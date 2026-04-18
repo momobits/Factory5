@@ -27,6 +27,7 @@ import { channelConfigFor, loadConfig } from '@factory5/brain';
 import {
   createChannelRegistry,
   createCliRpcChannel,
+  createDiscordChannel,
   type ChannelPlugin,
   type ChannelRegistry,
 } from '@factory5/channels';
@@ -165,7 +166,7 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
       // whatever the schema says is optional.
       const fileConfig =
         opts.noConfigFile === true ? undefined : await loadConfig().catch(() => undefined);
-      const pluginList = opts.channelPlugins ?? [createCliRpcChannel()];
+      const pluginList = opts.channelPlugins ?? buildDefaultChannelPlugins(fileConfig);
       const plugins = pluginList.map((plugin) => {
         const overrideBlock = opts.channelConfigs?.[plugin.id];
         const fileBlock = channelConfigFor(fileConfig, plugin.id);
@@ -313,6 +314,28 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
 /** Convenience symmetric stop. */
 export async function stopDaemon(handle: DaemonHandle): Promise<void> {
   await handle.stop();
+}
+
+/**
+ * Default channel set. Always includes the CLI-RPC plugin; includes the
+ * Discord plugin only when `config.toml` has a `[channels.discord]` block
+ * with a non-empty `token`. That way a user who installs factoryd without
+ * touching Discord doesn't see a "discord: failed (no token)" line on
+ * every startup.
+ */
+function buildDefaultChannelPlugins(
+  fileConfig: Awaited<ReturnType<typeof loadConfig>>,
+): ChannelPlugin[] {
+  const plugins: ChannelPlugin[] = [createCliRpcChannel()];
+  const discord = channelConfigFor(fileConfig, 'discord');
+  const token =
+    typeof discord === 'object' && discord !== null
+      ? (discord as { token?: unknown }).token
+      : undefined;
+  if (typeof token === 'string' && token.length > 0) {
+    plugins.push(createDiscordChannel());
+  }
+  return plugins;
 }
 
 /**

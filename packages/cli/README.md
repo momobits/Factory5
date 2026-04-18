@@ -4,19 +4,20 @@ Commander-based CLI. Used by the `factory` binary in `apps/factory`.
 
 ## Subcommands
 
-| Command                                                           | Phase | Status   | Purpose                                                     |
-| ----------------------------------------------------------------- | ----- | -------- | ----------------------------------------------------------- |
-| `factory --version`                                               | 0     | **done** | Print version                                               |
-| `factory build <project> [--autonomy chat\|assisted\|autonomous]` | 1     | **done** | Inline build (triage → architect → plan → workers → assess) |
-| `factory doctor [--skip-call]`                                    | 1     | **done** | Verify `claude` binary + run a tiny round-trip              |
-| `factory status [--limit N]`                                      | 1     | **done** | Projects + recent directives + per-directive spend          |
-| `factory init`                                                    | 1     | stub     | Interactive setup; writes `~/.factory5/config.toml`         |
-| `factory resume <project>`                                        | 1     | planned  | Resume a stopped/failed build                               |
-| `factory chat`                                                    | 3     | stub     | Interactive REPL against brain                              |
-| `factory daemon start\|stop\|status\|logs`                        | 3     | stubs    | Daemon lifecycle                                            |
-| `factory logs [--component] [--directive] [--follow]`             | 3     | stub     | Tail logs across components                                 |
-| `factory inspect <directiveId>`                                   | 3     | planned  | Stitch all logs/state for a directive                       |
-| `factory push <project>`                                          | 5     | planned  | Push completed project to GitHub                            |
+| Command                                                           | Phase | Status   | Purpose                                                                       |
+| ----------------------------------------------------------------- | ----- | -------- | ----------------------------------------------------------------------------- |
+| `factory --version`                                               | 0     | **done** | Print version                                                                 |
+| `factory answer <questionId> [text...]`                           | 4     | **done** | Close a pending `askUser`/`escalate_blocked` question                         |
+| `factory build <project> [--autonomy … --concurrency … --inline]` | 1–3   | **done** | Delegates to factoryd if running, else inline                                 |
+| `factory chat [--autonomy …]`                                     | 3     | **done** | Interactive REPL against factoryd (daemon must be up)                         |
+| `factory daemon start\|stop\|status\|restart`                     | 3     | **done** | Lifecycle; refuses duplicate starts via pidfile                               |
+| `factory doctor [--skip-call] [--skip-discord]`                   | 1/4   | **done** | Provider probe + triage round-trip + optional Discord reachability probe      |
+| `factory init [--discord-token … --discord-application-id … ...]` | 1/4   | **done** | Writes `config.toml`; populates `[channels.discord]` when `--discord-*` given |
+| `factory resume <project>`                                        | 2     | **done** | Resume the most recent build for a project                                    |
+| `factory status [--limit N]`                                      | 1     | **done** | Projects + recent directives + per-directive spend                            |
+| `factory logs [--component] [--directive] [--follow]`             | 3+    | stub     | Tail logs across components                                                   |
+| `factory inspect <directiveId>`                                   | 3+    | planned  | Stitch all logs/state for a directive                                         |
+| `factory push <project>`                                          | 5     | planned  | Push completed project to GitHub                                              |
 
 ## `factory build <project>`
 
@@ -27,16 +28,22 @@ Resolves `<project>` in this order:
 3. `<workspace>/<name>` (default workspace is `~/factory5-workspace`)
 4. `templates/<name>` in the factory5 repo — if found, copied into the workspace
 
-Writes a directive to SQLite, opens the brain in inline mode, prints a summary, exits `0` on `complete` / `2` on `blocked` / `1` on hard error.
+Writes a directive to SQLite. If a daemon is running (`factoryd.pid` owner alive) the directive is picked up by the serve loop; the CLI polls the directive row until terminal. `--inline` forces the old in-process pipeline even when a daemon is up. Exit code: `0` on `complete`, `2` on `blocked` / `failed`, `1` on hard error.
 
 ## `factory doctor`
 
-Smoke check the provider stack before burning tokens on a full build:
+Smoke check the stack before burning tokens on a full build:
 
 ```
 $ factory doctor
 Checking claude-cli provider…
   available(): true
+
+Checking Discord (channel)…
+  login:      ok
+  bot:        factory-bot#0001
+  guilds:     2 visible
+  guildId:    reachable
 
 Calling triage (quick tier) with a test directive…
   intent:     build
@@ -46,7 +53,37 @@ Calling triage (quick tier) with a test directive…
 All checks passed.
 ```
 
-`--skip-call` skips the round-trip and only checks availability.
+Flags: `--skip-call` (skip the model round-trip), `--skip-discord` (skip the Discord login probe even if a token is configured).
+
+## `factory init`
+
+Non-interactive (flag-only, CI-friendly). Writes `config.toml` with sensible defaults and optional Discord credentials.
+
+```
+factory init --workspace ~/projects \
+  --autonomy assisted \
+  --claude-cli-path "$(which claude)" \
+  --discord-token "$DISCORD_BOT_TOKEN" \
+  --discord-application-id 12345 \
+  --discord-guild 67890 \
+  --force
+```
+
+## `factory answer <questionId> [text...]`
+
+Close a pending question raised by the brain's `askUser` / `escalate_blocked` helpers.
+
+```
+factory answer 01K0…ULID "continue"
+factory answer 01K0…ULID skip
+factory answer 01K0…ULID -    # read answer from stdin
+```
+
+Writes `pending_questions.answer` + `answered_at`. The brain's polling loop picks it up within 1 s and unblocks its directive. The daemon does **not** need to be running — SQLite is the bus.
+
+## `factory chat`
+
+Interactive REPL that writes `intent=chat` directives against a running daemon and polls `outbound_messages` for replies. Type `/quit` or `Ctrl-D` to exit.
 
 ## API
 

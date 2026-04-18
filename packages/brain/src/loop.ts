@@ -29,6 +29,7 @@ import {
 import { appendBuildLog, listFindings, readPlan, wikiReadiness } from '@factory5/wiki';
 
 import { runArchitect, type ArchitectResult } from './architect.js';
+import { askUser, escalateBlocked, type AskUserResult } from './ask-user.js';
 import { runPlanner } from './planner.js';
 import { runPlanPool, type TaskOutcome } from './pool.js';
 import { buildRegistryFromDisk } from './provider-config.js';
@@ -191,6 +192,20 @@ async function runInline(
     const projectPath = extractProjectPath(directive);
     await appendBuildLog(projectPath, `brain: inline run started (directive ${directive.id})`);
 
+    // Assisted-mode shared options: every checkpoint inherits the same abort
+    // + poll cadence so a daemon shutdown unblocks all of them in one shot.
+    const checkpointSignal = opts.signal;
+    const runCheckpoint = async (question: string): Promise<AskUserResult> => {
+      const ckOpts: Parameters<typeof askUser>[0] = {
+        db,
+        directiveId: directive.id,
+        question,
+        options: ['continue', 'abort'],
+        ...(checkpointSignal !== undefined ? { signal: checkpointSignal } : {}),
+      };
+      return askUser(ckOpts);
+    };
+
     // -------- ARCHITECT --------
     // Skip when the wiki is already ready (resume path); otherwise run.
     const existingReadiness = await wikiReadiness(projectPath);
@@ -218,6 +233,30 @@ async function runInline(
       }
     }
 
+    // Assisted-mode checkpoint after architect (ADR 0005). Per ADR 0015 the
+    // checkpoint is idempotent — re-entering the phase finds the prior
+    // answer and skips re-asking.
+    if (directive.autonomy === 'assisted') {
+      const pageCount = architect?.pages.length ?? 0;
+      const ck = await runCheckpoint(
+        `Architect done (${String(pageCount)} wiki page${pageCount === 1 ? '' : 's'}). Continue to planning?`,
+      );
+      if (isAbortAnswer(ck)) {
+        await appendBuildLog(
+          projectPath,
+          `user aborted at architect checkpoint: ${ck.answer ?? '(no answer)'}`,
+        );
+        directivesQ.updateStatus(db, directive.id, 'blocked');
+        return {
+          directive,
+          triage,
+          ...(architect !== undefined ? { architect } : {}),
+          taskResults: [],
+          terminalStatus: 'blocked',
+        };
+      }
+    }
+
     // -------- PLANNER --------
     let plan: Plan;
     const existing = await readPlan(projectPath);
@@ -236,6 +275,31 @@ async function runInline(
         db,
       });
       plan = plannerOut.plan;
+    }
+
+    // Assisted-mode checkpoint after planner. Gives the user a chance to
+    // abort before any paid worker tasks start — the highest-leverage
+    // checkpoint in the pipeline.
+    if (directive.autonomy === 'assisted') {
+      const ck = await runCheckpoint(
+        `Plan ready (${String(plan.tasks.length)} task${plan.tasks.length === 1 ? '' : 's'}). Continue to execution?`,
+      );
+      if (isAbortAnswer(ck)) {
+        await appendBuildLog(
+          projectPath,
+          `user aborted at planner checkpoint: ${ck.answer ?? '(no answer)'}`,
+        );
+        directivesQ.updateStatus(db, directive.id, 'blocked');
+        const resBlocked: InlineResult = {
+          directive,
+          triage,
+          plan,
+          taskResults: [],
+          terminalStatus: 'blocked',
+        };
+        if (architect !== undefined) resBlocked.architect = architect;
+        return resBlocked;
+      }
     }
 
     // -------- DELEGATE --------
@@ -262,6 +326,40 @@ async function runInline(
 
     const openFindings = await listFindings(projectPath, { status: 'OPEN' });
     const hadFailures = taskResults.some((r) => r.exitCode !== 0) || !assessment.gateResults.verify;
+
+    // Autonomous mode never silently finishes with failures — escalate (ADR 0005).
+    // The call blocks until the user answers or the brain is aborted. The
+    // directive still ends up `blocked` here; a follow-up session (or a
+    // future planner-driven retry loop) can route the answer back in.
+    if (hadFailures && directive.autonomy === 'autonomous') {
+      const failedTasks = taskResults.filter((r) => r.exitCode !== 0);
+      const escalationOpts: Parameters<typeof escalateBlocked>[0] = {
+        db,
+        directiveId: directive.id,
+        reason: `${String(failedTasks.length)} task(s) failed and/or verify gate did not pass`,
+        attempted:
+          failedTasks.length === 0
+            ? [`assessor.verify=${String(assessment.gateResults.verify)}`]
+            : failedTasks.map(
+                (r) =>
+                  `task ${r.taskId}: exit ${String(r.exitCode)}${r.error !== undefined ? ` — ${r.error}` : ''}`,
+              ),
+        suggestions: [
+          'reply "skip" to mark this build blocked and move on',
+          'reply "retry" to try again from the top (brain will re-run `factory build`)',
+          'reply with a specific fix instruction',
+        ],
+        ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
+      };
+      const res = await escalateBlocked(escalationOpts);
+      if (res.answer !== undefined) {
+        await appendBuildLog(projectPath, `escalation answered: ${res.answer}`);
+      } else if (res.aborted) {
+        await appendBuildLog(projectPath, 'escalation aborted (brain shutdown)');
+      } else if (res.timedOut) {
+        await appendBuildLog(projectPath, 'escalation timed out — no human reply');
+      }
+    }
 
     const terminalStatus: Directive['status'] = hadFailures ? 'blocked' : 'complete';
     directivesQ.updateStatus(db, directive.id, terminalStatus);
@@ -313,6 +411,19 @@ function extractProjectPath(d: Directive): string {
   throw new Error(
     `directive ${d.id}: payload.projectPath (or payload.project) is required for build intent`,
   );
+}
+
+/**
+ * Interpret an {@link AskUserResult} as an abort signal. Treats explicit
+ * "abort", "cancel", "stop", or "no" answers as aborts; aborted signals
+ * and timeouts also count (the brain shuts down before continuing). Any
+ * other text is treated as "continue".
+ */
+function isAbortAnswer(res: AskUserResult): boolean {
+  if (res.aborted) return true;
+  if (res.timedOut) return true;
+  const ans = (res.answer ?? '').trim().toLowerCase();
+  return /^(abort|cancel|stop|no|quit|exit)\b/.test(ans);
 }
 
 function collectExpectedModules(plan: Plan): string[] {

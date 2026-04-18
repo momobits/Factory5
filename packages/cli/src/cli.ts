@@ -5,6 +5,7 @@
 
 import { Command } from 'commander';
 
+import { registerAnswerCommand } from './commands/answer.js';
 import { registerBuildCommand } from './commands/build.js';
 import { registerChatCommand } from './commands/chat.js';
 import { registerDaemonCommand } from './commands/daemon.js';
@@ -28,6 +29,7 @@ export function buildCli(opts: BuildCliOptions = {}): Command {
     .description('factory5 — autonomous (and human-directable) software builder')
     .version(opts.version ?? '0.0.1');
 
+  registerAnswerCommand(program);
   registerBuildCommand(program);
   registerChatCommand(program);
   registerDaemonCommand(program);

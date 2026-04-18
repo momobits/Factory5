@@ -23,15 +23,15 @@ Both Node 20+, TypeScript, ESM.
 | `@factory5/logger`    | shared       | implemented | Pino logger factory                                                                       |
 | `@factory5/state`     | shared       | implemented | SQLite (better-sqlite3) wrapper, migrations, CRUD                                         |
 | `@factory5/ipc`       | shared       | implemented | HTTP contracts (Zod) + typed clients                                                      |
-| `@factory5/channels`  | daemon       | phase-3     | `ChannelPlugin` interface + `ChannelRegistry` + `cli-rpc` plugin (ADR 0014)               |
+| `@factory5/channels`  | daemon       | phase-4     | `ChannelPlugin` interface + `ChannelRegistry` + `cli-rpc` (ADR 0014) + `discord` plugin   |
 | `@factory5/events`    | daemon       | phase-3     | `EventSource` interface + `fs-watcher` (chokidar, debounced)                              |
 | `@factory5/daemon`    | daemon       | phase-3     | pidfile (ADR 0011), IPC server, channels, events, brain supervisor (ADRs 0012, 0013)      |
 | `@factory5/providers` | brain        | phase-3     | `claude-cli` (ADR 0009) + `StubProvider` (via `FACTORY5_TEST_PROVIDER=stub`)              |
 | `@factory5/wiki`      | brain        | implemented | Pages, findings, BUILD.md, plan, readiness gate                                           |
 | `@factory5/assessor`  | brain        | phase-1     | pytest + Python imports + artifact + git checks                                           |
-| `@factory5/brain`     | brain        | phase-3     | Inline pipeline + parallel pool (ADR 0010) + serve-mode claim loop (ADR 0013)             |
+| `@factory5/brain`     | brain        | phase-4     | Inline + pool + serve loop + `askUser`/`escalateBlocked` mid-flight primitives (ADR 0015) |
 | `@factory5/worker`    | brain        | phase-2     | Per-task worktrees + tool-using subprocess for scaffolder/builder/fixer (ADRs 0007, 0008) |
-| `@factory5/cli`       | brain        | phase-3     | `build` (daemon-or-inline) / `daemon {start,stop,status,restart}` / `chat` / `doctor` …   |
+| `@factory5/cli`       | brain        | phase-4     | `build` / `daemon` / `chat` / `doctor` / `answer` / `init --discord-*` / `resume` / …     |
 | `apps/factory`        | brain entry  | implemented | Wires brain + cli                                                                         |
 | `apps/factoryd`       | daemon entry | phase-3     | `--foreground` / `--daemonize`; wires daemon assembly                                     |
 
@@ -50,7 +50,7 @@ Both Node 20+, TypeScript, ESM.
 | Channel    | Status  | Transport / library                                                                                             |
 | ---------- | ------- | --------------------------------------------------------------------------------------------------------------- |
 | `cli-rpc`  | phase-3 | HTTP POST to `/directives/notify`; outbound by SQLite polling + optional in-process session listener (ADR 0014) |
-| `discord`  | phase-4 | `discord.js`                                                                                                    |
+| `discord`  | phase-4 | `discord.js` v14 — threaded mentions, `/build` prefix, pending-question answer routing in-thread                |
 | `telegram` | future  | `grammy`                                                                                                        |
 | `web`      | future  | Fastify + SSE                                                                                                   |
 

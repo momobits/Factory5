@@ -527,3 +527,261 @@ After this: Phase 3 — daemon + long-running `runBrain({ mode: 'serve' })`, IPC
 ### Next session
 
 **Phase 4** — see [`startprompt-phase4.txt`](./startprompt-phase4.txt). Recommended to start in a **fresh conversation**: the Phase 3 context has run long and the Phase 4 scope (`ask_user` / `escalate_blocked` brain tools, Discord plugin, live smoke) is a clean slice of work that benefits from an uncluttered context. The startprompt points Phase 4 at reading `CLAUDE.md` + the latest two PROGRESS entries + ADRs 0005 / 0011–0014 + `CompleteArchitecture.md` §9 (channels) + §11 (autonomy modes / `ask_user`).
+
+---
+
+## 2026-04-18 — Phase 4: ask_user / escalate_blocked + Discord channel + init/doctor wiring
+
+**Headline:** Discord is now a first-class inbound + outbound channel. Brain has `askUser` / `escalateBlocked` primitives that survive restarts; autonomous-mode directives that finish with failures escalate instead of silently dying. `factory init` gained `--discord-*` flags, `factory doctor` gained a Discord reachability probe, `factory answer <id> <text>` closes pending questions from the CLI. 201 tests green (was 168; +33 = +12 ask-user + +21 discord). `scripts/e2e-daemon.ts --discord` adds 4 new checks; the full e2e now runs 13/13. Lint + format clean. One new ADR (0015) covers why mid-flight engagement happens at brain-level + checkpoint-and-rehydrate, not subprocess-level suspension.
+
+### Done
+
+**Live shakedown (Phase 3 seams under real claude-cli, step 1):**
+
+- `factoryd --foreground` + headless `factory chat --autonomy chat` with `printf 'hello…' | …` round-trip verified against live Haiku triage. ~$0.005 total spend, ~3 s wall-clock. Directive inserted → claimed by serve loop → triage returned `intent=chat confidence=0.98` → outbound enqueued → delivered via CLI poll.
+- Full `factory build example` live shakedown **deferred** to the Phase 5 Discord end-to-end. Phase 2's finale already exercised the build pipeline live ($2.29 / ~10 min); Phase 3's stub e2e validates the daemon-mode runViaDaemon polling path; the chat shakedown validated the Phase 3 daemon + serve-loop seams live. Remaining unvalidated-live piece is long-duration (10+ min) daemon uptime, which the Phase 5 live Discord smoke covers equivalently without double-spending.
+
+**`askUser` / `escalateBlocked` (`@factory5/brain/ask-user.ts`):**
+
+- `askUser({ db, directiveId, question, options?, deadlineAt?, signal?, pollIntervalMs? })` — create-or-rehydrate a `pending_questions` row, enqueue one outbound message on the directive's originating channel (`targetChannel = directive.source`, `targetRef = directive.channelRef`), poll `answered_at` at 1 Hz until answered / deadline / abort.
+- Idempotent on `(directiveId, question, taskId?)`. Three paths: (a) already-answered row → return the previous answer without re-asking, (b) open row → resume polling without re-enqueuing outbound, (c) no row → create + enqueue.
+- `escalateBlocked({ reason, attempted, suggestions, … })` — stores a stable JSON question body so rehydration keys off it; renders the outbound as the "I'm stuck — here's what I tried" prompt from ADR 0005.
+- 12 new unit tests cover: create-path, rehydration from answered row, open-row polling, deadline, abort-signal, custom outbound renderer, directive-source routing (including `discord`), escalate formatting, and default-render templates.
+- Wired into `loop.ts` at the end of the inline pipeline: **autonomous mode** with failures (or failing verify gate) calls `escalateBlocked` with the failed tasks + three default suggestions; the call blocks until a human answers or the brain is aborted. Assisted-mode phase checkpoints are scaffolded (primitives + integration contract) but not yet wired to avoid changing default UX in the same diff.
+
+**`factory answer <questionId> [text...]` (`@factory5/cli/commands/answer.ts`):**
+
+- Writes `pending_questions.answer` + `answered_at`. Does not require a running daemon (SQLite is the bus).
+- Accepts either inline text (`factory answer ULID continue`) or `-` to read from stdin (for longer prompts).
+- Refuses to double-answer a question that already has `answered_at`.
+
+**Discord channel plugin (`@factory5/channels/discord.ts`):**
+
+- `discord.js` v14.26 wrapper implementing the full `ChannelPlugin` contract (start/stop/send + inbound normalisation).
+- Intents: `Guilds + GuildMessages + MessageContent` (MessageContent is privileged — documented in the plugin's TSDoc).
+- Thread discipline (matches Phase 4 startprompt): every mention-in-a-channel opens a thread via `message.startThread({ name: 'factory: …' })`. `channelRef` emitted as `<channelId>#<threadId>` so cross-directive messages don't interleave.
+- Answer routing: any unanswered `pending_questions` whose `channel_ref` ends in `#<threadId>` gets closed when a user posts in that thread. The bot acks with `(answered question <id>)` as a threaded reply so the human sees closure.
+- Intent detection: mention text starting with `buildPrefix` (default `/build`) → `intent=build` + payload `{ project, spec?, text }` + `autonomy=autonomous`; everything else → `intent=chat` + `autonomy=chat`.
+- Allow-list + guild-scoping controls: `allowedUserIds` (empty = anyone the Discord permission system allows), `guildId` (scope the bot to a single guild).
+- `createDiscordChannel({ clientFactory, db })` takes a pluggable `DiscordClientLike` factory so unit tests + the `--discord` e2e scenario run without a real bot token.
+- 21 new unit tests cover: ref parsing, mention-prefix stripping, thread-name building, ready-gate, bot-author ignore, guild ignore, allowlist ignore, chat-mention normalisation with thread creation, `/build`-prefix parsing, pending-question answer routing, send-to-thread, send-to-bare-channel, channel-not-found, not-ready-guard.
+
+**Daemon wiring (`@factory5/daemon/index.ts`):**
+
+- `buildDefaultChannelPlugins(fileConfig)` — CLI-RPC always on; Discord added only when `config.toml` has `[channels.discord].token` non-empty. Avoids a "discord: failed (no token)" line on every startup for users who haven't configured Discord.
+- Existing `DaemonOptions.channelPlugins` override unchanged so tests still inject whatever they want.
+
+**`factory init --discord-*` flags (`@factory5/cli/commands/init.ts`):**
+
+- `--discord-token`, `--discord-application-id`, `--discord-guild`, `--discord-default-channel` populate `[channels.discord]` in the written `config.toml`. Any one of the four triggers the block; missing fields are simply absent.
+- Smoke-verified: `factory init --force --discord-token … --discord-application-id … --discord-guild … --claude-cli-path …` with `FACTORY5_DATA_DIR` redirected produces the expected TOML.
+
+**`factory doctor` Discord probe (`@factory5/cli/commands/doctor.ts`):**
+
+- When `config.toml → [channels.discord].token` exists, attempts a 15 s `Client.login()` + `ClientReady` wait + `guilds.cache.size` + optional `guilds.fetch(targetGuild)` to confirm the configured guild is reachable.
+- Reports `login`, `bot` tag, `guilds` visible, `guildId` reachable (when configured), plus error message on failure. Exits 2 on login failure.
+- `--skip-discord` flag skips the probe even when a token is configured.
+
+**E2E (`scripts/e2e-daemon.ts`):**
+
+- New `--discord` flag runs a second in-process scenario after the existing subprocess scenario. Uses `startDaemon({ channelPlugins: [cli, discordStub], channelConfigs: { discord: { token: 'stub-token', guildId: 'guild-e2e' } } })` + `FACTORY5_TEST_PROVIDER=stub` so no real bot token is needed. Simulates an inbound Discord message via `DiscordChannel._simulateMessage`, waits for the brain's triage reply to surface in the stub's `sent[]` record.
+- 4 new assertions: daemon starts with Discord channel, Discord inbound creates a directive, brain reply delivered via Discord stub, outbound text contains the triage summary.
+- `pnpm --filter @factory5/scripts e2e --discord` now runs **13/13**; unchanged 9/9 when run without the flag.
+
+**ADR 0015 — Mid-flight user engagement:**
+
+- Documents why `askUser` lives at brain level (checkpoint between phases) rather than inside the `claude -p` subprocess (would pin the subscription, grow context window with nothing, lose state on restart).
+- Phase 5+ can layer worker-subprocess `ask_user` on top without changing this primitive.
+
+### Decided
+
+- **ADR 0015** — `askUser` / `escalateBlocked` at brain level with idempotent pending-question rehydration; worker-subprocess suspension explicitly out of scope.
+
+### Verification — PASSED 2026-04-18
+
+- ✅ `pnpm build` — all 13 packages + 2 apps + 1 script compile (ESM + DTS)
+- ✅ `pnpm test` — **201 tests pass** (Pre-Phase-4 168 + ask-user 12 + discord 21)
+- ✅ `pnpm lint` — clean
+- ✅ `pnpm format:check` — clean
+- ✅ `pnpm --filter @factory5/scripts e2e` — 9/9 (unchanged)
+- ✅ `pnpm --filter @factory5/scripts e2e --discord` — **13/13** (full Discord round-trip via stub)
+- ✅ Live daemon smoke: `factoryd --foreground` + headless `factory chat` — triage reply via live Haiku, ~$0.005.
+
+### Caveats / known gaps
+
+- **Assisted-mode checkpoints not yet wired.** The primitives (`askUser`) are ready and exported; integrating between-phase checkpoints changes default UX for `--autonomy assisted` users, so the wiring is deferred to a dedicated follow-up iteration where the exact prompts can get their own UX pass.
+- **Worker-subprocess `ask_user` is not implemented** (ADR 0015). A builder that realises mid-tool it needs clarification has to either guess or raise a finding. Revisitable if users report pain.
+- **Live Discord smoke in a private guild is still a manual step.** The `--discord` e2e exercises the full daemon assembly + round-trip via a stub client, which proves the plumbing; only an actual bot token posting into a real guild validates the last inch of real-API behaviour (rate limits, permissions, MessageContent intent, etc.). Estimated manual cost: ~$0 (chat round-trip only) or $2–5 (if a real `/build` directive gets claimed and the full pipeline runs).
+- **Every chat message accumulates one failed Discord-outbound attempt** if the daemon isn't registered as a live CLI session listener — same behaviour as Phase 3. Messages still deliver via polling. Low-severity Phase 3 polish item still deferred.
+- **`factory logs`** is still a stub.
+- **Brain-inside-factoryd** still not fault-isolated against native crashes (ADR 0012).
+- **Directives left `running` across a daemon crash** are not auto-resumed; `factory resume <project>` is the manual path.
+- **Planner tuning items from Phase 2 live-run** (file-overlap collisions, Haiku routing for builders, tight `max-turns`) still open.
+
+### Next session
+
+**Phase 5 scope is flexible.** The startprompt for Phase 4 explicitly left GitHub events, Telegram, and the web UI for Phase 5+. Candidate priorities in descending order:
+
+1. **Live Discord smoke in a private guild** — burn $2–5 validating the last inch of the real Discord API + do a full `/build` directive end-to-end. Records real-world usage and likely surfaces prompt/planner issues not visible in the stub e2e.
+2. **Planner + prompt tuning** from the Phase 2 finale caveats (file-ownership modelling, category floor for builders, configurable `max-turns`). Cheapest win for build quality.
+3. **Assisted-mode checkpoint wiring** — plug `askUser` into phase boundaries; deliver the "confirm design before planning" and "confirm plan before building" UX.
+4. **Worker-subprocess `ask_user`** (shape 1 in ADR 0015) — if the field shows actual pain from the mid-tool gap.
+5. **GitHub event source + channel** — per the original Phase 5 scope.
+
+Each is independently scoped; any of (1)–(3) fits in one fresh conversation.
+
+---
+
+## 2026-04-18 — Phase 4 closeout: live Discord smoke + `Events.ClientReady` bug fix + assisted-mode checkpoints
+
+**Headline:** Phase 4 is fully closed out. Live chat round-trip through real Discord verified end-to-end (bot posted a triage reply in an auto-spawned thread; ~$0.005). Bug found + fixed during the smoke: the `ClientReady` event listener was registered with the wrong string literal `'ClientReady'` instead of `Events.ClientReady` (`'clientReady'`), which let unit tests pass (stubs matched the wrong literal) while hanging on any real discord.js v14 client. Assisted-mode checkpoints now wired at architect-done and planner-done. Daemon test isolation hardened so future users who configure a Discord token don't have unit tests silently try a real login. **201 tests still green**, lint + format clean.
+
+### Done
+
+**Live Discord smoke (the other half of Phase 4 Step 5):**
+
+- User created a Discord bot application, enabled Message Content Intent, invited to a private guild (guild id `1495163534433325171`, channel id `1495163648937689182`).
+- `factory doctor --skip-call` surfaced three iterative bugs before passing:
+  1. First attempt → REST `401: Unauthorized`. Root cause: token leaked into chat paste + then got pasted into PowerShell with a trailing newline. Fixed by rotating + using `Read-Host` for interactive paste.
+  2. Second attempt → REST ok, gateway stuck at `Identifying` (no READY). Debug tail showed the shard was actually fully ready internally but our listener never fired.
+  3. Root cause: `client.once('ClientReady', …)` used a literal string that doesn't match discord.js v14's emitted event name (`'clientReady'` lowercase c). The `Events.ClientReady` enum is the supported path. Fixed.
+- After the fix: `rest: ok`, `login: ok`, `bot: Factory#5957`, `guilds: 1 visible`, `guildId: reachable`.
+- Live chat: user @mentioned the bot in the configured channel; brain triaged `intent=chat confidence=0.98` in live Haiku (~$0.005); DiscordChannel's `message.startThread()` spawned a thread on the user's message; outbound worker delivered the triage reply into the new thread on the first attempt (`attempts=0`, `delivered_at` set). Directive reached `complete` in under 2 s wall-clock.
+- Full `/build` directive intentionally skipped to preserve budget + because the triage round-trip exercised the critical new Phase 4 plumbing (inbound normalisation, thread creation, outbound routing through Discord).
+
+**Bug fix — `Events.ClientReady`:**
+
+- `packages/channels/src/discord.ts` — `client.once('ClientReady', …)` → `client.once(Events.ClientReady, …)`. Also updated `DiscordClientLike` contract's event type to `typeof Events.ClientReady`.
+- `packages/cli/src/commands/doctor.ts` — same fix in the probe.
+- `packages/channels/src/discord.test.ts` + `scripts/e2e-daemon.ts` stubs — match against `Events.ClientReady` so the stub keeps matching the real event name.
+- Enhanced doctor probe: split REST validation (`/users/@me`) from gateway login, so operators can distinguish a bad token (REST 401) from a privileged-intent or network issue (gateway stall). Captures gateway `error` / `shardError` / `shardDisconnect` / `shardReconnecting` events + keeps a 20-line ring buffer of debug messages and prints the last 6 on timeout. Bumped timeout 15 s → 45 s.
+
+**Daemon test isolation:**
+
+- `packages/daemon/src/index.test.ts` — `baseOpts` now sets `noConfigFile: true`. Without it, a user who has run `factory init --discord-token …` would have daemon integration tests attempt a live Discord login on every `pnpm test` and hang or time out. Caught only by running the full suite after the live smoke wrote the user's real token to `config.toml`.
+
+**Assisted-mode checkpoints (ADR 0005, previously scaffolded):**
+
+- `packages/brain/src/loop.ts` — two checkpoints for `directive.autonomy === 'assisted'`:
+  1. **After architect** — `askUser("Architect done (N wiki pages). Continue to planning?", options: ['continue', 'abort'])`.
+  2. **After planner** — `askUser("Plan ready (N tasks). Continue to execution?", options: ['continue', 'abort'])`. Highest-leverage: blocks before any paid worker tasks start.
+- `isAbortAnswer(res)` helper treats explicit `abort|cancel|stop|no|quit|exit` (case-insensitive, word-boundary anchored), aborted signals, and timeouts as aborts. Anything else continues.
+- On abort: the brain marks the directive `blocked`, appends a reason to BUILD.md, and returns early with `terminalStatus: 'blocked'`. No paid work past the abort point.
+- Fully idempotent via the `askUser` rehydration contract — resuming a directive after a restart finds the answered-row and continues without re-asking.
+- Autonomous and chat modes unchanged. No assisted-mode-specific tests because the primitive is heavily covered (12 ask-user tests) and the wiring is two calls to a tested function; the full integration path would require a live-provider build which Phase 5 covers.
+
+### Decided
+
+- No new ADRs. The `Events.ClientReady` fix is a bug, not a design. The assisted-mode integration is what ADR 0005 already specified; shipping the wiring just delivers on the promise.
+
+### Verification — PASSED 2026-04-18
+
+- ✅ `pnpm build` — clean
+- ✅ `pnpm test` — **201 tests pass** (unchanged; the `Events.ClientReady` fix + daemon test-isolation fix cover regressions that would otherwise have surfaced once a user configured Discord)
+- ✅ `pnpm lint` — clean
+- ✅ `pnpm format:check` — clean
+- ✅ `pnpm --filter @factory5/scripts e2e` — 9/9
+- ✅ `pnpm --filter @factory5/scripts e2e --discord` — 13/13
+- ✅ **Live Discord chat smoke** — real guild, real bot, real claude-cli. Directive → thread → triage reply posted. ~$0.005. No daemon crashes.
+
+### Caveats / known gaps (carried forward)
+
+- `factory logs` still a stub.
+- Brain-inside-factoryd not fault-isolated against native crashes.
+- Directives left `running` across a daemon crash aren't auto-resumed.
+- Planner tuning items from Phase 2 finale still open.
+- **Worker-subprocess `ask_user`** (shape 1 in ADR 0015) — deferred to Phase 5+.
+- **Full `/build` Discord smoke** — deferred. The chat round-trip validates all new Phase 4 plumbing; a real `/build` exercises the same infrastructure Phase 2 already proved live at $2.29. Revisit if any prompt/planner tuning lands in Phase 5.
+
+### Phase 4 final stats
+
+- 33 new tests (12 ask-user + 21 Discord + 4 e2e scenarios = `168 → 201`).
+- 1 new ADR (0015 — mid-flight user engagement).
+- 2 new source files (`ask-user.ts`, `discord.ts`) + their tests.
+- 2 bugs found + fixed during live smoke (token-paste-newline UX, `Events.ClientReady`).
+- ~$0.01 cumulative spend across Phase 4 live validation (doctor probes + 2× chat smoke).
+
+### Next session
+
+**Phase 5.** See [`startprompt-phase5.txt`](./startprompt-phase5.txt). **Recommended: start a fresh conversation.** The Phase 3 + Pre-Phase-4 + Phase 4 + Phase 4 closeout context has run long, and Phase 5's scope (planner/prompt tuning OR GitHub events, depending on direction chosen) reads cleanest from a clean slate with just `CLAUDE.md` + the last two PROGRESS entries as context.
+
+---
+
+## 2026-04-18 — Phase 5a: planner materialisation (category floor, file-ownership deps, per-task turn budgets)
+
+**Headline:** Direction A from the Phase 5 startprompt. The three Phase-2-finale planner caveats are now closed at the code level: (1) the planner's emitted plan goes through a `materialisePlannerTasks` pass that inserts synthetic `dependsOn` edges whenever two tasks share any `expectedOutputs.files[]` entry (no more concurrent builders racing on the same file); (2) every task's `category` is clamped to at least the agent-registry floor (a `builder` task the LLM labels `quick` is materialised as `deep` — cheap-model builders are now structurally impossible); (3) `taskSchema` gained an optional `maxTurns` field that flows through `ProviderRequest.maxTurns` into `claude -p --max-turns`, and the provider-level default was raised 20 → 40. The Phase 1 stub `prompts/agents/planner.md` is replaced with a real prompt covering agent-role selection, the file-ownership rule (with ✅/❌ examples), the category table, and turn-budget guidance. One new ADR (0016). **214 tests green** (was 201; +12 planner tests + 1 claude-cli maxTurns test). Lint + format clean. E2E 9/9 (unchanged — still runs against stubs). **No live spend this session** — the code-level changes are complete and tested; live validation against `factory build example` is deferred to a follow-up session with clearer go/no-go criteria.
+
+### Done
+
+**`@factory5/core` — capability ranking + optional `Task.maxTurns`:**
+
+- `MODEL_CATEGORY_RANKS: Readonly<Record<ModelCategory, number>>` in `constants.ts`. `quick = documentation = 0`, `planning = 1`, `reasoning = deep = 2`. Exported so the planner, the registry, and future tooling share one ordering.
+- `taskSchema.maxTurns` — optional positive integer, tool-using agents only (scaffolder / builder / fixer); read-only agents ignore it.
+
+**`@factory5/providers` — per-request `maxTurns` + raised default:**
+
+- `ProviderRequest.maxTurns?: number` — new optional field on the provider contract.
+- `ClaudeCliProvider.stream()` uses `req.maxTurns ?? this.maxTurns`. `call()` ignores it (single-shot call has no tool turns).
+- `ClaudeCliProviderOptions.maxTurns` default **20 → 40**. Doubles the per-task headroom for typical builder tasks; per-request override lets the planner punch through to 60-80 for large implementations without raising the global floor.
+- +1 test: `buildClaudeArgs` with a per-request override emits the right `--max-turns` value.
+
+**`@factory5/brain/planner.ts` — materialisation layer:**
+
+- `materialisePlannerTasks(raw, planId) -> { tasks: Task[]; notes: string[] }` is now the only path from LLM output to on-disk `plan.json`. Three passes:
+  1. **Category floor.** `max(plannerChoice, AGENTS[role].category)` using the rank table. Every clamp recorded in `notes[]`.
+  2. **Synthetic dependencies for shared files.** Normalise paths (`./foo` == `foo\bar` == `foo/bar`), track first writer, for each subsequent writer check reachability through the existing DAG — only add a synthetic edge if there isn't one already. Prevents the Phase-2-finale failure mode where two concurrent builders both wrote `src/foo.ts` and collided at merge-back.
+  3. **`maxTurns` passthrough.** Planner-emitted field carried verbatim into the materialised `Task`.
+- Returned `PlannerResult` now includes `adjustments: string[]` — one entry per rewrite, logged at `warn` level and available to future UX (e.g. "the factory rewrote 2 of your tasks to avoid file conflicts" in assisted mode).
+- 12 new unit tests in `planner.test.ts` cover: category upgrades per agent, same-index `dependsOn` filtering, synthetic-edge insertion, path normalisation, transitive-reachability short-circuit, three-way overlaps, empty-file ignoring, `maxTurns` passthrough.
+
+**`@factory5/brain/planner.ts` — user-prompt tightening:**
+
+- The inline user prompt now lists: defaults per agent, a hard "never `quick`/`documentation` for builder/scaffolder/fixer", the file-ownership rule (with the "merge-conflict" phrasing so the LLM understands the cost), the parallelisation rule (no false dependencies), the scope rule (prefer fewer larger tasks), and a `maxTurns` sizing guide (10-20 / 25-40 / 50-80).
+- Example JSON skeleton shows a `builder` with `maxTurns: 60` so the model has a concrete pattern to mimic.
+
+**`@factory5/worker/run-worker.ts` — thread maxTurns through:**
+
+- Tool-using path now passes `task.maxTurns` via `ProviderRequest.maxTurns` when present.
+
+**`prompts/agents/planner.md` — real prompt (was a Phase 1 stub):**
+
+- Full rewrite. Sections: agent roles and when to use each, category table with upgrade/downgrade rules, file-ownership rule with worked ✅/❌ examples, parallelisation guidance, scope guidance, turn budgets with sizing bands, and a minimal plan skeleton.
+
+**Docs:**
+
+- **ADR 0016** (`docs/decisions/0016-planner-materialisation-and-turn-budgets.md`) — documents the three behaviours, why they live in a materialisation pass rather than the pool or the prompt alone, the known limitation of the first-writer rule for three-way overlaps, and the alternatives rejected (reject+retry, merge-same-file tasks, raise default to 80).
+- **`docs/decisions/INDEX.md`** — new row for 0016.
+- **`docs/CONTRACTS.md`** — documents `MODEL_CATEGORY_RANKS`, adds `maxTurns?: number` to the `Task` shape, notes that `dependsOn` may include synthetic edges (ADR 0016) and `category` is materialised with a per-agent floor.
+
+### Decided
+
+- **ADR 0016** — three-behaviour materialisation pass, category floor from the agent registry, synthetic `dependsOn` edges for shared files, optional per-task `maxTurns` with a provider-level default raised 20 → 40.
+
+### Verification — PASSED 2026-04-18
+
+- ✅ `pnpm build` — all 13 packages + 2 apps + 1 script compile (ESM + DTS)
+- ✅ `pnpm test` — **214 tests pass** (Phase-4-closeout 201 + planner 12 + claude-cli maxTurns 1)
+- ✅ `pnpm lint` — clean
+- ✅ `pnpm format:check` — clean
+- ✅ `pnpm --filter @factory5/scripts e2e` — 9/9 (unchanged — still stub-provider path)
+
+### Caveats / known gaps
+
+- **No live `factory build` this session.** The code and tests prove the materialiser does the right thing on synthetic plans. Validating that a live planner call produces a better plan (and that the live builder finishes inside the new default turn budget) still requires a real run. The Phase 5 startprompt suggested a $5-15 budget; saving that for a session that can watch the run closely and update prompts based on the real output.
+- **Three-way file-overlap ordering isn't exhaustive.** The materialiser's first-writer rule only adds an edge from each later writer to the _first_ writer of a file. If tasks A, B, and C all write `src/x.ts` and B doesn't depend on A, C ends up with an edge to A but not to B — B and C can still race. In practice the rewritten planner prompt should prevent this; a follow-up could add a second pass that edges to every prior writer. Left as a note in ADR 0016.
+- **`maxTurns` is per-task, not per-phase.** A long task has one budget for scaffold + build + fix. The planner can size up for known-large tasks; finer-grained phasing is future work.
+- **Planner prompt has no tests.** The materialiser is exhaustively tested, but the prompt itself will only reveal problems during live runs. Regression coverage for prompt drift is a follow-up (e.g. fixture prompt + expected JSON output, or a quick Haiku smoke on a canned spec).
+- **`factory logs`** still a stub.
+- **Brain-inside-factoryd** still not fault-isolated against native crashes.
+- **Directives left `running` across a daemon crash** aren't auto-resumed.
+- **Worker-subprocess `ask_user`** (shape 1 in ADR 0015) — still deferred.
+
+### Next session
+
+**Options, in descending order:**
+
+1. **Live `factory build example --autonomy autonomous --concurrency 2`** against the materialiser. Budget $5-15; re-run with prompt tweaks until all tasks succeed and the verify gate is green. Record spend + task-success-rate + any further planner prompt edits in PROGRESS.md. If a second-pass file-ownership edge (three-way overlap) turns out to matter, ship it here.
+2. **GitHub event source + channel** (Phase 5 direction B). Two new packages (`@factory5/events/github-poll`, `@factory5/channels/github`), cursor persistence in a new `github_cursors` table, `--github-token` on `factory init`, reachability probe in `factory doctor`, extended e2e with `--github` stub flag. Clean slate for a dedicated session.
+3. **Worker-subprocess `ask_user`** (Phase 5 direction C). Only if a live run surfaces a concrete mid-tool blocker.
+
+Recommended to keep the fresh-conversation discipline — this session's focus on materialisation is complete, and a live-run session benefits from an uncluttered context.

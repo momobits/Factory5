@@ -30,7 +30,8 @@
     "@factory5/logger": "workspace:*",
     "@factory5/providers": "workspace:*",
     "@factory5/state": "workspace:*",
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "discord.js": "^14.15.3"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

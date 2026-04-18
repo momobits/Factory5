@@ -5,5 +5,6 @@
  */
 
 export * from './cli-rpc.js';
+export * from './discord.js';
 export * from './registry.js';
 export * from './types.js';

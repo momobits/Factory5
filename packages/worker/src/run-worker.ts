@@ -287,6 +287,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
       cwd: worktree.path,
       allowedTools: allowed,
       permissionMode: 'bypassPermissions',
+      ...(opts.task.maxTurns !== undefined ? { maxTurns: opts.task.maxTurns } : {}),
       ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
     });
     for await (const chunk of iter) {

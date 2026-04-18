@@ -42,6 +42,18 @@ type Intent =
 
 What the user (or external system) wants done. The triage agent classifies free-form input into one of these.
 
+## `ModelCategory` and capability ranking
+
+```ts
+type ModelCategory = 'quick' | 'planning' | 'reasoning' | 'deep' | 'documentation';
+
+// Exported from `@factory5/core` as MODEL_CATEGORY_RANKS.
+// Higher = more capable. Ties: quick == documentation, reasoning == deep.
+const RANKS = { quick: 0, documentation: 0, planning: 1, reasoning: 2, deep: 2 };
+```
+
+Used by the planner to clamp tool-using agents to at least their registry-declared category (ADR 0016). A `builder` task the LLM labels `quick` is materialised as `deep`.
+
 ## `Directive`
 
 The unit of work flowing into the brain. One directive = one user-visible request.
@@ -155,14 +167,15 @@ type Task = {
   planId: string;
   title: string;
   agent: AgentRole;
-  category: ModelCategory;
+  category: ModelCategory; // materialised with a per-agent floor (ADR 0016)
   inputs: { files: string[]; context: string };
   expectedOutputs: { files: string[]; signals: string[] };
-  dependsOn: string[]; // task IDs
+  dependsOn: string[]; // task IDs — may include synthetic edges for file-ownership (ADR 0016)
   status: 'pending' | 'running' | 'complete' | 'failed' | 'blocked';
   attempts: number;
   worktreePath?: string;
   result?: TaskResult;
+  maxTurns?: number; // optional per-task tool-use turn budget; tool-using agents only
 };
 
 type TaskResult = {

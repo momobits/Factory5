@@ -45,3 +45,5 @@ docs/api/
 *.db-journal
 *.db-wal
 *.db-shm
+
+notes.md

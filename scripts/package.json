@@ -8,9 +8,13 @@
     "e2e": "tsx e2e-daemon.ts"
   },
   "dependencies": {
+    "@factory5/channels": "workspace:*",
     "@factory5/core": "workspace:*",
+    "@factory5/daemon": "workspace:*",
     "@factory5/ipc": "workspace:*",
-    "@factory5/state": "workspace:*"
+    "@factory5/logger": "workspace:*",
+    "@factory5/state": "workspace:*",
+    "discord.js": "^14.15.3"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

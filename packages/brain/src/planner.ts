@@ -12,6 +12,7 @@ import { readFile } from 'node:fs/promises';
 import {
   AGENT_ROLES,
   MODEL_CATEGORIES,
+  MODEL_CATEGORY_RANKS,
   newId,
   planSchema,
   type AgentRole,
@@ -25,6 +26,7 @@ import type { Database } from '@factory5/state';
 import { projectPaths, readWiki, writePlan } from '@factory5/wiki';
 import { z } from 'zod';
 
+import { getAgent } from './agents/registry.js';
 import { buildAgentSystemPrompt } from './prompts.js';
 import { extractJsonObject } from './triage.js';
 import { recordUsage } from './usage.js';
@@ -49,15 +51,145 @@ const plannerTaskSchema = z.object({
     .default({ files: [], signals: [] }),
   /** Indexes into the `tasks` array (0-based). Resolved to ULIDs when we materialize. */
   dependsOn: z.array(z.number().int().nonnegative()).default([]),
+  /**
+   * Optional per-task tool-use turn budget. Only honored for tool-using
+   * agents (scaffolder / builder / fixer). Passed through to the provider.
+   */
+  maxTurns: z.number().int().positive().optional(),
 });
 
 const plannerJsonSchema = z.object({
   tasks: z.array(plannerTaskSchema).min(1),
 });
 
+/** Return whichever category ranks at-or-above the other. Floor wins ties. */
+function maxCategory(a: ModelCategory, floor: ModelCategory): ModelCategory {
+  return MODEL_CATEGORY_RANKS[a] >= MODEL_CATEGORY_RANKS[floor] ? a : floor;
+}
+
+/** Normalize a file path for overlap detection: drop leading "./", collapse backslashes. */
+function normalizeFilePath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/^\.\//, '').trim();
+}
+
+/**
+ * Rewrite a planner-raw task list so that any two tasks writing to the same
+ * file are serialised, and so each task's `category` meets the agent-registry
+ * floor.
+ *
+ * Returns the materialized {@link Task[]} plus a list of notes describing
+ * every adjustment made (for logging + the session record).
+ *
+ * Category floor (ADR 0016):
+ *   Every task is clamped to `max(plannerChoice, AGENTS[role].category)`.
+ *   A `builder` task the LLM labelled `quick` becomes `deep`. The planner
+ *   can still upgrade — a `reviewer` the LLM labelled `deep` stays `deep`.
+ *
+ * File ownership (ADR 0016):
+ *   If two tasks both declare the same `expectedOutputs.files[]` entry and
+ *   neither transitively depends on the other, the later-indexed task gets
+ *   a synthetic dependency on the earlier one. Prevents two concurrent
+ *   builders writing the same file inside parallel worktrees (which would
+ *   produce merge conflicts at cleanup time).
+ */
+export function materialisePlannerTasks(
+  raw: z.infer<typeof plannerTaskSchema>[],
+  planId: string,
+): { tasks: Task[]; notes: string[] } {
+  const notes: string[] = [];
+  const taskIds = raw.map(() => newId());
+
+  // First pass: resolve dependsOn indexes to ULIDs and clamp category.
+  const partial: Task[] = raw.map((t, i) => {
+    const agentDef = getAgent(t.agent as AgentRole);
+    const floor = agentDef.category;
+    const clamped = maxCategory(t.category as ModelCategory, floor);
+    if (clamped !== t.category) {
+      notes.push(
+        `task[${String(i)}] "${t.title}" (agent=${t.agent}): category ${t.category} -> ${clamped} (floor enforced)`,
+      );
+    }
+    const dependsOn = t.dependsOn
+      .filter((d) => d !== i && d >= 0 && d < taskIds.length)
+      .map((d) => taskIds[d] as string);
+    const task: Task = {
+      id: taskIds[i] as string,
+      planId,
+      title: t.title,
+      agent: t.agent as AgentRole,
+      category: clamped,
+      inputs: t.inputs,
+      expectedOutputs: t.expectedOutputs,
+      dependsOn,
+      status: 'pending',
+      attempts: 0,
+    };
+    if (t.maxTurns !== undefined) task.maxTurns = t.maxTurns;
+    return task;
+  });
+
+  // Second pass: detect file-ownership conflicts. Two tasks writing the same
+  // file must be serialised. We add a synthetic dependency from the later
+  // task (higher index) to the earlier — the common case is that the later
+  // task in the planner's ordering is the refinement.
+  const indexById = new Map<string, number>();
+  partial.forEach((t, i) => indexById.set(t.id, i));
+
+  const reachable = (fromIdx: number, toIdx: number): boolean => {
+    if (fromIdx === toIdx) return true;
+    const stack = [partial[fromIdx]?.id].filter((v): v is string => v !== undefined);
+    const seen = new Set<string>(stack);
+    while (stack.length > 0) {
+      const id = stack.pop() as string;
+      const t = partial[indexById.get(id) ?? -1];
+      if (t === undefined) continue;
+      for (const dep of t.dependsOn) {
+        if (seen.has(dep)) continue;
+        const di = indexById.get(dep);
+        if (di === toIdx) return true;
+        seen.add(dep);
+        stack.push(dep);
+      }
+    }
+    return false;
+  };
+
+  const finalTasks: Task[] = partial.map((t) => ({ ...t, dependsOn: [...t.dependsOn] }));
+
+  // For each file, track which task index first claims it. When a second
+  // task claims the same file, either it (or one of its transitive deps)
+  // must already reach the first task; if not, we add an edge.
+  const firstWriter = new Map<string, number>();
+  for (let i = 0; i < finalTasks.length; i++) {
+    const t = finalTasks[i] as Task;
+    for (const rawFile of t.expectedOutputs.files) {
+      const file = normalizeFilePath(rawFile);
+      if (file.length === 0) continue;
+      const prev = firstWriter.get(file);
+      if (prev === undefined) {
+        firstWriter.set(file, i);
+        continue;
+      }
+      if (reachable(i, prev)) continue;
+      // Insert synthetic edge i -> prev (i depends on prev).
+      const prevTask = finalTasks[prev] as Task;
+      if (!t.dependsOn.includes(prevTask.id)) {
+        t.dependsOn.push(prevTask.id);
+        notes.push(
+          `task[${String(i)}] "${t.title}" -> task[${String(prev)}] "${prevTask.title}": synthetic dependency for shared file "${file}"`,
+        );
+      }
+    }
+  }
+
+  return { tasks: finalTasks, notes };
+}
+
 export interface PlannerResult {
   plan: Plan;
   rawResponse: string;
+  /** Planner-clamp + synthetic-dependency notes, one per adjustment. Empty when the raw plan passed through untouched. */
+  adjustments: string[];
 }
 
 export interface PlannerOptions {
@@ -83,17 +215,55 @@ export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
   const userPrompt = [
     'Produce a Task DAG for building this project.',
     '',
-    'Each task has: a title, an `agent` role (one of: scaffolder, builder, reviewer, fixer,',
-    'investigator, verifier), a `category` (quick / planning / reasoning / deep / documentation),',
-    '`inputs.files` the task should read, `inputs.context` a short description, `expectedOutputs.files`',
-    'files the task will write, `expectedOutputs.signals` tokens like "pytest-green" / "build-ok",',
-    'and `dependsOn`: an array of INDEXES into the tasks array (0-based) for prerequisites.',
+    'Each task has:',
+    '  - `title` — short human-readable name',
+    '  - `agent` — one of: scaffolder, builder, reviewer, fixer, investigator, verifier',
+    '  - `category` — model tier: quick / planning / reasoning / deep / documentation',
+    '       DEFAULTS per agent (use these unless the work plainly warrants a stronger tier):',
+    '         scaffolder=planning, builder=deep, reviewer=reasoning,',
+    '         fixer=reasoning, investigator=reasoning, verifier=planning',
+    '       NEVER pick `quick` or `documentation` for builder/scaffolder/fixer. Factory',
+    '       enforces a category floor and will upgrade you, but picking correctly up-front',
+    '       lets your plan reflect the real execution tier.',
+    '  - `inputs.files` — relative paths the task reads',
+    '  - `inputs.context` — 1-2 sentence description',
+    '  - `expectedOutputs.files` — relative paths the task writes (BE COMPLETE — see rule below)',
+    '  - `expectedOutputs.signals` — tokens like "pytest-green" / "build-ok" / "lint-clean"',
+    '  - `dependsOn` — 0-based INDEXES into this tasks array for prerequisites',
+    '  - `maxTurns` (optional) — integer 10-80. Only for builder/scaffolder/fixer.',
+    '       Use >40 when the task is a large multi-module implementation or a broad fixer',
+    '       pass over many files. Use <=20 for narrow single-file changes.',
+    '',
+    'FILE OWNERSHIP (critical — merge conflicts come from violating this):',
+    '  If two tasks write to ANY of the same `expectedOutputs.files[]`, the later task',
+    '  MUST list the earlier task in its `dependsOn`. Do NOT run two builders on the same',
+    '  file in parallel — they allocate isolated worktrees and the merges will collide.',
+    '  If you want progressive refinement of the same file, chain: task A writes foo.ts,',
+    '  task B (dependsOn: [indexOfA]) refines foo.ts.',
+    '',
+    'PARALLELISATION:',
+    '  Tasks with no shared output files and no logical prerequisite should have empty',
+    "  `dependsOn` so the pool runs them concurrently. Don't invent false dependencies",
+    '  just to sequence the plan.',
+    '',
+    'SCOPE:',
+    '  Prefer fewer, larger tasks over many tiny ones. A good `builder` task covers one',
+    '  cohesive module (related files, one responsibility). Avoid splitting a single',
+    '  module across multiple builders — that guarantees file-ownership conflicts.',
     '',
     'Respond with a SINGLE JSON object in this exact shape (no prose outside the object):',
     '',
     '{',
-    '  "tasks": [ { "title": "...", "agent": "scaffolder", "category": "planning", ',
-    '               "inputs": {...}, "expectedOutputs": {...}, "dependsOn": [] }, ... ]',
+    '  "tasks": [',
+    '    { "title": "...", "agent": "scaffolder", "category": "planning",',
+    '      "inputs": {"files": [], "context": "..."},',
+    '      "expectedOutputs": {"files": ["..."], "signals": []},',
+    '      "dependsOn": [] },',
+    '    { "title": "...", "agent": "builder", "category": "deep",',
+    '      "inputs": {"files": [], "context": "..."},',
+    '      "expectedOutputs": {"files": ["..."], "signals": ["pytest-green"]},',
+    '      "dependsOn": [0], "maxTurns": 60 }',
+    '  ]',
     '}',
     '',
     '--- CLAUDE.md ---',
@@ -139,24 +309,7 @@ export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
   const parsed = plannerJsonSchema.parse(JSON.parse(jsonText));
 
   const planId = newId();
-  const taskIds = parsed.tasks.map(() => newId());
-  const tasks: Task[] = parsed.tasks.map((t, i) => {
-    const dependsOn = t.dependsOn
-      .filter((d) => d !== i && d >= 0 && d < taskIds.length)
-      .map((d) => taskIds[d] as string);
-    return {
-      id: taskIds[i] as string,
-      planId,
-      title: t.title,
-      agent: t.agent as AgentRole,
-      category: t.category as ModelCategory,
-      inputs: t.inputs,
-      expectedOutputs: t.expectedOutputs,
-      dependsOn,
-      status: 'pending',
-      attempts: 0,
-    };
-  });
+  const { tasks, notes } = materialisePlannerTasks(parsed.tasks, planId);
 
   const plan: Plan = planSchema.parse({
     id: planId,
@@ -168,10 +321,16 @@ export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
   });
 
   await writePlan(plan);
+  if (notes.length > 0) {
+    log.warn(
+      { planId, projectPath: opts.projectPath, adjustments: notes.length, notes },
+      'planner: applied post-LLM adjustments',
+    );
+  }
   log.info(
-    { planId, taskCount: tasks.length, projectPath: opts.projectPath },
+    { planId, taskCount: tasks.length, projectPath: opts.projectPath, adjustments: notes.length },
     'planner: plan written',
   );
 
-  return { plan, rawResponse: response.text };
+  return { plan, rawResponse: response.text, adjustments: notes };
 }

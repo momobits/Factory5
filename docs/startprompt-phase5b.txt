@@ -1,0 +1,115 @@
+Read CLAUDE.md, then docs/PROGRESS.md — the latest entry (2026-04-18 Phase 5a
+— planner materialisation) is the one that matters; the Phase 4 closeout
+above it is useful context. Read ADR 0016 (category floor, file-ownership
+synthetic deps, per-task turn budgets — the three behaviours this session
+validates). Skim ADR 0005 (autonomy modes), ADR 0008 (per-task worktrees —
+why file collisions matter), ADR 0010 (the parallel pool), and
+CompleteArchitecture.md §12 (safety / anti-loop guardrails — note that
+`max_usd` / `max_steps` are documented but NOT yet enforced in code, so the
+session has to watch spend manually).
+
+Phase 5a shipped code + tests for three planner fixes: (1) a
+`materialisePlannerTasks` pass clamps every task's `category` to at least
+its agent-registry floor (builders can no longer run on `quick`); (2) the
+same pass inserts synthetic `dependsOn` edges whenever two tasks share any
+`expectedOutputs.files[]` entry (no more concurrent worktrees racing on the
+same file); (3) `taskSchema.maxTurns?` is plumbed through the provider
+contract and the claude-cli stream, and the provider-level default was
+raised 20 → 40. The Phase 1 stub planner prompt is replaced. 214 tests
+green, lint/format clean, e2e 9/9. No live spend last session — code-level
+only.
+
+Phase 5b is LIVE VALIDATION of 5a, in descending order of likely value:
+
+  A. Live `factory build example --autonomy autonomous --concurrency 2`.
+     This is the direct payoff from 5a. The Phase 2 live plan at
+     C:\Users\Momo\factory5-workspace\example\.factory\plan.json is the
+     ground-truth receipt of the three caveats 5a fixed: it has multiple
+     builder tasks at `category: "quick"` and partial failures. With 5a in
+     place, a fresh run should: (i) emit no `quick` tier for any
+     builder/scaffolder/fixer (category floor enforced); (ii) produce zero
+     merge-conflict failures (file-ownership deps enforced); (iii) let
+     builder tasks finish without hitting the 20-turn ceiling (default is
+     now 40 and the planner can opt up to 80 per task). Budget $5-15.
+
+     BEFORE starting the run:
+       1. Confirm no factoryd is running: `ls ~/.factory5/factoryd.pid` —
+          must be absent. If present, daemon was not shut down cleanly;
+          check `tasklist //FI "PID eq <id>"` and kill if stale.
+       2. USE A FRESH WORKSPACE. The existing
+          C:\Users\Momo\factory5-workspace\example\ has a Phase 2
+          half-built plan.json that the brain will try to reuse (loop.ts
+          reuses plans whose status isn't complete/abandoned). Options
+          (pick one):
+           a. `factory build example --workspace /c/Users/Momo/factory5-v5b`
+              — clean slate, non-destructive, template gets copied into
+              the new workspace. PREFERRED.
+           b. Wipe `~/factory5-workspace/example/` — ask the user first,
+              it's destructive.
+       3. Confirm `factory doctor` is green (claude-cli version 2.1.113
+          confirmed present, config.toml has a real Discord token from
+          Phase 4; use `factory doctor --skip-discord` if the probe
+          timeouts slow the pre-flight down).
+       4. Note the current total spend: the factory has no enforced
+          `max_usd` ceiling. Watch spend via `factory status <project>`
+          or `sqlite3 ~/.factory5/factory.db "SELECT SUM(cost_usd) FROM
+          model_usage WHERE directive_id = '<id>'"` and ctrl-c if it
+          exceeds $15. Autonomous mode escalates on failure but does
+          not stop on cost alone.
+
+     DURING the run:
+       - Save plan.json after the planner emits it, before the pool
+         starts dispatching: `cp .factory/plan.json .factory/plan-phase5b.json`.
+         This is the comparison artefact against Phase 2's bad plan.
+       - Watch `brain.planner` log lines for `adjustments: N` — if
+         materialisePlannerTasks had to rewrite anything, the notes
+         array tells you exactly what the planner got wrong. Ideal
+         outcome is adjustments=0 (planner prompt is now strong enough
+         to emit a correct plan on the first try); adjustments>0 is
+         fine but means the prompt has room to improve.
+       - If a builder hits a new failure mode (e.g. out-of-memory at
+         40 turns), fix the bug in the right layer and re-run. Don't
+         rewrite the pipeline.
+
+     AFTER the run:
+       - Diff plan-phase5b.json against the Phase 2 plan.json on:
+         category distribution (no `quick` for tool-using agents),
+         dependsOn density (synthetic edges visible), maxTurns
+         presence on large builder tasks.
+       - If all 14 tasks (or however many the fresh planner emits) pass
+         and the verify gate is green: Phase 5a is validated. Record
+         spend + task-success-rate + any planner prompt tweaks in a new
+         PROGRESS.md entry dated 2026-04-19 (or whenever the run
+         happens).
+       - If the three-way file-overlap gap from ADR 0016 turns out to
+         matter (some concurrent writes still slip through), ship a
+         second-pass edge insertion and add a test for it.
+
+  B. GitHub event source + channel (Phase 5 direction B, deferred from
+     the Phase 5 startprompt). Clean slate, no live spend. Two new
+     packages: @factory5/events/github-poll (Octokit + cursor
+     persistence) and @factory5/channels/github (comments + draft PRs).
+     New `github_cursors` SQLite table + migration + ADR. factory init
+     gains --github-token; factory doctor gains a reachability probe.
+     Extend scripts/e2e-daemon.ts with --github flag using stubbed
+     Octokit. Do NOT scope a live GitHub build in the same session —
+     plumbing only.
+
+  C. Worker-subprocess ask_user (shape 1 from ADR 0015). Only pick this
+     if Phase 5b-A surfaces concrete evidence of mid-tool blocking (a
+     stuck builder log, a user complaint about "it didn't ask me").
+     Without that evidence, the deferred status in ADR 0015 stands.
+
+Whichever direction, after each concrete change run `pnpm build` /
+`pnpm test` / `pnpm lint` / `pnpm format:check`. Update PROGRESS.md at
+session end with spend + test count + any new ADRs.
+
+DO NOT in this phase: Telegram (future), web UI (future), cross-project
+learnings registry (Phase 6), refactoring the inline pipeline shape (it
+works), changing ADR 0016's materialisation logic without new evidence
+(wait for the live run to tell you what to change).
+
+Start this in a fresh conversation. The Phase 4 closeout + Phase 5a
+context has run long and Phase 5b (whichever path you pick) reads
+cleanest from a clean slate with just CLAUDE.md + the latest two
+PROGRESS entries as context.

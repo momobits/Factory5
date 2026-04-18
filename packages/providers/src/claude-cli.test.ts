@@ -108,6 +108,16 @@ describe('buildClaudeArgs', () => {
     expect(jsonArgs).not.toContain('--max-turns');
   });
 
+  it('passes a per-request maxTurns override through to --max-turns', () => {
+    // The provider merges req.maxTurns with its own default before calling
+    // buildClaudeArgs; this test simulates that merge via explicit passthrough.
+    const args = buildClaudeArgs(baseReq({ maxTurns: 55 }), [], 'stream-json', {
+      maxTurns: 55,
+    });
+    expect(args).toContain('--max-turns');
+    expect(args[args.indexOf('--max-turns') + 1]).toBe('55');
+  });
+
   it('does not add tool/permission flags when they are absent', () => {
     const args = buildClaudeArgs(baseReq(), [], 'json');
     expect(args).not.toContain('--allowedTools');

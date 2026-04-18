@@ -55,6 +55,12 @@ export interface ProviderRequest {
    * understand the flag ignore it.
    */
   permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+  /**
+   * Per-request override for the maximum tool-use turns. Only honored by
+   * streaming/tool-using provider modes (claude-cli `stream()`); text-only
+   * paths ignore it. When omitted, the provider's own default is used.
+   */
+  maxTurns?: number;
 }
 
 export interface ProviderUsage {

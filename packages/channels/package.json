@@ -26,6 +26,7 @@
     "@factory5/core": "workspace:*",
     "@factory5/logger": "workspace:*",
     "@factory5/state": "workspace:*",
+    "discord.js": "^14.15.3",
     "zod": "^3.23.0"
   },
   "devDependencies": {

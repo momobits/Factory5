@@ -168,6 +168,14 @@ export const taskSchema = z.object({
   attempts: z.number().int().nonnegative(),
   worktreePath: z.string().optional(),
   result: taskResultSchema.optional(),
+  /**
+   * Per-task override for the tool-use turn budget. Applied only to
+   * tool-using agents (scaffolder / builder / fixer); read-only agents
+   * ignore it. When omitted, the provider's default ({@link
+   * ClaudeCliProviderOptions.maxTurns}) is used. Planner-emitted. See
+   * ADR 0016.
+   */
+  maxTurns: z.number().int().positive().optional(),
 });
 
 export const planSchema = z.object({

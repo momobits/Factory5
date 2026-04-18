@@ -69,6 +69,26 @@ export const MODEL_CATEGORIES = [
   'documentation',
 ] as const;
 
+/**
+ * Capability ranking over {@link MODEL_CATEGORIES}. Higher = more capable.
+ *
+ * Used by the planner to clamp tool-using agents against their agent-registry
+ * floor (a `builder` task the LLM labelled `quick` is upgraded to the agent's
+ * declared minimum). See ADR 0016.
+ *
+ * `quick` and `documentation` are both cheap/Haiku-class; `planning` is
+ * Sonnet-class; `reasoning` and `deep` are both Opus-class. Ties are broken
+ * by string equality (max(a, b) prefers `a` when ranks match), so the callers
+ * that want a specific disambiguation must pass categories in the right order.
+ */
+export const MODEL_CATEGORY_RANKS: Readonly<Record<(typeof MODEL_CATEGORIES)[number], number>> = {
+  quick: 0,
+  documentation: 0,
+  planning: 1,
+  reasoning: 2,
+  deep: 2,
+};
+
 /** Default port the daemon listens on for IPC. Override via env `FACTORY5_DAEMON_PORT`. */
 export const DEFAULT_DAEMON_PORT = 25295;
 

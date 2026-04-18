@@ -39,6 +39,14 @@ import {
   runMigrations,
   tasksInflight,
 } from '@factory5/state';
+import {
+  createCliRpcChannel,
+  createDiscordChannel,
+  type DiscordChannel,
+  type DiscordClientLike,
+} from '@factory5/channels';
+import { startDaemon } from '@factory5/daemon';
+import { Events, type Message } from 'discord.js';
 
 // ---------- fixtures ----------
 
@@ -295,6 +303,14 @@ async function main(): Promise<void> {
     process.stdout.write(childStdout.slice(-1000) + '\n');
   }
 
+  // If --discord is passed, run a second in-process scenario that exercises
+  // the Discord channel via a stub client (no real bot token required). This
+  // proves the daemon assembly wires Discord correctly and the brain's chat
+  // reply round-trips through the stub's send path.
+  if (process.argv.includes('--discord')) {
+    await runDiscordInProcessScenario();
+  }
+
   // Cleanup temp dir on success; leave it behind on failure for inspection.
   const passed = results.filter((r) => r.ok).length;
   const failed = results.length - passed;
@@ -310,6 +326,153 @@ async function main(): Promise<void> {
 
   process.stdout.write(`\n${String(passed)}/${String(results.length)} checks passed\n`);
   if (failed > 0) exit(1);
+}
+
+// ---------------------------------------------------------------------------
+// In-process Discord scenario (--discord)
+// ---------------------------------------------------------------------------
+
+function makeDiscordStub(): {
+  client: DiscordClientLike;
+  sent: Array<{ channelId: string; text: string }>;
+} {
+  const sent: Array<{ channelId: string; text: string }> = [];
+  const listeners: Array<(m: Message) => void | Promise<void>> = [];
+  let readyCb: (() => void) | undefined;
+  const client: DiscordClientLike = {
+    user: { id: 'bot-e2e', tag: 'factory-e2e#0001' },
+    once(event, listener) {
+      if (event === Events.ClientReady) readyCb = listener;
+    },
+    on(event, listener) {
+      if (event === 'messageCreate') listeners.push(listener);
+    },
+    off(event, listener) {
+      if (event !== 'messageCreate') return;
+      const idx = listeners.indexOf(listener);
+      if (idx >= 0) listeners.splice(idx, 1);
+    },
+    async login() {
+      queueMicrotask(() => readyCb?.());
+      return 'ok';
+    },
+    async destroy() {
+      // nothing
+    },
+    channels: {
+      async fetch(id: string) {
+        return {
+          id,
+          send: async (text: string) => {
+            sent.push({ channelId: id, text });
+            return { id: `posted-${sent.length.toString()}` };
+          },
+        } as unknown as ReturnType<DiscordClientLike['channels']['fetch']> extends Promise<infer T>
+          ? T
+          : never;
+      },
+    },
+  };
+  return { client, sent };
+}
+
+function stubDiscordMessage(text: string): Message {
+  return {
+    id: 'msg-e2e-1',
+    content: `<@bot-e2e> ${text}`,
+    author: { id: 'user-e2e', bot: false },
+    channelId: 'chan-e2e',
+    guildId: 'guild-e2e',
+    channel: {
+      isThread: () => false,
+      parentId: null,
+      id: 'chan-e2e',
+      type: 0,
+    },
+    mentions: {
+      has: (userId: string) => userId === 'bot-e2e',
+    },
+    startThread: async () => ({ id: 'thread-e2e' }),
+    reply: async () => ({ id: 'ack-e2e' }),
+  } as unknown as Message;
+}
+
+async function runDiscordInProcessScenario(): Promise<void> {
+  process.stdout.write('\n-- Discord in-process scenario --\n');
+  const discordTmp = mkdtempSync(join(tmpdir(), 'factory5-e2e-discord-'));
+  const dbPath = join(discordTmp, 'factory.db');
+  const pidPath = join(discordTmp, 'factoryd.pid');
+  process.env['FACTORY5_TEST_PROVIDER'] = 'stub';
+  process.env['FACTORY5_DATA_DIR'] = discordTmp;
+  process.env['FACTORY5_PIDFILE'] = pidPath;
+
+  const stub = makeDiscordStub();
+  const discord = createDiscordChannel({ clientFactory: () => stub.client });
+  const handle = await startDaemon({
+    host: '127.0.0.1',
+    port: 0,
+    dbPath,
+    pidFilePath: pidPath,
+    noFsWatcher: true,
+    channelPlugins: [createCliRpcChannel(), discord],
+    channelConfigs: { discord: { token: 'stub-token', guildId: 'guild-e2e' } },
+    serveConcurrency: 1,
+  });
+
+  try {
+    assert('daemon starts with Discord channel', true);
+
+    // Simulate an inbound Discord message.
+    await (discord as DiscordChannel)._simulateMessage(stubDiscordMessage('hello factory'));
+
+    // Wait for the brain to claim + produce its chat reply, then for the
+    // outbound worker to hand it to the Discord stub.
+    const db = openDatabase(dbPath);
+    try {
+      const directiveArrived = await waitFor(
+        'directive inserted via Discord',
+        () =>
+          Promise.resolve(
+            directivesQ
+              .listRecent(db, 10)
+              .some((d) => d.source === 'discord' && d.principal === 'user-e2e'),
+          ),
+        10_000,
+        100,
+      );
+      assert('Discord inbound created a directive', directiveArrived);
+
+      const delivered = await waitFor(
+        'Discord outbound delivered',
+        () => Promise.resolve(stub.sent.length > 0),
+        10_000,
+        100,
+      );
+      assert(
+        'brain reply delivered via Discord stub',
+        delivered,
+        `sent=${String(stub.sent.length)}`,
+      );
+      if (stub.sent.length > 0) {
+        assert(
+          'Discord outbound text contains triage summary',
+          (stub.sent[0]?.text ?? '').startsWith('(triage) intent='),
+          stub.sent[0]?.text,
+        );
+      }
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    assert('Discord in-process scenario threw', false, (err as Error).message);
+  } finally {
+    await handle.stop();
+    try {
+      rmSync(discordTmp, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  }
 }
 
 main().catch((err: unknown) => {

@@ -99,7 +99,12 @@ export interface ClaudeCliProviderOptions {
   timeoutMs?: number;
   /** Hard timeout per stream() call. Defaults to `timeoutMs * 2` for tool-using sessions. */
   streamTimeoutMs?: number;
-  /** Default max agentic turns for `stream()` when tools are in play. Default 20. */
+  /**
+   * Default max agentic turns for `stream()` when tools are in play and the
+   * {@link ProviderRequest.maxTurns} per-request override is unset. Raised
+   * to 40 in ADR 0016 after the Phase 2 live run showed builder tasks
+   * frequently hitting the prior 20-turn ceiling mid-TDD loop.
+   */
   maxTurns?: number;
   /**
    * Disable the in-process cache for {@link ClaudeCliProvider.available}.
@@ -556,7 +561,7 @@ export class ClaudeCliProvider implements ModelProvider {
     this.defaultCwd = opts.cwd;
     this.timeoutMs = opts.timeoutMs ?? 10 * 60 * 1000;
     this.streamTimeoutMs = opts.streamTimeoutMs ?? this.timeoutMs * 2;
-    this.maxTurns = opts.maxTurns ?? 20;
+    this.maxTurns = opts.maxTurns ?? 40;
     this.noAvailabilityCache = opts.noAvailabilityCache ?? false;
   }
 
@@ -674,7 +679,11 @@ export class ClaudeCliProvider implements ModelProvider {
       );
     }
 
-    const args = buildClaudeArgs(req, this.extraArgs, 'stream-json', { maxTurns: this.maxTurns });
+    const effectiveMaxTurns =
+      req.maxTurns !== undefined && req.maxTurns > 0 ? req.maxTurns : this.maxTurns;
+    const args = buildClaudeArgs(req, this.extraArgs, 'stream-json', {
+      maxTurns: effectiveMaxTurns,
+    });
     const promptText = composePromptText(req.systemPrompt, req.messages);
     const cwd = req.cwd ?? this.defaultCwd;
 
