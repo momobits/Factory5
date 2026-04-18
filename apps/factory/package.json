@@ -1,0 +1,30 @@
+{
+  "name": "factory",
+  "version": "0.0.1",
+  "private": true,
+  "description": "factory5 — autonomous (and human-directable) software builder. CLI + brain.",
+  "type": "module",
+  "bin": {
+    "factory": "./dist/main.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/main.ts --format esm --sourcemap --clean --target node20",
+    "dev": "tsx src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@factory5/brain": "workspace:*",
+    "@factory5/cli": "workspace:*",
+    "@factory5/core": "workspace:*",
+    "@factory5/logger": "workspace:*",
+    "@factory5/state": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "tsup": "^8.2.0",
+    "tsx": "^4.16.0"
+  }
+}

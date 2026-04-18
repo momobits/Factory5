@@ -1,0 +1,37 @@
+{
+  "name": "@factory5/logger",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Pino-based structured logger for factory5 with file + console sinks and correlation IDs",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./paths": {
+      "types": "./dist/paths.d.ts",
+      "import": "./dist/paths.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup src/index.ts src/paths.ts --format esm --dts --sourcemap --clean",
+    "dev": "tsup src/index.ts src/paths.ts --format esm --dts --sourcemap --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "pino": "^9.4.0",
+    "pino-pretty": "^11.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "tsup": "^8.2.0",
+    "vitest": "^2.0.0"
+  }
+}

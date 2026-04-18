@@ -1,0 +1,32 @@
+{
+  "name": "@factory5/assessor",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Ground-truth project assessment — real test runners, file/git/import checks. No LLM.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
+    "dev": "tsup src/index.ts --format esm --dts --sourcemap --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory5/core": "workspace:*",
+    "@factory5/logger": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "tsup": "^8.2.0",
+    "vitest": "^2.0.0"
+  }
+}

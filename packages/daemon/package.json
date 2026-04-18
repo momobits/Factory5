@@ -1,0 +1,37 @@
+{
+  "name": "@factory5/daemon",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Factory5 daemon assembly — wires channels + events + IPC server",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
+    "dev": "tsup src/index.ts --format esm --dts --sourcemap --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory5/channels": "workspace:*",
+    "@factory5/core": "workspace:*",
+    "@factory5/events": "workspace:*",
+    "@factory5/ipc": "workspace:*",
+    "@factory5/logger": "workspace:*",
+    "@factory5/state": "workspace:*",
+    "fastify": "^4.28.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "tsup": "^8.2.0",
+    "vitest": "^2.0.0"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "factoryd",
+  "version": "0.0.1",
+  "private": true,
+  "description": "factory5 daemon — owns Discord, GitHub polling, fs/git watching, webhooks, IPC server",
+  "type": "module",
+  "bin": {
+    "factoryd": "./dist/main.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/main.ts --format esm --sourcemap --clean --target node20",
+    "dev": "tsx src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@factory5/core": "workspace:*",
+    "@factory5/daemon": "workspace:*",
+    "@factory5/logger": "workspace:*",
+    "@factory5/state": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "tsup": "^8.2.0",
+    "tsx": "^4.16.0"
+  }
+}

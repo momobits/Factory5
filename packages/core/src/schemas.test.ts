@@ -1,0 +1,175 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  directiveSchema,
+  eventSchema,
+  findingSchema,
+  planSchema,
+  taskSchema,
+} from './schemas.js';
+import { findingId, newId } from './ulid.js';
+
+describe('newId', () => {
+  it('produces 26-char ULIDs', () => {
+    const id = newId();
+    expect(id).toHaveLength(26);
+    expect(id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+  });
+
+  it('produces lexicographically sorted IDs', async () => {
+    const a = newId();
+    await new Promise((r) => setTimeout(r, 2));
+    const b = newId();
+    expect(a < b).toBe(true);
+  });
+});
+
+describe('findingId', () => {
+  it('zero-pads to three digits', () => {
+    expect(findingId(1)).toBe('F001');
+    expect(findingId(42)).toBe('F042');
+    expect(findingId(999)).toBe('F999');
+  });
+
+  it('expands beyond F999 without truncation', () => {
+    expect(findingId(1234)).toBe('F1234');
+  });
+
+  it('throws on invalid input', () => {
+    expect(() => findingId(0)).toThrow();
+    expect(() => findingId(-1)).toThrow();
+    expect(() => findingId(1.5)).toThrow();
+  });
+});
+
+describe('directiveSchema', () => {
+  it('round-trips a minimal directive', () => {
+    const d = {
+      id: newId(),
+      source: 'cli' as const,
+      principal: 'local-user',
+      channelRef: 'session-123',
+      intent: 'build' as const,
+      payload: { project: 'demo' },
+      autonomy: 'assisted' as const,
+      createdAt: new Date().toISOString(),
+      status: 'pending' as const,
+    };
+    const parsed = directiveSchema.parse(d);
+    expect(parsed.id).toBe(d.id);
+    expect(parsed.intent).toBe('build');
+  });
+
+  it('rejects unknown source', () => {
+    const bad = {
+      id: newId(),
+      source: 'made-up',
+      principal: 'x',
+      channelRef: 'x',
+      intent: 'build',
+      payload: null,
+      autonomy: 'assisted',
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+    };
+    expect(() => directiveSchema.parse(bad)).toThrow();
+  });
+});
+
+describe('eventSchema', () => {
+  it('parses a github issue event', () => {
+    const e = {
+      id: newId(),
+      source: 'github',
+      body: {
+        kind: 'github.issue.opened' as const,
+        repo: 'owner/name',
+        number: 42,
+        title: 'Bug: foo',
+        author: 'someone',
+        body: 'Description',
+      },
+      metadata: {},
+      receivedAt: new Date().toISOString(),
+    };
+    const parsed = eventSchema.parse(e);
+    expect(parsed.body.kind).toBe('github.issue.opened');
+  });
+
+  it('parses a channel message event', () => {
+    const e = {
+      id: newId(),
+      source: 'channel',
+      body: {
+        kind: 'channel.message' as const,
+        channel: 'discord' as const,
+        principal: 'user-1',
+        ref: 'channel-1',
+        text: 'hello',
+      },
+      metadata: {},
+      receivedAt: new Date().toISOString(),
+    };
+    const parsed = eventSchema.parse(e);
+    if (parsed.body.kind !== 'channel.message') throw new Error('discriminator failed');
+    expect(parsed.body.text).toBe('hello');
+  });
+});
+
+describe('findingSchema', () => {
+  it('accepts F001 format', () => {
+    const f = {
+      id: 'F001',
+      source: 'reviewer' as const,
+      target: 'src/api.py',
+      severity: 'HIGH' as const,
+      status: 'OPEN' as const,
+      description: 'No timeout on HTTP calls',
+      createdAt: new Date().toISOString(),
+    };
+    expect(findingSchema.parse(f).id).toBe('F001');
+  });
+
+  it('rejects invalid finding ID format', () => {
+    const bad = {
+      id: '1',
+      source: 'reviewer',
+      target: 'x',
+      severity: 'HIGH',
+      status: 'OPEN',
+      description: 'x',
+      createdAt: new Date().toISOString(),
+    };
+    expect(() => findingSchema.parse(bad)).toThrow();
+  });
+});
+
+describe('plan and task schemas', () => {
+  it('parses a plan with one task', () => {
+    const planId = newId();
+    const taskA: unknown = {
+      id: newId(),
+      planId,
+      title: 'Build module A',
+      agent: 'builder',
+      category: 'deep',
+      inputs: { files: [], context: 'spec' },
+      expectedOutputs: { files: ['src/a.ts'], signals: [] },
+      dependsOn: [],
+      status: 'pending',
+      attempts: 0,
+    };
+    const parsedTask = taskSchema.parse(taskA);
+    const plan: unknown = {
+      id: planId,
+      directiveId: newId(),
+      projectPath: '/tmp/demo',
+      tasks: [parsedTask],
+      createdAt: new Date().toISOString(),
+      status: 'draft',
+    };
+    const parsed = planSchema.parse(plan);
+    expect(parsed.tasks).toHaveLength(1);
+    expect(parsed.tasks[0]?.title).toBe('Build module A');
+  });
+});

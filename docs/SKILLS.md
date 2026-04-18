@@ -1,0 +1,42 @@
+# Skills catalog
+
+Skills are reusable methodology files (markdown) that get injected into agent prompts. They define *how* an agent should approach a class of task.
+
+Skill files live in [`../skills/`](../skills). Format: YAML frontmatter (`name`, `description`) + markdown body.
+
+> Initial skills ported from `factory2/skills/`. New skills follow the same shape.
+
+| Skill | Purpose | Used by |
+|---|---|---|
+| `architect` | Design software architecture from a CLAUDE.md spec — produce concrete interfaces, patterns, decisions | `architect` agent |
+| `brainstorming` | Explore options before committing | `architect`, `planner` |
+| `code-review` | Adversarial code review checklist | `reviewer` |
+| `dependency-install` | Install + verify project dependencies | `scaffolder`, `builder` |
+| `documentation` | Produce README/architecture/API docs | `verifier`, `architect` |
+| `error-recovery` | Diagnose and recover from a failed step | `investigator`, `fixer` |
+| `integration-testing` | Write and run integration tests | `builder`, `verifier` |
+| `progress-tracking` | Maintain BUILD.md findings + progress | All agents |
+| `scaffolding` | Set up project structure, dependencies, git | `scaffolder` |
+| `tdd` | Strict test-first development | `builder` |
+| `work-verification` | Confirm work before claiming done | All agents |
+
+## Adding a skill
+
+1. Create `skills/<name>.md` with YAML frontmatter:
+   ```markdown
+   ---
+   name: <skill-id>
+   description: |
+     One-paragraph description of what this skill is for and when to apply it.
+   ---
+
+   # <Title>
+
+   <Methodology body — be explicit, reference rules, give examples>
+   ```
+2. Add a row above
+3. Reference from any agent prompt that should use it
+
+## Loading
+
+Skills are loaded by `@factory5/brain` at runtime via the skill loader (analog of `factory2/src/factory/skills.py`). The loader scans the `skills/` directory plus user-specific overrides at `~/.factory5/skills/` and project-specific overrides at `<project>/.factory/skills/`.

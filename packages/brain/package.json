@@ -1,0 +1,37 @@
+{
+  "name": "@factory5/brain",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Factory5 brain — orchestrator: triage → plan → delegate → verify. Hosts agents.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
+    "dev": "tsup src/index.ts --format esm --dts --sourcemap --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory5/assessor": "workspace:*",
+    "@factory5/core": "workspace:*",
+    "@factory5/ipc": "workspace:*",
+    "@factory5/logger": "workspace:*",
+    "@factory5/providers": "workspace:*",
+    "@factory5/state": "workspace:*",
+    "@factory5/wiki": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "tsup": "^8.2.0",
+    "vitest": "^2.0.0"
+  }
+}
