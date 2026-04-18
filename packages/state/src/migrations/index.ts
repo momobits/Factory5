@@ -42,7 +42,10 @@ export const currentSchemaVersion: number = migrations.reduce(
 export function runMigrations(db: Database): void {
   ensureMigrationsTable(db);
   const applied = new Set(
-    db.prepare('SELECT id FROM migrations').all().map((r) => (r as { id: number }).id),
+    db
+      .prepare('SELECT id FROM migrations')
+      .all()
+      .map((r) => (r as { id: number }).id),
   );
 
   for (const m of migrations) {

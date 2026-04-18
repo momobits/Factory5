@@ -1,0 +1,154 @@
+/**
+ * Channel registry — owns the set of `ChannelPlugin`s registered with the
+ * daemon, drives their lifecycle, and fans outbound messages to the right
+ * plugin for delivery.
+ *
+ * The registry is constructed with a list of plugins + their per-channel
+ * config blocks. `start()` calls `plugin.start()` for each; `stop()` reverses.
+ * Individual plugin failures are captured in `status` / `lastError` so
+ * `/status` surfaces them without taking the whole daemon down.
+ */
+
+import type { ChannelId, Directive, OutboundMessage } from '@factory5/core';
+import type { Logger } from '@factory5/logger';
+
+import type { ChannelPlugin, SendResult } from './types.js';
+
+export type ChannelStatus = 'ready' | 'starting' | 'failed' | 'disabled';
+
+export interface ChannelEntry {
+  id: ChannelId;
+  plugin: ChannelPlugin;
+  status: ChannelStatus;
+  lastError?: string;
+}
+
+export interface ChannelRegistryOptions {
+  log: Logger;
+  /** Plugins + config. Missing plugins do not appear in `/status`. */
+  plugins: Array<{
+    plugin: ChannelPlugin;
+    /** Channel config block validated by the plugin's `configSchema`. */
+    config?: unknown;
+  }>;
+  /** Called when a plugin reports an inbound `Directive`. */
+  onInbound: (directive: Directive) => void | Promise<void>;
+}
+
+/**
+ * Read-only view the daemon's IPC server uses to build `/status` responses.
+ */
+export interface ChannelRegistryView {
+  list(): ReadonlyArray<{
+    id: ChannelId;
+    status: ChannelStatus;
+    lastError?: string;
+  }>;
+}
+
+export class ChannelRegistry implements ChannelRegistryView {
+  private readonly log: Logger;
+  private readonly entries = new Map<ChannelId, ChannelEntry>();
+  private readonly onInbound: ChannelRegistryOptions['onInbound'];
+  private readonly configByPlugin: Map<ChannelPlugin, unknown>;
+
+  constructor(opts: ChannelRegistryOptions) {
+    this.log = opts.log;
+    this.onInbound = opts.onInbound;
+    this.configByPlugin = new Map(opts.plugins.map((p) => [p.plugin, p.config]));
+    for (const { plugin } of opts.plugins) {
+      this.entries.set(plugin.id, {
+        id: plugin.id,
+        plugin,
+        status: 'disabled',
+      });
+    }
+  }
+
+  /** Current state of every registered channel. */
+  list(): ReadonlyArray<{ id: ChannelId; status: ChannelStatus; lastError?: string }> {
+    return [...this.entries.values()].map((e) => ({
+      id: e.id,
+      status: e.status,
+      ...(e.lastError !== undefined ? { lastError: e.lastError } : {}),
+    }));
+  }
+
+  /** Fetch a plugin by id (for test injection / delivery routing). */
+  get(id: ChannelId): ChannelPlugin | undefined {
+    return this.entries.get(id)?.plugin;
+  }
+
+  /** Bring every plugin online. Failures are captured, not thrown. */
+  async start(): Promise<void> {
+    for (const entry of this.entries.values()) {
+      entry.status = 'starting';
+      try {
+        // Validate config via the plugin's schema. A plugin that doesn't
+        // need config ships a permissive schema (e.g. `z.object({}).default({})`)
+        // so this parse always succeeds.
+        const rawConfig = this.configByPlugin.get(entry.plugin);
+        const validated = entry.plugin.configSchema.parse(rawConfig ?? {});
+        await entry.plugin.start(
+          {
+            log: this.log.child({ channel: entry.id }),
+            onInbound: (d) => this.onInbound(d),
+          },
+          validated,
+        );
+        entry.status = 'ready';
+        delete entry.lastError;
+        this.log.info({ channel: entry.id }, 'channel: ready');
+      } catch (err) {
+        entry.status = 'failed';
+        entry.lastError = err instanceof Error ? err.message : String(err);
+        this.log.error({ err, channel: entry.id }, 'channel: start failed');
+      }
+    }
+  }
+
+  /** Take every plugin offline. */
+  async stop(): Promise<void> {
+    for (const entry of [...this.entries.values()].reverse()) {
+      try {
+        await entry.plugin.stop();
+        entry.status = 'disabled';
+        delete entry.lastError;
+      } catch (err) {
+        entry.lastError = err instanceof Error ? err.message : String(err);
+        this.log.warn({ err, channel: entry.id }, 'channel: stop failed');
+      }
+    }
+  }
+
+  /**
+   * Send an outbound message via the matching plugin. Returns the plugin's
+   * `SendResult`; callers decide how to mark the row as delivered.
+   */
+  async send(msg: OutboundMessage): Promise<SendResult> {
+    const entry = this.entries.get(msg.targetChannel);
+    if (entry === undefined) {
+      return { delivered: false, error: `no plugin registered for channel ${msg.targetChannel}` };
+    }
+    if (entry.status !== 'ready') {
+      return {
+        delivered: false,
+        error: `channel ${msg.targetChannel} not ready (${entry.status})`,
+      };
+    }
+    try {
+      return await entry.plugin.send(msg);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.log.warn({ err, channel: entry.id, messageId: msg.id }, 'channel: send threw');
+      return { delivered: false, error: message };
+    }
+  }
+}
+
+/**
+ * Helper to build a logger'd registry with the standard options surface.
+ */
+export function createChannelRegistry(opts: ChannelRegistryOptions): ChannelRegistry {
+  return new ChannelRegistry(opts);
+}

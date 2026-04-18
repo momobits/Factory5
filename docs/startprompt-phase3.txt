@@ -1,0 +1,61 @@
+  ▎ Read CLAUDE.md, then docs/PROGRESS.md (latest entry is the Phase 2 live-run completion +
+  ▎ post-mortem), then docs/ARCHITECTURE.md, then docs/decisions/INDEX.md (scan 0007–0010 for
+  ▎ Phase 2 reasoning; ADR 0002 for why factory + factoryd are two binaries; ADR 0003 for the
+  ▎ SQLite-as-bus contract). Phase 2 infrastructure is verified — pnpm build / test / lint /
+  ▎ format:check all green (128 tests); factory build example ran end-to-end against live
+  ▎ claude-cli, every seam worked (triage, architect, planner, parallel pool with worktrees +
+  ▎ stream-json tool use, assessor with real pytest), $2.29 spend on a 14-task plan. Three
+  ▎ PROMPT-ENGINEERING tuning items are flagged open in PROGRESS.md (planner over-parallelises
+  ▎ file-overlapping builders → merge conflicts; planner sometimes routes builders to Haiku
+  ▎ tier; --max-turns 20 is tight for larger Opus builders). Decide at the top of the session
+  ▎ whether to tackle those before Phase 3 infrastructure or alongside it — they're cheap prompt
+  ▎ edits + one config default, no new ADRs required. The seams for a long-running daemon are
+  ▎ in place (IPC contracts in @factory5/ipc, tasks_inflight heartbeats in @factory5/state,
+  ▎ serve-mode stub in runBrain, doorbell port 25295 pinned in CompleteArchitecture.md §3) but
+  ▎ nothing runs as a service yet — every `factory build` is still a one-shot process.
+  ▎
+  ▎ Proceed with Phase 3: turn factoryd from a stub into a real long-running daemon that claims
+  ▎ directives from SQLite, runs them on the brain's serve mode, and talks to the factory CLI
+  ▎ over a localhost IPC port. Goal: `factory daemon start` boots factoryd, `factory build <p>`
+  ▎ (in a separate terminal) enqueues a directive and watches it run under the daemon, `factory
+  ▎ daemon status` reports inflight tasks from tasks_inflight, and Ctrl-C drains cleanly with no
+  ▎ orphaned worktrees or stuck rows. Order:
+  ▎
+  ▎   1. Factoryd lifecycle — @factory5/daemon assembles: pidfile under %LOCALAPPDATA%\factory5\
+  ▎      (Windows) or ~/.factory5/ (Linux/Mac), structured shutdown on SIGINT/SIGTERM, stdout +
+  ▎      file logging via @factory5/logger, crash-loop protection (if the brain throws, log +
+  ▎      restart-with-backoff instead of dying). apps/factoryd wires it. Add `factoryd --daemonize`
+  ▎      vs `factoryd --foreground` (Windows has no fork, so daemonize spawns a detached child).
+  ▎   2. IPC server — Fastify (already a dep) on 127.0.0.1:25295 serving the four Zod-validated
+  ▎      endpoints from @factory5/ipc (/status, /send, /directives/notify, /reload-config). Every
+  ▎      handler logs a correlationId. Refuse non-localhost connections. Add a `/healthz` probe
+  ▎      that's handlerless (for future process supervisors).
+  ▎   3. Brain serve-mode — replace the stub in runBrain({ mode: 'serve' }) with a real claim loop:
+  ▎      listen on a doorbell signal (http POST from IPC), SELECT pending directives FOR UPDATE,
+  ▎      mark them claimed, delegate to the inline pipeline (already written), heartbeat per-
+  ▎      directive so the daemon's /status endpoint can surface live state. Concurrency ceiling
+  ▎      stays at the pool level (per-directive); serve-mode ceiling is directives-in-flight
+  ▎      (default 1 — one build at a time — opt-in higher via config).
+  ▎   4. CLI-RPC channel — @factory5/channels/cli-rpc: a ChannelPlugin that owns the daemon side
+  ▎      of the factory-CLI ↔ factoryd conversation. factory CLI gains `factory daemon start |
+  ▎      stop | status | restart` commands; `factory build <p>` now either starts a directive
+  ▎      against the running daemon (preferred) or falls back to inline if no daemon is reachable.
+  ▎      New command: `factory chat` — interactive REPL that posts as a channel.message event and
+  ▎      renders outbound_messages as they're delivered.
+  ▎   5. Filesystem event source — @factory5/events/fs-watcher: chokidar-backed; watches every
+  ▎      registered project's workspacePath; debounces 500ms; emits { kind: 'fs.changed', path,
+  ▎      type } events into events_audit and (if the project has an open build directive) posts
+  ▎      as a signal on that directive. Exclude .factory/, node_modules/, .git/, dist/ by default.
+  ▎   6. End-to-end validation — a live integration test script under scripts/e2e-daemon.ts that:
+  ▎      (a) starts factoryd in --foreground in a child process; (b) hits /healthz to confirm
+  ▎      IPC; (c) enqueues a directive via /directives/notify; (d) polls /status until terminal;
+  ▎      (e) asserts tasks_inflight has zero non-terminal rows; (f) sends SIGTERM and asserts
+  ▎      clean exit with no orphaned worktrees. Smoke only — don't spend tokens; the integration
+  ▎      test uses a stub provider registered via FACTORY5_TEST_PROVIDER.
+  ▎
+  ▎ After each step: pnpm build / test / lint / format:check. Update PROGRESS.md at session end
+  ▎ and add an ADR for any non-obvious choice (single-daemon-instance coordination — pidfile vs
+  ▎ lock vs port-in-use, doorbell vs polling, how serve-mode handles a brain that has already
+  ▎ claimed a directive across a restart, CLI-RPC transport choice). Phase 3 does NOT cover
+  ▎ Discord or GitHub events — those are Phase 4 and Phase 5. If you touch @factory5/channels
+  ▎ or @factory5/events beyond the two plugins listed above, stop and write an ADR first.

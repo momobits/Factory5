@@ -61,9 +61,7 @@ export function create(db: Database, q: PendingQuestion): void {
 
 /** Fetch a pending question by id. */
 export function getById(db: Database, id: string): PendingQuestion | undefined {
-  const row = db
-    .prepare('SELECT * FROM pending_questions WHERE id = ?')
-    .get(id) as Row | undefined;
+  const row = db.prepare('SELECT * FROM pending_questions WHERE id = ?').get(id) as Row | undefined;
   return row !== undefined ? rowToQuestion(row) : undefined;
 }
 
@@ -81,7 +79,9 @@ export function openForDirective(db: Database, directiveId: string): PendingQues
 
 /** Record an answer. */
 export function answer(db: Database, id: string, answer: string, when: string): void {
-  db.prepare(
-    'UPDATE pending_questions SET answered_at = ?, answer = ? WHERE id = ?',
-  ).run(when, answer, id);
+  db.prepare('UPDATE pending_questions SET answered_at = ?, answer = ? WHERE id = ?').run(
+    when,
+    answer,
+    id,
+  );
 }

@@ -11,25 +11,25 @@ Each file is the agent's system prompt. The brain composes the final prompt at r
 
 ## Files
 
-| File | Role | Status |
-|---|---|---|
-| `triage.md` | `triage` | stub |
-| `architect.md` | `architect` | stub |
-| `planner.md` | `planner` | stub |
-| `scaffolder.md` | `scaffolder` | stub |
-| `builder.md` | `builder` | stub |
-| `reviewer.md` | `reviewer` | stub |
-| `fixer.md` | `fixer` | stub |
-| `investigator.md` | `investigator` | stub |
-| `verifier.md` | `verifier` | stub |
-| `legacy/code-reviewer.md` | reference | from factory2 — Claude-Code-style subagent |
-| `legacy/test-runner.md` | reference | from factory2 — Claude-Code-style subagent |
+| File                      | Role           | Status                                     |
+| ------------------------- | -------------- | ------------------------------------------ |
+| `triage.md`               | `triage`       | stub                                       |
+| `architect.md`            | `architect`    | stub                                       |
+| `planner.md`              | `planner`      | stub                                       |
+| `scaffolder.md`           | `scaffolder`   | stub                                       |
+| `builder.md`              | `builder`      | stub                                       |
+| `reviewer.md`             | `reviewer`     | stub                                       |
+| `fixer.md`                | `fixer`        | stub                                       |
+| `investigator.md`         | `investigator` | stub                                       |
+| `verifier.md`             | `verifier`     | stub                                       |
+| `legacy/code-reviewer.md` | reference      | from factory2 — Claude-Code-style subagent |
+| `legacy/test-runner.md`   | reference      | from factory2 — Claude-Code-style subagent |
 
 ## Format
 
 ```markdown
 ---
-role: <agent-role>          # matches packages/core AgentRole
+role: <agent-role> # matches packages/core AgentRole
 description: |
   Short description of when this agent runs and what it produces.
 ---

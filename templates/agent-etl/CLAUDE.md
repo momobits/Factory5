@@ -1,9 +1,11 @@
 # Agent ETL
 
 ## Project Overview
+
 An AI agent that takes natural language descriptions of data flows and generates, validates, and executes ETL pipelines. Uses LangGraph for orchestration and MCP for tool connectivity.
 
 ## Tech Stack
+
 - Python 3.11+
 - LangGraph for agent graph
 - DuckDB as execution engine
@@ -11,6 +13,7 @@ An AI agent that takes natural language descriptions of data flows and generates
 - MCP SDK (Python) for exposing pipeline operations
 
 ## Architecture
+
 ```
 Natural language description → Planner → Validator → Executor → Results
                                                          ↕
@@ -18,6 +21,7 @@ Natural language description → Planner → Validator → Executor → Results
 ```
 
 ## Key Modules
+
 1. `agent/graph.py` — LangGraph agent with plan→validate→execute flow
 2. `agent/planner.py` — Parses NL into pipeline DAG (source, transforms, sink)
 3. `agent/validator.py` — Validates pipeline: checks sources exist, types compatible, transforms valid
@@ -28,6 +32,7 @@ Natural language description → Planner → Validator → Executor → Results
 8. `mcp_server/server.py` — MCP server exposing: create_pipeline, list_pipelines, run_pipeline, get_status
 
 ## Coding Standards
+
 - Type hints everywhere, pydantic models for pipeline definitions
 - Pipeline definitions stored as JSON (human-readable, version-controllable)
 - All generated code must be inspectable before execution
@@ -35,6 +40,7 @@ Natural language description → Planner → Validator → Executor → Results
 - Async where possible (MCP server, agent loop)
 
 ## Pipeline Definition Schema (pydantic)
+
 ```python
 class PipelineStep(BaseModel):
     name: str
@@ -49,15 +55,18 @@ class Pipeline(BaseModel):
 ```
 
 ## Sample Pipelines for Testing
+
 1. "Take the CSV at sample_data/sales.csv, clean the dates, aggregate by month, save as parquet"
 2. "Read customers.csv and orders.csv, join on customer_id, filter to last 90 days, output to analytics.parquet"
 
 ## Environment Variables
+
 - `ANTHROPIC_API_KEY` — Required
 - `DATA_DIR` — Working data directory (default: ./data)
 - `MCP_PORT` — MCP server port (default: 3100)
 
 ## Testing
+
 - pytest + pytest-asyncio
 - Test planner: NL input → correct pipeline DAG structure
 - Test validator: invalid pipelines should fail with clear errors
@@ -66,4 +75,5 @@ class Pipeline(BaseModel):
 - Test end-to-end: NL description → output file verification
 
 ## Git Workflow
+
 Conventional commits per module.

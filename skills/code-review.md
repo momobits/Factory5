@@ -12,11 +12,13 @@ After completing a module (tests pass, committed), review it before moving on.
 ## Review Checklist
 
 ### Spec Compliance
+
 - [ ] Module does what CLAUDE.md says it should
 - [ ] All functions/methods listed in spec are implemented
 - [ ] Return types match what other modules expect
 
 ### Code Quality
+
 - [ ] Type hints on all public functions
 - [ ] Docstrings on all public functions and classes (Google style)
 - [ ] No bare `except:` — catch specific exceptions
@@ -26,6 +28,7 @@ After completing a module (tests pass, committed), review it before moving on.
 - [ ] Consistent naming: snake_case (Python) or camelCase (TypeScript)
 
 ### Security
+
 - [ ] No hardcoded API keys, passwords, or secrets
 - [ ] No `eval()` or `exec()`
 - [ ] SQL uses parameterized queries (no f-strings in SQL)
@@ -33,6 +36,7 @@ After completing a module (tests pass, committed), review it before moving on.
 - [ ] Sensitive data not logged
 
 ### Dependencies
+
 - [ ] New imports are in requirements/package.json
 - [ ] No circular imports
 - [ ] External calls have timeout and error handling
@@ -46,6 +50,7 @@ After completing a module (tests pass, committed), review it before moving on.
 ## Output
 
 After review, add a one-line summary to BUILD.md:
+
 ```
 - [x] Module: sentinel/profiler.py (tests: 4 pass, review: clean)
 - [x] Module: sentinel/scorer.py (tests: 6 pass, review: 1 WARNING — missing docstring on _normalize)

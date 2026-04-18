@@ -26,17 +26,20 @@ pip install -e ".[dev,test]" --break-system-packages 2>&1
 ### Common Failures
 
 **Missing system library** (e.g., `libpq-dev`, `libffi-dev`):
+
 - Read the error for the library name
 - Try: `sudo apt-get install -y <lib>` if permissions allow
 - If no sudo: switch to a pure-Python alternative (e.g., `psycopg2-binary` instead of `psycopg2`)
 - Note the workaround in BUILD.md Decisions
 
 **Version conflict**:
+
 - Pin the conflicting package to a compatible version in pyproject.toml
 - Run `pip install -e .` again
 - Do NOT downgrade Python itself
 
 **Package not found**:
+
 - Check spelling against PyPI
 - Check if it was renamed (e.g., `sklearn` → `scikit-learn`)
 - If it's an optional heavy dependency, check if a lighter alternative exists
@@ -59,14 +62,17 @@ npm install 2>&1
 ### Common Failures
 
 **Peer dependency conflict**:
+
 - Try: `npm install --legacy-peer-deps`
 - If that fails: pin the conflicting peer in package.json overrides
 
 **Node version mismatch**:
+
 - Check `engines` field in package.json
 - Use the version specified, or remove the engines constraint if flexible
 
 **Native module build failure**:
+
 - Switch to a prebuilt alternative (e.g., `better-sqlite3` → `sql.js`)
 - Note the swap in BUILD.md Decisions
 

@@ -64,18 +64,12 @@ export function insert(db: Database, d: Directive): void {
 
 /** Fetch a directive by id. */
 export function getById(db: Database, id: string): Directive | undefined {
-  const row = db.prepare('SELECT * FROM directives WHERE id = ?').get(id) as
-    | Row
-    | undefined;
+  const row = db.prepare('SELECT * FROM directives WHERE id = ?').get(id) as Row | undefined;
   return row !== undefined ? rowToDirective(row) : undefined;
 }
 
 /** List directives by status (most-recent first), limited. */
-export function listByStatus(
-  db: Database,
-  status: Directive['status'],
-  limit = 50,
-): Directive[] {
+export function listByStatus(db: Database, status: Directive['status'], limit = 50): Directive[] {
   const rows = db
     .prepare('SELECT * FROM directives WHERE status = ? ORDER BY created_at DESC LIMIT ?')
     .all(status, limit) as Row[];
@@ -86,10 +80,7 @@ export function listByStatus(
  * Atomically claim the next pending directive (FIFO). Returns the claimed
  * directive or `undefined` if the queue is empty.
  */
-export function claimNext(
-  db: Database,
-  opts: { claimedBy: string },
-): Directive | undefined {
+export function claimNext(db: Database, opts: { claimedBy: string }): Directive | undefined {
   const claimTx = db.transaction(() => {
     const row = db
       .prepare(
@@ -100,19 +91,24 @@ export function claimNext(
       )
       .get() as Row | undefined;
     if (row === undefined) return undefined;
-    db.prepare(
-      `UPDATE directives SET status = 'claimed', claimed_by = ? WHERE id = ?`,
-    ).run(opts.claimedBy, row.id);
+    db.prepare(`UPDATE directives SET status = 'claimed', claimed_by = ? WHERE id = ?`).run(
+      opts.claimedBy,
+      row.id,
+    );
     return rowToDirective({ ...row, status: 'claimed', claimed_by: opts.claimedBy });
   });
   return claimTx();
 }
 
 /** Update a directive's status. */
-export function updateStatus(
-  db: Database,
-  id: string,
-  status: Directive['status'],
-): void {
+export function updateStatus(db: Database, id: string, status: Directive['status']): void {
   db.prepare('UPDATE directives SET status = ? WHERE id = ?').run(status, id);
+}
+
+/** List the most recent N directives across all statuses. */
+export function listRecent(db: Database, limit = 50): Directive[] {
+  const rows = db
+    .prepare('SELECT * FROM directives ORDER BY created_at DESC LIMIT ?')
+    .all(limit) as Row[];
+  return rows.map(rowToDirective);
 }

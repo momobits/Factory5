@@ -31,6 +31,30 @@ export interface ProviderRequest {
   maxTokens?: number;
   /** Reasoning effort hint. Providers that don't support it ignore. */
   reasoning?: 'low' | 'medium' | 'high' | 'max';
+  /**
+   * Cancellation signal. Provider implementations MUST honor this by killing
+   * their subprocess / aborting their HTTP request and rejecting the `call`
+   * promise (or ending the `stream` iterable) with an AbortError.
+   */
+  signal?: AbortSignal;
+  /**
+   * Working directory for subprocess-style providers (e.g. claude-cli inside
+   * a per-task worktree). HTTP providers ignore this.
+   */
+  cwd?: string;
+  /**
+   * Whitelist of tool names the provider may use. Only meaningful for
+   * tool-using provider modes (claude-cli `stream()`); unused by pure
+   * text-completion paths.
+   */
+  allowedTools?: readonly string[];
+  /**
+   * Permission mode for subprocess-style providers that support it
+   * (claude-cli: 'bypassPermissions' skips per-tool prompts; suitable when
+   * the worker runs inside an isolated worktree). Providers that don't
+   * understand the flag ignore it.
+   */
+  permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
 }
 
 export interface ProviderUsage {

@@ -2,7 +2,7 @@
 
 > This document is the **current** architecture. It mirrors [`../CompleteArchitecture.md`](../CompleteArchitecture.md) at scaffold time but is allowed to evolve. When something here disagrees with the snapshot, **this** document is the source of truth — and you should add an ADR explaining the divergence.
 
-For the full design context (philosophy, rationale, control flow), see [`../CompleteArchitecture.md`](../CompleteArchitecture.md). This file focuses on the *current state* of components and how they connect.
+For the full design context (philosophy, rationale, control flow), see [`../CompleteArchitecture.md`](../CompleteArchitecture.md). This file focuses on the _current state_ of components and how they connect.
 
 ---
 
@@ -17,23 +17,23 @@ Both Node 20+, TypeScript, ESM.
 
 ## Components (current)
 
-| Package | Process | Status | Responsibility |
-|---|---|---|---|
-| `@factory5/core` | shared | implemented | Types + Zod schemas |
-| `@factory5/logger` | shared | implemented | Pino logger factory |
-| `@factory5/state` | shared | implemented | SQLite (better-sqlite3) wrapper, migrations, CRUD |
-| `@factory5/ipc` | shared | implemented | HTTP contracts (Zod) + typed clients |
-| `@factory5/channels` | daemon | stub | ChannelPlugin interface (no impls yet) |
-| `@factory5/events` | daemon | stub | Event sources (no impls yet) |
-| `@factory5/daemon` | daemon | stub | Daemon assembly |
-| `@factory5/providers` | brain | stub | LLM provider interface (no impls yet) |
-| `@factory5/wiki` | brain | stub | Markdown wiki ops |
-| `@factory5/assessor` | brain | stub | Ground-truth checks |
-| `@factory5/brain` | brain | stub | Orchestrator |
-| `@factory5/worker` | brain | stub | Per-task subprocess |
-| `@factory5/cli` | brain | stub | Commander-based CLI |
-| `apps/factory` | brain entry | stub | Wires brain + cli |
-| `apps/factoryd` | daemon entry | stub | Wires daemon + channels + events |
+| Package               | Process      | Status      | Responsibility                                                                            |
+| --------------------- | ------------ | ----------- | ----------------------------------------------------------------------------------------- |
+| `@factory5/core`      | shared       | implemented | Types + Zod schemas                                                                       |
+| `@factory5/logger`    | shared       | implemented | Pino logger factory                                                                       |
+| `@factory5/state`     | shared       | implemented | SQLite (better-sqlite3) wrapper, migrations, CRUD                                         |
+| `@factory5/ipc`       | shared       | implemented | HTTP contracts (Zod) + typed clients                                                      |
+| `@factory5/channels`  | daemon       | phase-3     | `ChannelPlugin` interface + `ChannelRegistry` + `cli-rpc` plugin (ADR 0014)               |
+| `@factory5/events`    | daemon       | phase-3     | `EventSource` interface + `fs-watcher` (chokidar, debounced)                              |
+| `@factory5/daemon`    | daemon       | phase-3     | pidfile (ADR 0011), IPC server, channels, events, brain supervisor (ADRs 0012, 0013)      |
+| `@factory5/providers` | brain        | phase-3     | `claude-cli` (ADR 0009) + `StubProvider` (via `FACTORY5_TEST_PROVIDER=stub`)              |
+| `@factory5/wiki`      | brain        | implemented | Pages, findings, BUILD.md, plan, readiness gate                                           |
+| `@factory5/assessor`  | brain        | phase-1     | pytest + Python imports + artifact + git checks                                           |
+| `@factory5/brain`     | brain        | phase-3     | Inline pipeline + parallel pool (ADR 0010) + serve-mode claim loop (ADR 0013)             |
+| `@factory5/worker`    | brain        | phase-2     | Per-task worktrees + tool-using subprocess for scaffolder/builder/fixer (ADRs 0007, 0008) |
+| `@factory5/cli`       | brain        | phase-3     | `build` (daemon-or-inline) / `daemon {start,stop,status,restart}` / `chat` / `doctor` …   |
+| `apps/factory`        | brain entry  | implemented | Wires brain + cli                                                                         |
+| `apps/factoryd`       | daemon entry | phase-3     | `--foreground` / `--daemonize`; wires daemon assembly                                     |
 
 ## Storage
 
@@ -45,14 +45,22 @@ Both Node 20+, TypeScript, ESM.
 - **Bus:** SQLite (durable, audited, crash-safe)
 - **Doorbell:** Localhost HTTP at `127.0.0.1:25295`, defined in [`@factory5/ipc`](../packages/ipc/README.md)
 
-## Channels (planned)
+## Channels
 
-| Channel | Status | Library |
-|---|---|---|
-| `cli-rpc` | planned | local socket / named pipe |
-| `discord` | planned | `discord.js` |
-| `telegram` | future | `grammy` |
-| `web` | future | Fastify + SSE |
+| Channel    | Status  | Transport / library                                                                                             |
+| ---------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| `cli-rpc`  | phase-3 | HTTP POST to `/directives/notify`; outbound by SQLite polling + optional in-process session listener (ADR 0014) |
+| `discord`  | phase-4 | `discord.js`                                                                                                    |
+| `telegram` | future  | `grammy`                                                                                                        |
+| `web`      | future  | Fastify + SSE                                                                                                   |
+
+## Event sources
+
+| Source        | Status  | Library / approach                                                          |
+| ------------- | ------- | --------------------------------------------------------------------------- |
+| `fs-watcher`  | phase-3 | chokidar; watches each registered project's workspacePath; debounced 500 ms |
+| `github-poll` | phase-5 | Octokit + cursor persistence                                                |
+| `git-poll`    | phase-5 | `simple-git` log diff                                                       |
 
 ## Models / providers (planned)
 

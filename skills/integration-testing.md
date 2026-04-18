@@ -18,7 +18,9 @@ Unit tests prove each module works alone. Integration tests prove they work toge
 ## What to Test
 
 ### Data Flow
+
 Test that data passes correctly between modules end-to-end:
+
 ```
 Input → Module A → Module B → Module C → Expected Output
 ```
@@ -26,19 +28,24 @@ Input → Module A → Module B → Module C → Expected Output
 Write a test that feeds real (not mocked) input into the first module and checks the final output from the last module.
 
 ### Entry Points
+
 Test the main entry point (CLI, API endpoint, main function) with realistic inputs:
+
 - Does `python -m <package>` run without error?
 - Does the CLI parse arguments and produce output?
 - Does the API return valid responses?
 
 ### Error Propagation
+
 Test that errors in one module surface correctly:
+
 - Module A returns invalid data → Module B raises a clear error (not a cryptic crash)
 - External service is down → graceful error message, not a traceback
 
 ## How to Write Them
 
 ### File Location
+
 ```
 Python:  tests/test_integration.py
 TypeScript:  src/__tests__/integration.test.ts

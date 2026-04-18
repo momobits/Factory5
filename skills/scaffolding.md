@@ -72,7 +72,7 @@ EOF
 
 ## Always Include
 
-- `.gitignore` covering: .env, __pycache__, node_modules, .venv, *.pyc, dist/, .DS_Store
+- `.gitignore` covering: .env, **pycache**, node_modules, .venv, \*.pyc, dist/, .DS_Store
 - `.env.example` listing required env vars (from CLAUDE.md) with placeholder values
 - `Makefile` or `package.json` scripts for: install, test, lint, clean
 - Empty `__init__.py` or `index.ts` in every package directory

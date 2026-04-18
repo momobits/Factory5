@@ -17,11 +17,11 @@ A binary "interactive vs autonomous" toggle is too coarse. A pure interactive mo
 
 Three explicit modes per directive:
 
-| Mode | Behavior |
-|---|---|
-| **`chat`** | Turn-by-turn. Every step asks. For Q&A, brainstorming, light edits. |
-| **`assisted`** *(default)* | Brain produces plan → asks user to confirm → executes between checkpoints (per phase boundary, not per step) → asks at next checkpoint. |
-| **`autonomous`** | Runs to completion without checkpoints, **except**: (a) brain pauses and asks user when ambiguity blocks progress; (b) brain escalates to user if a task fails its retry budget; (c) brain reports milestones (start, design done, build done, complete/blocked). No silent looping. |
+| Mode                       | Behavior                                                                                                                                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`chat`**                 | Turn-by-turn. Every step asks. For Q&A, brainstorming, light edits.                                                                                                                                                                                                                  |
+| **`assisted`** _(default)_ | Brain produces plan → asks user to confirm → executes between checkpoints (per phase boundary, not per step) → asks at next checkpoint.                                                                                                                                              |
+| **`autonomous`**           | Runs to completion without checkpoints, **except**: (a) brain pauses and asks user when ambiguity blocks progress; (b) brain escalates to user if a task fails its retry budget; (c) brain reports milestones (start, design done, build done, complete/blocked). No silent looping. |
 
 Two brain-side tools enable mid-flight engagement (so even autonomous mode is never silent when stuck):
 
@@ -39,6 +39,7 @@ Anti-loop guardrails enforce that autonomous mode escalates rather than spinning
 ## Consequences
 
 **Positive:**
+
 - Matches the spectrum of how users actually want to interact
 - Default (`assisted`) is the safest first-time experience — checkpoints prevent surprise outputs
 - Autonomous mode is genuinely usable because it can't disappear into a loop
@@ -46,6 +47,7 @@ Anti-loop guardrails enforce that autonomous mode escalates rather than spinning
 - Survives brain restart: pending questions reload from SQLite
 
 **Negative:**
+
 - Three modes is more surface area than two (interactive/autonomous). Worth it because the middle (`assisted`) is what most users will actually use.
 - `ask_user` introduces latency in autonomous mode when called. Acceptable — the alternative is the agent guessing wrong.
 - Channel adapters must support inbound (await reply) — adds requirement to `ChannelPlugin` interface.

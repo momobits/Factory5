@@ -24,6 +24,7 @@ Before writing ANY implementation code for a module:
 ```
 
 Test what matters:
+
 - Happy path: normal inputs → expected outputs
 - Edge cases: empty inputs, None, zero, max values
 - Error cases: invalid inputs → proper exceptions
@@ -62,12 +63,14 @@ git commit -m "feat: implement <module> with tests"
 ## Test File Conventions
 
 Python:
+
 - Test files: `tests/test_<module>.py`
 - Use pytest, pytest-asyncio for async
 - Use `unittest.mock` for mocking
 - Fixtures in `tests/conftest.py`
 
 TypeScript:
+
 - Test files: `src/<module>.test.ts` or `__tests__/<module>.test.ts`
 - Use vitest or jest
 - Use `vi.mock()` / `jest.mock()` for mocking

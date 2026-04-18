@@ -27,13 +27,14 @@ taskLog.info('task started');
 
 ## Sinks
 
-| Sink | When | Format |
-|---|---|---|
-| Console | always | pretty-printed colorized when stdout is a TTY; JSON otherwise (CI-friendly) |
-| File | always | JSON to `<logsDir>/<process>-<date>.log`, daily rotation, 14-day retention |
+| Sink           | When                                                     | Format                                                                           |
+| -------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Console        | always                                                   | pretty-printed colorized when stdout is a TTY; JSON otherwise (CI-friendly)      |
+| File           | always                                                   | JSON to `<logsDir>/<process>-<date>.log`, daily rotation, 14-day retention       |
 | Per-build file | when `withBuildSink({ projectPath, buildId })` is called | JSON mirror of brain logs into `<projectPath>/.factory/logs/build-<buildId>.log` |
 
 `<logsDir>` is platform-aware:
+
 - Linux/Mac: `~/.factory5/logs/`
 - Windows: `%LOCALAPPDATA%\factory5\logs\`
 

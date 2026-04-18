@@ -49,16 +49,12 @@ export function upsert(db: Database, p: Project): void {
 
 /** Lookup a project by name. */
 export function getByName(db: Database, name: string): Project | undefined {
-  const row = db.prepare('SELECT * FROM projects WHERE name = ?').get(name) as
-    | Row
-    | undefined;
+  const row = db.prepare('SELECT * FROM projects WHERE name = ?').get(name) as Row | undefined;
   return row !== undefined ? rowToProject(row) : undefined;
 }
 
 /** All known projects, most-recently touched first. */
 export function listAll(db: Database): Project[] {
-  const rows = db
-    .prepare('SELECT * FROM projects ORDER BY last_touched_at DESC')
-    .all() as Row[];
+  const rows = db.prepare('SELECT * FROM projects ORDER BY last_touched_at DESC').all() as Row[];
   return rows.map(rowToProject);
 }

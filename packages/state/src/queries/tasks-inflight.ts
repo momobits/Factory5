@@ -91,12 +91,7 @@ export function heartbeat(db: Database, id: string, when: string): void {
 }
 
 /** Mark a task complete with its result. */
-export function markComplete(
-  db: Database,
-  id: string,
-  result: TaskResult,
-  when: string,
-): void {
+export function markComplete(db: Database, id: string, result: TaskResult, when: string): void {
   db.prepare(
     `UPDATE tasks_inflight
      SET status = 'complete', finished_at = ?, result_json = ?
@@ -105,12 +100,7 @@ export function markComplete(
 }
 
 /** Mark a task failed with its result. */
-export function markFailed(
-  db: Database,
-  id: string,
-  result: TaskResult,
-  when: string,
-): void {
+export function markFailed(db: Database, id: string, result: TaskResult, when: string): void {
   db.prepare(
     `UPDATE tasks_inflight
      SET status = 'failed', finished_at = ?, result_json = ?

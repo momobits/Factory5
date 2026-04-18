@@ -1,28 +1,17 @@
 /**
- * @factory5/worker — per-task subprocess wrapper.
+ * @factory5/worker — per-task execution.
  *
- * Phase 1 implementation will spawn `claude -p` and stream its output.
- * For now this is a scaffold.
+ * Phase 1 implements the single-task inline path: compose a prompt from the
+ * task + project wiki + open findings, call the resolved provider, parse
+ * `FINDING [SEV] target: description` markers out of the output, and return
+ * a {@link TaskResult}.
+ *
+ * Worktree isolation + subprocess-style `claude -p` invocation from a
+ * worker subprocess (rather than the brain's own process) land in Phase 2.
  *
  * @packageDocumentation
  */
 
-import type { Task, TaskResult } from '@factory5/core';
-import { createLogger } from '@factory5/logger';
-
-const log = createLogger('worker');
-
-export interface WorkerOptions {
-  task: Task;
-  projectPath: string;
-  /** Optional cancellation signal. */
-  signal?: AbortSignal;
-  /** Periodic heartbeat callback (every ~5s while running). */
-  onHeartbeat?: (now: string) => void;
-}
-
-/** Stub. */
-export async function runWorker(opts: WorkerOptions): Promise<TaskResult> {
-  log.warn({ taskId: opts.task.id }, 'runWorker: stub — Phase 1 implementation pending');
-  throw new Error('@factory5/worker.runWorker not yet implemented (Phase 1)');
-}
+export * from './run-worker.js';
+export * from './parse-findings.js';
+export * from './worktree.js';

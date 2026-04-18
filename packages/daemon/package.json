@@ -12,7 +12,10 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "dev": "tsup src/index.ts --format esm --dts --sourcemap --watch",
@@ -20,13 +23,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@factory5/brain": "workspace:*",
     "@factory5/channels": "workspace:*",
     "@factory5/core": "workspace:*",
     "@factory5/events": "workspace:*",
     "@factory5/ipc": "workspace:*",
     "@factory5/logger": "workspace:*",
+    "@factory5/providers": "workspace:*",
     "@factory5/state": "workspace:*",
-    "fastify": "^4.28.0"
+    "fastify": "^4.28.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

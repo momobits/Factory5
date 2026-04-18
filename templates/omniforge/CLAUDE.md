@@ -1,9 +1,11 @@
 # OmniForge — AI Content Laboratory
 
 ## Project Overview
+
 A centralized, API-first AI content engine. Ingests source material (video, audio, text, URLs), applies LLM routing and brand-voice cloning via RAG, and outputs platform-perfect social media posts, generated images, and programmatic faceless videos. Exposes a FastAPI service that a frontend or external tools (Make.com, Zapier) can drive. Bridges the gap between raw thought and omnichannel distribution via automated scheduling and publishing.
 
 ## Tech Stack
+
 - Python 3.11+
 - FastAPI for the API layer (async throughout)
 - PostgreSQL for persistent storage (users, OAuth tokens, content nodes, schedules) — localhost, db `omniforge`, user `momomo`
@@ -20,6 +22,7 @@ A centralized, API-first AI content engine. Ingests source material (video, audi
 - feedparser for RSS monitoring
 
 ## Architecture
+
 ```
                          ┌──────────────────────────┐
                          │     FastAPI Gateway       │
@@ -55,6 +58,7 @@ A centralized, API-first AI content engine. Ingests source material (video, audi
 ## Key Modules
 
 ### Core Infrastructure
+
 1. `src/core/config.py` — Pydantic Settings for all env vars, DB URLs, API keys, defaults
 2. `src/core/database.py` — Async SQLAlchemy engine, session factory, Base model
 3. `src/core/models.py` — SQLAlchemy ORM models: User, Account, Content, Schedule, Slot, Credit, APIKey
@@ -62,16 +66,19 @@ A centralized, API-first AI content engine. Ingests source material (video, audi
 5. `src/core/security.py` — AES-256-GCM encryption for BYOK keys, JWT auth, password hashing
 
 ### LLM Router
+
 6. `src/llm/router.py` — Unified LLM interface. Routes to OpenAI (GPT-4o, 4o-mini) or Anthropic (Claude Sonnet, Opus) based on request config. Handles retries, rate limits, streaming. Tracks token usage for credit accounting. BYOK key injection when user provides their own keys.
 7. `src/llm/prompts.py` — Prompt templates for each task type: content generation, rewriting, clone-to-platform, image prompt optimization, video scripting, hook extraction. Platform-specific formatting rules (Twitter 280 chars, LinkedIn 3000, etc.)
 
 ### Ingestion Engine
+
 8. `src/ingestion/scraper.py` — URL content extraction. Playwright for articles (bypasses anti-bot, extracts markdown, strips ads/navbars). Supports article URLs, Perplexity URLs, generic web pages. Returns clean markdown.
 9. `src/ingestion/transcriber.py` — Audio/video transcription pipeline. Uses yt-dlp to extract audio from YouTube/TikTok URLs. Sends to OpenAI Whisper API for transcript with timestamps. LLM summarization pass with timestamp extraction.
 10. `src/ingestion/rss_monitor.py` — RSS/Atom feed monitoring. Stores feed URLs per user. ARQ cron job polls feeds on configurable interval. On new entry: auto-ingests, generates counter-narrative draft, pushes to user's drafts.
 11. `src/ingestion/brand_voice.py` — Brand Voice Genome. Syncs user's historical Twitter/LinkedIn posts via social APIs. Chunks and embeds text using OpenAI embeddings. Stores vectors in PostgreSQL pgvector. At generation time, performs RAG retrieval to inject user's vocabulary, cadence, and formatting habits into LLM context.
 
 ### Generation Engine
+
 12. `src/generation/content.py` — Multi-platform content generation. Takes ingested source + target platforms + quantity. Generates platform-specific posts respecting character limits, hashtag conventions, formatting norms. Uses brand voice RAG when available. Supports batch generation (e.g., 5 tweets + 2 LinkedIn posts in one call).
 13. `src/generation/cloner.py` — Cross-platform content adaptation. Takes a finished post from one platform, reformats for target platforms. Adjusts character limits, spacing, hashtag style, emoji usage, CTA format. Preserves core message while optimizing for each platform's algorithm preferences.
 14. `src/generation/image.py` — Image generation orchestration. LLM parses post text to write optimized image prompt. Routes to DALL-E 3 (semantic accuracy) or Flux.1 API (hyper-realistic/creative). Returns image URL and stores metadata. Supports style selection: realistic, creative, text-focused.
@@ -80,22 +87,26 @@ A centralized, API-first AI content engine. Ingests source material (video, audi
 17. `src/generation/captions.py` — Dynamic caption renderer. Uses word-level timestamps from ElevenLabs. Generates karaoke-style animated captions: bold active word, emoji injection, configurable font/color/position. Renders caption frames as transparent PNGs, composited onto video via FFmpeg.
 
 ### Publishing Engine
+
 18. `src/publishing/oauth.py` — OAuth 2.0 manager for social platforms (Twitter/X, LinkedIn, Facebook, Instagram, TikTok, Pinterest, YouTube). Handles authorization flows, token storage (encrypted), and automatic token refresh. Background ARQ job checks token expiry and refreshes proactively.
 19. `src/publishing/scheduler.py` — Smart scheduling matrix. Users configure global time slots (e.g., Mon 9 AM → Twitter+LinkedIn). "Next Free Slot" algorithm: queries for next chronological timestamp without an active post_id for the requested platform set. Stores schedule in PostgreSQL.
 20. `src/publishing/publisher.py` — Social media API dispatcher. Publishes text + media to each platform's API. Handles platform-specific media requirements (image dimensions, video formats, file size limits). Retry logic with exponential backoff. Records publish status and post URLs.
 21. `src/publishing/analytics.py` — Post engagement tracking. Polls social platform Graph APIs for likes, shares, comments, impressions. Stores metrics per post over time. Feeds into predictive scheduling: analyzes historical engagement to recommend optimal time slots for the user's specific audience.
 
 ### Viral Intelligence
+
 22. `src/viral/scraper.py` — Trending content aggregator. ARQ cron job scrapes high-performing posts from X, LinkedIn, TikTok across configurable niches (SaaS, marketing, fitness, etc.). Uses platform APIs where available, Playwright where not. Stores in PostgreSQL with engagement metrics.
 23. `src/viral/analyzer.py` — Viral pattern extraction. Given a high-performing post, uses LLM to extract: the psychological hook, structural pattern (listicle, story, contrarian take, etc.), engagement drivers. Cross-platform trend translation: identifies why a TikTok script went viral and reverse-engineers it into a LinkedIn text format.
 
 ### Credits & API
+
 24. `src/credits/tracker.py` — Credit abacus. Calculates compute cost per operation (1 text post = 1 credit, 1 image = 5, 1 video = 50). Tracks per-user balance. Enforces limits based on subscription tier. BYOK users bypass credit limits for their own API calls.
 25. `src/api/routes.py` — FastAPI router aggregating all endpoint groups: auth, ingestion, generation, publishing, scheduling, viral, credits, admin
 26. `src/api/auth.py` — JWT authentication, user registration, login, API key management for external integrations
 27. `src/api/middleware.py` — Rate limiting, CORS, request logging, credit deduction middleware
 
 ### Background Tasks
+
 28. `src/workers/tasks.py` — ARQ task definitions: video rendering, mass image generation, RSS polling, token refresh, engagement polling, trending content scraping. Each task is idempotent and retryable.
 29. `src/workers/scheduler.py` — ARQ worker startup and cron job registration. Configurable intervals per task type.
 
@@ -193,6 +204,7 @@ GET    /api/v1/analytics/optimal-times — Predicted best posting times
 ```
 
 ## Environment Variables
+
 - `DATABASE_URL` — PostgreSQL connection string (default: `postgresql+asyncpg://momomo@localhost/omniforge`)
 - `REDIS_URL` — Redis connection string (default: `redis://localhost:6379`)
 - `SECRET_KEY` — JWT signing key
@@ -211,6 +223,7 @@ GET    /api/v1/analytics/optimal-times — Predicted best posting times
 - `CREDIT_COSTS` — JSON override for credit costs per operation (optional)
 
 ## Coding Standards
+
 - Type hints on all functions, Pydantic models for all request/response data
 - Google-style docstrings on all public functions
 - Async throughout — all I/O operations use async/await
@@ -224,6 +237,7 @@ GET    /api/v1/analytics/optimal-times — Predicted best posting times
 - Rate limit awareness on all external API calls with exponential backoff
 
 ## Testing
+
 - pytest + pytest-asyncio
 - Test database: separate `omniforge_test` PostgreSQL database, migrations applied via Alembic before test suite
 - Test each module independently with mocked external APIs
@@ -236,9 +250,10 @@ GET    /api/v1/analytics/optimal-times — Predicted best posting times
 - Test encryption: round-trip encrypt/decrypt for BYOK keys and OAuth tokens
 - Test scheduler: slot algorithm correctness, "next free slot" edge cases (all slots full, timezone handling)
 - Test RSS monitor: feed parsing, duplicate detection, auto-ingestion trigger
-- >80% coverage target
+- > 80% coverage target
 
 ## CLI Interface
+
 ```bash
 # Start API server
 uvicorn src.api.routes:app --reload
@@ -257,7 +272,9 @@ python -m pytest -v --tb=short
 ```
 
 ## Git Workflow
+
 Conventional commits per module:
+
 - `feat: implement core models, database, and auth`
 - `feat: add LLM router with OpenAI and Anthropic support`
 - `feat: add ingestion engine (scraper, transcriber, RSS monitor)`

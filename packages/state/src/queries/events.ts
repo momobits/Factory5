@@ -43,18 +43,14 @@ export function append(db: Database, event: Event): void {
 
 /** Fetch an event by id. */
 export function getById(db: Database, id: string): Event | undefined {
-  const row = db.prepare('SELECT * FROM events_audit WHERE id = ?').get(id) as
-    | Row
-    | undefined;
+  const row = db.prepare('SELECT * FROM events_audit WHERE id = ?').get(id) as Row | undefined;
   return row !== undefined ? rowToEvent(row) : undefined;
 }
 
 /** Recent events of a specific kind, newest first. */
 export function recentByKind(db: Database, kind: string, limit = 50): Event[] {
   const rows = db
-    .prepare(
-      `SELECT * FROM events_audit WHERE kind = ? ORDER BY received_at DESC LIMIT ?`,
-    )
+    .prepare(`SELECT * FROM events_audit WHERE kind = ? ORDER BY received_at DESC LIMIT ?`)
     .all(kind, limit) as Row[];
   return rows.map(rowToEvent);
 }

@@ -35,6 +35,7 @@ Lifecycle commands surface from the CLI: `factory daemon start | stop | status |
 ## Consequences
 
 **Positive:**
+
 - Brain restarts don't disrupt Discord/GitHub
 - LLM crashes don't drop external events
 - Logs are cleanly partitioned (daemon log = "what came in, what went out"; brain log = "what I thought, what I did")
@@ -43,6 +44,7 @@ Lifecycle commands surface from the CLI: `factory daemon start | stop | status |
 - First-time install friction is low (no daemon required for inline builds)
 
 **Negative:**
+
 - Two processes to manage. Mitigated by the `factory daemon` lifecycle commands.
 - Two log streams. Mitigated by the unified `factory logs` view that stitches by `correlationId`.
 - Higher baseline memory (~100–200 MB combined vs ~80 MB single). Negligible on dev machines.

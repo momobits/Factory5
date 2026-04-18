@@ -26,7 +26,7 @@ Three lessons inform the design.
 
 **From `oh-my-openagent`, `oh-my-codex`, `oh-my-claudecode`, `clawhip`, `openclaw`:** The orchestration layer should be the LLM itself, augmented by:
 
-- Category-based delegation (declare *intent*, not *agent*; let the system pick the model)
+- Category-based delegation (declare _intent_, not _agent_; let the system pick the model)
 - Dual fallback (proactive at config-load + reactive at runtime)
 - Out-of-band monitoring (separate process for I/O so monitoring doesn't burn agent context tokens)
 - Worktree-isolated parallel workers
@@ -107,9 +107,9 @@ Three lessons inform the design.
 
 Two binaries, both Node + TypeScript:
 
-| Binary | Role | Lifetime |
-|---|---|---|
-| **`factory`** | CLI + brain. Commander-based subcommands. Spawns the brain in-process for inline work, or claims directives from SQLite when serving long-running flows. | Per-invocation for CLI; long-lived when `factory chat` or `factory serve` is up |
+| Binary         | Role                                                                                                                                                                                                              | Lifetime                                                                          |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **`factory`**  | CLI + brain. Commander-based subcommands. Spawns the brain in-process for inline work, or claims directives from SQLite when serving long-running flows.                                                          | Per-invocation for CLI; long-lived when `factory chat` or `factory serve` is up   |
 | **`factoryd`** | Daemon. Owns all outside-world I/O: Discord websocket, GitHub polling, git watching, fs watching, webhook HTTP server, channel sinks. Normalizes external input to typed events/directives. Hosts the IPC server. | Long-lived background service; can run as systemd unit (Linux) or Windows Service |
 
 Why split: brain restarts during dev shouldn't kill Discord connections; a webhook HTTP server shouldn't compete with brain's event loop; LLM crash shouldn't drop pending events; daemon can serve multiple brains in future SaaS form.
@@ -131,37 +131,37 @@ The daemon is required for **chat / events / GitHub-driven** work. It is **not**
 
 ## 4. Components
 
-| Component | Location | Process | Responsibility |
-|---|---|---|---|
-| `core` | `packages/core` | shared lib | Types: `Directive`, `Event`, `Finding`, `Plan`, `Task`, `AgentRole`, `ModelCategory`, `AutonomyMode`. Zod schemas. Constants. |
-| `state` | `packages/state` | shared lib | SQLite (better-sqlite3) wrapper, migrations, typed CRUD. |
-| `ipc` | `packages/ipc` | shared lib | HTTP contracts (Zod) + typed clients for daemon↔brain. |
-| `logger` | `packages/logger` | shared lib | Pino-based logger factory; correlation-ID propagation. |
-| `channels` | `packages/channels` | daemon | `ChannelPlugin` interface + impls (`cli-rpc`, `discord`). |
-| `events` | `packages/events` | daemon | Event sources (`github-poll`, `git-poll`, `fs-watch`, `webhook-server`). |
-| `daemon` | `packages/daemon` | daemon | Hosts channels + events + IPC server; lifecycle, config, signals. |
-| `providers` | `packages/providers` | brain | LLM clients: anthropic-sdk, openai-sdk, openrouter, claude-cli (subprocess), codex-cli (subprocess). Unified `ModelProvider` interface. |
-| `wiki` | `packages/wiki` | brain | Read/write `docs/knowledge/`, `BUILD.md`, findings JSON; readiness gates. |
-| `assessor` | `packages/assessor` | brain | Ground-truth checks: spawn pytest/jest/cargo/go-test, parse output, file/git/import checks. **No LLM**. |
-| `brain` | `packages/brain` | brain | Triage → architect → plan → delegate → verify loop. Agent registry. Category routing. `ask_user`/`escalate_blocked` tools. |
-| `worker` | `packages/worker` | brain (subprocess) | Per-task subprocess: allocate worktree, spawn coding-agent CLI, stream output, persist results. |
-| `cli` | `packages/cli` | brain | Commander-based CLI. Wraps brain operations and daemon control. |
-| `apps/factory` | `apps/factory` | brain entry | Wires `cli` + `brain` + `worker` + `providers` into the `factory` binary. |
-| `apps/factoryd` | `apps/factoryd` | daemon entry | Wires `daemon` + `channels` + `events` into the `factoryd` binary. |
+| Component       | Location             | Process            | Responsibility                                                                                                                          |
+| --------------- | -------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `core`          | `packages/core`      | shared lib         | Types: `Directive`, `Event`, `Finding`, `Plan`, `Task`, `AgentRole`, `ModelCategory`, `AutonomyMode`. Zod schemas. Constants.           |
+| `state`         | `packages/state`     | shared lib         | SQLite (better-sqlite3) wrapper, migrations, typed CRUD.                                                                                |
+| `ipc`           | `packages/ipc`       | shared lib         | HTTP contracts (Zod) + typed clients for daemon↔brain.                                                                                  |
+| `logger`        | `packages/logger`    | shared lib         | Pino-based logger factory; correlation-ID propagation.                                                                                  |
+| `channels`      | `packages/channels`  | daemon             | `ChannelPlugin` interface + impls (`cli-rpc`, `discord`).                                                                               |
+| `events`        | `packages/events`    | daemon             | Event sources (`github-poll`, `git-poll`, `fs-watch`, `webhook-server`).                                                                |
+| `daemon`        | `packages/daemon`    | daemon             | Hosts channels + events + IPC server; lifecycle, config, signals.                                                                       |
+| `providers`     | `packages/providers` | brain              | LLM clients: anthropic-sdk, openai-sdk, openrouter, claude-cli (subprocess), codex-cli (subprocess). Unified `ModelProvider` interface. |
+| `wiki`          | `packages/wiki`      | brain              | Read/write `docs/knowledge/`, `BUILD.md`, findings JSON; readiness gates.                                                               |
+| `assessor`      | `packages/assessor`  | brain              | Ground-truth checks: spawn pytest/jest/cargo/go-test, parse output, file/git/import checks. **No LLM**.                                 |
+| `brain`         | `packages/brain`     | brain              | Triage → architect → plan → delegate → verify loop. Agent registry. Category routing. `ask_user`/`escalate_blocked` tools.              |
+| `worker`        | `packages/worker`    | brain (subprocess) | Per-task subprocess: allocate worktree, spawn coding-agent CLI, stream output, persist results.                                         |
+| `cli`           | `packages/cli`       | brain              | Commander-based CLI. Wraps brain operations and daemon control.                                                                         |
+| `apps/factory`  | `apps/factory`       | brain entry        | Wires `cli` + `brain` + `worker` + `providers` into the `factory` binary.                                                               |
+| `apps/factoryd` | `apps/factoryd`      | daemon entry       | Wires `daemon` + `channels` + `events` into the `factoryd` binary.                                                                      |
 
 ---
 
 ## 5. Languages and runtime
 
-| Layer | Language | Runtime | Why |
-|---|---|---|---|
-| All factory code | **TypeScript** (strict) | **Node 20+** | Cross-platform without compile pain; official Anthropic/OpenAI SDKs; mature Discord ecosystem; fastest iteration |
-| Both binaries | TypeScript bundled with `tsup` | Node 20+ | Single-file output for distribution |
-| SQLite driver | C++ via `better-sqlite3` (sync, prebuilt binaries) | Node native module | No async ceremony; prebuilt binaries for Win/Linux x64 + arm64 |
-| Coding agent (the actual code-writing) | Whatever the CLI is — `claude` (Node), `codex` (Rust/Node) | Subprocess | We orchestrate the existing CLIs; we don't reimplement them |
-| Test runners invoked by assessor | Project's own — pytest, jest, vitest, cargo, go test, etc. | Subprocess | Ground-truth verification means using the project's actual runner |
-| Skill/agent prompts | Markdown | None (read as text) | Hot-reloadable; version-controllable; no compile step |
-| Project templates | Whatever the template builds (Python/JS/Rust/etc.) | None at template stage | Templates are example `CLAUDE.md` + scaffold files |
+| Layer                                  | Language                                                   | Runtime                | Why                                                                                                              |
+| -------------------------------------- | ---------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| All factory code                       | **TypeScript** (strict)                                    | **Node 20+**           | Cross-platform without compile pain; official Anthropic/OpenAI SDKs; mature Discord ecosystem; fastest iteration |
+| Both binaries                          | TypeScript bundled with `tsup`                             | Node 20+               | Single-file output for distribution                                                                              |
+| SQLite driver                          | C++ via `better-sqlite3` (sync, prebuilt binaries)         | Node native module     | No async ceremony; prebuilt binaries for Win/Linux x64 + arm64                                                   |
+| Coding agent (the actual code-writing) | Whatever the CLI is — `claude` (Node), `codex` (Rust/Node) | Subprocess             | We orchestrate the existing CLIs; we don't reimplement them                                                      |
+| Test runners invoked by assessor       | Project's own — pytest, jest, vitest, cargo, go test, etc. | Subprocess             | Ground-truth verification means using the project's actual runner                                                |
+| Skill/agent prompts                    | Markdown                                                   | None (read as text)    | Hot-reloadable; version-controllable; no compile step                                                            |
+| Project templates                      | Whatever the template builds (Python/JS/Rust/etc.)         | None at template stage | Templates are example `CLAUDE.md` + scaffold files                                                               |
 
 **No Python in factory itself.** Python only needed on the user's machine if they're building Python projects (so assessor can run `pytest`).
 
@@ -170,6 +170,7 @@ The daemon is required for **chat / events / GitHub-driven** work. It is **not**
 **Why Node and not Bun for v0:** Bun is faster and ergonomically nicer, but its Windows native-module story still occasionally surprises. Node + better-sqlite3 + discord.js + Pino on Windows is boring and reliable. Re-evaluate Bun once architecture stabilizes.
 
 **Build/dev tooling:**
+
 - `pnpm` — workspace manager (strict, fast, deterministic)
 - `tsx` — dev (zero-config TS execution, watch mode)
 - `tsup` — production builds (esbuild-based, fast, ESM output)
@@ -201,17 +202,17 @@ This keeps the project portable, human-readable, git-committable, and Obsidian-b
 
 **Factory runtime state** lives in one SQLite file at `~/.factory5/factory.db`:
 
-| Table | Purpose |
-|---|---|
-| `directives` | Inbound work queue across all channels. FIFO, status lifecycle, claim model. |
-| `outbound_messages` | Brain → channels delivery queue with audit. |
-| `events_audit` | Every event ever seen. Debugging gold. |
-| `sessions` | Per-channel/per-user conversational state (Discord channel ID → context). |
-| `pending_questions` | `ask_user` calls awaiting reply (survives brain restart). |
-| `tasks_inflight` | Currently-running worker tasks (worktree path, agent, started_at, last heartbeat). |
-| `projects` | Registry of all projects factory has touched (name → workspace path → status). |
-| `learnings` | Cross-project patterns extracted from past builds (the `~/.factory/learnings.md` from factory2). |
-| `model_usage` | Token/cost tracking per provider per directive (budget enforcement, reporting). |
+| Table               | Purpose                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| `directives`        | Inbound work queue across all channels. FIFO, status lifecycle, claim model.                     |
+| `outbound_messages` | Brain → channels delivery queue with audit.                                                      |
+| `events_audit`      | Every event ever seen. Debugging gold.                                                           |
+| `sessions`          | Per-channel/per-user conversational state (Discord channel ID → context).                        |
+| `pending_questions` | `ask_user` calls awaiting reply (survives brain restart).                                        |
+| `tasks_inflight`    | Currently-running worker tasks (worktree path, agent, started_at, last heartbeat).               |
+| `projects`          | Registry of all projects factory has touched (name → workspace path → status).                   |
+| `learnings`         | Cross-project patterns extracted from past builds (the `~/.factory/learnings.md` from factory2). |
+| `model_usage`       | Token/cost tracking per provider per directive (budget enforcement, reporting).                  |
 
 Why SQLite for these: atomicity (concurrent writes from daemon + workers + brain), queries ("show all stuck builds"), single-file ops (zero admin), survives crashes.
 
@@ -354,8 +355,8 @@ interface ChannelPlugin {
   capabilities: {
     inbound: boolean;
     outbound: boolean;
-    threading: boolean;       // can post in threads/replies
-    interactive: boolean;     // supports ask_user
+    threading: boolean; // can post in threads/replies
+    interactive: boolean; // supports ask_user
     fileAttachments: boolean;
   };
   configSchema: ZodSchema;
@@ -366,10 +367,12 @@ interface ChannelPlugin {
 ```
 
 Day-1 channels:
+
 - **`cli-rpc`** — local Unix socket / named pipe so the `factory` CLI and `factoryd` daemon can converse for chat sessions
 - **`discord`** — discord.js, supports threading + interactive
 
 Phase-2 channels (added without changing brain):
+
 - **`telegram`** — grammy
 - **`web`** — small SSE+REST server for browser UI
 
@@ -381,7 +384,7 @@ Multi-provider via category routing (lifted from oh-my-openagent).
 
 ```ts
 interface ModelProvider {
-  id: string;           // "anthropic-api", "claude-cli", "openai", "openrouter", "codex-cli"
+  id: string; // "anthropic-api", "claude-cli", "openai", "openrouter", "codex-cli"
   available(): Promise<boolean>;
   call(req: ProviderRequest): Promise<ProviderResponse>;
   stream(req: ProviderRequest): AsyncIterable<ProviderStreamChunk>;
@@ -394,7 +397,7 @@ type ProviderRequest = {
   tools?: ToolDef[];
   temperature?: number;
   maxTokens?: number;
-  reasoning?: "low" | "medium" | "high" | "max";
+  reasoning?: 'low' | 'medium' | 'high' | 'max';
 };
 ```
 
@@ -421,6 +424,7 @@ reasoning = ["claude-cli/opus", "anthropic-api/opus", "openai/gpt-5", "openroute
 ```
 
 **Dual fallback (proactive + reactive):**
+
 - **Proactive** at config-load: if `claude-cli` reports unavailable on startup, brain pre-rebinds reasoning to next chain entry and warns.
 - **Reactive** at runtime: if a call fails (rate limit, error), the provider layer transparently retries with the next chain entry; brain receives a successful response with a fallback annotation in metadata.
 
@@ -428,13 +432,13 @@ reasoning = ["claude-cli/opus", "anthropic-api/opus", "openai/gpt-5", "openroute
 
 ## 11. Autonomy modes
 
-Three modes per directive — the brain owns *when to talk back*:
+Three modes per directive — the brain owns _when to talk back_:
 
-| Mode | Behavior |
-|---|---|
-| **`chat`** | Turn-by-turn. Every step asks. For Q&A, brainstorming, light edits. |
-| **`assisted`** *(default)* | Brain produces plan → asks user to confirm → executes between checkpoints (per phase boundary, not per step) → asks at next checkpoint. |
-| **`autonomous`** | Runs to completion without checkpoints, **except**: (a) brain pauses and asks user when ambiguity blocks progress; (b) brain escalates to user if a task fails its retry budget; (c) brain reports milestones (start, design done, build done, complete/blocked). No silent looping. |
+| Mode                       | Behavior                                                                                                                                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`chat`**                 | Turn-by-turn. Every step asks. For Q&A, brainstorming, light edits.                                                                                                                                                                                                                  |
+| **`assisted`** _(default)_ | Brain produces plan → asks user to confirm → executes between checkpoints (per phase boundary, not per step) → asks at next checkpoint.                                                                                                                                              |
+| **`autonomous`**           | Runs to completion without checkpoints, **except**: (a) brain pauses and asks user when ambiguity blocks progress; (b) brain escalates to user if a task fails its retry budget; (c) brain reports milestones (start, design done, build done, complete/blocked). No silent looping. |
 
 Two brain-side tools enable mid-flight engagement:
 
@@ -460,11 +464,13 @@ Two brain-side tools enable mid-flight engagement:
 **Library:** Pino. Fast, structured (JSON), pretty-prints in dev, writes JSON in prod.
 
 **Topology:**
+
 - Single root config in `packages/logger`
 - Each package imports `createLogger("brain.triage")` — gets a child with stable name
 - Every directive/task/session has a `correlationId` (ULID) propagated via `logger.child({ directiveId, taskId })`
 
 **Levels (used consistently):**
+
 - `trace` — verbose internals (off by default; on per-component via env var)
 - `debug` — development detail
 - `info` — normal lifecycle
@@ -472,11 +478,13 @@ Two brain-side tools enable mid-flight engagement:
 - `error` — failures with stack traces
 
 **Sinks (configured at process start):**
+
 - **Console** — pretty-printed colorized when stdout is a TTY, JSON otherwise
 - **File** — JSON to `~/.factory5/logs/<process>-<date>.log`, daily rotation, 14-day retention
 - **Per-build file** — when a build is active, mirror brain logs scoped to that build into `<project>/.factory/logs/build-<ts>.log`
 
 **Operator interface:**
+
 - `factory logs` — tail logs across all components, with filters (`--component brain`, `--directive <id>`, `--level warn+`, `--since 1h`)
 - `factory logs --follow` — live tail
 - `factory daemon logs` — daemon-specific
@@ -491,11 +499,13 @@ Two brain-side tools enable mid-flight engagement:
 Three layers, each with clear ownership and update cadence.
 
 ### a) Code documentation
+
 - TSDoc on every exported function, type, class
 - Each `packages/*/README.md` documents that package's purpose, public API, dependencies, examples
 - Generated API docs via TypeDoc into `docs/api/` on release
 
 ### b) Architecture documentation (`docs/`)
+
 - `docs/ARCHITECTURE.md` — single source of truth for the architecture (mirrors this file but is allowed to evolve)
 - `docs/CONTRACTS.md` — generated from Zod schemas in `core/`; describes Directive/Event/Finding/Plan/Task shapes
 - `docs/decisions/` — Architecture Decision Records (ADRs). One file per significant decision: Context / Decision / Consequences / Alternatives. Append-only.
@@ -503,10 +513,12 @@ Three layers, each with clear ownership and update cadence.
 - `docs/AGENTS.md` — index of all agent roles, their model categories, their tools, their prompts
 
 ### c) Runtime documentation (auto-produced)
+
 - Every directive produces a markdown trail in `<project>/.factory/runs/<directive-id>/` containing: the directive, the plan, all findings, all task results, the final disposition
 - Queryable via `factory inspect <directiveId>`
 
 ### Initial ADRs (written at scaffold)
+
 - `0001-typescript-on-node.md` — language and runtime choice
 - `0002-two-binary-split.md` — daemon as a separate process from day 1
 - `0003-sqlite-and-files-hybrid-storage.md` — wiki for projects, SQLite for runtime
@@ -520,6 +532,7 @@ Three layers, each with clear ownership and update cadence.
 The factory's own thesis (design before code, ground-truth verification, finding lifecycle) applies to building factory itself. Eat our own dog food.
 
 **`CLAUDE.md` at repo root** — first thing every Claude Code session reads when working on factory5. Contains:
+
 - Pointer to `docs/ARCHITECTURE.md` (read before touching code)
 - Pointer to `docs/PROGRESS.md` (read to understand where we are)
 - Non-negotiable rules (no `console.log`, no `any`, every package needs README + tests, no orphan files)
@@ -528,6 +541,7 @@ The factory's own thesis (design before code, ground-truth verification, finding
 **`docs/PROGRESS.md`** — chronological log of progress on factory5 itself, updated at the end of every working session. The canonical "what's been built and what's next." Every new session reads this before doing anything.
 
 **`docs/issues/`** — internal issue tracker for factory5, modeled on factory's own findings pattern:
+
 - One markdown file per issue, named `I001-short-title.md`
 - Frontmatter: `id`, `severity`, `status` (OPEN / IN_PROGRESS / RESOLVED / VERIFIED), `area`, `created`, `resolved`
 - Body: description, repro, hypothesis, resolution
@@ -536,6 +550,7 @@ The factory's own thesis (design before code, ground-truth verification, finding
 **`docs/decisions/`** — ADRs as above. New decisions get a new ADR; we don't argue against past decisions in code reviews — we argue them in a new ADR that supersedes the old one (`Supersedes: 0003`).
 
 **Verification gates before marking work "done"** (same discipline factory imposes on its outputs):
+
 - All tests pass (`pnpm test`)
 - All packages build (`pnpm build`)
 - Lint clean (`pnpm lint`)

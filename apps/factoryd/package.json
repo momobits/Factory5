@@ -7,7 +7,9 @@
   "bin": {
     "factoryd": "./dist/main.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/main.ts --format esm --sourcemap --clean --target node20",
     "dev": "tsx src/main.ts",

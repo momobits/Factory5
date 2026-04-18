@@ -4,4 +4,5 @@
  * @packageDocumentation
  */
 
+export * from './fs-watcher.js';
 export * from './types.js';

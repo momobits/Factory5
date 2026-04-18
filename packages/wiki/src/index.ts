@@ -1,18 +1,15 @@
 /**
- * @factory5/wiki — per-project markdown state operations.
+ * @factory5/wiki — per-project markdown wiki + BUILD.md + findings ops.
  *
- * Phase 1 implementation will add the read/write API. For now this is a
- * scaffold so consumers can typecheck-import the package.
+ * All project state lives in files (see ADR 0003). This package is the typed
+ * read/write API consumed by brain agents and the CLI.
  *
  * @packageDocumentation
  */
 
-import { createLogger } from '@factory5/logger';
-
-const log = createLogger('wiki');
-
-/** Marker — replace with the real API in Phase 1. */
-export function wikiNotYetImplemented(): never {
-  log.error('@factory5/wiki API not yet implemented');
-  throw new Error('@factory5/wiki API not yet implemented (Phase 1)');
-}
+export * from './paths.js';
+export * from './wiki.js';
+export * from './findings.js';
+export * from './build-log.js';
+export * from './plan.js';
+export * from './readiness.js';

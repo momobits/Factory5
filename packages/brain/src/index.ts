@@ -1,13 +1,19 @@
 /**
- * @factory5/brain — orchestrator.
+ * @factory5/brain — orchestrator: triage → architect → plan → delegate → verify.
  *
- * Phase 1 implementation will add the inline-build path; Phase 3 adds serve
- * (claim-from-SQLite). For now this exports the agent registry shape so
- * consumers can typecheck-import.
+ * Phase 1 wires the inline-build path (see {@link runBrain}). Phase 3 adds
+ * the long-running serve loop.
  *
  * @packageDocumentation
  */
 
 export * from './agents/registry.js';
-export { runBrain } from './loop.js';
-export type { BrainOptions, BrainHandle } from './loop.js';
+export * from './loop.js';
+export * from './triage.js';
+export * from './architect.js';
+export * from './planner.js';
+export * from './prompts.js';
+export * from './provider-config.js';
+export * from './serve.js';
+export * from './config.js';
+export * from './usage.js';

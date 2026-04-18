@@ -14,12 +14,13 @@ reviewer = "opus"
 ```
 
 This breaks down quickly:
+
 - New providers can't be slotted in without changing per-agent code
 - Cost optimization (run triage on a cheap model) requires editing many places
 - Provider outages can't be handled without manual reconfig
 - Multi-tenant (SaaS) per-user model preferences become a code change
 
-`oh-my-openagent` solved this with **category-based routing**: agents declare a *category* (intent class), not a *model*. The system resolves category → provider+model via user config, with a fallback chain.
+`oh-my-openagent` solved this with **category-based routing**: agents declare a _category_ (intent class), not a _model_. The system resolves category → provider+model via user config, with a fallback chain.
 
 ## Decision
 
@@ -27,11 +28,11 @@ Each agent declares a `ModelCategory`, not a model name:
 
 ```ts
 type ModelCategory =
-  | "quick"          // triage, classification (Haiku-tier)
-  | "planning"       // task decomposition (Sonnet-tier)
-  | "reasoning"      // architecture, deep diagnosis (Opus-tier)
-  | "deep"           // long autonomous execution (Opus or GPT-tier)
-  | "documentation"; // doc generation (Haiku-tier)
+  | 'quick' // triage, classification (Haiku-tier)
+  | 'planning' // task decomposition (Sonnet-tier)
+  | 'reasoning' // architecture, deep diagnosis (Opus-tier)
+  | 'deep' // long autonomous execution (Opus or GPT-tier)
+  | 'documentation'; // doc generation (Haiku-tier)
 ```
 
 Resolution pipeline (4-step, in order):
@@ -57,12 +58,14 @@ reasoning = ["claude-cli/opus", "anthropic-api/opus", "openai/gpt-5"]
 ```
 
 **Dual fallback (proactive + reactive):**
+
 - **Proactive** at config-load: if `claude-cli` reports unavailable on startup, brain pre-rebinds reasoning to next chain entry and warns
 - **Reactive** at runtime: if a call fails (rate limit, error), the provider layer transparently retries with the next chain entry; brain receives a successful response with a fallback annotation in metadata
 
 ## Consequences
 
 **Positive:**
+
 - New providers are added by implementing the `ModelProvider` interface and registering — zero changes to agent code
 - Cost optimization is a config edit, not a code change
 - Provider outages are handled automatically by the fallback chain
@@ -71,6 +74,7 @@ reasoning = ["claude-cli/opus", "anthropic-api/opus", "openai/gpt-5"]
 - Aligns with proven OmO pattern
 
 **Negative:**
+
 - Indirection: a contributor reading the brain code sees `category: "deep"` and must look up what model that resolves to. Mitigated by `factory status models` printing the current resolution.
 - Five categories may be too few for nuanced cases (e.g., "vision-needed" or "code-completion" specialty). Add a sixth category if/when needed via a new ADR.
 

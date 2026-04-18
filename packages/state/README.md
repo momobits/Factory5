@@ -8,18 +8,18 @@ SQLite-backed runtime state for factory5. Wraps `better-sqlite3` (synchronous, f
 
 One file at `<dataDir>/factory.db` (see `@factory5/logger/paths` for `dataDir()`).
 
-| Table | Purpose |
-|---|---|
-| `directives` | Inbound work queue across all channels |
-| `outbound_messages` | Brain → channel delivery queue with audit |
-| `events_audit` | Every external event ever observed |
-| `sessions` | Per-channel/per-user conversational state |
-| `pending_questions` | `ask_user` calls awaiting user reply |
-| `tasks_inflight` | Currently-running worker tasks (worktree path, agent, heartbeat) |
-| `projects` | Registry of all projects factory has touched |
-| `learnings` | Cross-project patterns extracted from past builds |
-| `model_usage` | Token / cost tracking per provider per directive |
-| `migrations` | Bookkeeping for which migrations have been applied |
+| Table               | Purpose                                                          |
+| ------------------- | ---------------------------------------------------------------- |
+| `directives`        | Inbound work queue across all channels                           |
+| `outbound_messages` | Brain → channel delivery queue with audit                        |
+| `events_audit`      | Every external event ever observed                               |
+| `sessions`          | Per-channel/per-user conversational state                        |
+| `pending_questions` | `ask_user` calls awaiting user reply                             |
+| `tasks_inflight`    | Currently-running worker tasks (worktree path, agent, heartbeat) |
+| `projects`          | Registry of all projects factory has touched                     |
+| `learnings`         | Cross-project patterns extracted from past builds                |
+| `model_usage`       | Token / cost tracking per provider per directive                 |
+| `migrations`        | Bookkeeping for which migrations have been applied               |
 
 ## Usage
 
@@ -27,7 +27,7 @@ One file at `<dataDir>/factory.db` (see `@factory5/logger/paths` for `dataDir()`
 import { openDatabase, runMigrations } from '@factory5/state';
 
 const db = openDatabase(); // opens at <dataDir>/factory.db, enables WAL
-runMigrations(db);          // idempotent — safe to call on every startup
+runMigrations(db); // idempotent — safe to call on every startup
 
 // Typed query helpers (one module per table):
 import { insertDirective, claimNextDirective } from '@factory5/state';

@@ -49,6 +49,7 @@ npx tsc --noEmit 2>&1
 ### 4. Detailed README.md (30+ lines)
 
 README must include ALL of these sections:
+
 - Project title and overview (2-3 paragraphs)
 - Features list
 - Architecture overview (with link to docs/architecture.md)
@@ -92,12 +93,14 @@ ls docs/notebooks/         # At least 1 notebook
 ```
 
 **docs/architecture.md** must contain:
+
 - System overview
 - At least 2 mermaid diagrams (component diagram + data flow)
 - Module details with signatures
 - Valid mermaid syntax (test by reviewing)
 
 **docs/setup.md** must contain:
+
 - Prerequisites
 - Installation steps (copy-paste-able)
 - Environment variables
@@ -106,6 +109,7 @@ ls docs/notebooks/         # At least 1 notebook
 - Troubleshooting
 
 **docs/notebooks/** must contain at least:
+
 - `01_getting_started.ipynb` — imports, basic usage, working code cells with output
 - Additional notebooks for complex features
 - Every code cell must be tested and produce output

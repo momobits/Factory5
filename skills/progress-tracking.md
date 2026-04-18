@@ -21,9 +21,12 @@ between iterations. Humans also read it to understand progress and give directio
 ## What to Update After Each Task
 
 ### ## Build Log
+
 Append an entry:
+
 ```markdown
 ### Iteration N — STATE task — YYYY-MM-DD HH:MM
+
 - What you did (specific actions, not vague descriptions)
 - Tests written: X, Tests passing: Y/Z
 - Review result: SHIP IT / NEEDS FIXES
@@ -32,9 +35,12 @@ Append an entry:
 ```
 
 ### ## Current State
+
 Update all fields:
+
 ```markdown
 ## Current State
+
 - Phase: BUILD
 - Next task: build src/formatter.py
 - Modules: 3/5 complete
@@ -43,13 +49,16 @@ Update all fields:
 ```
 
 ### ## Findings & Issues
+
 Add any:
+
 - Bugs discovered in other modules while working on this one
 - Design problems (circular deps, interface mismatches)
 - Workarounds applied and why
 - Dependency issues encountered
 
 ### ## Architecture
+
 Only the ARCHITECT updates this section. If you find an interface mismatch
 during BUILD or FIX, note it in Findings & Issues — do NOT modify Architecture.
 

@@ -12,7 +12,10 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
     "dev": "tsup src/index.ts --format esm --dts --sourcemap --watch",
@@ -23,7 +26,9 @@
     "@factory5/core": "workspace:*",
     "@factory5/logger": "workspace:*",
     "@factory5/providers": "workspace:*",
-    "@factory5/state": "workspace:*"
+    "@factory5/state": "workspace:*",
+    "@factory5/wiki": "workspace:*",
+    "simple-git": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

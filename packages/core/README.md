@@ -37,6 +37,7 @@ pnpm --filter @factory5/core test
 ```
 
 Tests verify:
+
 - Round-trip schema parse/serialize for every shape
 - Backward-compat: schemas accept previously-valid payloads
 - Forward-compat: schemas reject obviously-malformed payloads with clear error paths

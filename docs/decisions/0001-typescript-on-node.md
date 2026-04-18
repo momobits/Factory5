@@ -27,13 +27,14 @@ All factory5 source code is **TypeScript** in strict mode, targeting **Node 20+*
 
 The native dependency we accept is `better-sqlite3`, which ships prebuilt binaries for `win32-x64`, `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`. No C toolchain required for users on these platforms.
 
-Python only appears as a runtime requirement on the user's machine *if* they're building Python projects (so the assessor can run `pytest`). Python is not part of factory itself.
+Python only appears as a runtime requirement on the user's machine _if_ they're building Python projects (so the assessor can run `pytest`). Python is not part of factory itself.
 
 Rust appears only in `clawhip`, which is a separate optional reference daemon and is not depended on by factory itself for v0.
 
 ## Consequences
 
 **Positive:**
+
 - Cross-platform without compile hell
 - Official LLM SDKs available (Anthropic, OpenAI, etc.)
 - Fast iteration loop (no recompile)
@@ -42,6 +43,7 @@ Rust appears only in `clawhip`, which is a separate optional reference daemon an
 - Single binary distribution still feasible via `pkg` / `@yao-pkg/pkg` later
 
 **Negative:**
+
 - Higher resident memory than Rust (~50–150 MB per process). Acceptable for personal/single-machine use.
 - Dependency on Node runtime at install time (we ship a `.nvmrc` and document Node 20+ as the requirement).
 - TypeScript strictness requires discipline; we enforce via `tsconfig.base.json` strict family + `eslint`.

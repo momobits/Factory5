@@ -1,0 +1,20 @@
+{
+  "name": "@factory5/scripts",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Scripts (e2e smoke, migrations, ops tooling) — not published",
+  "type": "module",
+  "scripts": {
+    "e2e": "tsx e2e-daemon.ts"
+  },
+  "dependencies": {
+    "@factory5/core": "workspace:*",
+    "@factory5/ipc": "workspace:*",
+    "@factory5/state": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  }
+}

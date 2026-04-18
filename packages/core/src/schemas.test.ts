@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  directiveSchema,
-  eventSchema,
-  findingSchema,
-  planSchema,
-  taskSchema,
-} from './schemas.js';
+import { directiveSchema, eventSchema, findingSchema, planSchema, taskSchema } from './schemas.js';
 import { findingId, newId } from './ulid.js';
 
 describe('newId', () => {

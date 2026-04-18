@@ -16,6 +16,7 @@ plus a detailed root `README.md`.
 ### 1. Root README.md (detailed)
 
 Must include ALL of these sections:
+
 - **Project title and badge area** (build status placeholder, license badge)
 - **Overview** — 2-3 paragraph description of what it does and why
 - **Features** — bullet list of key capabilities
@@ -33,13 +34,15 @@ Must include ALL of these sections:
 
 Document the system architecture with **mermaid diagrams**:
 
-```markdown
+````markdown
 # Architecture
 
 ## System Overview
+
 Brief description of the overall design.
 
 ## Component Diagram
+
 ```mermaid
 graph TD
     A[CLI Entry Point] --> B[Module A]
@@ -47,8 +50,10 @@ graph TD
     C --> D[Database/API]
     B --> E[Module C]
 ```
+````
 
 ## Data Flow
+
 ```mermaid
 flowchart LR
     Input --> Parser --> Processor --> Output
@@ -56,13 +61,16 @@ flowchart LR
 ```
 
 ## Module Details
+
 For each module:
+
 - Purpose
 - Key functions and their signatures
 - Dependencies
 - Data types defined
 
 ## Sequence Diagram (for key operations)
+
 ```mermaid
 sequenceDiagram
     User->>CLI: command
@@ -70,7 +78,8 @@ sequenceDiagram
     Parser->>Processor: process(data)
     Processor-->>User: result
 ```
-```
+
+````
 
 Use at least 2 mermaid diagrams (component + data flow minimum).
 
@@ -110,7 +119,7 @@ Create notebooks that demonstrate the project's components:
 # Cell 4: Code - Demo with output
 # ... repeat pattern
 # Final cell: Markdown - Summary and next steps
-```
+````
 
 For Python projects, create `.ipynb` files directly.
 For TypeScript projects, create `.ts` demo scripts in docs/examples/ instead.

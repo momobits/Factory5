@@ -19,8 +19,8 @@ export interface EventSourceContext {
 export interface EventSource {
   /** Stable name like "github-poll", "git-poll". */
   name: string;
-  /** Bring the source online. Idempotent. */
-  start(ctx: EventSourceContext, config: unknown): Promise<void>;
+  /** Bring the source online. Idempotent. Config is source-specific. */
+  start(ctx: EventSourceContext, config?: unknown): Promise<void>;
   /** Take the source offline. Idempotent. */
   stop(): Promise<void>;
 }

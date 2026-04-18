@@ -1,0 +1,210 @@
+/**
+ * `runBrain({ mode: 'serve' })` — long-running claim loop for the daemon.
+ *
+ * The serve loop:
+ *   1. Claims pending directives atomically from SQLite (FIFO, via
+ *      `directives.claimNext`).
+ *   2. Dispatches each claim to the existing inline pipeline. Multiple
+ *      directives can run in parallel up to `concurrency` (default 1).
+ *   3. Waits between claim passes on either the doorbell (an external wake
+ *      signal — the daemon's IPC `/directives/notify` endpoint) or a 250 ms
+ *      polling fallback. When both are available the doorbell shortcuts
+ *      latency; when only polling is available the loop still makes progress.
+ *   4. Honors an `AbortSignal` for graceful shutdown. On abort we stop
+ *      claiming new work and wait for in-flight directives to settle; any
+ *      directive whose inline run throws from the abort is transitioned to
+ *      `blocked` so the row isn't left in `'running'` state.
+ *
+ * The brain does not depend on `@factory5/daemon` — the daemon wires its
+ * doorbell into the `onWake` hook so the packages remain acyclic.
+ */
+
+import process from 'node:process';
+
+import type { Directive } from '@factory5/core';
+import { createLogger } from '@factory5/logger';
+import type { ProviderRegistry } from '@factory5/providers';
+import { directives as directivesQ, type Database } from '@factory5/state';
+
+const log = createLogger('brain.serve');
+
+/** Default polling cadence when no doorbell is wired (or to catch missed events). */
+const DEFAULT_POLL_INTERVAL_MS = 250;
+
+/**
+ * Hook the caller uses to register a "new work" signal. The registered
+ * callback is invoked whenever an external source (typically the daemon's
+ * IPC doorbell) wants to wake the claim loop. Return a disposer used on
+ * shutdown.
+ */
+export type OnWake = (cb: () => void) => () => void;
+
+export interface ServeOptions {
+  db: Database;
+  registry: ProviderRegistry;
+  signal: AbortSignal;
+  /** Value written to `directives.claimed_by`. Default `serve-<pid>`. */
+  claimedBy?: string;
+  /**
+   * Max concurrent directives in flight. Per-directive task concurrency is
+   * a separate knob on the pool. Default 1 (one build at a time).
+   */
+  concurrency?: number;
+  /** Poll cadence in ms. Default 250. */
+  pollIntervalMs?: number;
+  /** Register a wake callback. Optional — absent ⇒ polling-only. */
+  onWake?: OnWake;
+  /**
+   * Inline runner. Injected so tests can stub out the full pipeline without
+   * spinning up providers. Production callers omit this.
+   */
+  runOne?: (directive: Directive, args: InlineRunnerArgs) => Promise<void>;
+}
+
+/** Args passed to the inline runner. */
+export interface InlineRunnerArgs {
+  db: Database;
+  registry: ProviderRegistry;
+  claimedBy: string;
+  signal: AbortSignal;
+}
+
+/**
+ * Run the serve loop until `signal` aborts. Resolves on clean shutdown;
+ * rejects if something catastrophic happens (DB closed mid-loop, etc.) so
+ * the supervisor can restart.
+ */
+export async function runServe(opts: ServeOptions): Promise<void> {
+  const claimedBy = opts.claimedBy ?? `serve-${String(process.pid)}`;
+  const concurrency = Math.max(1, opts.concurrency ?? 1);
+  const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const runOne = opts.runOne ?? defaultRunOne;
+
+  const inflight = new Map<string, Promise<void>>();
+
+  // Doorbell bridge: a simple "fired once since last reset" flag so a ring
+  // during a busy pass isn't lost between iterations.
+  let doorbellRang = false;
+  let pendingWake: (() => void) | undefined;
+  const onRing = (): void => {
+    doorbellRang = true;
+    pendingWake?.();
+  };
+  const unsubscribe = opts.onWake?.(onRing);
+
+  const abortWake = (): void => {
+    pendingWake?.();
+  };
+  opts.signal.addEventListener('abort', abortWake, { once: true });
+
+  log.info(
+    { claimedBy, concurrency, pollIntervalMs, hasDoorbell: opts.onWake !== undefined },
+    'serve: started',
+  );
+
+  try {
+    while (!opts.signal.aborted) {
+      // Dispatch as many pending directives as we have slots for.
+      while (inflight.size < concurrency && !opts.signal.aborted) {
+        const directive = directivesQ.claimNext(opts.db, { claimedBy });
+        if (directive === undefined) break;
+        log.info(
+          { directiveId: directive.id, intent: directive.intent, inflight: inflight.size + 1 },
+          'serve: claimed directive',
+        );
+        const runPromise = runOne(directive, {
+          db: opts.db,
+          registry: opts.registry,
+          claimedBy,
+          signal: opts.signal,
+        })
+          .then(() => {
+            log.info({ directiveId: directive.id }, 'serve: directive finished');
+          })
+          .catch((err: unknown) => {
+            // If we aborted mid-run, mark the directive as blocked so it
+            // doesn't get stuck in `running` forever — resume can pick it up.
+            if (opts.signal.aborted) {
+              try {
+                directivesQ.updateStatus(opts.db, directive.id, 'blocked');
+              } catch (writeErr) {
+                log.warn(
+                  { writeErr, directiveId: directive.id },
+                  'serve: failed to mark aborted directive as blocked',
+                );
+              }
+              log.warn(
+                { directiveId: directive.id, err },
+                'serve: directive aborted — marked blocked',
+              );
+              return;
+            }
+            // Non-abort failure: mark failed and keep the loop healthy.
+            try {
+              directivesQ.updateStatus(opts.db, directive.id, 'failed');
+            } catch (writeErr) {
+              log.warn(
+                { writeErr, directiveId: directive.id },
+                'serve: failed to mark failed directive',
+              );
+            }
+            log.error({ err, directiveId: directive.id }, 'serve: directive threw');
+          })
+          .finally(() => {
+            inflight.delete(directive.id);
+            pendingWake?.();
+          });
+        inflight.set(directive.id, runPromise);
+      }
+
+      if (opts.signal.aborted) break;
+
+      // Wait for: abort | doorbell ring | poll timeout | any slot freeing.
+      const freeSlotOrWake = new Promise<void>((resolve) => {
+        pendingWake = resolve;
+      });
+      const timerPromise = sleep(pollIntervalMs);
+      const slotPromises = [...inflight.values()];
+
+      await Promise.race([freeSlotOrWake, timerPromise, ...slotPromises]);
+      pendingWake = undefined;
+      if (doorbellRang) {
+        doorbellRang = false;
+      }
+    }
+
+    // Shutdown — drain inflight. They each got `signal`, so they'll settle.
+    if (inflight.size > 0) {
+      log.info({ inflight: inflight.size }, 'serve: draining inflight directives');
+      await Promise.allSettled([...inflight.values()]);
+    }
+    log.info('serve: stopped cleanly');
+  } finally {
+    opts.signal.removeEventListener('abort', abortWake);
+    unsubscribe?.();
+  }
+}
+
+/**
+ * Default inline runner. Lazy-imported to avoid circular module evaluation
+ * between `serve.ts` and `loop.ts`.
+ */
+async function defaultRunOne(directive: Directive, args: InlineRunnerArgs): Promise<void> {
+  const { runBrain } = await import('./loop.js');
+  const handle = await runBrain({
+    mode: 'inline',
+    directiveId: directive.id,
+    db: args.db,
+    registry: args.registry,
+    claimedBy: args.claimedBy,
+    signal: args.signal,
+  });
+  await handle.done;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    if (typeof t.unref === 'function') t.unref();
+  });
+}

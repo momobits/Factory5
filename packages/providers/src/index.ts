@@ -6,3 +6,6 @@
 
 export * from './types.js';
 export * from './registry.js';
+export * from './claude-cli.js';
+export * from './stream-events.js';
+export * from './stub.js';

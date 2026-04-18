@@ -7,11 +7,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { env, pid, stdout } from 'node:process';
 
-import type {
-  DestinationStream,
-  Logger as PinoLogger,
-  LoggerOptions as PinoOptions,
-} from 'pino';
+import type { DestinationStream, Logger as PinoLogger, LoggerOptions as PinoOptions } from 'pino';
 import pino, { multistream } from 'pino';
 
 import { logsDir } from './paths.js';
@@ -93,8 +89,7 @@ export function initLogger(opts: LoggerOptions): PinoLogger {
     serializers: pino.stdSerializers,
   };
 
-  rootLogger =
-    streams.length > 0 ? pino(baseOptions, multistream(streams)) : pino(baseOptions);
+  rootLogger = streams.length > 0 ? pino(baseOptions, multistream(streams)) : pino(baseOptions);
 
   return rootLogger;
 }
@@ -102,9 +97,7 @@ export function initLogger(opts: LoggerOptions): PinoLogger {
 /** Get the root logger. Throws if `initLogger` has not been called. */
 export function getRootLogger(): PinoLogger {
   if (rootLogger === undefined) {
-    throw new Error(
-      'logger not initialized — call initLogger({ processName }) at app startup',
-    );
+    throw new Error('logger not initialized — call initLogger({ processName }) at app startup');
   }
   return rootLogger;
 }

@@ -9,19 +9,19 @@ All shapes are validated at boundaries with Zod schemas (also exported from `@fa
 ## `AutonomyMode`
 
 ```ts
-type AutonomyMode = "chat" | "assisted" | "autonomous";
+type AutonomyMode = 'chat' | 'assisted' | 'autonomous';
 ```
 
 How much human-in-the-loop the brain expects:
 
 - **`chat`** — every step asks
-- **`assisted`** *(default)* — confirm at phase boundaries
+- **`assisted`** _(default)_ — confirm at phase boundaries
 - **`autonomous`** — run to done; pause/escalate only when ambiguous or stuck
 
 ## `ChannelId`
 
 ```ts
-type ChannelId = "cli" | "discord" | "telegram" | "github" | "webhook";
+type ChannelId = 'cli' | 'discord' | 'telegram' | 'github' | 'webhook';
 ```
 
 Where a directive originated. Drives reply routing.
@@ -30,14 +30,14 @@ Where a directive originated. Drives reply routing.
 
 ```ts
 type Intent =
-  | "build"        // produce new software from spec
-  | "fix"          // fix a problem in existing code
-  | "review"       // adversarial review
-  | "investigate"  // diagnose without changing
-  | "chat"         // conversational Q&A
-  | "status"       // report state
-  | "resume"       // continue a stopped build
-  | "cancel";      // stop a running build
+  | 'build' // produce new software from spec
+  | 'fix' // fix a problem in existing code
+  | 'review' // adversarial review
+  | 'investigate' // diagnose without changing
+  | 'chat' // conversational Q&A
+  | 'status' // report state
+  | 'resume' // continue a stopped build
+  | 'cancel'; // stop a running build
 ```
 
 What the user (or external system) wants done. The triage agent classifies free-form input into one of these.
@@ -48,16 +48,16 @@ The unit of work flowing into the brain. One directive = one user-visible reques
 
 ```ts
 type Directive = {
-  id: string;                 // ULID
+  id: string; // ULID
   source: ChannelId;
-  principal: string;          // user identifier scoped to source (e.g., discord user id)
-  channelRef: string;         // e.g. discord channel/thread id, cli session id
+  principal: string; // user identifier scoped to source (e.g., discord user id)
+  channelRef: string; // e.g. discord channel/thread id, cli session id
   intent: Intent;
-  payload: unknown;           // intent-specific shape
+  payload: unknown; // intent-specific shape
   autonomy: AutonomyMode;
-  createdAt: string;          // ISO8601
-  status: "pending" | "claimed" | "running" | "blocked" | "complete" | "failed";
-  claimedBy?: string;         // brain process id (PID + hostname)
+  createdAt: string; // ISO8601
+  status: 'pending' | 'claimed' | 'running' | 'blocked' | 'complete' | 'failed';
+  claimedBy?: string; // brain process id (PID + hostname)
   parentDirectiveId?: string; // when one directive spawns another
 };
 ```
@@ -71,19 +71,47 @@ A normalized observation from the outside world. Daemon writes; brain reads when
 ```ts
 type Event = {
   id: string;
-  source: string;             // "github" | "git" | "fs" | "tmux" | "channel"
-  body: EventBody;            // typed union
+  source: string; // "github" | "git" | "fs" | "tmux" | "channel"
+  body: EventBody; // typed union
   metadata: Record<string, unknown>;
   receivedAt: string;
 };
 
 type EventBody =
-  | { kind: "github.issue.opened"; repo: string; number: number; title: string; author: string; body: string }
-  | { kind: "github.issue.commented"; repo: string; number: number; commentId: string; author: string; body: string }
-  | { kind: "github.pr.status"; repo: string; number: number; status: string; conclusion?: string; sha: string }
-  | { kind: "git.commit"; repo: string; sha: string; summary: string; branch: string; author: string }
-  | { kind: "fs.changed"; path: string; type: "create" | "modify" | "delete" }
-  | { kind: "channel.message"; channel: ChannelId; principal: string; ref: string; text: string };
+  | {
+      kind: 'github.issue.opened';
+      repo: string;
+      number: number;
+      title: string;
+      author: string;
+      body: string;
+    }
+  | {
+      kind: 'github.issue.commented';
+      repo: string;
+      number: number;
+      commentId: string;
+      author: string;
+      body: string;
+    }
+  | {
+      kind: 'github.pr.status';
+      repo: string;
+      number: number;
+      status: string;
+      conclusion?: string;
+      sha: string;
+    }
+  | {
+      kind: 'git.commit';
+      repo: string;
+      sha: string;
+      summary: string;
+      branch: string;
+      author: string;
+    }
+  | { kind: 'fs.changed'; path: string; type: 'create' | 'modify' | 'delete' }
+  | { kind: 'channel.message'; channel: ChannelId; principal: string; ref: string; text: string };
 ```
 
 Stored in SQLite `events_audit` table.
@@ -94,11 +122,11 @@ An issue surfaced by an agent during build. The cross-agent dialogue primitive �
 
 ```ts
 type Finding = {
-  id: string;                 // F001-style, project-scoped
+  id: string; // F001-style, project-scoped
   source: AgentRole;
-  target: string;             // file path or module name
-  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  status: "OPEN" | "FIXED" | "VERIFIED" | "WONTFIX";
+  target: string; // file path or module name
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  status: 'OPEN' | 'FIXED' | 'VERIFIED' | 'WONTFIX';
   description: string;
   resolution?: string;
   createdAt: string;
@@ -117,9 +145,9 @@ type Plan = {
   id: string;
   directiveId: string;
   projectPath: string;
-  tasks: Task[];              // DAG via dependsOn
+  tasks: Task[]; // DAG via dependsOn
   createdAt: string;
-  status: "draft" | "active" | "complete" | "abandoned";
+  status: 'draft' | 'active' | 'complete' | 'abandoned';
 };
 
 type Task = {
@@ -130,8 +158,8 @@ type Task = {
   category: ModelCategory;
   inputs: { files: string[]; context: string };
   expectedOutputs: { files: string[]; signals: string[] };
-  dependsOn: string[];        // task IDs
-  status: "pending" | "running" | "complete" | "failed" | "blocked";
+  dependsOn: string[]; // task IDs
+  status: 'pending' | 'running' | 'complete' | 'failed' | 'blocked';
   attempts: number;
   worktreePath?: string;
   result?: TaskResult;
@@ -140,8 +168,8 @@ type Task = {
 type TaskResult = {
   exitCode: number;
   filesChanged: string[];
-  findingsRaised: string[];   // finding IDs
-  signalsEmitted: string[];   // e.g. "BUILD_COMPLETE", "NEEDS_FIXES"
+  findingsRaised: string[]; // finding IDs
+  signalsEmitted: string[]; // e.g. "BUILD_COMPLETE", "NEEDS_FIXES"
   error?: string;
   durationMs: number;
 };
@@ -153,15 +181,15 @@ Plans live in `<project>/.factory/plan.md` (markdown for human reading) AND `<pr
 
 ```ts
 type AgentRole =
-  | "triage"
-  | "architect"
-  | "planner"
-  | "scaffolder"
-  | "builder"
-  | "reviewer"
-  | "fixer"
-  | "investigator"
-  | "verifier";
+  | 'triage'
+  | 'architect'
+  | 'planner'
+  | 'scaffolder'
+  | 'builder'
+  | 'reviewer'
+  | 'fixer'
+  | 'investigator'
+  | 'verifier';
 ```
 
 See [`AGENTS.md`](AGENTS.md) for what each does and which model category it uses by default.
@@ -170,11 +198,11 @@ See [`AGENTS.md`](AGENTS.md) for what each does and which model category it uses
 
 ```ts
 type ModelCategory =
-  | "quick"          // triage, classification (Haiku-tier)
-  | "planning"       // task decomposition (Sonnet-tier)
-  | "reasoning"      // architecture, deep diagnosis (Opus-tier)
-  | "deep"           // long autonomous execution (Opus or GPT-tier)
-  | "documentation"; // doc generation (Haiku-tier)
+  | 'quick' // triage, classification (Haiku-tier)
+  | 'planning' // task decomposition (Sonnet-tier)
+  | 'reasoning' // architecture, deep diagnosis (Opus-tier)
+  | 'deep' // long autonomous execution (Opus or GPT-tier)
+  | 'documentation'; // doc generation (Haiku-tier)
 ```
 
 Categories map to providers via `~/.factory5/config.toml`. See ADR 0004.
