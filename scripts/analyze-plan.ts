@@ -1,9 +1,8 @@
 /**
- * Phase 5b analysis helper. Reads plan.json from a project workspace and
- * prints a structural summary used to validate ADR 0016 behaviours on a
- * live run.
+ * Plan analysis helper. Reads plan.json from a project workspace and prints
+ * a structural summary used to validate ADR 0016 behaviours on a live run.
  *
- * Not wired into the package scripts — invoked ad-hoc with tsx.
+ * Invoked via `pnpm --filter @factory5/scripts analyze-plan <path>`.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -92,13 +91,9 @@ async function main(planPath: string): Promise<void> {
       const earlier = owners[j - 1] as string;
       const reach = depsTransitive(later);
       if (reach.has(earlier)) {
-        overlapDepsPresent.push(
-          `${file}: ${shortId(later)} -> ${shortId(earlier)} (reachable)`,
-        );
+        overlapDepsPresent.push(`${file}: ${shortId(later)} -> ${shortId(earlier)} (reachable)`);
       } else {
-        overlapDepsMissing.push(
-          `${file}: ${shortId(later)} has no path to ${shortId(earlier)} !!`,
-        );
+        overlapDepsMissing.push(`${file}: ${shortId(later)} has no path to ${shortId(earlier)} !!`);
       }
     }
   }

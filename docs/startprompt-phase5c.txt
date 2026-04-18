@@ -1,0 +1,153 @@
+Read CLAUDE.md, then docs/Phase5_Progress.md — the Phase 5 roadmap. Then
+docs/PROGRESS.md, latest entry (2026-04-19 Phase 5b — live validation). You
+only need Phase 5b + Phase 5a to understand the context; everything earlier
+is covered by the roadmap. Then skim ADR 0016 (the behaviours Phase 5b
+validated in the wild) and read both open issues in full:
+docs/issues/I001-planner-emits-serial-chain.md and
+docs/issues/I002-assessor-inherits-host-python-env.md.
+
+Phase 5b shipped a live run that validated ADR 0016 end-to-end (6/6 tasks,
+$7.68, 114 tests passing in the built project) but ended `blocked` rather
+than `complete` because the assessor couldn't find the deps it needed to
+run pytest. That's I002. The same run also exposed I001 — the planner
+produced a fully serial DAG even though the tasks were independent.
+
+Phase 5c closes both issues in one session. I002 first, I001 second, one
+live re-run covers both validations.
+
+---
+
+Step 1 — Fix I002 (assessor env), minimum-viable tier.
+
+Code changes live in `packages/assessor/src/runners/pytest.ts` and its
+test file. The detailed design is in I002 under "Resolution → Minimum
+viable (one session)"; do not wander beyond tier 1.
+
+  a. `pickPython(opts)` gains venv preference + requires-python selection.
+     Use `smol-toml` (already in the workspace via brain.config) to parse
+     pyproject.toml when present. Priority order:
+       1. caller-provided `opts.pythonBin`
+       2. `<projectPath>/.venv/Scripts/python.exe` (Windows) or
+          `<projectPath>/.venv/bin/python` (Unix) — whichever exists
+       3. if `pyproject.toml` has `requires-python >= 3.X`, try `py -3.X`
+          (Windows) / `python3.X` (Unix) in descending order from the most
+          recent available
+       4. fallback to bare `python` / `python3`
+     Log at `info` with `{ chosen, reason }` so the assessor's decision is
+     traceable.
+
+  b. Before invoking pytest, run `<python> -m pip install -e .[test]`
+     against the chosen interpreter. If pyproject has no `[project.optional-dependencies.test]`, retry with plain `-e .`. Capture
+     stdout/stderr; surface failures as `provisioning.installOk: false`
+     with the last 40 lines of stderr in `installSummary`.
+
+  c. Extend `AssessResult` (in `packages/assessor/src/types.ts`) with
+     `provisioning?: { pythonPath: string; pythonVersion: string;
+     installOk: boolean; installSummary?: string }`. Thread it through
+     `runPytest` → `assess` → the log line `assess: complete`.
+
+  d. New tests in `pytest.test.ts`:
+     - venv detection picks `.venv/Scripts/python.exe` when present
+     - requires-python >= 3.11 picks py -3.11 when available, falls back
+       to py -3.10 (or whatever) when it isn't, and logs the demotion at warn
+     - install step runs before pytest
+     - install failure surfaces on `provisioning.installOk = false` and
+       the gate result is `{ build: false }` rather than `{ build:
+       test-exit-5 }`
+
+  e. `docs/decisions/0017-assessor-project-env-provisioning.md` — new
+     ADR documenting the tier-1 decision, why tier-2 (`.factory/assessor-env/`)
+     and tier-3 (pluggable runtimes) are deferred. Reference I002. Use
+     ADR 0016's shape (Context / Decision / Consequences / Alternatives).
+
+After each concrete edit: `pnpm build`, `pnpm --filter @factory5/assessor test`, `pnpm lint`, `pnpm format:check`. No live run yet.
+
+---
+
+Step 2 — Fix I001 (planner over-serialises), prompt-tuning tier.
+
+Code only touches prompt text, no runtime logic. Details in I001 under
+"Resolution → Suggested direction".
+
+  a. `prompts/agents/planner.md`:
+     - Add a second worked example with two parallel builders
+       (`models` + `ui`, both `dependsOn: [0]`, disjoint
+       `expectedOutputs.files[]`). Frame as default for independent
+       modules.
+     - Promote the "don't invent false dependencies" line from the
+       PARALLELISATION paragraph to a numbered rule alongside FILE
+       OWNERSHIP. Both rules carry equal visual weight.
+     - Add an explicit ❌ counter-example: "Task A writes models.py, task
+       B writes formatter.py that reads models.py → B deps on A. Task C
+       writes cli.py that reads formatter.py + models.py → C deps on B
+       AND A (not just B), but no spurious C-deps-on-earlier-builder-X
+       for 'serialisation'."
+
+  b. `packages/brain/src/planner.ts` — check the inline user prompt.
+     If it duplicates guidance from planner.md, update it in parallel so
+     both codepaths agree. (The current inline prompt is tight and might
+     already be fine; read it before editing.)
+
+  c. No test for prompt regression — prompt quality is evaluated by the
+     live run. Noted as follow-up in the Phase 5c PROGRESS entry, not a
+     Phase 5c blocker.
+
+After: `pnpm build`, full `pnpm test` (214 + assessor additions), lint,
+format:check.
+
+---
+
+Step 3 — Live re-run.
+
+  `factory build example --autonomy autonomous --concurrency 2 --workspace /c/Users/Momo/factory5-v5c`
+
+BEFORE the run:
+  1. Confirm no factoryd is running:
+       ls "$LOCALAPPDATA/factory5/factoryd.pid" → must be absent.
+       On Windows the factory data dir is `%LOCALAPPDATA%\factory5\`,
+       NOT `~/.factory5`. If the pidfile is present check tasklist and
+       rm if stale.
+  2. `factory doctor --skip-discord` → green. claude-cli should already
+     be at 2.1.113+.
+  3. Fresh workspace `/c/Users/Momo/factory5-v5c` (not v5b — v5b still
+     has the built example from Phase 5b's run).
+  4. Budget ceiling: $12. Ctrl-c if `factory status --limit 1` shows
+     the directive's spend crossing $12.
+
+DURING:
+  - Snapshot plan.json early:
+      cp "C:/Users/Momo/factory5-v5c/example/.factory/plan.json" \
+         "C:/Users/Momo/AppData/Local/Temp/2/factory5-phase5c/plan-phase5c-preexec.json"
+    as soon as the `planner: plan written` log line appears.
+  - Watch for "pool: task started" pairs within < 2 s — that's the I001
+    fix manifesting.
+  - Watch for `provisioning: { ..., installOk: true }` on the
+    `assess: complete` line — that's the I002 fix manifesting.
+
+AFTER:
+  - `pnpm --filter @factory5/scripts analyze-plan <plan.json>` on both
+    pre-exec and final. Expected: multiple builders with no inter-builder
+    edges.
+  - `factory status` should show the directive `complete` with spend
+    under $12.
+  - Write the Phase 5c PROGRESS.md entry: dated, all five Phase-5-exit
+    criteria ticked off, spend + test count + any fresh issues filed.
+  - Mark ADR 0017 status `Accepted` once the live run validates the tier-1
+    design actually works.
+
+---
+
+Whichever step fails, fix the bug in the right layer (if assessor fails,
+it's probably a pyproject/venv edge case — extend pickPython; if planner
+still serialises, it's the prompt — iterate). Don't rewrite the pipeline
+shape. Don't silently extend ADR 0016 with a code-level dependency pruner
+without writing an ADR first.
+
+DO NOT in this phase: Telegram, web UI, GitHub channel (all Phase 6),
+cross-project findings registry (Phase 6), worker-subprocess `ask_user`
+(still deferred), `max_usd` enforcement (documented but not in scope),
+directive auto-resume across crashes (Phase 6).
+
+Start this in a fresh conversation. The Phase 5b context is wrapped up
+cleanly in Phase5_Progress.md + PROGRESS.md; 5c reads cleanest from a
+clean slate with just those two + the issue files.

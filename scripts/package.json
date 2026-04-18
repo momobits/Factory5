@@ -5,7 +5,8 @@
   "description": "Scripts (e2e smoke, migrations, ops tooling) — not published",
   "type": "module",
   "scripts": {
-    "e2e": "tsx e2e-daemon.ts"
+    "e2e": "tsx e2e-daemon.ts",
+    "analyze-plan": "tsx analyze-plan.ts"
   },
   "dependencies": {
     "@factory5/channels": "workspace:*",

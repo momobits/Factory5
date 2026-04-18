@@ -14,9 +14,10 @@ Internal issue tracker for factory5 itself. Mirrors the finding-lifecycle patter
 
 ## Open
 
-| ID     | Severity | Area | Title | Owner |
-| ------ | -------- | ---- | ----- | ----- |
-| _none_ |          |      |       |       |
+| ID                                                | Severity | Area          | Title                                                          | Owner |
+| ------------------------------------------------- | -------- | ------------- | -------------------------------------------------------------- | ----- |
+| [I002](I002-assessor-inherits-host-python-env.md) | HIGH     | assessor      | Assessor inherits host's Python env — no venv, no deps, no pin | —     |
+| [I001](I001-planner-emits-serial-chain.md)        | MEDIUM   | brain/planner | Planner emits a fully serial task chain on simple specs        | —     |
 
 ## Resolved (last 20)
 
