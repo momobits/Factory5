@@ -883,3 +883,302 @@ Recommended to keep the fresh-conversation discipline — this session's focus o
 4. **Worker-subprocess `ask_user`** (Phase 5 direction C). The Phase 5b run's `askUser` fired correctly at the directive level — no mid-tool evidence either way — so C remains low priority.
 
 Recommend doing I002 first: unlocks a green-verify-gate dry run for every future Python build and substantially improves the "factory validates its own work" story. I001 can piggyback on the next live run after I002 lands.
+
+---
+
+## 2026-04-19 — Phase 5c: I002 closed via ADR 0017, I001 prompt-tuning landed, I003 newly filed
+
+**Headline:** Shipped ADR 0017 (assessor project-env provisioning — venv + `requires-python` + shared `pip install -e`) and the Phase 5c planner-prompt rewrite for I001. Live `factory build example --autonomy autonomous --concurrency 2 --workspace /c/Users/Momo/factory5-v5c` (directive `01KPJCH7HC7ECW1VRFC4QYWM79`): 6/6 tasks succeeded, 129 tests green in the built project, spend **$6.48**. The live run exposed a subtlety in the refactor (imports runner used its own old `pickPython`); post-run code refactor makes the provisioning a shared helper across imports + pytest, verified locally against the built workspace: **`gate.build: true`, `gate.integration: true`, 129 pytest pass**. Remaining `gate.verify: false` is driven entirely by scaffolder-level omissions (no README/LICENSE, thin `.gitignore`) — filed as I003. 231 tests in the workspace now pass (214 → +17 provisioning tests). I002 moves to RESOLVED; I001 stays OPEN pending a spec with genuine parallelism; I003 is the new dominant blocker for `gate.verify: true` on autonomous Python builds.
+
+### Done
+
+**Code — `packages/assessor/`:**
+
+- **ADR 0017 tier 1** landed (`packages/assessor/src/runners/pytest.ts`):
+  - New `pickPython(projectPath, opts, deps?)`. Priority:
+    caller-provided `opts.pythonBin` → project-local
+    `.venv/Scripts/python.exe` (Windows) / `.venv/bin/python` (Unix) →
+    `requires-python` from `pyproject.toml` parsed with `smol-toml` (matches
+    `>=X.Y`, `~=X.Y`, `^X.Y`, `==X.Y`) → bare `python`/`python3` fallback.
+    Each candidate probed with `<bin> --version`; first success wins. Emits
+    `pickPython: chose interpreter` at info level; warns on demotion.
+  - New `provisionAssessorEnv(projectPath, opts, deps?) -> { choice, provisioning }`
+    (post-live-run refactor) — shared env helper. Extracted from `runPytest`
+    so imports + pytest runners both use the same interpreter + one install
+    invocation.
+  - `runPytest` now accepts `opts.env` (pre-provisioned by
+    `assess()`) to avoid double provisioning.
+  - Install step: `<python> -m pip install -e .[test]` →
+    `-e .[dev]` (new fallback) → `-e .` (final fallback). `pyprojectPickExtra`
+    detects either `test` or `dev` optional-deps. Install failure captured
+    as `provisioning.installSummary` (last 40 lines) and surfaced via
+    `provisioning.installOk = false`.
+  - `PickPythonDeps` / `ProvisionEnvDeps` / `RunPytestDeps` exported for
+    unit-test injection (no production callers).
+
+- **`packages/assessor/src/runners/imports.ts` rewritten**:
+  - Accepts `opts.interpreter: PythonChoice` and runs
+    `<bin> <prefixArgs> -c "import X"`. Fallback order: explicit
+    `interpreter` → explicit `pythonBin` → PATH python.
+  - Removed the local duplicate `pickPython` that was silently using stock
+    `python` on PATH — the root cause of the live run's `gate.build: false`
+    outcome.
+
+- **`packages/assessor/src/types.ts`**: `AssessResult.provisioning?: {
+pythonPath, pythonVersion, installOk, installSummary? }` added (stable
+  cross-package contract; read by brain log line).
+
+- **`packages/assessor/src/assess.ts`**: new `computeGateResults` helper
+  (exported so gate semantics can be unit-tested). Orchestration:
+  1. Parallel file-system checks (modules / readme / license /
+     gitignore / architecture / gitClean).
+  2. `provisionAssessorEnv` once (skipped when `testFramework: 'none'`).
+  3. `checkPythonImports` with shared interpreter.
+  4. `runPytest` with `env: provisioned` to skip re-install.
+  - `gate.build` now includes `provisioning?.installOk !== false`. Install
+    failure marks gate.build false regardless of whether stdlib imports
+    happen to succeed.
+  - `assess: complete` log line now carries `provisioning.{pythonPath, pythonVersion, installOk}`
+    and the first five `importErrors` for operator triage.
+
+- **`packages/assessor/package.json`**: new `smol-toml` dependency
+  (already in workspace via `@factory5/brain`).
+
+- **Tests** (`packages/assessor/src/runners/pytest.test.ts`, new file, 17 tests):
+  - `extractMinimumPythonVersion` — `>=3.11`, `>=3.11,<3.13`, `^3.11`,
+    `~=3.11.2`, `==3.11`, unparseable.
+  - `pickPython` — venv detection on Windows + Unix, `py -3.11` selection
+    on Windows, `python3.11` on Unix, demotion with `demoted` field + warn
+    log when requested version unavailable, `opts.pythonBin` override
+    short-circuits, total unavailability returns undefined.
+  - `runPytest` — install runs before pytest, `.[test]` chosen when
+    extra present, falls back to `-e .` if `.[test]` fails, install
+    failure surfaces as `installOk: false` with last-40-lines
+    `installSummary`.
+  - `computeGateResults` — gate.build true when install ok, false when
+    install failed (even if imports pass), absent provisioning does not
+    regress.
+
+**Code — planner (I001 prompt tuning):**
+
+- `prompts/agents/planner.md` rewritten:
+  - `PARALLELISATION` paragraph replaced by a numbered "Dependency rules"
+    section: _file ownership_ and _no false dependencies_ carry **equal
+    weight**. The "don't serialise out of caution" line is now a rule, not
+    a footnote.
+  - New worked "Parallel siblings" example: two builders (`models` + `ui`)
+    with `dependsOn: [0]` and no inter-sibling edge. `cli` depends on
+    **both** `models` and `ui` (real data flow from both producers, not
+    just the most recent).
+  - Explicit ❌ counter-example showing cli.py depending on _both_
+    producers it reads from, never on an earlier builder "just to
+    serialise".
+
+- `packages/brain/src/planner.ts` inline user-prompt rewritten in
+  parallel (two entry-points now agree on framing). The `SCOPE` and `FILE
+OWNERSHIP` sections kept; a `NO FALSE DEPENDENCIES` rule added; GOOD /
+  BAD worked examples inline.
+
+**Docs:**
+
+- **ADR 0017** (`docs/decisions/0017-assessor-project-env-provisioning.md`)
+  — shipped, status Accepted, documents tier-1 design + why tier-2
+  (per-project `.factory/assessor-env/`) and tier-3 (pluggable runtimes)
+  are deferred. Reference from I002.
+- **`docs/decisions/INDEX.md`** — new row for 0017.
+- **`docs/issues/INDEX.md`** — I002 moved to Resolved, I003 filed in
+  Open.
+- **I002** frontmatter flipped to `status: RESOLVED`, `resolved:
+2026-04-19`.
+- **I001** appended with a Phase 5c update paragraph — prompt tuning
+  landed; planner now tracks real data flow correctly; stays OPEN pending
+  validation on a spec with genuine independent modules (the `example`
+  spec happens to be architect-designed as linear, so parallelism can't
+  manifest there).
+- **I003** (`docs/issues/I003-scaffolder-omits-project-hygiene-artifacts.md`)
+  — new: scaffolder omits README ≥30 lines, LICENSE, comprehensive
+  `.gitignore`. Under the previous broken assessor these failures were
+  masked by `gate.build: false`; now that `gate.build: true` is
+  achievable, the verify-gate ceiling lives here.
+
+**Tooling:**
+
+- `scripts/reassess.ts` — ad-hoc reassess CLI: reads an already-built
+  project + its plan.json, runs `assess()`, prints the full AssessResult.
+  Used in this session to locally verify the post-live-run refactor
+  produces `gate.build: true` + 129 pytest without paying for another
+  live run. Invoke via `npx tsx scripts/reassess.ts <projectPath> <planPath>`.
+- `scripts/package.json` — `@factory5/assessor` added to deps.
+
+### Live run — `factory build example --autonomy autonomous --concurrency 2 --workspace /c/Users/Momo/factory5-v5c`
+
+**Directive** `01KPJCH7HC7ECW1VRFC4QYWM79`. Fresh workspace, template copied on start.
+
+- **Triage** (Haiku, 15 s, $0.012) → intent=build, confidence=0.82.
+- **Architect** (Opus, 118 s, $0.329) → 6 wiki pages, readiness ok on first
+  try.
+- **Planner** (Sonnet, 46 s, $0.131) → 6 tasks, **adjustments=0** again.
+  Plan shape:
+  - scaffolder (planning, maxTurns=15) — writes
+    `pyproject.toml`, `src/__init__.py`, `tests/__init__.py`.
+  - builder: models (deep, maxTurns=25) — `src/models.py` + tests.
+  - builder: api + shared test infra (deep, maxTurns=55) — `src/api.py`,
+    `tests/conftest.py`, `tests/test_api.py`.
+  - builder: formatter (deep, maxTurns=40) — `src/formatter.py` +
+    `tests/test_formatter.py`; `dependsOn: [scaffolder, models, api]` —
+    formatter reads `WeatherAPIError` from `api`, so the edge is real.
+  - builder: cli (deep, maxTurns=45) — `src/cli.py` + `tests/test_cli.py`;
+    `dependsOn: [scaffolder, models, api, formatter]` — reads from all
+    three producers (not just the most recent). **This is the prompt-tuning
+    change manifesting**: Phase 5b had `formatter.dependsOn=[api]` only
+    (implicit models); Phase 5c lists every producer explicitly.
+  - verifier (planning) — `dependsOn: [cli]`.
+- **Pool** (concurrency=2): 6/6 tasks exit 0, 0 findings from builders.
+  Worker turn counts 8 / 16 / 29 / 21 / 28 — all well inside the
+  planner's per-task `maxTurns` budgets. All worktrees merged cleanly.
+- **Verifier** (Sonnet, 270 s, $0.907) emitted 1 LOW finding F001
+  (not inspected further — outside Phase 5c scope).
+- **Assessor** (2.67 s wall): `pickPython: chose interpreter` → `C:\WINDOWS\py.EXE`
+  with `-3.11` prefix, version `3.11.9`, reason
+  `requires-python=>=3.11 → py -3.11`. Install: `-e .` (pyproject has
+  `[project.optional-dependencies].dev` not `[test]`; the original live
+  run pre-dates the dev-extra fallback, so it ran plain `-e .`), 8 s,
+  `installOk: true`. Pytest: **129 passed, 0 failed** in 9.7 s.
+- **Gate at end of live run**: `{build: false, integration: true, verify:
+false}`. `gate.build: false` because the imports runner still used its
+  own old `pickPython` (stock PATH python 3.10) — it failed to import
+  `src.models` at the `StrEnum`-3.11 syntax before the new shared
+  interpreter could rescue it.
+- **Brain escalated** via `askUser` per ADR 0005 autonomous-mode policy;
+  process was killed mid-escalation (same stuck-running pattern as Phase
+  5b — unchanged from then, tracked as the still-open "directives left
+  running across brain crash" gap). Directive left in `running` status at
+  `$6.477`.
+
+**Spend accounting:** triage $0.012 + architect $0.329 + planner $0.131 +
+scaffolder $0.109 + builders ($0.668 + $1.461 + $1.190 + $1.670) +
+verifier $0.907 = **$6.477**. Target band was $5-12; inside it.
+
+### Post-run refactor + local validation
+
+The live run's `gate.build: false` exposed that the imports runner still
+had its own old `pickPython`. I refactored to share provisioning (extract
+`provisionAssessorEnv`, have `assess()` orchestrate, update imports to
+accept a shared `interpreter`, `runPytest` to accept pre-provisioned
+`env`). Added `dev` extra detection to `pyprojectPickExtra` while here
+(Phase 5b + 5c both scaffold `dev` not `test`).
+
+Local `scripts/reassess.ts` against the already-built `/c/Users/Momo/factory5-v5c/example`:
+
+```
+gate.build:       true   ← flipped from false (the fix works)
+gate.integration: true
+gate.verify:      false  ← remaining: I003
+testsPassed:      129
+testsFailed:      0
+importsOk:        true
+modulesExisting:  11
+modulesMissing:   []
+gitClean:         false  ← __pycache__ / .coverage / .egg-info after assess's own pytest run
+hasReadme:        false  ← scaffolder didn't produce it
+hasLicense:       false  ← scaffolder didn't produce it
+hasGitignore:     true   ← just '.factory/' — too thin
+hasArchitecture:  true
+provisioning:
+  pythonPath:    C:\WINDOWS\py.EXE
+  pythonVersion: 3.11.9
+  installOk:     true
+```
+
+**The ADR 0017 fix is validated.** `gate.build` and `gate.integration` go
+green; the remaining `gate.verify: false` is entirely I003-shaped.
+
+### Phase 5c exit-criteria scoreboard
+
+| #   | Criterion                                                         | Status     | Notes                                                                                             |
+| --- | ----------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------- |
+| 1   | `terminalStatus: 'complete'` (not blocked)                        | ❌ Miss    | Directive stuck `running` due to escalation + the Phase 4 auto-resume gap. Orthogonal to 5c work. |
+| 2   | `gate.verify: true`, `gate.build: true`, `gate.integration: true` | 🟡 Partial | `build` + `integration` true post-refactor; `verify` blocked by I003.                             |
+| 3   | `testsPassed >= 50`                                               | ✅ Hit     | 129 pytest passing against the built project.                                                     |
+| 4   | Visible parallelism in DAG                                        | ❌ Miss    | Architect-driven linear module graph on `example`; not a planner bug — see I001 update.           |
+| 5   | No new CRITICAL or HIGH issues filed                              | ✅ Hit     | I003 is MEDIUM; one LOW finding F001 from verifier.                                               |
+| 6   | Spend < $12                                                       | ✅ Hit     | $6.48 live + <$0.10 local reassess.                                                               |
+
+4 of 6 hit (criterion 2 partial). Criteria 1, 4 are both "infrastructure present, input doesn't exercise it" — the fix needs a different test vehicle:
+
+- **For criterion 1**: requires the directive-auto-resume or "markable" escalation handling (still deferred from Phase 4 closeout).
+- **For criterion 4**: requires a spec where the architect legitimately produces a non-linear module graph (e.g. two independent utilities sharing only the scaffolder). A synthetic test spec, not `example`.
+
+### Decided
+
+- **ADR 0017 is correct as shipped.** The post-live refactor (sharing
+  provisioning between imports + pytest, moving it up to `assess()`) is
+  an internal reorganisation that keeps the ADR's tier-1 contract intact
+  — venv > requires-python > PATH, `pip install -e .[test]`/.[dev]/`.`,
+  `provisioning` surface on `AssessResult`. Not an ADR amendment.
+- **I001 prompt tuning is correct and working.** The planner now tracks
+  real data flow (every consumer lists every producer it reads). That
+  this didn't manifest as parallelism on `example` is the spec's
+  architecture, not the planner.
+- **I003 is the new dominant `gate.verify` blocker.** Filed MEDIUM;
+  prompt-fix direction suggested. Not worth extending Phase 5c to also
+  close — scope would balloon past the one-session plan.
+
+### Verification — PASSED 2026-04-19
+
+- ✅ `pnpm build` — all 13 packages + 2 apps + 1 script compile.
+- ✅ `pnpm test` — **231 tests pass** (Phase 5b 214 + 17 new provisioning
+  tests in `pytest.test.ts`).
+- ✅ `pnpm lint` — clean.
+- ✅ `pnpm format:check` — clean.
+- ✅ **Live `factory build example`** — directive
+  `01KPJCH7HC7ECW1VRFC4QYWM79`, 6/6 tasks succeeded, 129 tests passing
+  under py -3.11, spend $6.48.
+- ✅ **`scripts/reassess.ts`** on the built project post-refactor —
+  `gate.build: true`, `gate.integration: true`, 129 passed, installOk
+  true.
+
+### Caveats / known gaps (updated)
+
+- **I003 (scaffolder hygiene)** — new; now the dominant gate.verify
+  blocker.
+- **I001 (planner parallelism)** — prompt-tuning landed but unvalidated
+  on a parallel-admitting spec.
+- **`gate.verify` measurement order vs assess side-effects** — after
+  `assess()` runs install + pytest, the project tree now carries
+  `*.egg-info/`, `__pycache__/`, `.coverage`. A future re-`assess()` on the
+  same directory will see gitClean=false even if the merged commit was
+  clean. Noted in I003's hypothesis. The scaffolder should produce a
+  `.gitignore` broad enough to mask these.
+- **Directive auto-resume across brain crash / escalation kill** —
+  unchanged from Phase 4/5b closeouts. Reproduced again cleanly here.
+- **Parallel builders on a genuinely-parallel spec** — unexercised.
+- **Three-way file-overlap edge** (ADR 0016 note) — unexercised.
+- **`max_usd` / `max_steps`** — documented-but-not-enforced. Phase 5c
+  came in at $6.48 against a $12 ceiling; not relevant this run.
+
+### Next session
+
+**Options, in descending order of value:**
+
+1. **Close I003 (scaffolder hygiene) via prompt tuning.** Extend the
+   scaffolder agent + architect wiki-scope to include README (≥30 lines
+   meaningful), LICENSE (pick sensible default, or leave a placeholder
+   but satisfy the 30-line rule), and a project-type-aware `.gitignore`.
+   Re-run `factory build example` → expected `gate.verify: true`. Budget
+   $6-8 for the live. This closes Phase 5c exit criterion 2 fully.
+2. **Validate I001 on a parallel-admitting spec.** Author a small second
+   template (`templates/parallel-example/`) with two modules that don't
+   share imports beyond the scaffolder. Live-run and confirm `pool: task
+started` pairs within <2 s. Can piggyback on (1)'s live budget.
+3. **Fix the directive-auto-resume gap** so `askUser`-triggered
+   escalations don't leave directives stuck `running` after process
+   exit. Either a `factory directive mark-blocked <id>` CLI or a
+   factoryd-start cleanup pass. Criterion 1 depends on this.
+4. **GitHub event source + channel** (Phase 5 direction B, still
+   deferred). Clean-slate session, two new packages, new ADR.
+5. **Worker-subprocess `ask_user`** (Phase 5 direction C). Still no
+   mid-tool evidence; stays low priority.
+
+Recommend (1) + (2) bundled into the next live run. That unlocks all six
+Phase 5 exit criteria (Phase 5c's carry-over + 5 overall).

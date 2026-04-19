@@ -41,12 +41,37 @@ Two compounding factors:
 
 ## Resolution
 
-(filled when work begins)
+**Phase 5c update (2026-04-19)**: prompt-tuning tier landed.
 
-Suggested direction:
+Changes shipped:
 
-- Add a second worked example in the planner prompt: a project with two independent modules (e.g. CLI parser + output renderer) where both builders have `dependsOn: [<scaffolder>]` and neither depends on the other. Contrast explicitly with the chain form.
-- Promote the "don't invent false dependencies" rule from a soft line in the `PARALLELISATION` section to a numbered rule alongside file-ownership, to rebalance the framing.
-- Consider a post-materialisation **dependency pruner** that removes `dependsOn` edges between tasks whose `expectedOutputs.files[]` don't overlap and where the later task doesn't consume any of the earlier task's `expectedOutputs.files[]` via its own `inputs.files[]`. This would be a fourth behaviour in `materialisePlannerTasks` (extending ADR 0016) — edges go in _and_ come out based on declared data flow. Requires care: overly aggressive pruning breaks legitimate chains, so prune only when we can _prove_ there's no data dependency from the declared file lists.
+- `prompts/agents/planner.md` rewritten: "don't invent false dependencies"
+  promoted to a numbered rule of equal weight with file-ownership; a second
+  worked example (parallel-siblings `models` + `ui`, both `dependsOn: [0]`)
+  added; explicit ❌ counter-example showing cli depending on **both**
+  models and formatter (not just the most recent one).
+- `packages/brain/src/planner.ts` inline user-prompt rewritten in parallel
+  so the two planner entry-points stay in sync.
 
-Pruning is riskier than promotion — start with prompt tuning and a live re-run; only add the code-level pruner if the prompt alone doesn't fix it.
+Live validation (directive `01KPJCH7HC7ECW1VRFC4QYWM79`, 2026-04-19):
+
+The planner-emitted DAG for `example` changed from the Phase 5b
+"formatter-deps-on-api-only-because-that's-the-previous-step" shape to a
+fully data-flow-correct shape: every builder now depends on **all** the
+producers it reads from (`cli` → `[scaffolder, models, api, formatter]`,
+`formatter` → `[scaffolder, models, api]`, etc.). The prompt change
+successfully disciplined the planner to reflect genuine data flow.
+
+However — `example`'s architect-designed module graph is itself linear:
+`formatter` imports `WeatherAPIError` from `api`, so the edge is real;
+`cli` imports from all three non-scaffolder modules, so its edges are
+real. No pair of independent tasks exists in this architecture, so
+`--concurrency 2` still serialises in practice (each level has only one
+ready task). **Not a bug in the planner; the spec's architecture doesn't
+admit parallelism.**
+
+Status: **OPEN** pending validation on a project spec with genuine
+independent modules (e.g. a project with two unrelated utilities that
+share only the scaffolder). If such a re-run shows the planner correctly
+emits sibling tasks, I001 can be marked RESOLVED. The dependency-pruner
+option is parked — no evidence the prompt alone is insufficient.

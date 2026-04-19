@@ -2,8 +2,9 @@
 id: I002
 severity: HIGH
 area: assessor
-status: OPEN
+status: RESOLVED
 created: 2026-04-19
+resolved: 2026-04-19
 ---
 
 # Assessor inherits the host's Python env — no venv, no dep install, no runtime version pin

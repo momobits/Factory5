@@ -1,0 +1,164 @@
+Read CLAUDE.md, then docs/Phase5_Progress.md and the 2026-04-19 Phase 5c
+entry of docs/PROGRESS.md. Then skim ADR 0015 (mid-flight user engagement)
+and ADR 0005 (three autonomy modes + escalation).
+
+Three live runs now (Phase 2 finale, Phase 5b, Phase 5c) have left a
+directive stuck in `running` status because the brain's `askUser`
+escalation got killed before a human could answer (shell timeout, ctrl-C,
+background-task kill). This is orthogonal to the Phase 5c/5d assessor +
+planner work — it's a daemon/state gap that doesn't affect what the
+factory builds, only the directive's terminal status. Phase 5 exit
+criterion #1 (`terminalStatus: 'complete'`) can't be honestly evaluated
+until this is addressed.
+
+This session lands the fix. Pure code + unit tests. No live build spend.
+
+Runs in parallel with the Phase 5d prompt (startprompt-phase5d.txt) —
+this touches daemon / state / cli / brain code; Phase 5d touches prompts
++ templates. Disjoint file sets. Merge both before running the close-out
+(startprompt-phase5-closeout.txt).
+
+---
+
+Step 1 — Investigate first, then pick.
+
+Read in this order, take notes as you go:
+
+  a. `packages/brain/src/loop.ts` — understand where `directivesQ.updateStatus`
+     is called at terminal time, and how `escalateBlocked` (await'd) leaves
+     the directive in `running` when the awaiter is killed mid-await.
+
+  b. `packages/brain/src/ask-user.ts` — understand the abort / timeout
+     paths and which of them update directive state vs rely on the caller
+     in loop.ts to do so.
+
+  c. `packages/state/src/queries/directives.ts` — understand the directive
+     schema (status enum, `claimedBy`, timestamps, any existing `reason` /
+     `metadata` column).
+
+  d. `packages/daemon/src/index.ts` — understand startup sequencing and
+     whether there's an existing reconcile-orphaned-state hook at boot.
+
+  e. `packages/cli/src/commands/*.ts` — skim to see how an existing
+     command is structured (use `status.ts` or `resume.ts` as a template).
+
+Write down the smallest fix that solves "directive `running` but no live
+process is driving it" without regressing the happy path.
+
+---
+
+Step 2 — Pick a path. Two are acceptable, both land in this session:
+
+  Path A — `factory directive mark-blocked <id> [--reason <text>]` CLI.
+    - New command (new file `packages/cli/src/commands/directive.ts` or
+      extended existing structure).
+    - Calls a new `directivesQ.markBlocked(db, id, reason?)` that sets
+      status to `blocked` with an optional recorded reason.
+    - Argv parsing validates the ID exists + is currently `running`.
+      Refuses to mark non-running directives (safety).
+    - Operator runs manually when they know a directive is dead.
+
+  Path B — factoryd-start reconciliation.
+    - On factoryd startup (before serving), scan directives where
+      status=`running` AND (claimedBy is set AND looks like a dead PID) OR
+      (no heartbeat in N minutes — pick a threshold that won't false-flag
+      a healthy long run, e.g. 10 min since last `model_usage` row).
+    - Mark them blocked, with reason like "reconciled at startup — prior
+      process gone".
+    - Log at warn level.
+    - Unit-test the reconciliation function against a seeded DB.
+
+Recommended: ship both. Path A is 30 lines + a test and gives the operator
+an immediate hand-crank. Path B automates the common case but needs the
+heuristic right. Ship A first, then B as a second commit.
+
+If you can only do one in this session: do A. Stuck directives happen
+rarely enough that a CLI is enough.
+
+---
+
+Step 3 — Implement Path A.
+
+  a. `packages/state/src/queries/directives.ts`:
+     - New `markBlocked(db, id, reason?)`. Looks up the directive;
+       returns an error if not found or already terminal. Updates status
+       to `blocked`. If a `blocked_reason` / `metadata` column exists,
+       record the reason; if not, add a migration OR log it out via the
+       CLI. Prefer adding a migration — future log inspection benefits.
+
+  b. `packages/state/src/migrations/` — add a new migration (next id)
+     that adds a nullable `blocked_reason TEXT` to the directives table
+     IF it's not already there. Read existing migrations for shape.
+
+  c. `packages/cli/src/commands/` — new command:
+         factory directive mark-blocked <id> [--reason <text>]
+     Wire it from `packages/cli/src/index.ts` alongside existing commands.
+
+  d. Tests:
+     - `packages/state/src/queries/directives.test.ts` (or create it) —
+       test markBlocked: happy, not-found error, already-blocked error.
+     - CLI test if the CLI package already has them; otherwise skip for
+       Path A.
+
+After each concrete edit: `pnpm build`, `pnpm --filter @factory5/state test`,
+`pnpm --filter @factory5/cli test` (if present), `pnpm lint`,
+`pnpm format:check`.
+
+---
+
+Step 4 — Implement Path B (optional in this session).
+
+  a. `packages/daemon/src/index.ts` (or wherever startup sequencing
+     lives):
+     - After `runMigrations`, before starting channels, call a new
+       `reconcileOrphanedDirectives(db, logger)` from
+       `packages/state/src/queries/directives.ts`.
+
+  b. `reconcileOrphanedDirectives`:
+     - Find directives where status=`running` AND (claimedBy NULL OR the
+       claiming PID is gone AND no `model_usage` row in last 10 min).
+     - For each: call `markBlocked(db, id, 'reconciled at daemon start')`.
+     - Return the count reconciled so the daemon can log it.
+     - Cross-platform PID liveness check: use `process.kill(pid, 0)`
+       inside a try/catch — throws if the PID is dead. This is the
+       standard node idiom.
+
+  c. Unit tests: seed a DB with (a) a live directive, (b) a fake-PID
+     directive, (c) a terminal directive, then call reconcile. Assert
+     only (b) flips to blocked.
+
+  d. Don't integration-test factoryd startup for this — the unit test
+     on the reconcile function is enough; the wiring is trivial.
+
+After: `pnpm build`, `pnpm test` (full workspace — state + daemon), lint,
+format:check.
+
+---
+
+Step 5 — Verify + clean up.
+
+  a. Run Path A against the Phase 5c stuck directive:
+       factory directive mark-blocked 01KPJCH7HC7ECW1VRFC4QYWM79 --reason "phase-5c live run, escalation killed"
+     Confirm `factory status --limit 2` shows it as `blocked` now.
+
+     (Also clean up the Phase 5b stuck directive 01KPHAYCJSYFC7RK3EPZ3B0XKA
+     with the same mechanism — it's been sitting since 2026-04-18.)
+
+  b. If Path B shipped: stop/start factoryd if you happen to have it
+     running (unlikely in this session). The unit test is the real proof.
+
+  c. Append a dated entry to `docs/PROGRESS.md` summarising: which path(s)
+     shipped, tests added, Phase 5b/5c stuck directives cleaned up,
+     test-count delta. No ADR unless you're introducing a new state-layer
+     abstraction.
+
+---
+
+DO NOT in this session: do a live `factory build`; touch assessor code;
+touch planner prompt or agent registry; implement worker-subprocess
+`ask_user` (ADR 0015 shape 1 — still deferred, still waiting for mid-tool
+evidence); add `max_usd` enforcement; touch any Phase 5d files
+(prompts/agents/scaffolder.md, prompts/agents/architect.md,
+templates/parallel-example/). Those belong to the parallel 5d session.
+
+Start this in a fresh conversation.

@@ -14,16 +14,16 @@ Internal issue tracker for factory5 itself. Mirrors the finding-lifecycle patter
 
 ## Open
 
-| ID                                                | Severity | Area          | Title                                                          | Owner |
-| ------------------------------------------------- | -------- | ------------- | -------------------------------------------------------------- | ----- |
-| [I002](I002-assessor-inherits-host-python-env.md) | HIGH     | assessor      | Assessor inherits host's Python env — no venv, no deps, no pin | —     |
-| [I001](I001-planner-emits-serial-chain.md)        | MEDIUM   | brain/planner | Planner emits a fully serial task chain on simple specs        | —     |
+| ID                                                         | Severity | Area             | Title                                                                              | Owner |
+| ---------------------------------------------------------- | -------- | ---------------- | ---------------------------------------------------------------------------------- | ----- |
+| [I003](I003-scaffolder-omits-project-hygiene-artifacts.md) | MEDIUM   | brain/scaffolder | Scaffolder omits project-hygiene artifacts (README ≥30 lines, LICENSE, .gitignore) | —     |
+| [I001](I001-planner-emits-serial-chain.md)                 | MEDIUM   | brain/planner    | Planner emits a fully serial task chain on simple specs                            | —     |
 
 ## Resolved (last 20)
 
-| ID     | Severity | Area | Title | Resolved |
-| ------ | -------- | ---- | ----- | -------- |
-| _none_ |          |      |       |          |
+| ID                                                | Severity | Area     | Title                                                          | Resolved   |
+| ------------------------------------------------- | -------- | -------- | -------------------------------------------------------------- | ---------- |
+| [I002](I002-assessor-inherits-host-python-env.md) | HIGH     | assessor | Assessor inherits host's Python env — no venv, no deps, no pin | 2026-04-19 |
 
 ## Adding an issue
 

@@ -22,11 +22,12 @@ Lift factory out of "infrastructure verified" into **"produces a
 green verify gate on a real project, end to end, autonomously."** Three
 sub-phases planned; two shipped.
 
-| Sub-phase | Status       | Outcome                                                                                                                             |
-| --------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| **5a**    | ✅ Shipped   | ADR 0016: `materialisePlannerTasks` (category floor + file-ownership deps + per-task `maxTurns`); planner prompt rewrite; 214 tests |
-| **5b**    | ✅ Validated | Live run against fresh workspace; 6/6 tasks succeeded, `adjustments: 0`, $7.68, built code passes 114 pytest tests                  |
-| **5c**    | 🟡 Next      | Close the two issues surfaced by 5b (I001, I002) so the next live run ends with `gate.verify: true` naturally                       |
+| Sub-phase | Status       | Outcome                                                                                                                                                     |
+| --------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **5a**    | ✅ Shipped   | ADR 0016: `materialisePlannerTasks` (category floor + file-ownership deps + per-task `maxTurns`); planner prompt rewrite; 214 tests                         |
+| **5b**    | ✅ Validated | Live run against fresh workspace; 6/6 tasks succeeded, `adjustments: 0`, $7.68, built code passes 114 pytest tests                                          |
+| **5c**    | 🟡 Partial   | ADR 0017 (shared assessor env provisioning) + I001 prompt-tuning shipped; live run 6/6, 129 pytest pass, gate.build/integration=true; I002 closed; I003 new |
+| **5d**    | 🟡 Next      | Close I003 (scaffolder hygiene: README / LICENSE / comprehensive .gitignore); validate I001 on a parallel-admitting spec                                    |
 
 ## Where we are, end of Phase 5b
 
@@ -45,6 +46,37 @@ architectural:
   DAG into a strict chain, neutering `--concurrency 2`. The `FILE
 OWNERSHIP` section of `prompts/agents/planner.md` is framed strongly
   enough that the LLM defaults to "safe = sequential" when uncertain.
+
+## Where we are, end of Phase 5c
+
+ADR 0017 (assessor env provisioning) and the I001 planner-prompt rewrite
+shipped. Live run (`01KPJCH7HC7ECW1VRFC4QYWM79`, 2026-04-19): 6/6 tasks
+succeeded, 129 pytest tests green, spend $6.48. Post-run refactor pulled
+provisioning up to `assess()` so imports + pytest share the picked
+interpreter and single install. Locally verified:
+`gate.build: true`, `gate.integration: true`, 129 tests pass. 231 workspace
+tests green (214 + 17 new).
+
+Two takeaways, one per issue:
+
+- **I002 is closed** (RESOLVED, 2026-04-19). `pickPython` → venv → `py
+-3.11` → PATH, with `pip install -e .[test|dev|.]` before tests. Install
+  failure surfaces as `AssessResult.provisioning.installOk: false` and
+  drops `gate.build`. The factory can now see its own Python builds
+  correctly.
+- **I001 stays OPEN** — prompt tuning landed but the `example` spec's
+  architect-designed module graph is genuinely linear (`formatter` imports
+  `WeatherAPIError` from `api`, `cli` from all three). The planner now
+  correctly lists every producer a task reads from; it just happens there's
+  no parallel pair on this spec. Needs a different spec to validate.
+
+And one new issue surfaced:
+
+- **I003 (MEDIUM, brain/scaffolder)** — scaffolder omits README ≥30 lines,
+  LICENSE, comprehensive `.gitignore`. Under the pre-ADR-0017 assessor
+  these failures were masked by `gate.build: false`; now that `gate.build:
+true` is reachable, I003 is the dominant remaining blocker for
+  `gate.verify: true`.
 
 ## Phase 5c — what needs to happen next
 
@@ -166,6 +198,21 @@ Phase 5b hit 2, 4-partial, 5-sort-of (filed I001/I002 but they were
 always-there-just-not-seen), and 6. It missed 1 and 3 entirely. Phase 5c
 aims to hit all six.
 
+### Phase 5c's actual scoreboard (2026-04-19)
+
+| #   | Criterion                                                           | Status | Note                                                                    |
+| --- | ------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------- |
+| 1   | `terminalStatus: 'complete'`                                        | ❌     | Escalation-kill pattern from Phase 4/5b repeats; orthogonal to 5c work. |
+| 2   | `gate.verify: true` + `gate.build: true` + `gate.integration: true` | 🟡     | `build` + `integration` green; `verify` blocked by I003.                |
+| 3   | `testsPassed >= 50`                                                 | ✅     | 129.                                                                    |
+| 4   | Visible parallelism in the DAG                                      | ❌     | Architect-driven linear module graph on `example`; not a planner bug.   |
+| 5   | No new CRITICAL or HIGH issues                                      | ✅     | I003 is MEDIUM; one LOW finding from verifier.                          |
+| 6   | Spend < $12                                                         | ✅     | $6.48.                                                                  |
+
+4 hits + 1 partial + 2 misses. The misses are both "needs different input,
+not different code": criterion 4 needs a parallel-admitting spec; criterion
+1 needs the directive auto-resume gap addressed. Criterion 2 needs I003.
+
 ## After Phase 5
 
 Phase 6 opens the door to multi-project runs: (a) cross-project findings
@@ -173,3 +220,7 @@ registry (pulled forward from the original Phase 6 charter); (b) GitHub
 channel + event source (Phase 5 direction B, deferred); (c) Telegram
 channel; (d) web UI. Pick based on what users (including this user) are
 asking for when 5c closes.
+
+Phase 5d (the natural next half-session) closes I003 + validates I001 on
+a parallel-admitting spec. See the next-session recommendation at the
+bottom of `docs/PROGRESS.md` 2026-04-19 entry.

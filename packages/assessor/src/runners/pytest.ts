@@ -9,29 +9,29 @@
  *   - bare (`-q` clean run):
  *       "33 passed in 0.07s"
  * Both are matched.
+ *
+ * ADR 0017 (Phase 5c): before invoking pytest we provision the interpreter
+ * (preferring a project-local .venv, then an interpreter matching the
+ * project's `requires-python` constraint, then PATH `python`) and run
+ * `python -m pip install -e .[test]` so the built project's own dependencies
+ * are on the import path.
  */
 
-import { access } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { platform as processPlatform } from 'node:process';
 
 import { createLogger } from '@factory5/logger';
+import { parse as parseToml } from 'smol-toml';
 
-import { resolveOnPath, runSubprocess } from '../run.js';
+import { resolveOnPath, runSubprocess, type SubprocessResult } from '../run.js';
 
 const log = createLogger('assessor.pytest');
 
-export interface PytestResult {
-  available: boolean;
-  passed: number;
-  failed: number;
-  errors: number;
-  skipped: number;
-  exitCode: number | null;
-  durationMs: number;
-  rawTail: string;
-  reason?: string;
-}
+// ---------------------------------------------------------------------------
+// Summary parsing
+// ---------------------------------------------------------------------------
 
 function parseSummary(stdout: string): {
   passed: number;
@@ -69,7 +69,64 @@ function parseSummary(stdout: string): {
   return result;
 }
 
-async function fileExists(p: string): Promise<boolean> {
+// ---------------------------------------------------------------------------
+// Python selection (ADR 0017)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the minimum Python version from a `requires-python` constraint.
+ *
+ * Examples:
+ *   `">=3.11"`       -> `"3.11"`
+ *   `">=3.11,<3.13"` -> `"3.11"`
+ *   `"~=3.11.2"`     -> `"3.11"`
+ *   `"^3.11"`        -> `"3.11"`
+ *   `"==3.11"`       -> `"3.11"`
+ *
+ * Returns undefined for constraints we can't parse — the caller falls back
+ * to PATH python and the warn log records it.
+ */
+export function extractMinimumPythonVersion(requires: string): string | undefined {
+  const m = /(?:>=|~=|\^|==)\s*(\d+)\.(\d+)/.exec(requires);
+  if (m === null) return undefined;
+  const major = m[1];
+  const minor = m[2];
+  if (major === undefined || minor === undefined) return undefined;
+  return `${major}.${minor}`;
+}
+
+export interface PythonChoice {
+  /** Binary to spawn. */
+  bin: string;
+  /** Args to prepend to every invocation (e.g. `['-3.11']` for the Windows `py` launcher). */
+  prefixArgs: readonly string[];
+  /** Version reported by `<bin> <prefixArgs> --version` (e.g. `3.11.9`), empty if probe was skipped or failed. */
+  version: string;
+  /** Human-readable reason this interpreter was chosen. */
+  reason: string;
+  /** Set when we requested a specific version but had to fall back to PATH python. */
+  demoted?: { requestedVersion: string };
+}
+
+/**
+ * Testing seam for {@link pickPython}. In production every field uses its
+ * real IO default; tests inject fakes so no subprocess is spawned and no
+ * file has to be mutated on disk.
+ */
+export interface PickPythonDeps {
+  /** Probe an interpreter with `--version`. Return its version or undefined. */
+  probe?: (bin: string, prefixArgs: readonly string[]) => Promise<string | undefined>;
+  /** Resolve a name on PATH, as in {@link resolveOnPath}. */
+  resolveOnPath?: (name: string) => Promise<string | undefined>;
+  /** Check whether a file path exists. */
+  fileExists?: (p: string) => Promise<boolean>;
+  /** Read a file path as utf8, returning undefined on any error. */
+  readTextFile?: (p: string) => Promise<string | undefined>;
+  /** Override `process.platform`. Defaults to the real value. */
+  platform?: NodeJS.Platform;
+}
+
+async function defaultFileExists(p: string): Promise<boolean> {
   try {
     await access(p, fsConstants.F_OK);
     return true;
@@ -78,28 +135,436 @@ async function fileExists(p: string): Promise<boolean> {
   }
 }
 
-async function projectHasTests(projectPath: string): Promise<boolean> {
-  for (const candidate of ['tests', 'test', 'src/tests']) {
-    if (await fileExists(join(projectPath, candidate))) return true;
+async function defaultReadTextFile(p: string): Promise<string | undefined> {
+  try {
+    return await readFile(p, 'utf8');
+  } catch {
+    return undefined;
   }
-  return false;
 }
 
-async function pickPython(override?: string): Promise<string | undefined> {
-  if (override !== undefined && override.length > 0) return override;
-  const pyw = await resolveOnPath('python');
-  if (pyw !== undefined) return pyw;
-  return resolveOnPath('python3');
+async function defaultProbe(
+  bin: string,
+  prefixArgs: readonly string[],
+): Promise<string | undefined> {
+  try {
+    const res = await runSubprocess(bin, [...prefixArgs, '--version'], { timeoutMs: 10_000 });
+    if (res.exitCode !== 0) return undefined;
+    const combined = `${res.stdout}${res.stderr}`;
+    const m = /Python\s+(\d+\.\d+\.\d+)/.exec(combined);
+    return m?.[1] ?? '';
+  } catch {
+    return undefined;
+  }
+}
+
+async function readRequiresPython(
+  projectPath: string,
+  deps: Required<PickPythonDeps>,
+): Promise<string | undefined> {
+  const raw = await deps.readTextFile(join(projectPath, 'pyproject.toml'));
+  if (raw === undefined) return undefined;
+  try {
+    const parsed = parseToml(raw) as { project?: { 'requires-python'?: unknown } };
+    const r = parsed.project?.['requires-python'];
+    return typeof r === 'string' ? r : undefined;
+  } catch (err) {
+    log.warn({ projectPath, error: String(err) }, 'pickPython: failed to parse pyproject.toml');
+    return undefined;
+  }
+}
+
+export interface PickPythonOptions {
+  /** Override: use this binary as-is, no probe. */
+  pythonBin?: string;
+}
+
+function resolveDeps(override: PickPythonDeps): Required<PickPythonDeps> {
+  return {
+    probe: override.probe ?? defaultProbe,
+    resolveOnPath: override.resolveOnPath ?? resolveOnPath,
+    fileExists: override.fileExists ?? defaultFileExists,
+    readTextFile: override.readTextFile ?? defaultReadTextFile,
+    platform: override.platform ?? processPlatform,
+  };
+}
+
+/**
+ * Select a Python interpreter for running tests against `projectPath`.
+ *
+ * Priority order (ADR 0017):
+ *   1. Caller-provided `opts.pythonBin` — used as-is, no probe.
+ *   2. Project-local virtual env (`<projectPath>/.venv/Scripts/python.exe`
+ *      on Windows, `<projectPath>/.venv/bin/python` on Unix).
+ *   3. `requires-python` from pyproject.toml: try `py -X.Y` on Windows /
+ *      `pythonX.Y` on Unix for the minimum specified version.
+ *   4. Fall back to `python` / `python3` on PATH. Emits a warn-level log
+ *      line when we had to demote from a requires-python pin.
+ *
+ * Each candidate is probed with `<bin> --version`; the first that reports a
+ * version wins.
+ */
+export async function pickPython(
+  projectPath: string,
+  opts: PickPythonOptions = {},
+  depsOverride: PickPythonDeps = {},
+): Promise<PythonChoice | undefined> {
+  const deps = resolveDeps(depsOverride);
+
+  if (opts.pythonBin !== undefined && opts.pythonBin.length > 0) {
+    const v = await deps.probe(opts.pythonBin, []);
+    return {
+      bin: opts.pythonBin,
+      prefixArgs: [],
+      version: v ?? '',
+      reason: 'opts.pythonBin',
+    };
+  }
+
+  const venvPath =
+    deps.platform === 'win32'
+      ? join(projectPath, '.venv', 'Scripts', 'python.exe')
+      : join(projectPath, '.venv', 'bin', 'python');
+  if (await deps.fileExists(venvPath)) {
+    const v = await deps.probe(venvPath, []);
+    return {
+      bin: venvPath,
+      prefixArgs: [],
+      version: v ?? '',
+      reason: '.venv detected',
+    };
+  }
+
+  const requires = await readRequiresPython(projectPath, deps);
+  const requestedVersion =
+    requires !== undefined ? extractMinimumPythonVersion(requires) : undefined;
+
+  if (requestedVersion !== undefined) {
+    if (deps.platform === 'win32') {
+      const pyBin = await deps.resolveOnPath('py');
+      if (pyBin !== undefined) {
+        const v = await deps.probe(pyBin, [`-${requestedVersion}`]);
+        if (v !== undefined) {
+          return {
+            bin: pyBin,
+            prefixArgs: [`-${requestedVersion}`],
+            version: v,
+            reason: `requires-python=${requires} → py -${requestedVersion}`,
+          };
+        }
+      }
+    } else {
+      const vBin = await deps.resolveOnPath(`python${requestedVersion}`);
+      if (vBin !== undefined) {
+        const v = await deps.probe(vBin, []);
+        if (v !== undefined) {
+          return {
+            bin: vBin,
+            prefixArgs: [],
+            version: v,
+            reason: `requires-python=${requires} → python${requestedVersion}`,
+          };
+        }
+      }
+    }
+  }
+
+  const fallback = (await deps.resolveOnPath('python')) ?? (await deps.resolveOnPath('python3'));
+  if (fallback === undefined) return undefined;
+  const v = await deps.probe(fallback, []);
+  const choice: PythonChoice = {
+    bin: fallback,
+    prefixArgs: [],
+    version: v ?? '',
+    reason: 'python on PATH (fallback)',
+  };
+  if (requestedVersion !== undefined) {
+    log.warn(
+      {
+        projectPath,
+        requestedVersion,
+        chosen: fallback,
+        chosenVersion: v ?? 'unknown',
+      },
+      `pickPython: requires-python=${requires} unavailable; demoted to PATH python`,
+    );
+    choice.reason = `requires-python=${requires} unavailable; demoted to PATH python`;
+    choice.demoted = { requestedVersion };
+  }
+  return choice;
+}
+
+// ---------------------------------------------------------------------------
+// Shared assessor-env provisioning (ADR 0017)
+// ---------------------------------------------------------------------------
+
+export interface ProvisioningReport {
+  pythonPath: string;
+  pythonVersion: string;
+  installOk: boolean;
+  installSummary?: string;
+}
+
+export interface AssessorEnv {
+  /** The chosen interpreter — use `bin` + `prefixArgs` to invoke it. */
+  choice: PythonChoice;
+  /** Install state; mirrored into {@link PytestResult.provisioning} and {@link AssessResult.provisioning}. */
+  provisioning: ProvisioningReport;
+}
+
+/**
+ * Testing seam for {@link provisionAssessorEnv}. In production defaults to
+ * the real pickPython / runSubprocess / fs helpers.
+ */
+export interface ProvisionEnvDeps {
+  pickPython?: (projectPath: string, opts: PickPythonOptions) => Promise<PythonChoice | undefined>;
+  runSubprocess?: (
+    bin: string,
+    args: readonly string[],
+    opts?: { cwd?: string; timeoutMs?: number; env?: Record<string, string> },
+  ) => Promise<SubprocessResult>;
+  hasPyproject?: (projectPath: string) => Promise<boolean>;
+  /**
+   * Returns `test` if pyproject declares `[project.optional-dependencies.test]`,
+   * `dev` if it declares `dev`, or undefined if neither. Fallback to plain
+   * `-e .` when undefined. Retained as `pyprojectHasTestExtra` for existing
+   * test-suite compatibility; defaults delegate to the real helper.
+   */
+  pyprojectPickExtra?: (projectPath: string) => Promise<string | undefined>;
+  pyprojectHasTestExtra?: (projectPath: string) => Promise<boolean>;
+}
+
+async function projectHasPyproject(projectPath: string): Promise<boolean> {
+  return defaultFileExists(join(projectPath, 'pyproject.toml'));
+}
+
+async function pyprojectPickExtra(projectPath: string): Promise<string | undefined> {
+  const raw = await defaultReadTextFile(join(projectPath, 'pyproject.toml'));
+  if (raw === undefined) return undefined;
+  try {
+    const parsed = parseToml(raw) as {
+      project?: { 'optional-dependencies'?: Record<string, unknown> };
+    };
+    const extras = parsed.project?.['optional-dependencies'];
+    if (extras === undefined) return undefined;
+    // Prefer `test`, fall back to `dev` — these are the two widely-used
+    // conventions for project-internal test deps.
+    if (extras['test'] !== undefined) return 'test';
+    if (extras['dev'] !== undefined) return 'dev';
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function tailLines(s: string, n: number): string {
+  const lines = s.split(/\r?\n/);
+  return lines.slice(-n).join('\n');
+}
+
+/**
+ * Pick a Python interpreter and, when the project carries a pyproject.toml,
+ * run `pip install -e .[test]` (or `-e .` fallback) so the project's declared
+ * deps are on the import path. Returns the chosen interpreter plus an
+ * `installOk` / `installSummary` report.
+ *
+ * Shared helper for {@link runPytest} and {@link checkPythonImports} — both
+ * runners need the same interpreter + installed deps to agree on gate
+ * outcomes (ADR 0017).
+ */
+export async function provisionAssessorEnv(
+  projectPath: string,
+  opts: { pythonBin?: string; installTimeoutMs?: number } = {},
+  depsOverride: ProvisionEnvDeps = {},
+): Promise<AssessorEnv | undefined> {
+  const deps = {
+    pickPython: depsOverride.pickPython ?? pickPython,
+    runSubprocess: depsOverride.runSubprocess ?? runSubprocess,
+    hasPyproject: depsOverride.hasPyproject ?? projectHasPyproject,
+    pyprojectPickExtra: depsOverride.pyprojectPickExtra ?? pyprojectPickExtra,
+    // Test-only back-compat: older tests inject `pyprojectHasTestExtra`; if
+    // present, interpret it as "pick `test` when true, `.` otherwise."
+    pyprojectHasTestExtraLegacy: depsOverride.pyprojectHasTestExtra,
+  };
+
+  const choice = await deps.pickPython(
+    projectPath,
+    opts.pythonBin !== undefined ? { pythonBin: opts.pythonBin } : {},
+  );
+  if (choice === undefined) return undefined;
+
+  log.info(
+    {
+      projectPath,
+      chosen: choice.bin,
+      prefixArgs: choice.prefixArgs,
+      version: choice.version,
+      reason: choice.reason,
+      demoted: choice.demoted,
+    },
+    'pickPython: chose interpreter',
+  );
+
+  if (!(await deps.hasPyproject(projectPath))) {
+    return {
+      choice,
+      provisioning: {
+        pythonPath: choice.bin,
+        pythonVersion: choice.version,
+        installOk: true,
+      },
+    };
+  }
+
+  const extraName =
+    deps.pyprojectHasTestExtraLegacy !== undefined
+      ? (await deps.pyprojectHasTestExtraLegacy(projectPath))
+        ? 'test'
+        : undefined
+      : await deps.pyprojectPickExtra(projectPath);
+  const target = extraName !== undefined ? `.[${extraName}]` : '.';
+  const pipArgs = [
+    ...choice.prefixArgs,
+    '-m',
+    'pip',
+    'install',
+    '-e',
+    target,
+    '--disable-pip-version-check',
+    '--quiet',
+  ];
+  const installStarted = Date.now();
+  log.info(
+    { projectPath, python: choice.bin, target },
+    'assessor-env: installing project (editable)',
+  );
+  const installRes = await deps.runSubprocess(choice.bin, pipArgs, {
+    cwd: projectPath,
+    timeoutMs: opts.installTimeoutMs ?? 180_000,
+  });
+  let installOk = installRes.exitCode === 0;
+  let installSummary: string | undefined;
+  if (!installOk && extraName !== undefined) {
+    log.warn(
+      { projectPath, target, exitCode: installRes.exitCode },
+      `assessor-env: install -e .[${extraName}] failed; retrying with -e .`,
+    );
+    const retryArgs = [
+      ...choice.prefixArgs,
+      '-m',
+      'pip',
+      'install',
+      '-e',
+      '.',
+      '--disable-pip-version-check',
+      '--quiet',
+    ];
+    const retryRes = await deps.runSubprocess(choice.bin, retryArgs, {
+      cwd: projectPath,
+      timeoutMs: opts.installTimeoutMs ?? 180_000,
+    });
+    installOk = retryRes.exitCode === 0;
+    if (!installOk) {
+      installSummary = tailLines(`${retryRes.stdout}\n${retryRes.stderr}`, 40);
+    }
+  } else if (!installOk) {
+    installSummary = tailLines(`${installRes.stdout}\n${installRes.stderr}`, 40);
+  }
+  log.info(
+    { projectPath, installOk, durationMs: Date.now() - installStarted },
+    installOk ? 'assessor-env: install complete' : 'assessor-env: install failed',
+  );
+  return {
+    choice,
+    provisioning: {
+      pythonPath: choice.bin,
+      pythonVersion: choice.version,
+      installOk,
+      ...(installSummary !== undefined ? { installSummary } : {}),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Runner
+// ---------------------------------------------------------------------------
+
+export interface PytestResult {
+  available: boolean;
+  passed: number;
+  failed: number;
+  errors: number;
+  skipped: number;
+  exitCode: number | null;
+  durationMs: number;
+  rawTail: string;
+  reason?: string;
+  /**
+   * Provisioning state when the runner provisioned the project env before
+   * pytest (ADR 0017). Absent when the runner short-circuited before reaching
+   * the install step (no tests/, no python on PATH).
+   */
+  provisioning?: ProvisioningReport;
+}
+
+/**
+ * Testing seam for {@link runPytest}.
+ */
+export interface RunPytestDeps {
+  provisionAssessorEnv?: (
+    projectPath: string,
+    opts: { pythonBin?: string; installTimeoutMs?: number },
+  ) => Promise<AssessorEnv | undefined>;
+  runSubprocess?: (
+    bin: string,
+    args: readonly string[],
+    opts?: { cwd?: string; timeoutMs?: number; env?: Record<string, string> },
+  ) => Promise<SubprocessResult>;
+  fileExists?: (p: string) => Promise<boolean>;
+  // Legacy seams retained for provisionAssessorEnv tests that inject pytest-runPytest-style deps.
+  pickPython?: (projectPath: string, opts: PickPythonOptions) => Promise<PythonChoice | undefined>;
+  hasPyproject?: (projectPath: string) => Promise<boolean>;
+  pyprojectHasTestExtra?: (projectPath: string) => Promise<boolean>;
 }
 
 /**
  * Run pytest against `projectPath`. Returns a structured result; does NOT
- * throw when tests fail (that's a test result, not a runner error).
+ * throw when tests fail — that's a test result, not a runner error.
+ *
+ * ADR 0017: if no `env` is given, provisions one via
+ * {@link provisionAssessorEnv} (pickPython + `pip install -e .[test]`).
+ * Callers that share provisioning between runners (e.g.
+ * {@link assess} → pytest + imports) should pass the shared `env` in so
+ * install runs once.
  */
 export async function runPytest(
   projectPath: string,
-  opts: { pythonBin?: string; timeoutMs?: number } = {},
+  opts: {
+    pythonBin?: string;
+    timeoutMs?: number;
+    installTimeoutMs?: number;
+    env?: AssessorEnv;
+  } = {},
+  depsOverride: RunPytestDeps = {},
 ): Promise<PytestResult> {
+  const deps = {
+    provisionAssessorEnv:
+      depsOverride.provisionAssessorEnv ??
+      ((pp: string, o: { pythonBin?: string; installTimeoutMs?: number }) => {
+        const legacyDeps: ProvisionEnvDeps = {};
+        if (depsOverride.pickPython !== undefined) legacyDeps.pickPython = depsOverride.pickPython;
+        if (depsOverride.runSubprocess !== undefined)
+          legacyDeps.runSubprocess = depsOverride.runSubprocess;
+        if (depsOverride.hasPyproject !== undefined)
+          legacyDeps.hasPyproject = depsOverride.hasPyproject;
+        if (depsOverride.pyprojectHasTestExtra !== undefined)
+          legacyDeps.pyprojectHasTestExtra = depsOverride.pyprojectHasTestExtra;
+        return provisionAssessorEnv(pp, o, legacyDeps);
+      }),
+    runSubprocess: depsOverride.runSubprocess ?? runSubprocess,
+    fileExists: depsOverride.fileExists ?? defaultFileExists,
+  };
+
   const empty: PytestResult = {
     available: false,
     passed: 0,
@@ -111,20 +576,35 @@ export async function runPytest(
     rawTail: '',
   };
 
-  const python = await pickPython(opts.pythonBin);
-  if (python === undefined) {
+  const envOpts: { pythonBin?: string; installTimeoutMs?: number } = {};
+  if (opts.pythonBin !== undefined) envOpts.pythonBin = opts.pythonBin;
+  if (opts.installTimeoutMs !== undefined) envOpts.installTimeoutMs = opts.installTimeoutMs;
+  const env = opts.env ?? (await deps.provisionAssessorEnv(projectPath, envOpts));
+  if (env === undefined) {
     return { ...empty, reason: 'python not on PATH' };
   }
+  const { choice, provisioning } = env;
 
-  if (!(await projectHasTests(projectPath))) {
-    return { ...empty, reason: 'no tests/ directory' };
+  let testsPresent = false;
+  for (const candidate of ['tests', 'test', 'src/tests']) {
+    if (await deps.fileExists(join(projectPath, candidate))) {
+      testsPresent = true;
+      break;
+    }
+  }
+  if (!testsPresent) {
+    return { ...empty, reason: 'no tests/ directory', provisioning };
   }
 
-  log.debug({ projectPath, python }, 'invoking pytest');
-  const res = await runSubprocess(python, ['-m', 'pytest', '-q', '--tb=short'], {
-    cwd: projectPath,
-    timeoutMs: opts.timeoutMs ?? 120_000,
-  });
+  log.debug({ projectPath, python: choice.bin }, 'invoking pytest');
+  const res = await deps.runSubprocess(
+    choice.bin,
+    [...choice.prefixArgs, '-m', 'pytest', '-q', '--tb=short'],
+    {
+      cwd: projectPath,
+      timeoutMs: opts.timeoutMs ?? 120_000,
+    },
+  );
 
   if (res.exitCode === 5) {
     // pytest exit code 5 = no tests collected
@@ -135,6 +615,7 @@ export async function runPytest(
       durationMs: res.durationMs,
       rawTail: res.stdout.slice(-500),
       reason: 'no tests collected',
+      provisioning,
     };
   }
 
@@ -145,6 +626,7 @@ export async function runPytest(
     exitCode: res.exitCode,
     durationMs: res.durationMs,
     rawTail: res.stdout.slice(-500),
+    provisioning,
   };
 }
 

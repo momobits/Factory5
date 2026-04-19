@@ -1,0 +1,165 @@
+Read CLAUDE.md, then docs/Phase5_Progress.md and the last THREE entries
+of docs/PROGRESS.md (Phase 5c, Phase 5d, and the directive-auto-resume
+fix). No need to read earlier entries — the roadmap has them.
+
+Phase 5 close-out. This session runs end-to-end verification against a
+fresh workspace; no new features.
+
+Prerequisite — all of the following should already be shipped:
+  - ADR 0016 (Phase 5a, 2026-04-18) — planner materialisation
+  - Phase 5b — live validation of ADR 0016
+  - ADR 0017 (Phase 5c) — assessor env provisioning
+  - Phase 5c — I001 planner prompt rewrite
+  - Phase 5d — I003 scaffolder hygiene, templates/parallel-example/
+  - Directive auto-resume fix — `factory directive mark-blocked <id>`
+    CLI and/or factoryd-start reconciliation
+
+If any are missing, stop and say so; do not attempt the close-out
+run.
+
+This session verifies Phase 5's six exit criteria end-to-end against a
+fresh workspace. Budget ceiling: $16 total across both runs.
+
+The six criteria:
+  1. `terminalStatus: 'complete'` (not blocked)
+  2. `gate.verify: true`, `gate.build: true`, `gate.integration: true`
+  3. `testsPassed >= 50`
+  4. Visible parallelism in the DAG
+  5. No new CRITICAL or HIGH issues filed
+  6. Spend < $12 per complete-build outcome (we're running two, so < $16
+     total)
+
+---
+
+Step 1 — Preflight.
+
+  a. `pnpm build` + `pnpm test` + `pnpm lint` + `pnpm format:check` —
+     all green.
+
+  b. `factory doctor --skip-discord` → green.
+
+  c. Confirm Phase 5d landed:
+     - `prompts/agents/scaffolder.md` mentions README + LICENSE +
+       runtime-aware `.gitignore`.
+     - `templates/parallel-example/CLAUDE.md` exists.
+     - `docs/issues/INDEX.md` shows I003 resolved and I001 resolved (or
+       pending validation in this run).
+
+  d. Confirm auto-resume fix landed:
+     - `factory directive mark-blocked --help` returns usage (Path A); OR
+     - factoryd boot log contains a line like "reconciled N orphaned
+       directives" (Path B); OR both.
+
+  e. Clean up any leftover stuck directives via the new CLI:
+       factory status --limit 5
+     Anything `running` that's not actively driven now: mark-blocked.
+     Phase 5b/5c artifacts should already be cleaned by the autoresume
+     session; confirm `factory status` is quiet.
+
+  f. `ls "$LOCALAPPDATA/factory5/factoryd.pid"` → absent. If present and
+     no factoryd is running, rm.
+
+---
+
+Step 2 — Two live runs, one per spec.
+
+Mkdir the artifact dir up front:
+  mkdir -p "C:/Users/Momo/AppData/Local/Temp/2/factory5-phase5-final"
+
+Run A — existing spec, hygiene-fixed:
+
+  factory build example --autonomy autonomous --concurrency 2 --workspace /c/Users/Momo/factory5-v5-final-example
+
+  Expected signals:
+    - `pickPython: chose interpreter ... py -3.11`
+    - `assessor-env: install complete installOk: true`
+    - `hasReadme: true`, `hasLicense: true`, `gitClean: true`
+    - `gate: {build:true, integration:true, verify:true}`
+    - `terminalStatus: complete`
+    - testsPassed ~= 129 (similar to Phase 5c), spend $6-9
+
+  Snapshot plan.json when `planner: plan written` fires:
+    cp "C:/Users/Momo/factory5-v5-final-example/example/.factory/plan.json" \
+       "C:/Users/Momo/AppData/Local/Temp/2/factory5-phase5-final/plan-example-preexec.json"
+
+Run B — parallel-admitting spec:
+
+  factory build parallel-example --autonomy autonomous --concurrency 2 --workspace /c/Users/Momo/factory5-v5-final-parallel
+
+  Expected signals:
+    - `pool: task started` log pairs within <2 s of each other — real
+      parallelism in action (I001 validation).
+    - Same assessor-env + gate/terminal signals as Run A.
+    - testsPassed ≥ 50, spend $4-7 (the parallel spec is smaller).
+
+  Snapshot plan-parallel-preexec.json similarly.
+
+---
+
+Step 3 — Post-run analysis.
+
+For each run:
+
+  a. `pnpm --filter @factory5/scripts analyze-plan <plan.json>`. Confirm:
+     - 0 category-floor violations (ADR 0016 behaviour 1).
+     - 0 missing file-ownership edges (ADR 0016 behaviour 2).
+     - All tool-using tasks have `maxTurns` set (ADR 0016 behaviour 3).
+     - Run B specifically: ≥ 2 tasks with `dependsOn: [<same-scaffolder>]`
+       and no edge between them.
+
+  b. `npx tsx scripts/reassess.ts <projectPath> <planPath>` — re-run the
+     assessor locally to double-check `gate.verify: true`.
+
+  c. `factory status --limit 5`:
+     - Both directives `complete`, spend sum < $16.
+     - No newly stuck `running` entries.
+
+---
+
+Step 4 — Score + write up.
+
+Six-criterion scoreboard — score each as HIT / MISS with evidence (log
+line, plan structure, analyze-plan output). Run A covers criteria 2/3/5/6;
+Run B covers 4 (+ repeats 2/3/6). Criterion 1 covers both runs.
+
+Two outcomes:
+
+  Outcome α — All six HIT:
+    - Write the Phase 5 CLOSED entry in `docs/PROGRESS.md`. Dated, six
+      criteria scored with evidence, total Phase 5 spend across 5a-5d +
+      this close-out.
+    - Update `docs/Phase5_Progress.md`: mark all sub-phases ✅ Validated,
+      collapse the "Where we are" sections into a single "Phase 5
+      complete" summary at the top. Move outdated detail to a historical
+      appendix.
+    - Decide Phase 6 scope and open `docs/Phase6_Progress.md`. The "After
+      Phase 5" section in Phase5_Progress.md lists the candidate
+      directions (cross-project findings registry, GitHub channel,
+      Telegram, web UI). Pick one based on user priority at that
+      moment; write a one-page scope.
+
+  Outcome β — at least one criterion MISSES:
+    - Do not pretend Phase 5 is done.
+    - File a new issue (I004, I005, ...) describing the gap concretely.
+    - Write the Phase 5 close-out PROGRESS entry as "criteria X, Y hit;
+      Z missed — tracked as I00N — next session re-runs close-out after
+      fix."
+    - Do NOT open Phase 6 work. Stay on Phase 5.
+
+---
+
+DO NOT in this session: add new features, refactor production code,
+write new ADRs unless the run surfaces a CRITICAL architectural gap,
+scope-creep into Phase 6 work (cross-project findings registry, GitHub
+channel, Telegram, web UI, worker-subprocess `ask_user`, `max_usd`
+enforcement). The job is end-to-end verification of work that's already
+shipped.
+
+If a run fails in a way that suggests a quick bug rather than a new
+feature (e.g. the scaffolder's README is exactly 29 lines), a one-line
+prompt tweak + second live attempt is fine — document it. Anything bigger
+means the close-out goes to Outcome β.
+
+Start this in a fresh conversation once both dependent sessions (Phase
+5d + autoresume) have landed. Confirm their progress is in
+docs/PROGRESS.md before starting.

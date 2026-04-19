@@ -42,6 +42,23 @@ export interface AssessResult {
     integration: boolean;
     verify: boolean;
   };
+
+  /**
+   * Present when the pytest runner provisioned an environment before running
+   * the tests (ADR 0017). Absent when tests were skipped (`testFramework:
+   * 'none'`) or the runner short-circuited before provisioning (python not on
+   * PATH, no `tests/` directory).
+   */
+  provisioning?: {
+    /** Absolute path to the Python interpreter the runner chose. */
+    pythonPath: string;
+    /** Interpreter's reported version (e.g. `3.11.9`), or empty if probing failed. */
+    pythonVersion: string;
+    /** `python -m pip install -e .[test]` exited 0 (or `-e .` fallback did). */
+    installOk: boolean;
+    /** Last 40 lines of combined stdout+stderr from the install step, when it failed. */
+    installSummary?: string;
+  };
 }
 
 export interface AssessOptions {

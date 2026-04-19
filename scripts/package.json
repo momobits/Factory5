@@ -9,6 +9,7 @@
     "analyze-plan": "tsx analyze-plan.ts"
   },
   "dependencies": {
+    "@factory5/assessor": "workspace:*",
     "@factory5/channels": "workspace:*",
     "@factory5/core": "workspace:*",
     "@factory5/daemon": "workspace:*",

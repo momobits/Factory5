@@ -24,7 +24,8 @@
   },
   "dependencies": {
     "@factory5/core": "workspace:*",
-    "@factory5/logger": "workspace:*"
+    "@factory5/logger": "workspace:*",
+    "smol-toml": "^1.3.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

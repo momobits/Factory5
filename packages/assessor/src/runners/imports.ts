@@ -5,11 +5,17 @@
  * Module paths are converted from `src/foo/bar.py` → `src.foo.bar` by
  * stripping the `.py` extension and replacing separators with dots. If the
  * path doesn't look like a Python module, the check is skipped.
+ *
+ * ADR 0017: accepts a shared `interpreter` (PythonChoice) so that the
+ * assessor's imports + pytest runners agree on which Python they're probing
+ * (and, crucially, hit the venv/requires-python interpreter rather than the
+ * host PATH default).
  */
 
 import { createLogger } from '@factory5/logger';
 
 import { resolveOnPath, runSubprocess } from '../run.js';
+import type { PythonChoice } from './pytest.js';
 
 const log = createLogger('assessor.imports');
 
@@ -27,27 +33,51 @@ function pathToModule(rel: string): string | undefined {
   return stem.replace(/\//g, '.');
 }
 
-async function pickPython(override?: string): Promise<string | undefined> {
-  if (override !== undefined && override.length > 0) return override;
-  return (await resolveOnPath('python')) ?? (await resolveOnPath('python3'));
+interface ResolvedInterpreter {
+  bin: string;
+  prefixArgs: readonly string[];
+}
+
+async function pickInterpreter(opts: {
+  pythonBin?: string;
+  interpreter?: PythonChoice;
+}): Promise<ResolvedInterpreter | undefined> {
+  if (opts.interpreter !== undefined) {
+    return { bin: opts.interpreter.bin, prefixArgs: opts.interpreter.prefixArgs };
+  }
+  if (opts.pythonBin !== undefined && opts.pythonBin.length > 0) {
+    return { bin: opts.pythonBin, prefixArgs: [] };
+  }
+  const fallback = (await resolveOnPath('python')) ?? (await resolveOnPath('python3'));
+  if (fallback === undefined) return undefined;
+  return { bin: fallback, prefixArgs: [] };
 }
 
 /**
  * Run `python -c "import <module>"` for each module path. Returns aggregate
  * ok + per-module detail. Modules with non-`.py` paths are silently skipped.
+ *
+ * When `opts.interpreter` is given (set by `assess()` via
+ * {@link provisionAssessorEnv}), the check runs against the shared
+ * interpreter — same one pytest uses — so the two runners agree on gate
+ * outcomes. Fallback ordering: explicit `interpreter` → explicit `pythonBin`
+ * → `python`/`python3` on PATH.
  */
 export async function checkPythonImports(
   projectPath: string,
   modulePaths: readonly string[],
-  opts: { pythonBin?: string; timeoutMs?: number } = {},
+  opts: { pythonBin?: string; timeoutMs?: number; interpreter?: PythonChoice } = {},
 ): Promise<ImportCheckResult> {
   const details: ImportCheckResult['details'] = [];
   if (modulePaths.length === 0) {
     return { ok: true, details };
   }
 
-  const python = await pickPython(opts.pythonBin);
-  if (python === undefined) {
+  const interpOpts: { pythonBin?: string; interpreter?: PythonChoice } = {};
+  if (opts.pythonBin !== undefined) interpOpts.pythonBin = opts.pythonBin;
+  if (opts.interpreter !== undefined) interpOpts.interpreter = opts.interpreter;
+  const interp = await pickInterpreter(interpOpts);
+  if (interp === undefined) {
     return {
       ok: false,
       details: modulePaths.map((m) => ({ module: m, ok: false, error: 'python not on PATH' })),
@@ -58,7 +88,7 @@ export async function checkPythonImports(
     const mod = pathToModule(rel);
     if (mod === undefined) continue;
 
-    const res = await runSubprocess(python, ['-c', `import ${mod}`], {
+    const res = await runSubprocess(interp.bin, [...interp.prefixArgs, '-c', `import ${mod}`], {
       cwd: projectPath,
       timeoutMs: opts.timeoutMs ?? 30_000,
       env: { PYTHONDONTWRITEBYTECODE: '1' },

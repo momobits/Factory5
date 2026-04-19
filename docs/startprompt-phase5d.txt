@@ -1,0 +1,172 @@
+Read CLAUDE.md, then docs/Phase5_Progress.md — the Phase 5 roadmap. Then
+docs/PROGRESS.md, latest entry (2026-04-19 Phase 5c). You only need Phase
+5c + the roadmap to understand context; 5a/5b are captured in the
+roadmap. Skim ADR 0017 (assessor env provisioning — the surface you will
+NOT modify) and read both open issues in full:
+docs/issues/I001-planner-emits-serial-chain.md and
+docs/issues/I003-scaffolder-omits-project-hygiene-artifacts.md.
+
+Phase 5c shipped ADR 0017 + the I001 prompt rewrite. The live run
+produced 6/6 tasks and 129 pytest pass; `gate.build` + `gate.integration`
+flipped green. The remaining `gate.verify: false` is entirely I003
+(scaffolder emits no README, no LICENSE, a one-line `.gitignore`), and
+I001's prompt change couldn't be validated because the `example` spec's
+architect-designed module graph is genuinely linear (every builder
+legitimately reads a predecessor's output).
+
+Phase 5d closes I003 and finishes validating I001 on a spec that actually
+admits parallelism. One session, one live run (two builds) covers both.
+
+---
+
+Step 1 — Fix I003 (scaffolder project hygiene), prompt-tuning tier.
+
+All code changes are prompt text. Details in I003 under
+"Resolution → Suggested direction (tier 1, prompt-only)"; stay inside
+that scope.
+
+  a. `prompts/agents/scaffolder.md`:
+     - Add an explicit "repo-level hygiene files" section to the scaffolder's
+       default outputs: `README.md` (≥30 non-empty lines, substantive —
+       overview + install + usage + test-how-to + license reference),
+       `LICENSE` (default MIT with the current year and a sensible
+       placeholder author; the spec can override), and a runtime-aware
+       `.gitignore`.
+     - For Python projects: `.gitignore` must cover `__pycache__/`,
+       `*.pyc`, `.pytest_cache/`, `.coverage`, `htmlcov/`, `*.egg-info/`,
+       `dist/`, `build/`, `.venv/`, plus the existing `.factory/`.
+     - Frame "README is content, not a stub" — the assessor requires ≥30
+       non-empty lines. Stub files fail the gate.
+
+  b. `prompts/agents/architect.md`:
+     - Add a rule in the wiki-scope guidance that `overview.md` must
+       cover the project's repo-level hygiene intent: what the README
+       needs to explain (one paragraph is fine), which license applies,
+       which runtime's `.gitignore` patterns are needed. This makes the
+       scaffolder's job deterministic.
+
+  c. `packages/brain/src/architect.ts` — read the inline user prompt. If
+     it duplicates guidance from architect.md, update it in parallel so
+     both codepaths agree. (The current inline prompt may already be tight;
+     read it before editing.)
+
+  d. `packages/brain/src/agents/registry.ts` — check whether `scaffolder`
+     has any explicit expected-output hinting. If yes, extend to match
+     the prompt.
+
+  e. No test for prompt regression — prompt quality is evaluated by the
+     live run. Noted as follow-up in the Phase 5d PROGRESS entry, not a
+     blocker.
+
+After each concrete edit: `pnpm build`, `pnpm test` (still 231), `pnpm lint`,
+`pnpm format:check`.
+
+---
+
+Step 2 — Author a parallel-admitting spec.
+
+I001 validation requires a project where the architect's natural design
+puts two modules at the same DAG level, sharing only the scaffolder. The
+current `example` spec is a weather CLI where every module transitively
+reads `models` or `api`, so it can never parallelise.
+
+  a. Create `templates/parallel-example/CLAUDE.md`.
+     - Small (~25-40 lines), in the same shape as `templates/example/CLAUDE.md`.
+     - Pick a project that genuinely has independent modules. For example:
+       a CLI with two unrelated utilities — say a JSON prettifier and an
+       ASCII-art text renderer — plus a tiny dispatcher. The utilities share
+       zero imports with each other; the dispatcher imports both.
+     - Expected DAG after planner runs: scaffolder → {prettifier builder,
+       art builder} (both `dependsOn: [0]`, no edge between them) →
+       dispatcher builder → verifier. Two parallel builders at level 1.
+     - Don't include any source files in the template — the factory builds
+       it from scratch. Only `CLAUDE.md`.
+
+  b. Keep the spec tight. Tech stack: Python 3.11+, stdlib-only if
+     possible (to keep pip install fast). Each utility has its own tests;
+     the dispatcher has tests that exercise both.
+
+  c. No README/LICENSE in the template — the scaffolder should produce
+     them (that's Step 1's fix).
+
+After: `pnpm build`, `pnpm test`, `pnpm lint`, `pnpm format:check`. No
+TS changes expected beyond possibly the architect/scaffolder tweaks in
+Step 1.
+
+---
+
+Step 3 — Live run.
+
+Two builds, one session. Budget $16 total.
+
+BEFORE:
+  1. Confirm no factoryd running:
+       ls "$LOCALAPPDATA/factory5/factoryd.pid" → must be absent.
+  2. Confirm the directive-auto-resume fix has landed (see the separate
+     startprompt-autoresume.txt). If it hasn't, Step 3's directives will
+     escalate the same way Phase 5b/5c did; the builds may still end
+     `complete` if `gate.verify: true` because autonomous escalation only
+     fires on `hadFailures`. Proceed either way, but note it in PROGRESS.
+  3. `factory doctor --skip-discord` → green.
+  4. Fresh workspace `/c/Users/Momo/factory5-v5d` (not v5c).
+  5. Budget ceiling: $16 for the pair. Ctrl-c if `factory status --limit 1`
+     crosses that.
+
+Run A — the I003 validation (existing spec, hygiene fix):
+
+  factory build example --autonomy autonomous --concurrency 2 --workspace /c/Users/Momo/factory5-v5d
+
+  Watch for:
+    - `hasReadme: true`, `hasLicense: true` on `assess: complete`
+    - `gitClean: true` (the new `.gitignore` masks pip/pytest output)
+    - `gate.verify: true`
+    - `terminalStatus: complete`
+
+  Snapshot plan.json as soon as `planner: plan written` fires:
+    cp "C:/Users/Momo/factory5-v5d/example/.factory/plan.json" \
+       "C:/Users/Momo/AppData/Local/Temp/2/factory5-phase5d/plan-example-preexec.json"
+
+Run B — the I001 validation (new parallel spec):
+
+  factory build parallel-example --autonomy autonomous --concurrency 2 --workspace /c/Users/Momo/factory5-v5d
+
+  Watch for:
+    - `pool: task started` log pairs within <2 s of each other — two
+      builders at the same DAG level, actually running concurrently.
+    - `gate.verify: true`
+    - `terminalStatus: complete`
+
+  Snapshot plan.json similarly as plan-parallel-preexec.json.
+
+AFTER:
+  - `pnpm --filter @factory5/scripts analyze-plan` on each snapshot.
+    Run B's plan must show ≥2 builders with no inter-builder edges (i.e.
+    both `dependsOn: [<scaffolder-id>]` and neither reaches the other
+    transitively).
+  - `factory status` — both directives should be `complete`, total spend
+    under $16.
+  - Write the Phase 5d PROGRESS.md entry: dated, Phase 5 exit criteria
+    scored across both runs, I003 marked RESOLVED in the index,
+    I001 marked RESOLVED once Run B produces real parallelism.
+  - Update `docs/Phase5_Progress.md`'s top table: 5d row → ✅ Validated.
+
+---
+
+Whichever step fails, fix the prompt (not the pipeline). If the
+scaffolder produces a stub README, the prompt isn't strong enough; tighten
+the content requirement and re-run just Run A (not both). If the planner
+on parallel-example still emits a chain, the prompt's worked example isn't
+sticking; consider inlining the example into the `packages/brain/src/planner.ts`
+user-prompt with literal JSON. Do NOT add a code-level dependency pruner
+to `materialisePlannerTasks` without writing a new ADR that supersedes
+0016's parallelism note — it's been parked since Phase 5a precisely
+because prompt-tuning was expected to be enough.
+
+DO NOT in this phase: Telegram, web UI, GitHub channel (Phase 6),
+cross-project findings registry (Phase 6), worker-subprocess `ask_user`
+(still deferred), `max_usd` enforcement, touch assessor env code
+(ADR 0017 is done), touch daemon/state code (that's the separate
+auto-resume prompt — see startprompt-autoresume.txt).
+
+Start this in a fresh conversation. Phase 5c's context is captured in
+Phase5_Progress.md + PROGRESS.md; 5d reads cleanest from a clean slate.

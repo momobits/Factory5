@@ -108,6 +108,9 @@ importers:
       '@factory5/logger':
         specifier: workspace:*
         version: link:../logger
+      smol-toml:
+        specifier: ^1.3.0
+        version: 1.6.1
     devDependencies:
       '@types/node':
         specifier: ^20.14.0
@@ -499,6 +502,9 @@ importers:
 
   scripts:
     dependencies:
+      '@factory5/assessor':
+        specifier: workspace:*
+        version: link:../packages/assessor
       '@factory5/channels':
         specifier: workspace:*
         version: link:../packages/channels
