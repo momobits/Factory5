@@ -29,6 +29,7 @@ Decisions are append-only. To overturn a decision, write a new ADR with `Superse
 | [0015](0015-mid-flight-user-engagement.md)               | Mid-flight user engagement via brain-level `askUser` + checkpoint-and-rehydrate       | Accepted           | 2026-04-18 |
 | [0016](0016-planner-materialisation-and-turn-budgets.md) | Planner materialisation: category floor, file-ownership deps, per-task turn budgets   | Accepted           | 2026-04-18 |
 | [0017](0017-assessor-project-env-provisioning.md)        | Assessor project-env provisioning: venv + requires-python + pip install               | Accepted           | 2026-04-19 |
+| [0018](0018-verifier-advisory-only.md)                   | Verifier becomes advisory-only (findings don't block the gate)                        | Accepted           | 2026-04-21 |
 
 ## Adding a new ADR
 
