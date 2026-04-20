@@ -2,6 +2,30 @@
 
 > **Read this first.** It is the standing brief for any session working on factory5 itself. The repo follows the same disciplines factory imposes on its outputs: design before code, verification-first, finding lifecycle.
 
+## Control framework (operational layer)
+
+This project uses the **Control framework** for session management — cursor, phase gating, commit discipline, hook-driven snapshots. Framework reference: [`.control/PROJECT_PROTOCOL.md`](.control/PROJECT_PROTOCOL.md). Tunables: [`.control/config.sh`](.control/config.sh).
+
+**At session start:**
+1. Read [`.control/progress/STATE.md`](.control/progress/STATE.md) — current phase, step, next action.
+2. Read the current phase's `README.md` and `steps.md` (path in STATE.md).
+3. Check `.control/issues/OPEN/` for blockers (operational); check [`docs/issues/INDEX.md`](docs/issues/INDEX.md) for the rich issue backlog.
+4. Run `/session-start` for the full git/state drift check.
+5. **Wait for user confirmation before editing code.**
+
+**Content vs operational split — important:**
+- **Long-form content stays in `docs/`** — `CompleteArchitecture.md`, `docs/ARCHITECTURE.md`, `docs/CONTRACTS.md`, `docs/SKILLS.md`, `docs/AGENTS.md`, `docs/PROGRESS.md`, `docs/decisions/` (ADRs), `docs/issues/` (rich issue files), `docs/Phase*_Progress.md`, `docs/Phases/`. These are authoritative for **what the system is**.
+- **Operational cursor lives in `.control/`** — `progress/STATE.md` (current position), `progress/journal.md` (per-step log), `progress/next.md` (handoff prompt), `phases/phase-<N>/` (active step checklist), `snapshots/` (PreCompact auto-saves).
+- **ADRs: write under `docs/decisions/`** (factory5's richer shape, `INNN` numbering). `.control/architecture/decisions/` is kept empty — don't fork the set.
+- **Issues: write under `docs/issues/`** with factory5's frontmatter shape. `.control/issues/OPEN|RESOLVED/` is reserved for Control's `/new-issue` + `/close-issue` flow if ever used; do not duplicate.
+
+**Control invariants:**
+- Commit message shape: `<type>(<phase>.<step>): <subject>` (e.g. `feat(6c.1): add read tools to verifier allowlist`). Allowed types: `feat fix test docs refactor chore`.
+- Every sub-step closes with a commit. Every phase/sub-phase closes with a tag (`phase-6c-verifier-overhaul-closed`, etc.) via `/phase-close`.
+- Never advance a step with uncommitted work unless STATE.md's "In-flight work" explains why.
+- Regression test required before any blocker/major issue moves to RESOLVED.
+- Do not edit accepted ADRs in `docs/decisions/` — supersede with a new one.
+
 ## Before touching code
 
 1. **Read [`CompleteArchitecture.md`](CompleteArchitecture.md)** — the canonical design.
