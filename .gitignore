@@ -51,3 +51,7 @@ notes.md
 # Control framework source (installed into .control/ and .claude/)
 Control/
 CLAUDE copy.md
+# --- Control framework ---
+.control/snapshots/
+.claude/settings.local.json
+# --- /Control ---
