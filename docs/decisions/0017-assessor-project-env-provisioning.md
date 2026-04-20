@@ -170,3 +170,54 @@ still function. Reverting is a local change to `pytest.ts` and
   in `pytest.ts`'s header — avoiding the plugin dependency keeps the
   assessor's install surface small and the parsing logic under 60
   lines. Unchanged by this ADR.
+
+## Implementation notes — 2026-04-19 (Phase 5f, I006 fix)
+
+The Phase 5 close-out rerun surfaced
+[I006](../issues/I006-assessor-pip-install-pollutes-user-site.md): when
+`pickPython` fell through to the system interpreter (no project
+`.venv/`), `pip install -e .` registered the project in the user's
+site-packages (`%APPDATA%\Python\Python311\site-packages` on Windows;
+`~/.local/lib/python3.11/site-packages` on Unix). A second
+factory build of a same-named project then saw the previous install's
+`.pth` entries on `sys.path` and imported the stale workspace's
+modules. The ADR's "Negative consequences → Host pollution risk"
+paragraph flagged this explicitly and deferred the fix to tier 2.
+
+Phase 5f takes the narrow slice of tier 2 that closes I006 without
+introducing a dep-manifest-hash cache or a `runtime:` plan declaration
+— it just ensures the install site is always a venv.
+
+**Install-site precedence (implemented in
+`packages/assessor/src/runners/pytest.ts`):**
+
+1. `<projectPath>/.venv/` — user-controlled. `pickPython` short-circuits
+   on step 2 and `ensureAssessorVenv` keeps it. Reported as
+   `provisioning.venvSource: 'project'`.
+2. `<projectPath>/.factory/assessor-env/` — factory-managed. Created
+   on demand via `<basePython> -m venv <envPath>`; reused across
+   incremental assesses by checking that the venv's interpreter file
+   exists. Gitignored via the pre-existing `.factory/` guard so no
+   project state leaks. Reported as `'factory-managed'`.
+3. Base interpreter — only used when steps 1/2 both fail (no `.venv/`
+   - `python -m venv` refuses + optional `virtualenv` binary missing
+     from PATH). Logged at `warn`, reported as `'system'`; carries the
+     pre-fix pollution risk, so the surfaced field tells operators to
+     install `python -m venv` support on the host.
+
+**Why this is still tier 1 in spirit.** No cache key, no manifest hash,
+no plan-level `runtime:` declaration, no pluggable dispatch. The venv
+is simply "where we install" — its lifecycle is governed by the same
+trivial presence-check cache as the project's own `.venv/`. Tier 2's
+full design (manifest-hashed env names, runtime declarations) and
+tier 3 (pluggable runtimes for Go/Rust/JS) remain deferred.
+
+**Cross-platform invariants.** Venv interpreter paths follow the
+Python venv module's conventions: `Scripts/python.exe` on Windows,
+`bin/python` on Unix. The venv is invoked with empty `prefixArgs` —
+a venv python is launched directly, not via the `py` launcher.
+
+**Testing seam.** `ensureAssessorVenv` is exported and injection-only
+for unit tests (no real subprocess / no real fs mutation in the
+workspace suite). Integration coverage comes from the live
+`factory build` validation runs.

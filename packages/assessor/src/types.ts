@@ -58,6 +58,14 @@ export interface AssessResult {
     installOk: boolean;
     /** Last 40 lines of combined stdout+stderr from the install step, when it failed. */
     installSummary?: string;
+    /**
+     * Which venv layer owns the install site (ADR 0017 implementation notes, I006 fix):
+     *  - `'project'` — reused `<projectPath>/.venv/` (user-controlled).
+     *  - `'factory-managed'` — created/reused `<projectPath>/.factory/assessor-env/`.
+     *  - `'system'` — installed against the base interpreter because no venv could
+     *    be created; risks user-site pollution and warrants operator attention.
+     */
+    venvSource: 'project' | 'factory-managed' | 'system';
   };
 }
 

@@ -26,13 +26,17 @@ const outcome = await runWorker({
 // outcome.usage?.{resolution, response, durationMs} — for model_usage recording
 ```
 
-## Phase 2 plans
+## Phase 2+ behavior (also current)
 
-- Allocate a per-task git worktree at `<project>/.factory/worktrees/task-<id>/`.
-- Spawn `claude -p` with Write/Edit/Bash tools enabled; stream stdout (stream-json); honor `signal: AbortSignal`.
-- Worker-pool executor for independent-ready tasks (concurrency configurable).
-- Heartbeat into `tasks_inflight` so the brain can time out stuck workers.
+Tool-using agents (scaffolder/builder/fixer) run in per-task git worktrees:
+
+- `allocateWorktree({ projectPath, taskId })` — branches `factory/task-<short>` off the project's current branch and `git worktree add`s it at `<project>/.factory/worktrees/task-<id>/`. Idempotent on the project (calls `ensureProjectRepo` to init + initial-commit if needed). Returns `WorktreeHandle = { path, branch, baseBranch }`.
+- `cleanupWorktree({ projectPath, handle, outcome })` — `success` merges the task branch back into the base (`--no-ff`), removes the worktree, deletes the branch. `failure` leaves the worktree in place for inspection.
+- `verifyHeadAdvanced(git, baseBranch, preMergeHead)` — assertion helper used inside `cleanupWorktree`; throws if the post-merge `rev-parse <baseBranch>` equals the pre-merge HEAD (catches silent no-op merges — see I004).
+- `branchNameFor(taskId)` / `WORKTREES_SUBDIR` — name + path conventions.
+
+Concurrent-merge safety: per-project async mutex inside `mergeAndRemove` chains sibling-task merges so two simultaneous `git merge` invocations don't race on `.git/index.lock` (originally observed losing commits silently on Windows — I004).
 
 ## Status
 
-Phase 1 single-shot implementation shipped.
+Phase 1 single-shot path + Phase 2 worktree + tool-streaming path both shipped. The worker is invoked from `@factory5/brain`'s pool (see `packages/brain/src/pool.ts`).

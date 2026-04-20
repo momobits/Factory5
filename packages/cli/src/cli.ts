@@ -9,6 +9,7 @@ import { registerAnswerCommand } from './commands/answer.js';
 import { registerBuildCommand } from './commands/build.js';
 import { registerChatCommand } from './commands/chat.js';
 import { registerDaemonCommand } from './commands/daemon.js';
+import { registerDirectiveCommand } from './commands/directive.js';
 import { registerDoctorCommand } from './commands/doctor.js';
 import { registerInitCommand } from './commands/init.js';
 import { registerResumeCommand } from './commands/resume.js';
@@ -33,6 +34,7 @@ export function buildCli(opts: BuildCliOptions = {}): Command {
   registerBuildCommand(program);
   registerChatCommand(program);
   registerDaemonCommand(program);
+  registerDirectiveCommand(program);
   registerDoctorCommand(program);
   registerInitCommand(program);
   registerResumeCommand(program);

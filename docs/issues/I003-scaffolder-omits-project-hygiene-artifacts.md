@@ -2,8 +2,9 @@
 id: I003
 severity: MEDIUM
 area: brain/scaffolder
-status: OPEN
+status: RESOLVED
 created: 2026-04-19
+resolved: 2026-04-19
 ---
 
 # Scaffolder omits project-hygiene artifacts (README ≥30 lines, LICENSE, comprehensive .gitignore)
@@ -75,28 +76,56 @@ src/... + tests/...` as expected outputs, emits exactly those files.
 
 ## Resolution
 
-(filled when work begins)
+**Phase 5d (2026-04-19)**: tier-1 prompt-only fix landed and validated.
 
-Suggested direction (tier 1, prompt-only):
+Shipped:
 
-- Update the architect prompt to include a line like "describe the
-  repo-level files the project needs (README, LICENSE, .gitignore) and what
-  they should contain" as part of its `overview.md` output.
-- Update the scaffolder agent prompt / agent registry entry to include
-  README / LICENSE / comprehensive .gitignore in its default outputs for any
-  project type it recognises.
-- At minimum, ship a Python-project `.gitignore` template the scaffolder
-  uses as a baseline — it's well-known and stable.
+- `prompts/agents/scaffolder.md` — replaced the Phase 1 stub with a
+  body that mandates three "repo-level hygiene files" as required
+  output regardless of planner-provided `expectedOutputs.files[]`:
+  - `README.md` with ≥30 non-empty lines covering Overview, Install,
+    Usage, Testing, License (explicit section list and "README is
+    content, not a stub" framing).
+  - `LICENSE` defaulting to MIT with the current year and a sensible
+    placeholder copyright holder; spec overrides.
+  - Runtime-aware `.gitignore` — explicit Python block
+    (`__pycache__/`, `*.pyc`, `.pytest_cache/`, `.coverage`, `htmlcov/`,
+    `*.egg-info/`, `dist/`, `build/`, `.venv/`, `.factory/`) and Node
+    block (`node_modules/`, `dist/`, `build/`, `*.tsbuildinfo`,
+    `coverage/`, `.env*`, `.factory/`) with a fall-through note for
+    other runtimes.
+- `prompts/agents/architect.md` — rewritten from stub with a
+  "Wiki scope" section that makes `overview.md` hygiene coverage
+  mandatory (README content outline, license choice, runtime tag for
+  `.gitignore`). Adds the load-bearing "if module A does not import
+  module B, say so plainly" guidance that I001 needs.
+- `packages/brain/src/architect.ts` inline user prompt updated in
+  parallel so the inline and .md guidance agree.
 
-Tier 2 (requires factory-wide policy): introduce a dedicated **hygiene
-pass** task (verifier-adjacent) that checks artifacts pre-gate and emits
-findings rather than relying on the builder tasks to remember. Defer until
-we've seen whether the tier-1 prompt fix holds across multiple project
-types.
+Live validation (Phase 5d, 2026-04-19):
 
-Not the root cause of the Phase 5b / 5c verify-gate failure (that was
-I002); but with I002 resolved this is now the dominant remaining gap
-between "factory builds" and "verify gate green".
+- **Run A** — `factory build example`: scaffolder produced `README.md`
+  (108 non-empty lines), `LICENSE` (1110 bytes, full MIT), `.gitignore`
+  (15 entries covering all Python cache/build artefacts plus
+  `.factory/`).
+- **Run B** — `factory build parallel-example`: scaffolder produced
+  `README.md` (109 non-empty lines), `LICENSE` (1111 bytes), `.gitignore`
+  (13 entries).
+
+Both artefacts satisfy the assessor's `hasReadme`, `hasLicense`, and
+`hasGitignore` checks, and the comprehensive `.gitignore` masks the
+`pip install -e .` + `pytest` generated noise that was making
+`gitClean: false` in Phase 5c.
+
+Status: **RESOLVED**. Tier-2 (dedicated hygiene-pass task) stays
+deferred — the prompt-only tier handled both project types cleanly.
+
+Note: `gate.verify: true` is still unreachable end-to-end, but the
+blocker is now a separate, newer issue — [I004](I004-worktree-concurrent-merge-race.md).
+When two sibling builders merge back concurrently the second one's
+commits are silently lost, which strands downstream builders and drops
+`gate.build` via missing imports. I003's artefacts themselves are
+correct on every run.
 
 ## Related
 

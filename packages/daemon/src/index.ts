@@ -110,6 +110,11 @@ export interface DaemonOptions {
   noOutboundWorker?: boolean;
   /** Poll cadence for the outbound worker, ms. Default 1000. */
   outboundPollIntervalMs?: number;
+  /**
+   * Skip the orphaned-directive reconcile pass at startup. Tests that seed
+   * their own DB state and don't want the reconciler touching it pass this.
+   */
+  noReconcile?: boolean;
 }
 
 export interface DaemonHandle {
@@ -157,6 +162,30 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
       { host, port: requestedPort, pid: process.pid, pidFile: pidFile?.path },
       'daemon: starting',
     );
+
+    // Before any subsystem touches directives, sweep up anything left
+    // `running` by a prior brain that died without writing a terminal
+    // status (escalation-kill, ctrl-C mid-await, etc.). The pidfile lock
+    // above guarantees no other factoryd is running, so dead PIDs in
+    // `claimed_by` are unambiguously orphaned; concurrent `factory build
+    // --inline` runs are protected by the activity-floor heuristic.
+    if (opts.noReconcile !== true) {
+      const reconcileRes = directivesQ.reconcileOrphanedDirectives(
+        db,
+        createLogger('daemon.reconcile'),
+      );
+      if (reconcileRes.reconciled.length > 0) {
+        log.warn(
+          { reconciled: reconcileRes.reconciled, inspected: reconcileRes.inspected },
+          'daemon: reconciled orphaned directives at startup',
+        );
+      } else if (reconcileRes.inspected > 0) {
+        log.info(
+          { inspected: reconcileRes.inspected },
+          'daemon: inspected running directives at startup, none orphaned',
+        );
+      }
+    }
 
     let channelRegistry: ChannelRegistry | undefined;
     if (opts.noChannels !== true) {

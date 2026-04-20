@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { appendBuildLog } from '@factory5/wiki';
 import { simpleGit } from 'simple-git';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -11,6 +12,7 @@ import {
   branchNameFor,
   cleanupWorktree,
   ensureProjectRepo,
+  verifyHeadAdvanced,
 } from './worktree.js';
 
 let projectPath: string;
@@ -115,5 +117,147 @@ describe('allocateWorktree + cleanupWorktree', () => {
     await cleanupWorktree({ projectPath, handle, outcome: 'failure' });
 
     expect(await exists(handle.path)).toBe(true);
+  });
+
+  it('cleanup success on a branch with no new commits removes worktree without throwing', async () => {
+    // Worker subprocess that wrote nothing → branch tip == baseBranch tip.
+    // Must not trigger the post-merge HEAD verification (no merge happened).
+    const taskId = 'NOOP1234567890ABCDEFGHJKL';
+    const handle = await allocateWorktree({ projectPath, taskId });
+
+    await cleanupWorktree({ projectPath, handle, outcome: 'success' });
+
+    expect(await exists(handle.path)).toBe(false);
+    const git = simpleGit(projectPath);
+    const branches = await git.branch();
+    expect(branches.all).not.toContain(handle.branch);
+  });
+
+  it('two concurrent successful cleanups on the same project both land in main (I004)', async () => {
+    // Regression test for I004 — without per-project merge serialisation the
+    // second sibling's merge was logged "merged and removed" but never
+    // recorded in main's reflog on Windows. The mechanical test (both files
+    // present, both branches removed, both worker commits reachable from
+    // main) holds even when the underlying file-lock race doesn't fire on
+    // the test host.
+    const taskA = '01ABCDEFGHJKMNPQRS-AAAAAAAA';
+    const taskB = '01ABCDEFGHJKMNPQRS-BBBBBBBB';
+
+    const handleA = await allocateWorktree({ projectPath, taskId: taskA });
+    const handleB = await allocateWorktree({ projectPath, taskId: taskB });
+
+    await writeFile(join(handleA.path, 'a.txt'), 'A content\n', 'utf8');
+    await writeFile(join(handleB.path, 'b.txt'), 'B content\n', 'utf8');
+
+    await Promise.all([
+      cleanupWorktree({ projectPath, handle: handleA, outcome: 'success' }),
+      cleanupWorktree({ projectPath, handle: handleB, outcome: 'success' }),
+    ]);
+
+    expect(await exists(join(projectPath, 'a.txt'))).toBe(true);
+    expect(await exists(join(projectPath, 'b.txt'))).toBe(true);
+    expect(await exists(handleA.path)).toBe(false);
+    expect(await exists(handleB.path)).toBe(false);
+
+    const git = simpleGit(projectPath);
+    const branches = await git.branch();
+    expect(branches.all).not.toContain(handleA.branch);
+    expect(branches.all).not.toContain(handleB.branch);
+
+    // Initial commit + worker-A commit + merge-A commit + worker-B commit +
+    // merge-B commit = 5 reachable from main.
+    const log = await git.log({ maxCount: 20 });
+    expect(log.total).toBe(5);
+  });
+
+  it('a failing cleanup does not poison subsequent merges on the same project', async () => {
+    // The mutex chains via `.catch(() => undefined)` so one failed merge
+    // can't skip the next caller's work. Simulate by making cleanup A fail
+    // (force its worktree dir to disappear so the porcelain `worktree
+    // remove` step throws), then verify cleanup B still lands.
+    const taskA = '01ABCDEFGHJKMNPQRS-CCCCCCCC';
+    const taskB = '01ABCDEFGHJKMNPQRS-DDDDDDDD';
+
+    const handleA = await allocateWorktree({ projectPath, taskId: taskA });
+    const handleB = await allocateWorktree({ projectPath, taskId: taskB });
+
+    await writeFile(join(handleA.path, 'a.txt'), 'A\n', 'utf8');
+    await writeFile(join(handleB.path, 'b.txt'), 'B\n', 'utf8');
+
+    // Wipe handleA's worktree dir out from under git to force the cleanup
+    // path to throw after the merge (the merge itself can succeed because
+    // the branch ref is still valid, but `worktree remove --force` errors
+    // when the directory it expects has gone missing).
+    // Use a separate sibling directory so we hit a real failure in cleanup
+    // A while leaving B intact.
+    const cleanupAPromise = cleanupWorktree({
+      projectPath,
+      handle: { ...handleA, path: join(projectPath, '.factory/worktrees/does-not-exist') },
+      outcome: 'success',
+    });
+    const cleanupBPromise = cleanupWorktree({
+      projectPath,
+      handle: handleB,
+      outcome: 'success',
+    });
+
+    const results = await Promise.allSettled([cleanupAPromise, cleanupBPromise]);
+    expect(results[0].status).toBe('rejected');
+    expect(results[1].status).toBe('fulfilled');
+
+    // Cleanup B must have completed despite A's failure.
+    expect(await exists(join(projectPath, 'b.txt'))).toBe(true);
+    const git = simpleGit(projectPath);
+    const branches = await git.branch();
+    expect(branches.all).not.toContain(handleB.branch);
+  });
+
+  it('appendBuildLog between task and cleanup does not dirty main (I005)', async () => {
+    // Regression for I005. `persistFindings` in run-worker.ts calls
+    // appendBuildLog(projectPath, …) after the claude stream finishes and
+    // before cleanupWorktree runs. Pre-fix, BUILD.md lived at the project
+    // root and was tracked by git — the write left main's working tree
+    // with uncommitted changes and the next `git merge --no-ff` aborted
+    // with "Your local changes to the following files would be overwritten
+    // by merge: BUILD.md". Post-fix, BUILD.md lives under .factory/ (already
+    // gitignored), so appendBuildLog leaves main clean and the merge
+    // proceeds.
+    const taskId = 'I005AAAA1234567890ABCDEFGH';
+    const handle = await allocateWorktree({ projectPath, taskId });
+    await writeFile(join(handle.path, 'feature.txt'), 'hello\n', 'utf8');
+
+    await appendBuildLog(projectPath, `builder (task ${taskId}) raised 1 finding(s)`);
+
+    const git = simpleGit(projectPath);
+    const statusBefore = await git.status();
+    expect(statusBefore.files).toEqual([]);
+
+    await cleanupWorktree({ projectPath, handle, outcome: 'success' });
+
+    expect(await exists(handle.path)).toBe(false);
+    expect(await exists(join(projectPath, 'feature.txt'))).toBe(true);
+    const branches = await git.branch();
+    expect(branches.all).not.toContain(handle.branch);
+  });
+});
+
+describe('verifyHeadAdvanced', () => {
+  it('throws when HEAD is unchanged', async () => {
+    await ensureProjectRepo(projectPath);
+    const git = simpleGit(projectPath);
+    const head = (await git.revparse(['main'])).trim();
+    await expect(verifyHeadAdvanced(git, 'main', head)).rejects.toThrow(/did not advance/);
+  });
+
+  it('returns the new HEAD when the branch has moved', async () => {
+    await ensureProjectRepo(projectPath);
+    const git = simpleGit(projectPath);
+    const before = (await git.revparse(['main'])).trim();
+    await writeFile(join(projectPath, 'second.txt'), 'second\n', 'utf8');
+    await git.add(['-A']);
+    await git.commit('second');
+    const after = await verifyHeadAdvanced(git, 'main', before);
+    expect(after).not.toBe(before);
+    expect(after).toMatch(/^[0-9a-f]{40}$/);
   });
 });

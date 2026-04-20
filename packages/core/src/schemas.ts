@@ -59,6 +59,14 @@ export const directiveSchema = z.object({
   status: directiveStatusSchema,
   claimedBy: z.string().min(1).optional(),
   parentDirectiveId: ulidSchema.optional(),
+  /**
+   * Free-text explanation recorded when a directive transitions to `blocked`.
+   * Set by the CLI `factory directive mark-blocked` command, the daemon
+   * startup reconcile pass, and any future escalation flow that wants to
+   * leave a breadcrumb for later inspection. Nullable — pre-migration rows
+   * and most assisted-mode aborts leave it empty.
+   */
+  blockedReason: z.string().min(1).optional(),
 });
 
 // -----------------------------------------------------------------------------

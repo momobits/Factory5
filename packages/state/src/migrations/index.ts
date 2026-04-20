@@ -12,6 +12,7 @@ import { createLogger } from '@factory5/logger';
 
 import type { Database } from '../db.js';
 import { migration001 } from './001-initial.js';
+import { migration002 } from './002-directive-blocked-reason.js';
 
 const log = createLogger('state.migrations');
 
@@ -24,7 +25,7 @@ export interface Migration {
   up: string;
 }
 
-export const migrations: readonly Migration[] = [migration001];
+export const migrations: readonly Migration[] = [migration001, migration002];
 
 /** Highest migration id currently shipped. Useful for clients gating on schema. */
 export const currentSchemaVersion: number = migrations.reduce(

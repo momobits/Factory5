@@ -16,6 +16,18 @@ Daemon assembly. Wires together:
 
 Consumed by `apps/factoryd` (the binary entry point).
 
+## Startup reconcile
+
+After migrations run and before any subsystem touches the directives
+table, `startDaemon` calls `reconcileOrphanedDirectives` from
+`@factory5/state`. It sweeps `running` directives whose owning PID is
+gone and whose last activity (model_usage row, falling back to
+`created_at`) is older than 10 min, flipping them to `blocked` with a
+reason. The pidfile lock above the sweep guarantees no other factoryd
+is alive, so dead `serve-<pid>` rows are unambiguously orphaned; the
+activity floor keeps concurrent `factory build --inline` runs safe.
+Disable with `noReconcile: true` in tests that seed their own DB state.
+
 ## Lifecycle
 
 ```ts

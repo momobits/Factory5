@@ -1,0 +1,304 @@
+Read CLAUDE.md, then docs/Phase6_Progress.md — the Phase 6 charter
+drafted at Phase 5 close-out (three candidate sub-phases: 6a
+findings registry, 6b GitHub channel, 6c verifier overhaul). Then
+docs/PROGRESS.md, the last two entries: (a) 2026-04-19 Phase 5f —
+I006 RESOLVED + Phase 5 Outcome α and (b) 2026-04-19 I007 RESOLVED
+— builder-prompt discipline. Both close with notes about the
+verifier hallucination that motivates this session.
+
+Skim docs/Phase5_Progress.md §5f scoreboard so you know where
+Phase 5 landed. You do NOT need to re-read the older entries; the
+Phase 5 arc is closed.
+
+Read `prompts/agents/verifier.md` in full (it's a Phase 1 stub —
+six lines total; that IS most of the problem). Read the verifier
+finding file at
+`C:/Users/Momo/factory5-v5f-example-2/example/.factory/findings.json`
+— it's the F001 reproducer this session is built around.
+
+This is Phase 6c — the quality track. Pick ONE of two resolution
+paths below, implement it, validate with a live run, update docs.
+Scope: 1 session, code + tests + ADR + one live build. Budget $4-6.
+
+---
+
+The forcing function — F001 on directive 01KPKRNB2V08QZZD02SKTK6MWP
+(I007 live validation, 2026-04-19, workspace
+`/c/Users/Momo/factory5-v5f-example-2`):
+
+- Pool completed 6/6 tasks. All merged cleanly.
+- Assessor returned `gate: {build: true, integration: true, verify:
+  true}`, `testsPassed: 78`, `importErrors: []`. Ground truth: the
+  built project is correct.
+- Verifier (read-only, LLM-only, no tools) raised F001 CRITICAL:
+  "Python project `example-cli-app` source files are absent —
+  `src/models.py`, `src/api.py`, `src/formatter.py`, `src/cli.py`,
+  `tests/`, and `pyproject.toml` all missing."
+- All six of those files DO exist on main in the workspace. The
+  verifier had no Bash/Glob/Read tool access; it hallucinated the
+  absence from context alone.
+- Terminal status: `complete`, `openFindings: 1`. So the finding
+  didn't block termination, but the finding IS on the books as a
+  CRITICAL, visible in `factory findings list`, and it's flat
+  wrong.
+
+Pick the fix direction before you implement.
+
+---
+
+**Path A — Verifier gets filesystem access (upgrade to tool-using).**
+
+Structural fix. The verifier becomes authoritative: if it raises a
+finding, it had to actually see the problem.
+
+Concrete changes:
+
+  - `packages/worker/src/run-worker.ts` — `isToolUsingAgent(role)`
+    currently returns true for `scaffolder | builder | fixer`. Add
+    `verifier`. That flips the verifier onto the `runTooling`
+    code path: worktree allocation + `provider.stream()` with
+    `allowedTools`.
+  - Allowed tools: `['Read', 'Glob', 'Grep']` — read-only set. The
+    verifier should NOT get Write/Edit/Bash; it's a verifier, not a
+    builder. If you think Bash is needed for `git log` / test
+    counting, whitelist `Bash` but add a guard note in the prompt.
+  - Verifier already runs inside a worktree post-pool, so it sees
+    the post-merge state. Cleanup follows the existing
+    `runTooling` → `cleanupWorktree` path.
+  - `prompts/agents/verifier.md` — flesh out from stub. Core rule:
+    "Do not claim a file is absent unless you have attempted to
+    read it and got a `not found` error. Every assertion about the
+    filesystem MUST be grounded in a tool call in this turn." Add
+    a concrete worked example.
+  - Tests: +2-3 worker tests exercising the verifier-tool-using
+    path (worktree allocated, read-only allowlist enforced).
+
+Consequences to weigh:
+
+  - Cost: verifier moves from single-shot call (~15s) to streaming
+    with tool turns (~60-120s). Spend per run goes up maybe $0.30.
+  - Worktree allocation cost: +1 worktree per directive. The merge
+    race was a pain point pre-I004; the mutex fixed it but one
+    more worktree doubles the pressure on that code path.
+  - This says "verifier's findings are authoritative." That's a
+    stance — the assessor is still ground truth for gate booleans,
+    but the verifier's findings now carry weight instead of being
+    recommended-ignore.
+
+**Path B — Verifier findings become advisory (no gate impact).**
+
+Minimum-change fix. Formally encode what was already implicit: the
+verifier is LLM-based second opinion, not authority. Its findings
+surface for operator attention but never block the loop.
+
+Concrete changes:
+
+  - `packages/core/src/schemas.ts` — add `advisory: boolean` to the
+    `Finding` shape (default `false`).
+  - `packages/wiki/src/findings.ts` (or wherever `addFinding` lives)
+    — accept `advisory` in the input; persist it.
+  - `packages/worker/src/run-worker.ts` — `persistFindings()` is
+    called by both `runReadOnly` and `runTooling`. Thread
+    `advisory = true` when `task.agent === 'verifier'`. Consider
+    whether other read-only agents (architect, planner, triage)
+    should also be advisory — probably yes; they're all LLM-based
+    non-authoritative signals. That's a scope decision.
+  - `packages/brain/src/loop.ts` — wherever `openFindings` feeds
+    into terminal-status / escalation logic, filter out advisory
+    findings. Keep them in the `listFindings` API so the operator
+    still sees them.
+  - `prompts/agents/verifier.md` — flesh out from stub. Core rule:
+    "Your findings are advisory, never blocking. Surface risks the
+    operator should know about; do not claim authority over the
+    build's correctness — that is the assessor's job." Worked
+    example showing the shape of an advisory finding vs. a
+    hallucination.
+  - `factory findings list` — default behaviour decision: show
+    advisory inline (distinguished visually) or hide behind
+    `--include-advisory`? Probably show inline, with a marker
+    like `[advisory]` in the listing.
+  - Tests: +3-4 tests: (a) verifier-raised findings carry
+    `advisory: true`; (b) builder-raised findings do not;
+    (c) `openFindings` blocker logic excludes advisory; (d) CLI
+    output differentiates advisory vs. authoritative.
+
+Consequences to weigh:
+
+  - The verifier can still hallucinate — it just doesn't matter
+    anymore. Cosmetic fix; some operators may prefer a verifier
+    that actually knows what it's claiming.
+  - Cleaner surface area. No worktree churn for the verifier; no
+    tool budget spent on read-only filesystem scans.
+  - Signals a design choice: factory's verification authority is
+    ground-truth (assessor) only; LLM signals are aids, not
+    judgments.
+
+---
+
+**Recommendation — Path B.** It's the smaller, more honest change.
+Path A pushes the verifier toward authority; but the assessor is
+already the authority for gate booleans (ADR 0017), and doubling up
+the authority path is wasted effort when the assessor is the
+authoritative one.
+
+Path B makes the split explicit: assessor = authority, verifier (and
+architect, triage, planner when they raise findings) = advisory.
+That's a cleaner mental model, smaller code change, and doesn't
+buy into the "LLM can verify filesystems" assumption that F001
+already falsified.
+
+But this is a design call — if you disagree, argue for A and ship
+that. Don't split the difference.
+
+---
+
+Step 1 — Read the code.
+
+Orient yourself before picking:
+
+  1. `packages/worker/src/run-worker.ts` — the read-only vs. tool-using
+     split. `persistFindings()` call sites. `isToolUsingAgent()`
+     definition.
+  2. `packages/worker/src/parse-findings.ts` — how `FINDING [...]`
+     markers become `Finding` objects.
+  3. `packages/core/src/schemas.ts` — the current `Finding` shape.
+  4. `packages/wiki/src/` — `addFinding` / `listFindings` helpers.
+  5. `packages/brain/src/loop.ts` — where `openFindings` feeds into
+     terminal decisions. Grep for `openFindings` / `findings.length`.
+  6. `packages/cli/src/commands/` — `factory findings list` command
+     (if it exists; if not, Path B adds it to the scope).
+  7. `packages/brain/src/agents/` — verifier-task construction. How
+     does the brain decide to spawn a verifier task? Is it planner-
+     materialised or hard-coded post-pool?
+
+Confirm your understanding: the verifier today is spawned as a
+read-only task in the pool, gets the context block + agent prompt,
+and its output is `parseFindings()`-scanned for `FINDING [SEV]
+<target>: <desc>` markers. No filesystem access. Its findings
+persist to `<project>/.factory/findings.json` and count toward
+`openFindings` in the brain loop.
+
+---
+
+Step 2 — Commit to Path A or Path B.
+
+One sentence in your first PROGRESS.md entry of the session:
+"Going Path X because Y." Don't implement both; don't waffle.
+
+If Path B (recommended), draft ADR 0018 "Advisory findings — LLM
+agents do not carry gate authority" before writing code. Context
+should reference F001; Decision section records the signal-vs-
+authority split; Consequences acknowledges that verifier hallucinations
+are now cosmetic not blocking.
+
+If Path A, draft ADR 0018 "Verifier filesystem access — upgrading
+read-only agents to tool-using" instead. Consequences section must
+cover the added turn budget / spend per directive, the worktree
+lifecycle, and the contract that the verifier's findings are now
+authoritative (operator should trust them).
+
+Either way, update `docs/decisions/INDEX.md` with the new ADR row.
+
+---
+
+Step 3 — Implement.
+
+Follow the ADR. Scope bounds for either path:
+
+  - No brain/loop / scheduler rework beyond what the chosen path
+    demands. `openFindings` filtering (Path B) or tool-allowlist
+    plumbing (Path A) only.
+  - No other read-only agents upgraded beyond what the chosen path
+    names (Path B: all read-only agents' findings become advisory
+    unless overridden; Path A: verifier only).
+  - Don't touch the assessor. Assessor is correct; it's verifier
+    that needs the change.
+  - No CLI work beyond what's strictly needed to surface the new
+    signal (`factory findings list --include-advisory` or similar).
+  - `prompts/agents/verifier.md` gets filled in regardless of
+    path — the current stub is part of the problem.
+
+Run `pnpm build` + `pnpm --filter @factory5/{worker,brain,core,wiki}
+test` after each meaningful step. Full `pnpm test` + `pnpm lint` +
+`pnpm format:check` at the end. Expect workspace test count to move
+from 255 to ~258-262 depending on path and scope.
+
+---
+
+Step 4 — Targeted live validation.
+
+Budget: $4-6. Replay the F001-triggering scenario.
+
+BEFORE:
+
+  1. Fresh workspace at `/c/Users/Momo/factory5-v6c-example` (or
+     similar). Do NOT reuse Phase 5 workspaces — they have
+     state-contaminated factory dirs.
+  2. `factory doctor --skip-discord` green.
+  3. Scrub user-site:
+     `py -3.11 -m pip uninstall -y example-cli-app parallel-example`
+     (benign if not installed — I006 + I007 fixes prevent
+     re-pollution, but guard anyway).
+  4. No factoryd pidfile.
+
+RUN:
+
+  factory build example --autonomy autonomous --concurrency 2 \
+    --workspace /c/Users/Momo/factory5-v6c-example
+
+  Expected signals:
+
+    - 6/6 tasks succeed. Siblings same-ms start. Assessor venv
+      factory-managed. All gates true. terminalStatus: complete.
+
+    - **Critical:**
+      - Path A: verifier runs with tools, allocates a worktree,
+        uses Read/Glob to list src/, raises zero findings if the
+        project is correct (or a grounded finding if it isn't).
+        `worker: starting (tool-using)` log with
+        `agent: verifier, allowedTools: [Read, Glob, Grep, ...]`.
+      - Path B: verifier still raises findings as before, but
+        every finding carries `advisory: true` in findings.json
+        and `openFindings` in the brain log counts only
+        non-advisory.
+
+    - Post-run: `factory findings list --project example` shows
+      verifier findings clearly marked (advisory, or
+      filesystem-grounded per path choice). Ideally zero verifier
+      findings because the build is correct.
+
+AFTER:
+
+  - Append a dated entry to `docs/PROGRESS.md`: "Phase 6c — Path X
+    landed, ADR 0018, +N tests, live evidence, spend $Z."
+  - Update `docs/Phase6_Progress.md`:
+    - Flip the 6c row in the candidate-sub-phases table from
+      ⏸ Pending to ✅ Shipped / ✅ Validated.
+    - Add a Phase 6c scoreboard: criterion 3 (verifier signal
+      trustworthy) hits definitively; note whether criteria 1/2
+      are still pending or struck.
+  - No new issue file unless you actually find a new bug during
+    implementation — F001 isn't a factory5 issue, it's a scope gap
+    closed by this session.
+
+---
+
+DO NOT in this session:
+
+  - Start 6a or 6b — Phase 6 is independent sub-phases, pick one.
+  - Touch the assessor. ADR 0017 is load-bearing.
+  - Pull the verifier out of the pool entirely — it stays a task,
+    just with (Path A) tools or (Path B) advisory classification.
+  - Upgrade more read-only agents to tool-using on a whim (planner,
+    architect, triage stay as-is unless Path A specifically
+    includes them — it shouldn't).
+  - Add a cross-project findings registry (that's 6a, separate
+    session).
+  - Skip the ADR. One of the two design directions is being
+    committed to; the ADR is the record.
+
+---
+
+Start in a fresh conversation. Phase 5 is closed; Phase 6 charter
+reads cleanly from a clean slate. The factory5 issue backlog is
+empty — keep it that way unless a real bug surfaces.

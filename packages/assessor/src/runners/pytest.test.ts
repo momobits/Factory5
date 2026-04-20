@@ -6,10 +6,12 @@
  *   (d) install failure surfaces as provisioning.installOk=false, and the
  *       gate.build computation flips to false regardless of pytest's own
  *       exit code.
+ *   (e) ensureAssessorVenv (Phase 5f / I006) — factory-managed per-project
+ *       venv creation + reuse, with graceful fallback semantics.
  *
- * Every test uses the injected deps surface on `pickPython` / `runPytest`
- * so no real subprocess is spawned and no filesystem state beyond tmpdir
- * is mutated.
+ * Every test uses the injected deps surface on `pickPython` / `runPytest` /
+ * `ensureAssessorVenv` so no real subprocess is spawned and no filesystem
+ * state beyond tmpdir is mutated.
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -22,10 +24,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { computeGateResults } from '../assess.js';
 import type { SubprocessResult } from '../run.js';
 import {
+  ensureAssessorVenv,
   extractMinimumPythonVersion,
   pickPython,
   runPytest,
+  type EnsureAssessorVenvDeps,
   type PickPythonDeps,
+  type PythonChoice,
   type RunPytestDeps,
 } from './pytest.js';
 
@@ -212,7 +217,7 @@ describe('runPytest provisioning', () => {
         bin: '/usr/bin/python3.11',
         prefixArgs: [],
         version: '3.11.9',
-        reason: 'test stub',
+        reason: '.venv detected',
       }),
       hasPyproject: async () => true,
       pyprojectHasTestExtra: async () => false,
@@ -244,7 +249,7 @@ describe('runPytest provisioning', () => {
         bin: '/usr/bin/python3.11',
         prefixArgs: [],
         version: '3.11.9',
-        reason: 'test stub',
+        reason: '.venv detected',
       }),
       hasPyproject: async () => true,
       pyprojectHasTestExtra: async () => true,
@@ -266,7 +271,7 @@ describe('runPytest provisioning', () => {
         bin: '/usr/bin/python3.11',
         prefixArgs: [],
         version: '3.11.9',
-        reason: 'test stub',
+        reason: '.venv detected',
       }),
       hasPyproject: async () => true,
       pyprojectHasTestExtra: async () => true,
@@ -292,7 +297,7 @@ describe('runPytest provisioning', () => {
         bin: '/usr/bin/python3.11',
         prefixArgs: [],
         version: '3.11.9',
-        reason: 'test stub',
+        reason: '.venv detected',
       }),
       hasPyproject: async () => true,
       pyprojectHasTestExtra: async () => false,
@@ -312,6 +317,241 @@ describe('runPytest provisioning', () => {
     const summaryLines = result.provisioning?.installSummary?.split('\n') ?? [];
     // Keep the tail bounded at 40 lines
     expect(summaryLines.length).toBeLessThanOrEqual(41);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ensureAssessorVenv — Phase 5f (I006) per-project isolated venv
+// ---------------------------------------------------------------------------
+
+function systemPick(overrides: Partial<PythonChoice> = {}): PythonChoice {
+  return {
+    bin: 'C:\\Windows\\py.exe',
+    prefixArgs: ['-3.11'] as readonly string[],
+    version: '3.11.9',
+    reason: 'requires-python=>=3.11 → py -3.11',
+    ...overrides,
+  };
+}
+
+function venvPick(bin: string): PythonChoice {
+  return { bin, prefixArgs: [], version: '3.11.9', reason: '.venv detected' };
+}
+
+describe('ensureAssessorVenv', () => {
+  it('reuses a pre-existing project .venv without creating an assessor-env', async () => {
+    const projectVenv = '/proj/.venv/bin/python';
+    let spawnCount = 0;
+    const deps: EnsureAssessorVenvDeps = {
+      platform: 'linux',
+      fileExists: async () => true,
+      runSubprocess: async () => {
+        spawnCount += 1;
+        return { stdout: '', stderr: '', exitCode: 0, durationMs: 1 };
+      },
+      probe: async () => '3.11.9',
+    };
+    const result = await ensureAssessorVenv('/proj', venvPick(projectVenv), deps);
+    expect(result.venvSource).toBe('project');
+    expect(result.bin).toBe(projectVenv);
+    expect(result.prefixArgs).toEqual([]);
+    // Project .venv short-circuits before touching the factory dir.
+    expect(spawnCount).toBe(0);
+  });
+
+  it('creates .factory/assessor-env/ via `python -m venv` when no project venv (Unix)', async () => {
+    const expected = join('/proj', '.factory', 'assessor-env', 'bin', 'python');
+    const spawnCalls: { bin: string; args: readonly string[] }[] = [];
+    const existsAfter = new Set<string>();
+    const deps: EnsureAssessorVenvDeps = {
+      platform: 'linux',
+      fileExists: async (p) => existsAfter.has(p),
+      runSubprocess: async (bin, args) => {
+        spawnCalls.push({ bin, args: [...args] });
+        if (args.includes('venv')) existsAfter.add(expected);
+        return { stdout: '', stderr: '', exitCode: 0, durationMs: 10 };
+      },
+      probe: async () => '3.11.9',
+    };
+    const result = await ensureAssessorVenv('/proj', systemPick(), deps);
+    expect(result.venvSource).toBe('factory-managed');
+    expect(result.bin).toBe(expected);
+    expect(result.prefixArgs).toEqual([]);
+    expect(spawnCalls.length).toBe(1);
+    const createCall = spawnCalls[0];
+    expect(createCall).toBeDefined();
+    if (createCall !== undefined) {
+      expect(createCall.bin).toBe('C:\\Windows\\py.exe');
+      expect(createCall.args.slice(0, 3)).toEqual(['-3.11', '-m', 'venv']);
+      // Target path = <projectPath>/.factory/assessor-env
+      expect(createCall.args[3]).toBe(join('/proj', '.factory', 'assessor-env'));
+    }
+  });
+
+  it('uses the Windows Scripts/python.exe path layout', async () => {
+    const projectPath = 'C:\\proj';
+    const expected = join(projectPath, '.factory', 'assessor-env', 'Scripts', 'python.exe');
+    const existsAfter = new Set<string>();
+    const deps: EnsureAssessorVenvDeps = {
+      platform: 'win32',
+      fileExists: async (p) => existsAfter.has(p),
+      runSubprocess: async (_bin, args) => {
+        if (args.includes('venv')) existsAfter.add(expected);
+        return { stdout: '', stderr: '', exitCode: 0, durationMs: 10 };
+      },
+      probe: async () => '3.11.9',
+    };
+    const result = await ensureAssessorVenv(projectPath, systemPick(), deps);
+    expect(result.venvSource).toBe('factory-managed');
+    expect(result.bin).toBe(expected);
+  });
+
+  it('reuses an existing .factory/assessor-env/ interpreter without spawning', async () => {
+    const expected = join('/proj', '.factory', 'assessor-env', 'bin', 'python');
+    let spawnCount = 0;
+    const deps: EnsureAssessorVenvDeps = {
+      platform: 'linux',
+      // The venv interpreter is already present from a prior assess call.
+      fileExists: async (p) => p === expected,
+      runSubprocess: async () => {
+        spawnCount += 1;
+        return { stdout: '', stderr: '', exitCode: 0, durationMs: 0 };
+      },
+      probe: async () => '3.11.9',
+    };
+    const result = await ensureAssessorVenv('/proj', systemPick(), deps);
+    expect(result.venvSource).toBe('factory-managed');
+    expect(result.bin).toBe(expected);
+    expect(result.reason).toContain('reused');
+    expect(spawnCount).toBe(0);
+  });
+
+  it('falls through to system base interpreter when venv creation fails and virtualenv is absent', async () => {
+    const base = systemPick();
+    const deps: EnsureAssessorVenvDeps = {
+      platform: 'linux',
+      fileExists: async () => false,
+      runSubprocess: async () => ({
+        stdout: '',
+        stderr: 'Error: ensurepip is not available',
+        exitCode: 1,
+        durationMs: 5,
+      }),
+      probe: async () => '3.11.9',
+      resolveOnPath: async () => undefined,
+    };
+    const result = await ensureAssessorVenv('/proj', base, deps);
+    expect(result.venvSource).toBe('system');
+    expect(result.bin).toBe(base.bin);
+    expect(result.prefixArgs).toEqual(base.prefixArgs);
+  });
+
+  it('uses virtualenv fallback when `python -m venv` fails but virtualenv is on PATH', async () => {
+    const expected = join('/proj', '.factory', 'assessor-env', 'bin', 'python');
+    const spawnCalls: { bin: string; args: readonly string[] }[] = [];
+    const existsAfter = new Set<string>();
+    const deps: EnsureAssessorVenvDeps = {
+      platform: 'linux',
+      fileExists: async (p) => existsAfter.has(p),
+      runSubprocess: async (bin, args) => {
+        spawnCalls.push({ bin, args: [...args] });
+        if (bin === '/usr/bin/virtualenv') {
+          existsAfter.add(expected);
+          return { stdout: '', stderr: '', exitCode: 0, durationMs: 10 };
+        }
+        // `python -m venv` leg fails.
+        return { stdout: '', stderr: 'no ensurepip', exitCode: 1, durationMs: 5 };
+      },
+      probe: async () => '3.11.9',
+      resolveOnPath: async (name) => (name === 'virtualenv' ? '/usr/bin/virtualenv' : undefined),
+    };
+    const result = await ensureAssessorVenv('/proj', systemPick(), deps);
+    expect(result.venvSource).toBe('factory-managed');
+    expect(result.bin).toBe(expected);
+    // Two spawns: `-m venv` then virtualenv.
+    expect(spawnCalls.length).toBe(2);
+    expect(spawnCalls[1]?.bin).toBe('/usr/bin/virtualenv');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// provisionAssessorEnv — end-to-end wiring (pickPython → ensureAssessorVenv →
+// pip install). Exercises the full runPytest provisioning path without
+// bypassing ensureAssessorVenv.
+// ---------------------------------------------------------------------------
+
+describe('provisionAssessorEnv wires ensureAssessorVenv', () => {
+  let projectDir: string;
+
+  beforeEach(async () => {
+    projectDir = await mkdtemp(join(tmpdir(), 'factory5-provision-'));
+    await mkdir(join(projectDir, 'tests'));
+    await writeFile(join(projectDir, 'tests', 'test_stub.py'), '# placeholder\n');
+    await writeFile(
+      join(projectDir, 'pyproject.toml'),
+      '[project]\nname = "p"\nversion = "0.1.0"\nrequires-python = ">=3.11"\n',
+    );
+  });
+
+  afterEach(async () => {
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  it('installs via the factory-managed venv interpreter when no project .venv exists', async () => {
+    const venvPython =
+      process.platform === 'win32'
+        ? join(projectDir, '.factory', 'assessor-env', 'Scripts', 'python.exe')
+        : join(projectDir, '.factory', 'assessor-env', 'bin', 'python');
+    const deps: RunPytestDeps = {
+      // Base pick: system-interpreter (not a project venv) — forces the
+      // factory-managed branch of ensureAssessorVenv.
+      pickPython: async () => ({
+        bin: '/usr/bin/python3.11',
+        prefixArgs: [],
+        version: '3.11.9',
+        reason: 'requires-python=>=3.11 → python3.11',
+      }),
+      ensureAssessorVenv: async () => ({
+        bin: venvPython,
+        prefixArgs: [],
+        version: '3.11.9',
+        reason: '.factory/assessor-env created',
+        venvSource: 'factory-managed',
+      }),
+      hasPyproject: async () => true,
+      pyprojectHasTestExtra: async () => false,
+      fileExists: async () => true,
+      runSubprocess: async (bin, args) => {
+        if (args.includes('pytest')) return okExit('1 passed in 0.01s\n');
+        return okExit();
+      },
+    };
+    const result = await runPytest(projectDir, {}, deps);
+    expect(result.provisioning?.venvSource).toBe('factory-managed');
+    expect(result.provisioning?.pythonPath).toBe(venvPython);
+    expect(result.provisioning?.installOk).toBe(true);
+  });
+
+  it('propagates venvSource=project when the ensured venv is the user .venv', async () => {
+    const projectVenv = '/proj/.venv/bin/python';
+    const deps: RunPytestDeps = {
+      pickPython: async () => ({
+        bin: projectVenv,
+        prefixArgs: [],
+        version: '3.11.9',
+        reason: '.venv detected',
+      }),
+      hasPyproject: async () => true,
+      pyprojectHasTestExtra: async () => false,
+      fileExists: async () => true,
+      runSubprocess: async (_bin, args) => {
+        if (args.includes('pytest')) return okExit('1 passed in 0.01s\n');
+        return okExit();
+      },
+    };
+    const result = await runPytest(projectDir, {}, deps);
+    expect(result.provisioning?.venvSource).toBe('project');
+    expect(result.provisioning?.pythonPath).toBe(projectVenv);
   });
 });
 
@@ -337,6 +577,7 @@ describe('computeGateResults + provisioning', () => {
       pythonPath: '/usr/bin/python3.11',
       pythonVersion: '3.11.9',
       installOk: true,
+      venvSource: 'factory-managed',
     });
     expect(result.build).toBe(true);
     expect(result.verify).toBe(true);
@@ -348,6 +589,7 @@ describe('computeGateResults + provisioning', () => {
       pythonVersion: '3.11.9',
       installOk: false,
       installSummary: 'ERROR: Could not install',
+      venvSource: 'factory-managed',
     });
     expect(result.build).toBe(false);
     expect(result.verify).toBe(false);

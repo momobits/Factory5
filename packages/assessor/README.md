@@ -37,6 +37,6 @@ Also exports `runPytest`, `checkPythonImports`, and individual artifact checks f
 
 ## Status
 
-Implemented in Phase 1 (pytest + Python import + artifact + git checks). Other language runners — jest/vitest, cargo, go — land in Phase 2 when we build projects that need them.
+Implemented in Phase 1 (pytest + Python import + artifact + git checks). Phase 5c wired per-project environment provisioning (pickPython + editable install, ADR 0017). Phase 5f closed I006 by routing every install through an isolated venv — precedence is project `.venv/` → factory-managed `.factory/assessor-env/` → base interpreter fallback, surfaced on `AssessResult.provisioning.venvSource`. Other language runners — jest/vitest, cargo, go — land in Phase 2 when we build projects that need them.
 
-15 unit tests cover summary parsing, `pathToModule` conversion, every artifact check, and `assess()` on temp dirs.
+42 unit tests cover summary parsing, `pathToModule` conversion, every artifact check, `pickPython` priority order + demotion, `ensureAssessorVenv` across Unix + Windows + cache-reuse + fallback paths, `provisionAssessorEnv` wiring, and gate computation edge cases.

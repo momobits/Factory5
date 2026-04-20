@@ -31,7 +31,7 @@ export function projectPaths(projectPath: string): ProjectPaths {
   return {
     root: projectPath,
     claudeMd: join(projectPath, 'CLAUDE.md'),
-    buildMd: join(projectPath, 'BUILD.md'),
+    buildMd: join(factory, 'BUILD.md'),
     docs: join(projectPath, 'docs'),
     knowledge: join(projectPath, 'docs', 'knowledge'),
     factory,

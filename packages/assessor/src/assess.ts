@@ -171,6 +171,7 @@ export async function assess(opts: AssessOptions): Promise<AssessResult> {
               pythonPath: result.provisioning.pythonPath,
               pythonVersion: result.provisioning.pythonVersion,
               installOk: result.provisioning.installOk,
+              venvSource: result.provisioning.venvSource,
             },
           }
         : {}),

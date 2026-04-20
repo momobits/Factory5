@@ -2,8 +2,9 @@
 id: I001
 severity: MEDIUM
 area: brain/planner
-status: OPEN
+status: RESOLVED
 created: 2026-04-19
+resolved: 2026-04-19
 ---
 
 # Planner emits a fully serial task chain on simple specs
@@ -70,8 +71,31 @@ real. No pair of independent tasks exists in this architecture, so
 ready task). **Not a bug in the planner; the spec's architecture doesn't
 admit parallelism.**
 
-Status: **OPEN** pending validation on a project spec with genuine
-independent modules (e.g. a project with two unrelated utilities that
-share only the scaffolder). If such a re-run shows the planner correctly
-emits sibling tasks, I001 can be marked RESOLVED. The dependency-pruner
-option is parked — no evidence the prompt alone is insufficient.
+**Phase 5d update (2026-04-19)**: validated on a parallel-admitting
+spec.
+
+Added a new template `templates/parallel-example/` — a tiny CLI with two
+utilities (`rot13` + `art`) that share zero imports plus a `cli`
+dispatcher. Live run (directive `01KPJJP52JCWJVH2DVBVCSACVE`): planner
+emitted the ideal 5-task DAG — scaffolder → {rot13 builder, art
+builder} both `dependsOn: [scaffolder]` only, no edge between them →
+cli dispatcher `dependsOn: [scaffolder, rot13, art]` (data flow from
+both siblings) → verifier. Pool launched `rot13` and `art` at the
+**identical millisecond** (09:58:14.283), confirming the prompt-tuned
+planner emits siblings and the pool actually runs them concurrently.
+
+A second data point: Run A (`factory build example`, directive
+`01KPJHBK5Z2ZB7BPGE0N93M5MG`) on the original `example` spec also
+produced parallel siblings this time — `api` + `formatter` launched
+at 09:40:01.872, same millisecond. The difference vs Phase 5c is the
+updated **architect** prompt (Phase 5d work): adding the rule
+"Independent modules are load-bearing: if module A does not import
+module B, say so plainly" caused the architect to design `formatter`
+as reading only from `models` (not from `api`), enabling the planner
+to put `api` + `formatter` at the same DAG level.
+
+Status: **RESOLVED**. Prompt tuning alone (planner.md + architect.md +
+their inline counterparts in `packages/brain/src/`) produces correct
+sibling parallelism on both a spec authored for it and a legacy spec
+that previously serialised. The dependency-pruner option stays parked —
+the prompt-only fix held up.

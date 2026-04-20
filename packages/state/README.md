@@ -41,6 +41,30 @@ insertDirective(db, {
 const claimed = claimNextDirective(db, { claimedBy: `factory-${process.pid}` });
 ```
 
+### Recovering stuck directives
+
+A directive flips to `running` while a brain owns it; if that brain is
+killed before writing a terminal status, the row stays `running`
+indefinitely. Two recovery paths close that gap:
+
+```ts
+import { directives, MarkBlockedError, reconcileOrphanedDirectives } from '@factory5/state';
+
+// Manual operator path (also exposed as `factory directive mark-blocked`):
+directives.markBlocked(db, directiveId, 'reason text'); // throws MarkBlockedError
+// if unknown or already terminal.
+
+// Daemon-startup sweep (wired in `@factory5/daemon`): flip orphaned rows
+// whose owning PID is gone AND whose last model_usage activity is older
+// than 10 min. Keeps concurrent `factory build --inline` runs safe via
+// the activity floor.
+reconcileOrphanedDirectives(db, log);
+```
+
+Both paths record the reason in the new `blocked_reason TEXT` column
+(migration 002) so `factory status` / later inspection explain why a
+row was flipped.
+
 ## Conventions
 
 - **Always validate at boundaries.** Inputs to insert helpers are validated against the matching `@factory5/core` schema before SQL is run.

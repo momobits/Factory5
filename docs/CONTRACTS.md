@@ -69,8 +69,11 @@ type Directive = {
   autonomy: AutonomyMode;
   createdAt: string; // ISO8601
   status: 'pending' | 'claimed' | 'running' | 'blocked' | 'complete' | 'failed';
-  claimedBy?: string; // brain process id (PID + hostname)
+  claimedBy?: string; // `inline-<pid>` / `serve-<pid>`, written by the brain
   parentDirectiveId?: string; // when one directive spawns another
+  blockedReason?: string; // recorded when status flips to `blocked` via
+  //   markBlocked / reconcileOrphanedDirectives /
+  //   the `factory directive mark-blocked` CLI
 };
 ```
 

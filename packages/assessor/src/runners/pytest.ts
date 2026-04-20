@@ -15,6 +15,13 @@
  * project's `requires-python` constraint, then PATH `python`) and run
  * `python -m pip install -e .[test]` so the built project's own dependencies
  * are on the import path.
+ *
+ * ADR 0017 Implementation Notes (Phase 5f, I006): the install site is always
+ * a venv. Precedence: project `.venv/` → `<projectPath>/.factory/assessor-env/`
+ * → base interpreter (fallback, logged warn). {@link ensureAssessorVenv}
+ * sits between {@link pickPython} and the install step so `pip install -e .`
+ * can no longer land in the user's site-packages and poison sibling
+ * factory workspaces.
  */
 
 import { constants as fsConstants } from 'node:fs';
@@ -295,6 +302,198 @@ export async function pickPython(
 }
 
 // ---------------------------------------------------------------------------
+// Per-project assessor venv (ADR 0017 impl. notes / I006 fix)
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the assessor's `pip install -e .` actually lands. Stable across
+ * runs of the same project; regenerated on demand per-project.
+ *
+ * - `'project'`: a pre-existing `<projectPath>/.venv/` (user-controlled).
+ *   {@link pickPython} already prefers this; {@link ensureAssessorVenv}
+ *   keeps it in place.
+ * - `'factory-managed'`: `<projectPath>/.factory/assessor-env/`. Created on
+ *   demand, reused across incremental assesses within one workspace,
+ *   gitignored via the existing `.factory/` guard.
+ * - `'system'`: fallback — used only if `python -m venv` (and the
+ *   optional `virtualenv` shim) both fail. Carries the pre-I006 risk of
+ *   user-site pollution, so we log a warn and surface it up to
+ *   `AssessResult.provisioning.venvSource` for operator attention.
+ */
+export type VenvSource = 'project' | 'factory-managed' | 'system';
+
+export interface AssessorVenvChoice extends PythonChoice {
+  venvSource: VenvSource;
+}
+
+/**
+ * Testing seam for {@link ensureAssessorVenv}. Real IO by default; tests
+ * inject fakes so no venv is actually created on disk and no subprocess
+ * is spawned.
+ */
+export interface EnsureAssessorVenvDeps {
+  fileExists?: (p: string) => Promise<boolean>;
+  runSubprocess?: (
+    bin: string,
+    args: readonly string[],
+    opts?: { cwd?: string; timeoutMs?: number; env?: Record<string, string> },
+  ) => Promise<SubprocessResult>;
+  probe?: (bin: string, prefixArgs: readonly string[]) => Promise<string | undefined>;
+  resolveOnPath?: (name: string) => Promise<string | undefined>;
+  platform?: NodeJS.Platform;
+}
+
+function resolveEnsureVenvDeps(override: EnsureAssessorVenvDeps): Required<EnsureAssessorVenvDeps> {
+  return {
+    fileExists: override.fileExists ?? defaultFileExists,
+    runSubprocess: override.runSubprocess ?? runSubprocess,
+    probe: override.probe ?? defaultProbe,
+    resolveOnPath: override.resolveOnPath ?? resolveOnPath,
+    platform: override.platform ?? processPlatform,
+  };
+}
+
+function venvInterpreterPath(envPath: string, platform: NodeJS.Platform): string {
+  return platform === 'win32'
+    ? join(envPath, 'Scripts', 'python.exe')
+    : join(envPath, 'bin', 'python');
+}
+
+/**
+ * Ensure the assessor has an isolated Python env for `projectPath` and
+ * return the interpreter to use for `pip install` / pytest / imports.
+ *
+ * Precedence:
+ *   1. If `basePython` was already picked from a project `.venv/` (i.e.
+ *      `pickPython` short-circuited on step 2), reuse it. The user's
+ *      venv is authoritative.
+ *   2. Otherwise resolve `<projectPath>/.factory/assessor-env/`:
+ *      - If the venv's interpreter exists on disk, reuse it (cache hit
+ *        across incremental assesses).
+ *      - Else bootstrap via `<basePython> -m venv <envPath>` with
+ *        `{ shell: false }`.
+ *      - If `-m venv` fails and `virtualenv` is on PATH, retry via
+ *        `virtualenv -p <basePython> <envPath>` (modern-Python hosts
+ *        never hit this).
+ *   3. Last resort: return `basePython` with `venvSource: 'system'` and
+ *      log a warn so operators can install venv support. The install step
+ *      still runs but carries the pre-I006 user-site-pollution risk.
+ *
+ * The returned choice has empty `prefixArgs` when a venv interpreter is
+ * used — venv pythons are invoked directly, not via the `py` launcher.
+ */
+export async function ensureAssessorVenv(
+  projectPath: string,
+  basePython: PythonChoice,
+  depsOverride: EnsureAssessorVenvDeps = {},
+): Promise<AssessorVenvChoice> {
+  const deps = resolveEnsureVenvDeps(depsOverride);
+
+  // Step 1 — pickPython already landed on a project .venv/. Honour it.
+  if (basePython.reason === '.venv detected') {
+    return { ...basePython, venvSource: 'project' };
+  }
+
+  // Step 2 — factory-managed venv under .factory/assessor-env/.
+  const envPath = join(projectPath, '.factory', 'assessor-env');
+  const interpreterPath = venvInterpreterPath(envPath, deps.platform);
+
+  if (await deps.fileExists(interpreterPath)) {
+    const v = await deps.probe(interpreterPath, []);
+    log.debug(
+      { projectPath, interpreter: interpreterPath, version: v ?? '' },
+      'assessor-env: reusing existing venv',
+    );
+    return {
+      bin: interpreterPath,
+      prefixArgs: [],
+      version: v ?? basePython.version,
+      reason: '.factory/assessor-env reused',
+      venvSource: 'factory-managed',
+    };
+  }
+
+  log.info(
+    {
+      projectPath,
+      envPath,
+      basePython: basePython.bin,
+      basePrefix: basePython.prefixArgs,
+      baseVersion: basePython.version,
+    },
+    'assessor-env: creating venv',
+  );
+
+  const venvRes = await deps.runSubprocess(
+    basePython.bin,
+    [...basePython.prefixArgs, '-m', 'venv', envPath],
+    { cwd: projectPath, timeoutMs: 60_000 },
+  );
+
+  if (venvRes.exitCode === 0 && (await deps.fileExists(interpreterPath))) {
+    const v = await deps.probe(interpreterPath, []);
+    log.info(
+      {
+        projectPath,
+        interpreter: interpreterPath,
+        version: v ?? '',
+        durationMs: venvRes.durationMs,
+      },
+      'assessor-env: venv created',
+    );
+    return {
+      bin: interpreterPath,
+      prefixArgs: [],
+      version: v ?? basePython.version,
+      reason: '.factory/assessor-env created',
+      venvSource: 'factory-managed',
+    };
+  }
+
+  log.warn(
+    {
+      projectPath,
+      envPath,
+      exitCode: venvRes.exitCode,
+      stderrTail: tailLines(venvRes.stderr, 10),
+    },
+    'assessor-env: `python -m venv` failed; trying virtualenv fallback',
+  );
+
+  const virtualenvBin = await deps.resolveOnPath('virtualenv');
+  if (virtualenvBin !== undefined) {
+    const veRes = await deps.runSubprocess(virtualenvBin, ['-p', basePython.bin, envPath], {
+      cwd: projectPath,
+      timeoutMs: 60_000,
+    });
+    if (veRes.exitCode === 0 && (await deps.fileExists(interpreterPath))) {
+      const v = await deps.probe(interpreterPath, []);
+      log.info(
+        { projectPath, interpreter: interpreterPath, version: v ?? '' },
+        'assessor-env: venv created via virtualenv fallback',
+      );
+      return {
+        bin: interpreterPath,
+        prefixArgs: [],
+        version: v ?? basePython.version,
+        reason: '.factory/assessor-env created (virtualenv fallback)',
+        venvSource: 'factory-managed',
+      };
+    }
+    log.warn(
+      { projectPath, envPath, exitCode: veRes.exitCode },
+      'assessor-env: virtualenv fallback also failed',
+    );
+  }
+
+  log.warn(
+    { projectPath, basePython: basePython.bin },
+    'assessor-env: no venv could be created; falling through to base interpreter (risks I006-style user-site pollution — install python -m venv support on the host)',
+  );
+  return { ...basePython, venvSource: 'system' };
+}
+
+// ---------------------------------------------------------------------------
 // Shared assessor-env provisioning (ADR 0017)
 // ---------------------------------------------------------------------------
 
@@ -303,11 +502,12 @@ export interface ProvisioningReport {
   pythonVersion: string;
   installOk: boolean;
   installSummary?: string;
+  venvSource: VenvSource;
 }
 
 export interface AssessorEnv {
-  /** The chosen interpreter — use `bin` + `prefixArgs` to invoke it. */
-  choice: PythonChoice;
+  /** The chosen interpreter — use `bin` + `prefixArgs` to invoke it. Carries `venvSource` for the install site. */
+  choice: AssessorVenvChoice;
   /** Install state; mirrored into {@link PytestResult.provisioning} and {@link AssessResult.provisioning}. */
   provisioning: ProvisioningReport;
 }
@@ -318,6 +518,10 @@ export interface AssessorEnv {
  */
 export interface ProvisionEnvDeps {
   pickPython?: (projectPath: string, opts: PickPythonOptions) => Promise<PythonChoice | undefined>;
+  ensureAssessorVenv?: (
+    projectPath: string,
+    basePython: PythonChoice,
+  ) => Promise<AssessorVenvChoice>;
   runSubprocess?: (
     bin: string,
     args: readonly string[],
@@ -379,6 +583,7 @@ export async function provisionAssessorEnv(
 ): Promise<AssessorEnv | undefined> {
   const deps = {
     pickPython: depsOverride.pickPython ?? pickPython,
+    ensureAssessorVenv: depsOverride.ensureAssessorVenv ?? ensureAssessorVenv,
     runSubprocess: depsOverride.runSubprocess ?? runSubprocess,
     hasPyproject: depsOverride.hasPyproject ?? projectHasPyproject,
     pyprojectPickExtra: depsOverride.pyprojectPickExtra ?? pyprojectPickExtra,
@@ -387,22 +592,36 @@ export async function provisionAssessorEnv(
     pyprojectHasTestExtraLegacy: depsOverride.pyprojectHasTestExtra,
   };
 
-  const choice = await deps.pickPython(
+  const basePick = await deps.pickPython(
     projectPath,
     opts.pythonBin !== undefined ? { pythonBin: opts.pythonBin } : {},
   );
-  if (choice === undefined) return undefined;
+  if (basePick === undefined) return undefined;
 
   log.info(
     {
       projectPath,
-      chosen: choice.bin,
-      prefixArgs: choice.prefixArgs,
-      version: choice.version,
-      reason: choice.reason,
-      demoted: choice.demoted,
+      chosen: basePick.bin,
+      prefixArgs: basePick.prefixArgs,
+      version: basePick.version,
+      reason: basePick.reason,
+      demoted: basePick.demoted,
     },
     'pickPython: chose interpreter',
+  );
+
+  // ADR 0017 impl. notes / I006: route installs through an isolated venv.
+  const choice = await deps.ensureAssessorVenv(projectPath, basePick);
+  log.info(
+    {
+      projectPath,
+      bin: choice.bin,
+      prefixArgs: choice.prefixArgs,
+      version: choice.version,
+      venvSource: choice.venvSource,
+      reason: choice.reason,
+    },
+    'assessor-env: interpreter ready',
   );
 
   if (!(await deps.hasPyproject(projectPath))) {
@@ -412,6 +631,7 @@ export async function provisionAssessorEnv(
         pythonPath: choice.bin,
         pythonVersion: choice.version,
         installOk: true,
+        venvSource: choice.venvSource,
       },
     };
   }
@@ -481,6 +701,7 @@ export async function provisionAssessorEnv(
       pythonVersion: choice.version,
       installOk,
       ...(installSummary !== undefined ? { installSummary } : {}),
+      venvSource: choice.venvSource,
     },
   };
 }
@@ -523,6 +744,10 @@ export interface RunPytestDeps {
   fileExists?: (p: string) => Promise<boolean>;
   // Legacy seams retained for provisionAssessorEnv tests that inject pytest-runPytest-style deps.
   pickPython?: (projectPath: string, opts: PickPythonOptions) => Promise<PythonChoice | undefined>;
+  ensureAssessorVenv?: (
+    projectPath: string,
+    basePython: PythonChoice,
+  ) => Promise<AssessorVenvChoice>;
   hasPyproject?: (projectPath: string) => Promise<boolean>;
   pyprojectHasTestExtra?: (projectPath: string) => Promise<boolean>;
 }
@@ -553,6 +778,8 @@ export async function runPytest(
       ((pp: string, o: { pythonBin?: string; installTimeoutMs?: number }) => {
         const legacyDeps: ProvisionEnvDeps = {};
         if (depsOverride.pickPython !== undefined) legacyDeps.pickPython = depsOverride.pickPython;
+        if (depsOverride.ensureAssessorVenv !== undefined)
+          legacyDeps.ensureAssessorVenv = depsOverride.ensureAssessorVenv;
         if (depsOverride.runSubprocess !== undefined)
           legacyDeps.runSubprocess = depsOverride.runSubprocess;
         if (depsOverride.hasPyproject !== undefined)

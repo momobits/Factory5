@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { newId } from '@factory5/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -220,7 +220,7 @@ describe('readiness', () => {
 describe('custom pre-existing files', () => {
   it('does not overwrite an existing BUILD.md on appendBuildLog', async () => {
     const bp = projectPaths(projectDir).buildMd;
-    await mkdir(join(projectDir), { recursive: true });
+    await mkdir(dirname(bp), { recursive: true });
     await writeFile(bp, '# BUILD.md\n\n## Log\n\n- pre-existing line\n', 'utf8');
     await appendBuildLog(projectDir, 'new entry', new Date('2026-04-18T11:00:00Z'));
     const content = await readFile(bp, 'utf8');

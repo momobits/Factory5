@@ -11,6 +11,7 @@ Commander-based CLI. Used by the `factory` binary in `apps/factory`.
 | `factory build <project> [--autonomy … --concurrency … --inline]` | 1–3   | **done** | Delegates to factoryd if running, else inline                                 |
 | `factory chat [--autonomy …]`                                     | 3     | **done** | Interactive REPL against factoryd (daemon must be up)                         |
 | `factory daemon start\|stop\|status\|restart`                     | 3     | **done** | Lifecycle; refuses duplicate starts via pidfile                               |
+| `factory directive mark-blocked <id> [--reason …]`                | 5     | **done** | Flip a stuck `running` directive to `blocked` (manual recovery)               |
 | `factory doctor [--skip-call] [--skip-discord]`                   | 1/4   | **done** | Provider probe + triage round-trip + optional Discord reachability probe      |
 | `factory init [--discord-token … --discord-application-id … ...]` | 1/4   | **done** | Writes `config.toml`; populates `[channels.discord]` when `--discord-*` given |
 | `factory resume <project>`                                        | 2     | **done** | Resume the most recent build for a project                                    |
@@ -80,6 +81,23 @@ factory answer 01K0…ULID -    # read answer from stdin
 ```
 
 Writes `pending_questions.answer` + `answered_at`. The brain's polling loop picks it up within 1 s and unblocks its directive. The daemon does **not** need to be running — SQLite is the bus.
+
+## `factory directive mark-blocked <id> [--reason <text>]`
+
+Manually flip a directive from `running` to `blocked`. Useful when the
+brain left a directive stuck after an escalation-kill (shell timeout,
+ctrl-C, background-task kill) and you want a clean status without
+poking SQL by hand.
+
+```
+factory directive mark-blocked 01K0…ULID --reason "ran out of budget"
+```
+
+Refuses to touch directives that aren't `running` (already-terminal
+rows exit 2 with a message). Works without the daemon. The reason is
+stored in `directives.blocked_reason`. For the automated version —
+"sweep at daemon startup" — see `reconcileOrphanedDirectives` in
+`@factory5/state`, which is wired into `factoryd` automatically.
 
 ## `factory chat`
 

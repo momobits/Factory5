@@ -1,0 +1,284 @@
+Read CLAUDE.md, then docs/Phase5_Progress.md — the Phase 5 roadmap (which
+now includes the close-out-rerun row). Then docs/PROGRESS.md, the last
+two entries (the 2026-04-19 Phase 5 close-out attempt and the
+close-out-rerun addendum). Skim ADR 0017 (assessor env provisioning —
+the direction this session extends, NOT supersedes). Read the I006 issue
+file in full:
+docs/issues/I006-assessor-pip-install-pollutes-user-site.md.
+
+The close-out rerun landed Run B green end-to-end (directive
+`01KPK1CM3X6JXHQ5AVCAJ6QR46` terminated `complete` LIVE with all gates
+true — first ever in Phase 5). Run A attempt-3 also came in at 6/6
+tasks + 58 tests but needed a manual `py -3.11 -m pip uninstall -y
+example-cli-app` + `scripts/reassess.ts` to see green gates, because a
+prior attempt's `pip install -e .` had left `example-cli-app`
+registered in the user-site with `sys.path` pointing at the stale
+workspace. That's **I006** — the last remaining HIGH, and the reason
+Phase 5 closed 5/6 (Outcome β on the strict rubric) instead of 6/6.
+
+Phase 5f fixes I006 so the close-out criteria can re-score to a clean
+6/6 on a subsequent rerun and Phase 5 formally closes. Pure
+code + unit tests + one targeted live build to confirm. No prompt
+changes, no brain/worker touches.
+
+---
+
+Step 1 — Read the existing implementation.
+
+All in `packages/assessor/src/runners/pytest.ts`:
+
+  a. `pickPython(opts)` — the helper that chooses an interpreter.
+     Today: prefers `<projectPath>/.venv/Scripts/python.exe` (Windows)
+     or `<projectPath>/.venv/bin/python` (Unix) when present; parses
+     `pyproject.toml`'s `requires-python` and prefers `py -3.11` /
+     `python3.11` when the constraint calls for 3.11+; otherwise falls
+     back to bare `python`. Note the return shape (likely a
+     `{chosen, prefixArgs, version, reason}` object or similar).
+
+  b. The assessor's install step. Today it runs `<chosen> [prefixArgs]
+     -m pip install -e ".[dev]"` (falling back to `-e .`) from the
+     project root. When `<chosen>` is the system interpreter, pip's
+     default is to install into the current user's site
+     (`%APPDATA%\Python\Python311\site-packages` on Windows,
+     `~/.local/lib/python3.11/site-packages` on Linux) and register a
+     `.pth` that puts the project's `src/` on every subsequent
+     invocation's `sys.path`. That's I006.
+
+  c. The pytest invocation step. Same `<chosen> [prefixArgs] -m pytest
+     ...` — uses whichever interpreter the install step used, so once
+     we pivot to a venv for install, pytest must pivot with it.
+
+  d. The import-check step (`checkPythonImports` if that's the name)
+     — also uses the picked interpreter. Must pivot too.
+
+Skim `packages/assessor/src/runners/pytest.test.ts` so you know the
+existing tests' shape before adding new ones.
+
+---
+
+Step 2 — Pick a fix tier. I006's issue file enumerates three:
+
+  Tier 1 — per-project isolated venv in `.factory/assessor-env/`.
+  Tier 2 — `pip install --target <tmpdir>` + PYTHONPATH injection.
+  Tier 3 — pre-uninstall the project's distribution name before install.
+
+**Ship tier 1.** It is the smallest, cleanest change that fully closes
+the issue, aligns with ADR 0017's direction (assessor provisions its
+own env), and gracefully reuses `.factory/`'s gitignored home.
+Tier 2's PYTHONPATH routing is fiddly around console-scripts and
+binary wheels; tier 3 is a loud mutation of the user's global env that
+only covers the same-name-repeated case.
+
+Respect ADR 0017's precedence: **if the project already has its own
+`<projectPath>/.venv/`, prefer it** (user-controlled env). Only
+fall through to `.factory/assessor-env/` when no project-level venv
+exists. This keeps a developer's deliberate venv setup authoritative.
+
+---
+
+Step 3 — Implement.
+
+  a. `packages/assessor/src/runners/pytest.ts`:
+
+     - New helper `ensureAssessorVenv({ projectPath, basePython })`:
+       1. If `pickProjectVenv(projectPath)` returns a valid venv
+          interpreter (i.e. the existing `.venv/` precedence), return
+          that — don't create an assessor-managed env.
+       2. Otherwise compute
+          `envPath = join(projectPath, '.factory', 'assessor-env')`.
+          Platform-aware interpreter path:
+          - Windows: `join(envPath, 'Scripts', 'python.exe')`
+          - Unix:    `join(envPath, 'bin', 'python')`
+       3. If the interpreter file doesn't exist, create the venv:
+          spawn `basePython.chosen [basePython.prefixArgs] -m venv
+          <envPath>` with `{ shell: false }` and explicit args.
+          Surface stderr on failure; don't swallow.
+       4. If creation succeeded, log at `info` with `envPath` +
+          `basePython.version` so ops can trace which interpreter
+          seeded the venv.
+       5. Return a `PickedPython`-shaped object pointing at the venv's
+          interpreter with **empty `prefixArgs`** (a venv's python is
+          invoked directly, not via `py -3.11`).
+       6. Export the helper so the test file can unit-test it.
+
+     - Thread the helper into the assessor's main flow:
+         basePicked = pickPython(opts)
+         picked     = await ensureAssessorVenv({ projectPath, basePython: basePicked })
+         install(picked, ...)    // unchanged
+         pytest(picked, ...)     // unchanged
+         checkImports(picked, ...) // unchanged
+       Every downstream step that today uses `basePicked` must use
+       `picked`.
+
+     - `AssessResult.provisioning` gets a new optional field:
+       `venvSource: 'project' | 'factory-managed' | 'system'` — 'project'
+       when `.venv/` already existed, 'factory-managed' when we
+       created `.factory/assessor-env/`, 'system' only if the fallback
+       somehow lands on a non-venv interpreter (should not happen once
+       tier 1 lands; log a warn if it does). Useful for debugging.
+
+     - Cache by reuse: the "is the interpreter file present?" check at
+       step 3 IS the cache. Incremental assesses on the same project
+       get a hot venv — no recreation, no re-install of base tooling.
+       Package install still runs every assess (cheap in incremental
+       mode — pip detects no changes and exits fast).
+
+  b. `packages/assessor/src/runners/pytest.test.ts`:
+
+     - `ensureAssessorVenv returns project .venv when present` — seed a
+       fake `<tmp>/.venv/Scripts/python.exe` (or `bin/python`), assert
+       the helper returns that without creating `.factory/assessor-env/`.
+     - `ensureAssessorVenv creates .factory/assessor-env/ when no
+       project venv` — no fake `.venv/`, stub out the subprocess spawn
+       to simulate `python -m venv`, assert creation and correct
+       interpreter path returned. Don't actually shell out to python
+       in unit tests — that's a live integration.
+     - `ensureAssessorVenv reuses an existing assessor venv` — seed a
+       pre-existing `.factory/assessor-env/.../python` file, call
+       twice, assert the spawn stub is called zero times.
+     - Platform handling: one parametrised case for Windows path
+       (`Scripts/python.exe`) and one for POSIX (`bin/python`). Use
+       `process.platform` mocking via your existing pattern (grep the
+       test file for how `pickPython` already handles this — mirror
+       that).
+
+     - End-to-end assess test (if one already exists) — extend it to
+       assert `provisioning.venvSource` is `'factory-managed'` on a
+       project without `.venv/`, and that the install went to the
+       factory venv (check for `<projectPath>/.factory/assessor-env/`
+       existing on disk).
+
+     - Aim for +3-5 tests. Workspace total should go from 247 to
+       ~250-252.
+
+  c. `docs/decisions/0017-assessor-project-env-provisioning.md`:
+
+     - Do **not** write a new ADR. Add a short "Implementation notes"
+       section (or extend an existing one) to 0017 describing:
+       - Precedence: project `.venv/` → `.factory/assessor-env/` →
+         system (deprecated fallback).
+       - Why `.factory/assessor-env/` (gitignored, per-project,
+         reused across incremental assesses).
+       - Pointer to I006 for the incident history.
+
+  d. No brain / worker / wiki / CLI / prompts changes. If you find
+     yourself tempted to touch those, stop — you're out of scope.
+
+After each concrete edit: `pnpm build`, `pnpm --filter @factory5/assessor test`
+(fast iteration), then full `pnpm test` once the assessor tests are green.
+Then `pnpm lint`, `pnpm format:check`. Expect final workspace test count
+in the 250-252 range (247 + 3-5 new).
+
+---
+
+Step 4 — Targeted live validation.
+
+Budget: $3-4. Only do this step if Steps 1–3 are fully green.
+
+BEFORE:
+
+  1. Scrub any residual pollution from prior Phase 5 close-out runs:
+         py -3.11 -m pip uninstall -y example-cli-app
+     (benign if not installed). This clears the specific sys.path
+     entry that bit Run A attempt-3.
+
+  2. `ls "$LOCALAPPDATA/factory5/factoryd.pid"` → absent.
+
+  3. `factory doctor --skip-discord` → green. Budget $0.05.
+
+  4. Fresh workspace `/c/Users/Momo/factory5-v5f-example`.
+
+  5. Confirm `scripts/reassess.ts` still exists (the close-out used
+     it for the I006 workaround) — useful as a belt-and-braces check
+     after the live run.
+
+RUN (only if doctor is green):
+
+  factory build example --autonomy autonomous --concurrency 2 \
+    --workspace /c/Users/Momo/factory5-v5f-example
+
+  Expected signals:
+
+    - `pool: task started` pair within <2 s for the two siblings (I001
+      still holds).
+    - Every sibling's `worktree: merged and removed` fires (I004 +
+      I005 still hold).
+    - **New**: one or two `assessor-env: creating venv` logs from
+      `ensureAssessorVenv` on the first assess pass. Subsequent
+      assesses (there's only one per directive today) won't repeat
+      the line because the venv is reused.
+    - `assessor-env: install complete installOk: true`.
+    - `assess: complete gate: {build: true, integration: true, verify:
+      true}` — and critically, `provisioning.venvSource:
+      'factory-managed'` (or `'project'` if the project template has
+      a `.venv/`, but templates/example doesn't).
+    - `terminalStatus: complete`.
+
+  IF `gate.build: false` STILL fires with `importErrors` pointing at
+  another workspace's `src/...`: the venv isn't actually isolated from
+  user-site. Check:
+    - `<projectPath>/.factory/assessor-env/pyvenv.cfg` should have
+      `include-system-site-packages = false` (venv's default on 3.3+).
+    - `<venv-python> -c "import sys; print(sys.path)"` should NOT
+      contain `%APPDATA%\Python\Python311\site-packages`.
+  Most likely cause if it's contaminated: `python -m venv` was invoked
+  with `--system-site-packages` somehow. Don't add that flag.
+
+  Optional stress-test (adds $3-4):
+
+    factory build example --autonomy autonomous --concurrency 2 \
+      --workspace /c/Users/Momo/factory5-v5f-example-2
+
+  Second run of the same-named spec in a different workspace — this
+  is the exact scenario that tripped I006 pre-fix. Post-fix, each
+  workspace gets its own `.factory/assessor-env/` and the two
+  installs don't see each other. If gate stays green, I006 is
+  fully closed.
+
+AFTER:
+
+  - Append a dated entry to `docs/PROGRESS.md`: I006 RESOLVED via
+    per-project assessor venv; +3-5 assessor tests; live run
+    evidence (gate line + venvSource); spend. If the stress-test
+    ran, include both spends.
+  - Flip `docs/issues/INDEX.md` — move I006 to Resolved with today's
+    date.
+  - Update I006 frontmatter (`status: RESOLVED`,
+    `resolved: YYYY-MM-DD`) and fill in the Resolution section
+    pointing at the implementation + ADR 0017 note.
+  - Update `docs/Phase5_Progress.md`: add a **5g** row reflecting the
+    I006 fix (or reuse the 5f slot if you prefer — pick one and be
+    consistent with PROGRESS). Mark Phase 5's 6-criterion scoreboard
+    as fully ✅ on a post-5g rerun if one happens; at minimum note
+    that I006 is no longer a carry-over.
+  - If `scripts/reassess.ts` runs green against the 5f live
+    workspace's plan.json (as a belt-and-braces), note that too.
+
+---
+
+Whichever step fails, fix the assessor (not the brain, not the
+prompts). If `ensureAssessorVenv` can't create a venv because the base
+python lacks `venv` (very rare on modern 3.11+), fall back to
+`virtualenv` if available with a clear log warning — but don't
+regress to the user-site path that caused I006. If that fallback
+itself isn't present, raise `AssessResult.provisioning.venvSource:
+'system'` + log a warn so ops can install `python -m venv` support on
+the host.
+
+If the live run surfaces a *different* issue (unlikely — I006's path
+is narrow and contained), follow the I004/I005 pattern: file it
+concretely, don't hotfix the unrelated surface, close-out re-scores
+based on what's proven.
+
+---
+
+DO NOT in this session: touch brain / worker / wiki / core / CLI /
+prompts / templates; write a new ADR (0017 already covers the
+direction; implementation notes is enough); implement worker-subprocess
+`ask_user` (still deferred); add `max_usd` enforcement; begin Phase 6
+work (cross-project findings registry, GitHub channel, Telegram, web
+UI) — that's the session AFTER 5f closes.
+
+Start this in a fresh conversation. The Phase 5 close-out's context is
+captured in PROGRESS.md + Phase5_Progress.md + docs/issues/I006; 5f
+reads cleanest from a clean slate.

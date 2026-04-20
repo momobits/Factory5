@@ -23,7 +23,7 @@
  */
 
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { createLogger } from '@factory5/logger';
 import { simpleGit, type SimpleGit } from 'simple-git';
@@ -32,6 +32,23 @@ const log = createLogger('worker.worktree');
 
 /** Relative path (from project root) where all per-task worktrees live. */
 export const WORKTREES_SUBDIR = '.factory/worktrees';
+
+/**
+ * Per-project async mutex for the merge-back phase. Two sibling tasks that
+ * finish concurrently both call `mergeAndRemove` against the same `.git/`;
+ * on Windows the second `git merge` was observed to log success but never
+ * advance `main`'s ref (I004). Chaining the merges per project eliminates
+ * the race without restricting the rest of the pipeline.
+ *
+ * Keyed by the resolved (and on Windows lowercased) project path so `.`,
+ * relative, and absolute forms collapse to the same entry.
+ */
+const projectMergeQueues = new Map<string, Promise<unknown>>();
+
+function mergeQueueKey(projectPath: string): string {
+  const abs = resolve(projectPath);
+  return process.platform === 'win32' ? abs.toLowerCase() : abs;
+}
 
 export interface WorktreeHandle {
   /** Absolute path of the new worktree directory. */
@@ -207,12 +224,54 @@ export async function allocateWorktree(opts: AllocateOptions): Promise<WorktreeH
 }
 
 /**
- * Merge the task's branch back into the base branch (fast-forward if possible,
- * `--no-ff` otherwise for a clear merge commit), then remove the worktree.
- * On conflict the merge is aborted and the worktree is left in place so the
- * caller can inspect the diff; the error is surfaced.
+ * Verify that a merge actually advanced the base branch's tip. Detects the
+ * silent-no-op merge failure where `git merge` returns exit 0 but the ref
+ * never moves (observed under concurrent merges sharing `.git/index.lock`
+ * on Windows — I004). Throws with both hashes when HEAD is unchanged.
+ *
+ * Returns the new HEAD hash on success.
+ */
+export async function verifyHeadAdvanced(
+  git: SimpleGit,
+  baseBranch: string,
+  preMergeHead: string,
+): Promise<string> {
+  const postMergeHead = (await git.revparse([baseBranch])).trim();
+  if (postMergeHead === preMergeHead) {
+    throw new Error(
+      `worktree: merge did not advance ${baseBranch} (HEAD still at ${preMergeHead}) — silent merge failure`,
+    );
+  }
+  return postMergeHead;
+}
+
+/**
+ * Merge the task's branch back into the base branch (`--no-ff` so each merge
+ * is a distinct commit), then remove the worktree. On conflict the merge is
+ * aborted and the worktree is left in place so the caller can inspect the
+ * diff; the error is surfaced.
+ *
+ * Serialised per project via {@link projectMergeQueues}. See I004.
  */
 async function mergeAndRemove(projectPath: string, handle: WorktreeHandle): Promise<void> {
+  const key = mergeQueueKey(projectPath);
+  const previous = projectMergeQueues.get(key) ?? Promise.resolve();
+  // Wait for the previous merge on this project to settle (success OR failure)
+  // before starting ours; one failed merge must not skip subsequent ones.
+  const next = previous.catch(() => undefined).then(() => doMergeAndRemove(projectPath, handle));
+  projectMergeQueues.set(key, next);
+  try {
+    await next;
+  } finally {
+    // Drop our entry only if no later caller has chained on top of us; this
+    // avoids leaking a Map entry per merge while keeping the chain intact.
+    if (projectMergeQueues.get(key) === next) {
+      projectMergeQueues.delete(key);
+    }
+  }
+}
+
+async function doMergeAndRemove(projectPath: string, handle: WorktreeHandle): Promise<void> {
   const git = simpleGit(projectPath);
   const wtGit = simpleGit(handle.path);
 
@@ -233,17 +292,60 @@ async function mergeAndRemove(projectPath: string, handle: WorktreeHandle): Prom
     await git.raw(['checkout', handle.baseBranch]);
   }
 
-  try {
-    await git.raw(['merge', '--no-ff', '-m', `factory: merge ${handle.branch}`, handle.branch]);
-  } catch (err) {
-    // Abort the failed merge so the main working tree is clean; re-throw.
+  // If the worker produced no commits ahead of base, there's nothing to
+  // merge. Skip rather than calling `git merge --no-ff` (which would no-op
+  // with "Already up to date." and leave the verification check unable to
+  // distinguish that from a silent failure).
+  const aheadCount = (
+    await git.raw(['rev-list', '--count', `${handle.baseBranch}..${handle.branch}`])
+  ).trim();
+  if (aheadCount === '0') {
+    log.info(
+      { taskId: handle.branch, baseBranch: handle.baseBranch },
+      'worktree: branch has no new commits — skipping merge',
+    );
+  } else {
+    const preMergeHead = (await git.revparse([handle.baseBranch])).trim();
     try {
-      await git.raw(['merge', '--abort']);
-    } catch {
-      /* ignore — nothing to abort */
+      await git.raw(['merge', '--no-ff', '-m', `factory: merge ${handle.branch}`, handle.branch]);
+    } catch (err) {
+      // Abort the failed merge so the main working tree is clean; re-throw.
+      try {
+        await git.raw(['merge', '--abort']);
+      } catch {
+        /* ignore — nothing to abort */
+      }
+      throw new Error(
+        `worktree: merge of ${handle.branch} into ${handle.baseBranch} failed (${(err as Error).message}) — worktree preserved for inspection`,
+      );
     }
-    throw new Error(
-      `worktree: merge of ${handle.branch} into ${handle.baseBranch} failed (${(err as Error).message}) — worktree preserved for inspection`,
+    // Defense-in-depth: simple-git occasionally returns cleanly from `git
+    // merge` even when git left the repo mid-merge with conflicts
+    // (observed during Phase 5 close-out on Windows, where the non-zero
+    // exit of `git merge --no-ff` on BUILD.md conflicts was swallowed). If
+    // `.git/MERGE_HEAD` exists post-command, the merge conflicted —
+    // abort and raise so the worker marks the task failed (worktree is
+    // preserved by the caller for inspection).
+    const mergeHeadPath = join(projectPath, '.git', 'MERGE_HEAD');
+    if (await pathExists(mergeHeadPath)) {
+      try {
+        await git.raw(['merge', '--abort']);
+      } catch {
+        /* ignore — best effort */
+      }
+      throw new Error(
+        `worktree: merge of ${handle.branch} into ${handle.baseBranch} left repo in MERGING state (conflict swallowed by simple-git); aborted — worktree preserved for inspection`,
+      );
+    }
+    const postMergeHead = await verifyHeadAdvanced(git, handle.baseBranch, preMergeHead);
+    log.info(
+      {
+        taskId: handle.branch,
+        baseBranch: handle.baseBranch,
+        preMergeHead,
+        postMergeHead,
+      },
+      'worktree: merge advanced base branch',
     );
   }
 
