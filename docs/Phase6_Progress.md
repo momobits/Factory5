@@ -57,11 +57,11 @@ independent — pick the one that matches the session's appetite.
 
 ### Candidate sub-phases
 
-| Sub-phase | Track    | Pitch                                                                                                                                                                                                                                                                                                       | Est. sessions | Status    |
-| --------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | --------- |
-| **6a**    | Data     | **Cross-project findings registry.** Aggregate `<project>/.factory/findings.json` into a factory-home index (`~/.factory5/findings-registry.sqlite`). Surface `factory findings list [--severity HIGH] [--status OPEN] [--project <glob>]` and `factory findings show <id>`. Original Phase 6 charter item. | 1-2           | ⏸ Pending |
-| **6b**    | Triggers | **GitHub channel + event source.** A `github` channel parallel to the existing `discord` channel — GitHub issues / PR comments become directives; finding-raise / terminalStatus posts back as comments. Plumbing-heavy, unlocks non-CLI build triggers.                                                    | 2-3           | ⏸ Pending |
-| **6c**    | Quality  | **Verifier overhaul.** Either give the verifier filesystem access (upgrade to tool-using, parallel to builder) or formally downgrade its claims to advisory (never blocking, always informational). Today's F001 hallucination is the forcing function.                                                     | 1             | ⏸ Pending |
+| Sub-phase | Track    | Pitch                                                                                                                                                                                                                                                                                                       | Est. sessions | Status     |
+| --------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------- |
+| **6a**    | Data     | **Cross-project findings registry.** Aggregate `<project>/.factory/findings.json` into a factory-home index (`~/.factory5/findings-registry.sqlite`). Surface `factory findings list [--severity HIGH] [--status OPEN] [--project <glob>]` and `factory findings show <id>`. Original Phase 6 charter item. | 1-2           | ⏸ Pending  |
+| **6b**    | Triggers | **GitHub channel + event source.** A `github` channel parallel to the existing `discord` channel — GitHub issues / PR comments become directives; finding-raise / terminalStatus posts back as comments. Plumbing-heavy, unlocks non-CLI build triggers.                                                    | 2-3           | ⏸ Pending  |
+| **6c**    | Quality  | **Verifier overhaul.** Either give the verifier filesystem access (upgrade to tool-using, parallel to builder) or formally downgrade its claims to advisory (never blocking, always informational). Today's F001 hallucination is the forcing function.                                                     | 1             | ✅ Shipped |
 
 Three _deferred_ items that logically live in Phase 6+ but aren't in
 the initial scope:
@@ -92,18 +92,44 @@ Infrastructure the 6x sub-phases can build on without re-paving:
 
 ## Recommended first sub-phase
 
-**6c (verifier overhaul)** — today's live run (directive
-`01KPKRNB2V08QZZD02SKTK6MWP`) produced a concrete reproducer (F001
-CRITICAL, verifier-raised, contradicted by assessor's green gate +
-78 tests). Short scope, narrow blast radius, single ADR-candidate
-decision ("verifier gets filesystem access vs. verifier becomes
-advisory-only"). Pair with a regression test that replays the F001
-scenario. ~1 session.
+**6c (verifier overhaul) — ✅ shipped 2026-04-21.** The live run on
+directive `01KPKRNB2V08QZZD02SKTK6MWP` (2026-04-19 I007 rerun) raised
+F001 — a verifier-sourced CRITICAL claiming six Python source files
+were absent from `/c/Users/Momo/factory5-v5f-example-2/example`, every
+one of which existed on main. The assessor's green gate overrode the
+finding so the build shipped `complete`, but F001 remained on the
+books and misled operators reading `factory findings`.
+
+**Outcome: advisory path** (see
+[ADR 0018](decisions/0018-verifier-advisory-only.md)). Verifier
+findings are now persisted with `advisory: true` by default; the
+Finding schema carries the optional flag; `brain/loop.ts` splits
+open findings into `N blocking + M advisory` in its terminal log
+line. The verifier prompt (`prompts/agents/verifier.md`) was rewritten
+from the 6-line Phase 1 stub to a real brief with evidence discipline
+and an explicit anti-hallucination rule. The F001 reproducer test in
+`packages/worker/src/verifier-f001.test.ts` now asserts the gate
+guardrail holds: even when the LLM produces the same absence claim,
+the resulting finding cannot contribute to `gate.verify`.
+
+Rejected the authoritative path (give the verifier a worktree + tools
+and enforce evidence citations) because closing F001 through that path
+required four phase-sized chunks (worktree, tool loop, citation
+protocol, rejection mechanism). The advisory path closes the defect in
+a single session with minimal schema churn; it leaves room for a
+future ADR 0019+ to reintroduce an authoritative verifier if demand
+surfaces.
+
+**Budget:** 6 commits, well inside the $4–6 envelope (no live-LLM
+calls — all validation via stub provider). Tests: 262 green (was 255).
 
 After 6c: **6a (findings registry)** is the natural follow-on —
 every project factory has ever built lives in
 `<workspace>/<project>/.factory/findings.json`, and Phase 5 produced
-enough projects that the aggregation has real signal.
+enough projects that the aggregation has real signal. The advisory
+flag added in 6c will propagate into 6a's display layer (e.g.
+`factory findings list` can now annotate or filter by blocking vs
+advisory).
 
 **6b (GitHub channel)** is the bigger build and probably wants
 coordination with the user on OAuth / webhook setup before a session
