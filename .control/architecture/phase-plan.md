@@ -13,7 +13,8 @@
 | 4 | Phase 2 finale + autonomy modes | ✅ closed pre-Control | 3 | ~3 | Category routing, autonomy-mode end-to-end, 201 tests |
 | 5 | Green-verify end-to-end | ✅ closed pre-Control (2026-04-19) | 4 | ~5 (5a–5f) | Autonomous loop proven end-to-end; I001–I007 all resolved; `factory build example` fully green; 255 tests |
 | **6** | **Operator-trust + multi-surface** | 🟢 **active** | 5 | 3–6 (6c+6a+6b) | See charter in `docs/Phase6_Progress.md` |
-| 7 | (TBD) | ⏸ not yet charted | 6 | — | Options: Telegram channel, `max_usd`/`max_steps` enforcement, cross-session spend, Web UI |
+| **7** | **Operator-control + budget discipline** | ⏸ queued — charted 2026-04-21 | 6 | 3–5 (7a+7b+7c) | Budget enforcement + cross-session spend dashboard + Telegram channel |
+| 8 | (TBD) | ⏸ not yet charted | 7 | — | Options: Web UI, assessor tier-3 pluggable runtimes, worker-subprocess `ask_user` |
 
 ## Phase 6 — sub-phase schedule
 
@@ -64,6 +65,67 @@ Detailed plan: `.control/phases/phase-6c-verifier-overhaul/README.md` + `steps.m
 - Event source for webhooks (`events/github-webhook`)
 - Round-trip integration test using recorded fixtures
 - Live run against a test repo
+
+## Phase 7 — sub-phase schedule
+
+Three sub-phases, execution order **7a → 7b → 7c**. Each closes independently with its own tag.
+
+| Order | Sub-phase | Name | Charter pitch | Key package(s) | Est. sessions |
+|---|---|---|---|---|---|
+| 1st | **7a** | Budget enforcement (`max_usd` / `max_steps`) | Per-build cost + step ceilings enforced before each LLM call. Today a runaway build can burn $20+ silently. `CompleteArchitecture.md §12` line 454 flags this as deferred. | `brain`, `state`, `providers`, `cli` | 1 |
+| 2nd | **7b** | Cross-session spend dashboard | `factory spend` subcommand — per-project, per-directive, per-day spend. Aggregates `model_usage` table. Makes expensive rebuilds visible. | `state`, `cli`, `wiki` | 1 |
+| 3rd | **7c** | Telegram channel | Third `ChannelPlugin` implementation, sibling to Discord (ships) and GitHub (6b). Patterns locked by 6b. | `channels`, `events`, `daemon` | 1–2 |
+
+### Phase 7a — Budget enforcement *(queued, execution order #1 of Phase 7)*
+
+**Goal:** a runaway build can no longer burn unbounded spend or step-count.
+
+**Source material:**
+- `CompleteArchitecture.md §12` line 454 — `max_usd` / `max_steps` listed alongside retry budgets, stall detector, circuit breakers (the "anti-loop guardrails lifted from OmO" section).
+- Operational signal: Phase 5 builds cost $5–8 with no pre-call enforcement. A stuck retry loop would have been bounded only by the step-level retry budget.
+
+**Key sub-steps (expand to full steps.md at phase start):**
+- CLI flags: `factory build <spec> --max-usd <N> --max-steps <N>`; defaults read from config.
+- `state` extends `model_usage` with per-build running total (or query-derive).
+- `brain.loop` pre-call check: read running total + per-build ceiling; halt + escalate if exceeded.
+- `providers` exposes per-call cost *estimate* so the ceiling check fires *before* the call, not after.
+- Regression test: a synthetic build hits ceiling → escalates cleanly with useful error, doesn't half-fail mid-task.
+
+### Phase 7b — Cross-session spend dashboard *(queued, execution order #2 of Phase 7)*
+
+**Goal:** operator can see where their factory5 budget goes. `factory spend` returns rows across all projects and directives.
+
+**Depends on:** 7a's telemetry completeness (running total per build, reliably populated).
+
+**Key sub-steps (expand at phase start):**
+- `state.queries.spend` — aggregations by project, directive, day, model.
+- `cli spend [--since <date>] [--project <glob>] [--group-by <field>]`.
+- Round-trip test: run two builds, query dashboard, verify rows match `model_usage` raw data.
+
+### Phase 7c — Telegram channel *(queued, execution order #3 of Phase 7)*
+
+**Goal:** a Telegram message produces a `directive:new`, runs through the pipeline, replies with terminal status. Parallel to Discord + GitHub.
+
+**Depends on:** 6b's channel-shape validation. If 6b reveals gaps in the `ChannelPlugin` abstraction, fix those in 6b's close-out or as Phase 6 residue before starting 7c.
+
+**Pause-for-human at start:** Telegram bot token + target chat-id required from user. `[HALT] secret_needed` per Control halt conditions.
+
+**Key sub-steps (expand at phase start):**
+- `packages/channels/src/telegram.ts` implementing `ChannelPlugin`.
+- Long-polling event source (Telegram's preferred transport; no webhook server needed).
+- State config for bot-token + allowed-chats allowlist.
+- Round-trip integration test using recorded fixtures.
+- Live run against a user-provided test chat.
+
+## Phase 8+ deferred
+
+Items logically beyond Phase 7, parked until a demand signal surfaces:
+
+- **Web UI** — multi-session build, its own phase (probably multi-phase). Requires a non-trivial front-end stack decision (ADR-level). Wait until CLI + channel surfaces are fully mature.
+- **Assessor tier-3 — pluggable runtimes** (Go / Rust / JS provisioners). Flagged in ADR 0017. Wait until a non-Python project actually surfaces the need; today's Python-only builds make tier-2 sufficient.
+- **Worker-subprocess `ask_user`** (ADR 0015 shape 1) — no evidence yet of mid-tool blocking need; current brain-level `askUser` is holding.
+
+These don't have phase numbers yet. When one activates, charter it as Phase 8 / 9 / etc. via the existing phase-plan.md update flow (edit at end of preceding phase or at start of its session).
 
 ## Guidance
 
