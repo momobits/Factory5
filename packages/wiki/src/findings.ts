@@ -59,6 +59,24 @@ export interface AddFindingInput {
   createdAt?: string;
   /** Initial status — defaults to `OPEN`. */
   status?: FindingStatus;
+  /**
+   * Mark the finding advisory (doesn't contribute to the gate — see ADR 0018).
+   * When omitted, `source === 'verifier'` defaults to `true`; every other
+   * source defaults to blocking (`advisory` field omitted entirely).
+   */
+  advisory?: boolean;
+}
+
+/**
+ * Resolve the `advisory` flag for a new finding. Verifier-sourced findings
+ * default to advisory (ADR 0018); callers may override explicitly. Returns
+ * `true` only when the resulting finding should carry the flag — consumers
+ * write `advisory: true` to JSON only, leaving the field absent for the
+ * blocking default so JSON stays small.
+ */
+function resolveAdvisory(input: AddFindingInput): boolean | undefined {
+  if (input.advisory !== undefined) return input.advisory ? true : undefined;
+  return input.source === 'verifier' ? true : undefined;
 }
 
 /**
@@ -69,6 +87,7 @@ export async function addFinding(projectPath: string, input: AddFindingInput): P
   const { findings } = projectPaths(projectPath);
   const file = await loadFile(findings);
   const id = findingId(file.nextSequence);
+  const advisory = resolveAdvisory(input);
   const newFinding: Finding = {
     id,
     source: input.source,
@@ -77,6 +96,7 @@ export async function addFinding(projectPath: string, input: AddFindingInput): P
     status: input.status ?? 'OPEN',
     description: input.description,
     createdAt: input.createdAt ?? new Date().toISOString(),
+    ...(advisory === true ? { advisory: true } : {}),
   };
   findingSchema.parse(newFinding);
   const updated: FindingsFile = {
@@ -84,8 +104,20 @@ export async function addFinding(projectPath: string, input: AddFindingInput): P
     findings: [...file.findings, newFinding],
   };
   await writeFileAtomic(findings, JSON.stringify(updated, null, 2));
-  log.info({ projectPath, id, severity: newFinding.severity }, 'finding added');
+  log.info(
+    { projectPath, id, severity: newFinding.severity, advisory: advisory === true },
+    'finding added',
+  );
   return newFinding;
+}
+
+/**
+ * Predicate: does this finding contribute to the gate? Advisory findings
+ * (per ADR 0018) do not — they are operator-facing informational signal only.
+ * Use this helper so every consumer has a single definition of the rule.
+ */
+export function isAdvisory(f: Finding): boolean {
+  return f.advisory === true;
 }
 
 /**

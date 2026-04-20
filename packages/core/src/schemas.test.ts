@@ -136,6 +136,35 @@ describe('findingSchema', () => {
     };
     expect(() => findingSchema.parse(bad)).toThrow();
   });
+
+  it('accepts advisory:true (ADR 0018)', () => {
+    const f = {
+      id: 'F001',
+      source: 'verifier' as const,
+      target: 'src/',
+      severity: 'CRITICAL' as const,
+      status: 'OPEN' as const,
+      description: 'second-opinion observation',
+      createdAt: new Date().toISOString(),
+      advisory: true,
+    };
+    const parsed = findingSchema.parse(f);
+    expect(parsed.advisory).toBe(true);
+  });
+
+  it('accepts a finding with no advisory field (backwards-compat)', () => {
+    const f = {
+      id: 'F002',
+      source: 'reviewer' as const,
+      target: 'src/api.py',
+      severity: 'HIGH' as const,
+      status: 'OPEN' as const,
+      description: 'no timeout',
+      createdAt: new Date().toISOString(),
+    };
+    const parsed = findingSchema.parse(f);
+    expect(parsed.advisory).toBeUndefined();
+  });
 });
 
 describe('plan and task schemas', () => {

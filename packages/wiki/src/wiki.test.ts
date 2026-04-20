@@ -9,6 +9,7 @@ import {
   addFinding,
   appendBuildLog,
   getFinding,
+  isAdvisory,
   listFindings,
   projectPaths,
   readPlan,
@@ -124,6 +125,56 @@ describe('findings', () => {
   it('getFinding returns undefined for unknown id', async () => {
     const got = await getFinding(projectDir, 'F999');
     expect(got).toBeUndefined();
+  });
+
+  // ADR 0018 — verifier findings default to advisory
+  it('addFinding defaults advisory=true for verifier source', async () => {
+    const f = await addFinding(projectDir, {
+      source: 'verifier',
+      target: 'src/',
+      severity: 'CRITICAL',
+      description: 'claimed absence of scaffolded files',
+    });
+    expect(f.advisory).toBe(true);
+    expect(isAdvisory(f)).toBe(true);
+  });
+
+  it('addFinding does not set advisory for non-verifier sources', async () => {
+    const reviewer = await addFinding(projectDir, {
+      source: 'reviewer',
+      target: 'src/api.py',
+      severity: 'HIGH',
+      description: 'no timeout on HTTP call',
+    });
+    const builder = await addFinding(projectDir, {
+      source: 'builder',
+      target: 'src/cli.py',
+      severity: 'MEDIUM',
+      description: 'leaky error handler',
+    });
+    expect(reviewer.advisory).toBeUndefined();
+    expect(builder.advisory).toBeUndefined();
+    expect(isAdvisory(reviewer)).toBe(false);
+    expect(isAdvisory(builder)).toBe(false);
+  });
+
+  it('addFinding respects an explicit advisory override', async () => {
+    const verifierBlocking = await addFinding(projectDir, {
+      source: 'verifier',
+      target: 'docs/',
+      severity: 'LOW',
+      description: 'caller forced blocking',
+      advisory: false,
+    });
+    const reviewerAdvisory = await addFinding(projectDir, {
+      source: 'reviewer',
+      target: 'README.md',
+      severity: 'LOW',
+      description: 'caller forced advisory',
+      advisory: true,
+    });
+    expect(verifierBlocking.advisory).toBeUndefined();
+    expect(reviewerAdvisory.advisory).toBe(true);
   });
 });
 

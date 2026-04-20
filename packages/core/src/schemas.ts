@@ -142,6 +142,14 @@ export const findingSchema = z.object({
   resolution: z.string().optional(),
   createdAt: isoDateTimeSchema,
   resolvedAt: isoDateTimeSchema.optional(),
+  /**
+   * Advisory findings do not contribute to the gate. Verifier-raised findings
+   * default to `advisory: true` (see ADR 0018); other sources default to
+   * `undefined` (treated as blocking). Consumers that surface findings to
+   * operators may annotate advisory findings so a false CRITICAL from a
+   * read-only agent doesn't look like a real blocker.
+   */
+  advisory: z.boolean().optional(),
 });
 
 // -----------------------------------------------------------------------------

@@ -26,7 +26,7 @@ import {
   runMigrations,
   type Database,
 } from '@factory5/state';
-import { appendBuildLog, listFindings, readPlan, wikiReadiness } from '@factory5/wiki';
+import { appendBuildLog, isAdvisory, listFindings, readPlan, wikiReadiness } from '@factory5/wiki';
 
 import { runArchitect, type ArchitectResult } from './architect.js';
 import { askUser, escalateBlocked, type AskUserResult } from './ask-user.js';
@@ -325,6 +325,10 @@ async function runInline(
     );
 
     const openFindings = await listFindings(projectPath, { status: 'OPEN' });
+    const advisoryFindings = openFindings.filter(isAdvisory);
+    const blockingFindings = openFindings.filter((f) => !isAdvisory(f));
+    // ADR 0018: advisory findings (today: verifier source by default) never
+    // enter `hadFailures`. Assessor gate results remain the sole ground truth.
     const hadFailures = taskResults.some((r) => r.exitCode !== 0) || !assessment.gateResults.verify;
 
     // Autonomous mode never silently finishes with failures — escalate (ADR 0005).
@@ -365,15 +369,21 @@ async function runInline(
     directivesQ.updateStatus(db, directive.id, terminalStatus);
 
     const totalCost = modelUsage.totalCostForDirective(db, directive.id);
+    const findingsCountPhrase =
+      advisoryFindings.length > 0
+        ? `${String(blockingFindings.length)} blocking + ${String(advisoryFindings.length)} advisory`
+        : String(blockingFindings.length);
     await appendBuildLog(
       projectPath,
-      `brain: inline run ended (status=${terminalStatus}, open findings=${String(openFindings.length)}, spend=$${totalCost.toFixed(4)})`,
+      `brain: inline run ended (status=${terminalStatus}, open findings=${findingsCountPhrase}, spend=$${totalCost.toFixed(4)})`,
     );
     log.info(
       {
         directiveId: directive.id,
         terminalStatus,
         openFindings: openFindings.length,
+        blockingFindings: blockingFindings.length,
+        advisoryFindings: advisoryFindings.length,
         totalCostUsd: totalCost,
       },
       'brain: inline run complete',
