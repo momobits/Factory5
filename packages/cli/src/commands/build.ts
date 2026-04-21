@@ -18,7 +18,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { cwd, exit, stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { runBrain } from '@factory5/brain';
+import { loadConfig, runBrain } from '@factory5/brain';
 import { readPidFile } from '@factory5/daemon';
 import { type AutonomyMode, directiveSchema, newId, type Intent } from '@factory5/core';
 import { createDaemonClient } from '@factory5/ipc';
@@ -166,9 +166,14 @@ export function registerBuildCommand(program: Command): void {
             lastTouchedAt: new Date().toISOString(),
           });
 
+          // Resolve budget ceilings: explicit CLI flag wins over
+          // `~/.factory5/config.toml` [budget.defaults] (ADR 0020, step 7a.6).
+          const cfg = await loadConfig().catch(() => undefined);
           const limits: { maxUsd?: number; maxSteps?: number } = {};
-          if (options.maxUsd !== undefined) limits.maxUsd = options.maxUsd;
-          if (options.maxSteps !== undefined) limits.maxSteps = options.maxSteps;
+          const maxUsd = options.maxUsd ?? cfg?.budget.defaults.maxUsd;
+          const maxSteps = options.maxSteps ?? cfg?.budget.defaults.maxSteps;
+          if (maxUsd !== undefined) limits.maxUsd = maxUsd;
+          if (maxSteps !== undefined) limits.maxSteps = maxSteps;
           const hasLimits = Object.keys(limits).length > 0;
 
           const directive = directiveSchema.parse({
@@ -186,7 +191,7 @@ export function registerBuildCommand(program: Command): void {
           directivesQ.insert(db, directive);
 
           const limitsLine = hasLimits
-            ? `  limits:   ${options.maxUsd !== undefined ? `max_usd=$${options.maxUsd.toFixed(2)} ` : ''}${options.maxSteps !== undefined ? `max_steps=${String(options.maxSteps)}` : ''}\n`
+            ? `  limits:   ${maxUsd !== undefined ? `max_usd=$${maxUsd.toFixed(2)} ` : ''}${maxSteps !== undefined ? `max_steps=${String(maxSteps)}` : ''}\n`
             : '';
           stdout.write(
             `factory build ${project}\n  directive: ${directive.id}\n  path: ${projectPath}\n  autonomy: ${autonomy}\n${limitsLine}\n`,

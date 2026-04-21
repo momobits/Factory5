@@ -68,6 +68,22 @@ describe('loadConfig / saveConfig', () => {
     expect(loaded?.providers.claudeCliPath).toBe('C:\\custom\\claude.cmd');
   });
 
+  it('defaults budget.defaults to empty (unlimited) when unspecified', async () => {
+    const cfg = defaultConfig();
+    expect(cfg.budget.defaults.maxUsd).toBeUndefined();
+    expect(cfg.budget.defaults.maxSteps).toBeUndefined();
+  });
+
+  it('round-trips budget.defaults.maxUsd and maxSteps when set (ADR 0020)', async () => {
+    const cfg = defaultConfig();
+    cfg.budget.defaults.maxUsd = 5.0;
+    cfg.budget.defaults.maxSteps = 50;
+    await saveConfig(cfg);
+    const loaded = await loadConfig();
+    expect(loaded?.budget.defaults.maxUsd).toBeCloseTo(5.0);
+    expect(loaded?.budget.defaults.maxSteps).toBe(50);
+  });
+
   it('throws a helpful error on malformed TOML', async () => {
     const { writeFile, mkdir } = await import('node:fs/promises');
     const { dirname } = await import('node:path');

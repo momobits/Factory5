@@ -33,6 +33,19 @@ const categoryEntrySchema = z.object({
   model: z.string().min(1),
 });
 
+/**
+ * Budget defaults applied to every directive that does not specify its
+ * own `--max-usd` / `--max-steps` on the CLI (ADR 0020). Absent or
+ * null-valued = unlimited, preserving pre-Phase-7 behaviour on a fresh
+ * install.
+ */
+const budgetDefaultsSchema = z
+  .object({
+    maxUsd: z.number().positive().optional(),
+    maxSteps: z.number().int().positive().optional(),
+  })
+  .default({});
+
 export const configSchema = z.object({
   general: z
     .object({
@@ -47,6 +60,17 @@ export const configSchema = z.object({
     .default({}),
   categories: z.record(z.enum(MODEL_CATEGORIES), categoryEntrySchema).default({}),
   fallbackChains: z.record(z.enum(MODEL_CATEGORIES), z.array(categoryEntrySchema)).default({}),
+  /**
+   * Budget ceilings applied to every directive unless the CLI overrides
+   * them per-invocation (ADR 0020). Read by `factory build` in
+   * `packages/cli/src/commands/build.ts`. Explicit CLI flag wins over
+   * the default.
+   */
+  budget: z
+    .object({
+      defaults: budgetDefaultsSchema,
+    })
+    .default({ defaults: {} }),
   /**
    * Per-channel config blocks. Keyed by the channel plugin's `id` field
    * (e.g. `cli`, `discord`, `telegram`). Each plugin validates its own
@@ -167,6 +191,7 @@ export function defaultConfig(): FactoryConfig {
     providers: {},
     categories: { ...DEFAULT_CATEGORIES },
     fallbackChains: {},
+    budget: { defaults: {} },
     channels: {},
   });
 }
