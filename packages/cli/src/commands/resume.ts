@@ -84,9 +84,13 @@ export function registerResumeCommand(program: Command): void {
         const db = openDatabase();
         runMigrations(db);
 
-        // Pull recent directives and the project record (if any).
+        // Pull recent directives and the project record (if any). After
+        // ADR 0021 `name` is non-unique, so `findByName` may return more
+        // than one row; resume picks the most recently touched (the array
+        // is ordered DESC by `last_touched_at`).
         const recent = directivesQ.listRecent(db, 200);
-        const projectRow = projectsQ.getByName(db, project);
+        const namedProjects = projectsQ.findByName(db, project);
+        const projectRow = namedProjects[0];
         const absoluteArg = isAbsolute(project) ? project : resolve(cwd(), project);
         const projectPathHint = projectRow?.workspacePath ?? absoluteArg;
 
@@ -101,6 +105,12 @@ export function registerResumeCommand(program: Command): void {
         }
 
         const projectPath = extractProjectPath(prior) ?? projectRow?.workspacePath ?? absoluteArg;
+
+        // Inherit project identity from the prior directive when present;
+        // fall back to the projects-table lookup; otherwise leave undefined
+        // (the resumed build will operate without a project_id, matching
+        // pre-ADR-0021 behaviour for legacy directives that lack one).
+        const inheritedProjectId = prior.projectId ?? projectRow?.id;
 
         const directive = directiveSchema.parse({
           id: newId(),
@@ -118,6 +128,7 @@ export function registerResumeCommand(program: Command): void {
           createdAt: new Date().toISOString(),
           status: 'pending' as const,
           parentDirectiveId: prior.id,
+          ...(inheritedProjectId !== undefined ? { projectId: inheritedProjectId } : {}),
         });
         directivesQ.insert(db, directive);
 

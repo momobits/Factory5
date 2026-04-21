@@ -87,6 +87,13 @@ export const directiveSchema = z.object({
    * Absent means unlimited (pre-ADR-0020 behaviour).
    */
   limits: directiveLimitsSchema.optional(),
+  /**
+   * Stable project identity (ADR 0021) — the ULID from
+   * `<project>/.factory/project.json`. Populated by directive-creation paths
+   * (CLI build / resume) via `wiki.loadOrCreateProjectMetadata`. Optional
+   * because chat / system directives are not tied to a project.
+   */
+  projectId: ulidSchema.optional(),
 });
 
 // -----------------------------------------------------------------------------
@@ -238,9 +245,25 @@ export const pendingQuestionSchema = z.object({
 // Project registry
 // -----------------------------------------------------------------------------
 
+/**
+ * Project registry entry. ADR 0021 made `id` (ULID) the canonical key,
+ * superseding the prior `name`-keyed shape:
+ *
+ *   - `id` — ULID; the canonical handle. Stable across path moves; matches
+ *     `<project>/.factory/project.json` `id`.
+ *   - `name` — human-readable label. Not unique, never used for joins.
+ *   - `workspacePath` — current workspace path. Snapshot only; identity
+ *     does not derive from it.
+ *   - `lastWorkspacePath` — advisory snapshot of the most recent workspace
+ *     path seen for this project, populated when factory cannot read the
+ *     identity file at `workspacePath` (e.g. moved/deleted without
+ *     factory's knowledge). Operator-facing diagnostic only.
+ */
 export const projectSchema = z.object({
+  id: ulidSchema,
   name: z.string().min(1),
   workspacePath: z.string().min(1),
+  lastWorkspacePath: z.string().min(1).optional(),
   status: z.enum(['active', 'paused', 'complete', 'archived']),
   createdAt: isoDateTimeSchema,
   lastTouchedAt: isoDateTimeSchema,

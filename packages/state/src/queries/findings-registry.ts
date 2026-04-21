@@ -16,7 +16,13 @@ import { findingSchema, type Finding } from '@factory5/core';
 import type { Database } from '../db.js';
 
 export interface FindingsRegistryUpsertInput {
-  /** Stable project handle — typically `basename(projectPath)`. */
+  /**
+   * Stable project handle — the ULID from `<project>/.factory/project.json`
+   * (ADR 0021). Pre-ADR-0021 callers passed `basename(projectPath)`; that
+   * legacy mapping was migrated in 006-project-identity. Callers must now
+   * resolve the project id via `wiki.loadOrCreateProjectMetadata` (or
+   * `wiki.readProjectMetadata` when not creating) before upsert.
+   */
   projectId: string;
   /** Absolute workspace path, snapshotted for cross-workspace display. */
   projectPath: string;
@@ -188,9 +194,7 @@ export function list(db: Database, filter: ListFilter = {}): RegistryEntry[] {
   const where = parts.length > 0 ? `WHERE ${parts.join(' AND ')}` : '';
   const limit = Math.min(1000, Math.max(1, Math.floor(filter.limit ?? 100)));
   const rows = db
-    .prepare(
-      `SELECT * FROM findings_registry ${where} ORDER BY updated_at DESC LIMIT ?`,
-    )
+    .prepare(`SELECT * FROM findings_registry ${where} ORDER BY updated_at DESC LIMIT ?`)
     .all(...params, limit) as Row[];
   return rows.map(rowToEntry);
 }
@@ -215,9 +219,7 @@ export function getByProjectAndId(
  */
 export function findByFindingId(db: Database, findingId: string): RegistryEntry[] {
   const rows = db
-    .prepare(
-      'SELECT * FROM findings_registry WHERE finding_id = ? ORDER BY updated_at DESC',
-    )
+    .prepare('SELECT * FROM findings_registry WHERE finding_id = ? ORDER BY updated_at DESC')
     .all(findingId) as Row[];
   return rows.map(rowToEntry);
 }

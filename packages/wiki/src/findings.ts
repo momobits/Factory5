@@ -8,7 +8,7 @@
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { basename, dirname } from 'node:path';
+import { dirname } from 'node:path';
 
 import { findingId, findingSchema, type Finding, type FindingStatus } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
@@ -78,7 +78,14 @@ export interface AddFindingInput {
  */
 export interface FindingRegistryBinding {
   db: Database;
-  /** Stable project handle — defaults to `basename(projectPath)`. */
+  /**
+   * Project identity (ADR 0021) — the ULID from
+   * `<project>/.factory/project.json`. Optional because some legacy code
+   * paths still call `addFinding` without resolving identity first;
+   * `mirrorToRegistry` skips the registry write in that case rather than
+   * falling back to `basename(projectPath)` (the I008 collision trap).
+   * The per-project `findings.json` stays authoritative either way.
+   */
   projectId?: string;
   /** Directive that raised this finding; recorded as `origin_directive_id`. */
   originDirectiveId?: string;
@@ -89,9 +96,16 @@ function mirrorToRegistry(
   projectPath: string,
   registry: FindingRegistryBinding,
 ): void {
+  if (registry.projectId === undefined) {
+    log.warn(
+      { projectPath, id: finding.id },
+      'wiki.findings: no projectId on registry binding — skipping registry mirror; per-project file remains authoritative (ADR 0021)',
+    );
+    return;
+  }
   try {
     findingsRegistry.upsert(registry.db, {
-      projectId: registry.projectId ?? basename(projectPath),
+      projectId: registry.projectId,
       projectPath,
       finding,
       ...(registry.originDirectiveId !== undefined

@@ -36,7 +36,7 @@
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { exit, stdout } from 'node:process';
 
 import { findingSchema, type Finding } from '@factory5/core';
@@ -49,6 +49,7 @@ import {
   type FindingsRegistryEntry,
   type FindingsRegistryListFilter,
 } from '@factory5/state';
+import { ProjectMetadataCorruptError, readProjectMetadata } from '@factory5/wiki';
 import type { Command } from 'commander';
 
 const log = createLogger('cli.findings');
@@ -191,7 +192,7 @@ function renderFindingDetail(e: FindingsRegistryEntry): string {
     ['Resolved', f.resolvedAt ?? '-'],
   ];
   const labelWidth = Math.max(...rows.map(([k]) => k.length));
-  const header = rows.map(([k, v]) => `${(`${k}:`).padEnd(labelWidth + 2)}${v}`).join('\n');
+  const header = rows.map(([k, v]) => `${`${k}:`.padEnd(labelWidth + 2)}${v}`).join('\n');
   const description = f.description.trim().length > 0 ? f.description.trim() : '(none)';
   const resolution = f.resolution !== undefined ? f.resolution.trim() : '(unresolved)';
   const indent = (block: string): string =>
@@ -229,11 +230,7 @@ function renderAmbiguity(findingId: string, matches: FindingsRegistryEntry[]): s
         `${m.finding.source}`,
     );
   }
-  lines.push(
-    '',
-    `Disambiguate with \`factory findings show <project>/${findingId}\`.`,
-    '',
-  );
+  lines.push('', `Disambiguate with \`factory findings show <project>/${findingId}\`.`, '');
   return `${lines.join('\n')}\n`;
 }
 
@@ -360,6 +357,7 @@ export async function runFindingsBackfill(
     imported: 0,
     updated: 0,
     errors: 0,
+    skipped: [],
     byProject: new Map(),
   };
 
@@ -378,7 +376,37 @@ export async function runFindingsBackfill(
       continue;
     }
     summary.projectsWithFindings++;
-    const projectId = basename(projectPath);
+
+    // Resolve project identity from `.factory/project.json` (ADR 0021).
+    // The backfill never silently re-tags: if the identity file is missing
+    // we skip the project (the operator should run `factory build` once to
+    // claim identity); if it is corrupt we surface that loudly.
+    let projectId: string;
+    let projectName: string;
+    try {
+      const meta = await readProjectMetadata(projectPath);
+      if (meta === undefined) {
+        summary.skipped.push({
+          projectPath,
+          reason: 'no .factory/project.json — run `factory build` here once to claim identity',
+        });
+        log.info({ projectPath }, 'backfill: skipping — no project identity file (ADR 0021)');
+        continue;
+      }
+      projectId = meta.id;
+      projectName = meta.name;
+    } catch (err) {
+      if (err instanceof ProjectMetadataCorruptError) {
+        summary.errors++;
+        log.warn(
+          { err, projectPath, filePath: err.filePath },
+          'backfill: project.json corrupt — refusing to silently re-tag',
+        );
+        continue;
+      }
+      throw err;
+    }
+
     const counters = { imported: 0, updated: 0 };
     for (const finding of loaded) {
       const existing = findingsRegistry.getByProjectAndId(db, projectId, finding.id);
@@ -398,7 +426,7 @@ export async function runFindingsBackfill(
         counters.updated++;
       }
     }
-    summary.byProject.set(projectId, counters);
+    summary.byProject.set(projectName, counters);
   }
 
   return {
@@ -413,6 +441,8 @@ interface BackfillSummary {
   imported: number;
   updated: number;
   errors: number;
+  /** Projects skipped because identity could not be resolved (ADR 0021). */
+  skipped: { projectPath: string; reason: string }[];
   byProject: Map<string, { imported: number; updated: number }>;
 }
 
@@ -454,18 +484,28 @@ function renderBackfillSummary(workspace: string, s: BackfillSummary, dryRun: bo
   const verbUpd = dryRun ? 'would update' : 'updated';
   const lines: string[] = [];
   lines.push(`factory findings backfill — workspace: ${workspace}${dryRun ? ' (dry-run)' : ''}`);
+  const skippedSuffix = s.skipped.length > 0 ? `; ${String(s.skipped.length)} skipped` : '';
   lines.push(
     `  ${String(s.projectsScanned)} dir(s) scanned; ` +
       `${String(s.projectsWithFindings)} with findings.json; ` +
-      `${String(s.errors)} error(s)`,
+      `${String(s.errors)} error(s)` +
+      skippedSuffix,
   );
-  if (s.projectsWithFindings === 0) return `${lines.join('\n')}\n`;
-  lines.push(`  ${verb} ${String(s.imported)}; ${verbUpd} ${String(s.updated)}`, '');
-  const projectWidth = Math.max(7, ...[...s.byProject.keys()].map((k) => k.length));
-  for (const [projectId, counters] of s.byProject) {
-    lines.push(
-      `    ${projectId.padEnd(projectWidth)}  +${String(counters.imported)} imported  ~${String(counters.updated)} updated`,
-    );
+  if (s.projectsWithFindings === 0 && s.skipped.length === 0) return `${lines.join('\n')}\n`;
+  if (s.byProject.size > 0) {
+    lines.push(`  ${verb} ${String(s.imported)}; ${verbUpd} ${String(s.updated)}`, '');
+    const projectWidth = Math.max(7, ...[...s.byProject.keys()].map((k) => k.length));
+    for (const [projectName, counters] of s.byProject) {
+      lines.push(
+        `    ${projectName.padEnd(projectWidth)}  +${String(counters.imported)} imported  ~${String(counters.updated)} updated`,
+      );
+    }
+  }
+  if (s.skipped.length > 0) {
+    lines.push('', '  skipped (no identity file — see ADR 0021):');
+    for (const { projectPath, reason } of s.skipped) {
+      lines.push(`    ${projectPath}  — ${reason}`);
+    }
   }
   return `${lines.join('\n')}\n`;
 }

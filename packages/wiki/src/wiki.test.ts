@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { newId } from '@factory5/core';
 import {
@@ -238,6 +238,14 @@ describe('findings registry dual-write', () => {
     updated_at: string;
   }
 
+  // ADR 0021: callers must pass an explicit `projectId` (the ULID from
+  // `<project>/.factory/project.json`) on the registry binding. Without
+  // it, `mirrorToRegistry` skips the write rather than fall back to
+  // `basename(projectPath)` (the I008 collision trap). Tests construct a
+  // synthetic ULID here; production callers use
+  // `wiki.loadOrCreateProjectMetadata`.
+  const TEST_PROJECT_ID = '01KP00000000000000000000PR';
+
   it('addFinding with registry writes both file and registry row', async () => {
     const directiveId = seedDirective();
     const f = await addFinding(
@@ -248,14 +256,14 @@ describe('findings registry dual-write', () => {
         severity: 'HIGH',
         description: 'missing timeout',
       },
-      { db, originDirectiveId: directiveId },
+      { db, projectId: TEST_PROJECT_ID, originDirectiveId: directiveId },
     );
     const rows = db
       .prepare('SELECT * FROM findings_registry WHERE finding_id = ?')
       .all(f.id) as RegistryRow[];
     expect(rows).toHaveLength(1);
     const row = rows[0]!;
-    expect(row.project_id).toBe(basename(projectDir));
+    expect(row.project_id).toBe(TEST_PROJECT_ID);
     expect(row.project_path).toBe(projectDir);
     expect(row.source).toBe('reviewer');
     expect(row.severity).toBe('HIGH');
@@ -274,7 +282,7 @@ describe('findings registry dual-write', () => {
         severity: 'MEDIUM',
         description: 'potential contract drift',
       },
-      { db },
+      { db, projectId: TEST_PROJECT_ID },
     );
     const row = db
       .prepare('SELECT advisory, source FROM findings_registry WHERE finding_id = ?')
@@ -299,6 +307,26 @@ describe('findings registry dual-write', () => {
     expect(fileCopy?.id).toBe(f.id);
   });
 
+  it('addFinding with binding but no projectId skips the registry mirror (ADR 0021)', async () => {
+    const f = await addFinding(
+      projectDir,
+      {
+        source: 'reviewer',
+        target: 'src/x',
+        severity: 'LOW',
+        description: 'nit',
+      },
+      { db }, // intentionally no projectId
+    );
+    const count = db
+      .prepare('SELECT COUNT(*) AS c FROM findings_registry WHERE finding_id = ?')
+      .get(f.id) as { c: number };
+    expect(count.c).toBe(0);
+    // File write still happens — the per-project file is authoritative.
+    const fileCopy = await getFinding(projectDir, f.id);
+    expect(fileCopy?.id).toBe(f.id);
+  });
+
   it('updateFindingStatus upserts into the registry and bumps resolved_at', async () => {
     const directiveId = seedDirective();
     const f = await addFinding(
@@ -309,7 +337,7 @@ describe('findings registry dual-write', () => {
         severity: 'LOW',
         description: 'nit',
       },
-      { db, originDirectiveId: directiveId },
+      { db, projectId: TEST_PROJECT_ID, originDirectiveId: directiveId },
     );
     const before = db
       .prepare('SELECT updated_at FROM findings_registry WHERE finding_id = ?')
@@ -317,10 +345,13 @@ describe('findings registry dual-write', () => {
     await new Promise((r) => setTimeout(r, 2));
     await updateFindingStatus(projectDir, f.id, 'FIXED', 'patched in abc', {
       db,
+      projectId: TEST_PROJECT_ID,
       originDirectiveId: directiveId,
     });
     const after = db
-      .prepare('SELECT status, resolution, resolved_at, updated_at FROM findings_registry WHERE finding_id = ?')
+      .prepare(
+        'SELECT status, resolution, resolved_at, updated_at FROM findings_registry WHERE finding_id = ?',
+      )
       .get(f.id) as {
       status: string;
       resolution: string | null;
@@ -344,10 +375,13 @@ describe('findings registry dual-write', () => {
         description: 'first',
         createdAt: fixedCreated,
       },
-      { db },
+      { db, projectId: TEST_PROJECT_ID },
     );
     // Manually re-upsert with a different updated_at — created_at should stick.
-    await updateFindingStatus(projectDir, f.id, 'WONTFIX', 'stale rule', { db });
+    await updateFindingStatus(projectDir, f.id, 'WONTFIX', 'stale rule', {
+      db,
+      projectId: TEST_PROJECT_ID,
+    });
     const row = db
       .prepare('SELECT created_at, status FROM findings_registry WHERE finding_id = ?')
       .get(f.id) as { created_at: string; status: string };
@@ -367,7 +401,7 @@ describe('findings registry dual-write', () => {
         severity: 'LOW',
         description: 'y',
       },
-      { db },
+      { db, projectId: TEST_PROJECT_ID },
     );
     expect(f.id).toBe('F001');
     const fileCopy = await getFinding(projectDir, f.id);

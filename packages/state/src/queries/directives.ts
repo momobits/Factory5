@@ -27,6 +27,7 @@ interface Row {
   blocked_reason: string | null;
   max_usd: number | null;
   max_steps: number | null;
+  project_id: string | null;
 }
 
 function rowToDirective(row: Row): Directive {
@@ -48,6 +49,7 @@ function rowToDirective(row: Row): Directive {
     ...(row.parent_directive_id !== null ? { parentDirectiveId: row.parent_directive_id } : {}),
     ...(row.blocked_reason !== null ? { blockedReason: row.blocked_reason } : {}),
     ...(hasLimits ? { limits } : {}),
+    ...(row.project_id !== null ? { projectId: row.project_id } : {}),
   });
 }
 
@@ -58,8 +60,8 @@ export function insert(db: Database, d: Directive): void {
     `INSERT INTO directives
        (id, source, principal, channel_ref, intent, payload_json, autonomy,
         created_at, status, claimed_by, parent_directive_id, blocked_reason,
-        max_usd, max_steps)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        max_usd, max_steps, project_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     validated.id,
     validated.source,
@@ -75,6 +77,7 @@ export function insert(db: Database, d: Directive): void {
     validated.blockedReason ?? null,
     validated.limits?.maxUsd ?? null,
     validated.limits?.maxSteps ?? null,
+    validated.projectId ?? null,
   );
 }
 

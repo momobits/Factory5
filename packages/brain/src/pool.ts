@@ -15,12 +15,16 @@
  */
 
 import { cpus } from 'node:os';
-import { basename } from 'node:path';
 
 import type { DirectiveLimits, Plan, Task } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import type { ProviderRegistry } from '@factory5/providers';
-import { tasksInflight, type Database, type UsageMode } from '@factory5/state';
+import {
+  directives as directivesQ,
+  tasksInflight,
+  type Database,
+  type UsageMode,
+} from '@factory5/state';
 import { writePlan } from '@factory5/wiki';
 import { isToolUsingAgent, runWorker, type WorkerOutcome } from '@factory5/worker';
 
@@ -155,6 +159,13 @@ async function executeTask(
 
   log.info({ taskId: task.id, agent: task.agent, category: task.category }, 'pool: task started');
 
+  // Resolve the directive's projectId once per task to attach to the
+  // findings-registry binding. One small SELECT per task is cheaper than
+  // threading the value through every PoolOptions invocation, and keeps
+  // the pool's call signature stable.
+  const directive = directivesQ.getById(db, directiveId);
+  const projectId = directive?.projectId;
+
   let outcome: WorkerOutcome;
   try {
     outcome = await runWorker({
@@ -165,7 +176,14 @@ async function executeTask(
       userPrompt,
       findingRegistry: {
         db,
-        projectId: basename(plan.projectPath),
+        // Project identity (ADR 0021). Pulled from the directive — populated
+        // either at directive creation (CLI build) or by migration 006's
+        // backfill. Undefined only for legacy directives that predate the
+        // backfill running (which would be a deployment in an unmigrated
+        // state). Wiki's `mirrorToRegistry` skips the registry write
+        // when projectId is undefined rather than falling back to basename
+        // (which was the I008 collision trap).
+        ...(projectId !== undefined ? { projectId } : {}),
         originDirectiveId: directiveId,
       },
       ...(signal !== undefined ? { signal } : {}),

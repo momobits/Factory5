@@ -13,3 +13,4 @@ export * from './findings.js';
 export * from './build-log.js';
 export * from './plan.js';
 export * from './readiness.js';
+export * from './project-metadata.js';

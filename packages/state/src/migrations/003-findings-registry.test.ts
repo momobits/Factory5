@@ -120,15 +120,13 @@ describe('migration 003-findings-registry — schema shape', () => {
 
   it('exposes idx_findings_registry_severity_status non-unique index', () => {
     const db = freshDb();
-    const indexes = db
-      .prepare('PRAGMA index_list(findings_registry)')
-      .all() as IndexInfo[];
+    const indexes = db.prepare('PRAGMA index_list(findings_registry)').all() as IndexInfo[];
     const explicit = indexes.find((i) => i.name === 'idx_findings_registry_severity_status');
     expect(explicit, 'severity/status index missing').toBeDefined();
     expect(explicit?.unique).toBe(0);
-    const cols = db
-      .prepare("PRAGMA index_info('idx_findings_registry_severity_status')")
-      .all() as { name: string }[];
+    const cols = db.prepare("PRAGMA index_info('idx_findings_registry_severity_status')").all() as {
+      name: string;
+    }[];
     expect(cols.map((c) => c.name)).toEqual(['severity', 'status']);
   });
 
@@ -140,8 +138,32 @@ describe('migration 003-findings-registry — schema shape', () => {
        description, advisory, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(project_id, finding_id) DO UPDATE SET status = excluded.status`;
-    db.prepare(insertSql).run('p', '/tmp/p', 'F001', 'reviewer', 'x', 'HIGH', 'OPEN', 'd', 0, now, now);
-    db.prepare(insertSql).run('p', '/tmp/p', 'F001', 'reviewer', 'x', 'HIGH', 'FIXED', 'd', 0, now, now);
+    db.prepare(insertSql).run(
+      'p',
+      '/tmp/p',
+      'F001',
+      'reviewer',
+      'x',
+      'HIGH',
+      'OPEN',
+      'd',
+      0,
+      now,
+      now,
+    );
+    db.prepare(insertSql).run(
+      'p',
+      '/tmp/p',
+      'F001',
+      'reviewer',
+      'x',
+      'HIGH',
+      'FIXED',
+      'd',
+      0,
+      now,
+      now,
+    );
     const rows = db
       .prepare('SELECT status FROM findings_registry WHERE project_id = ? AND finding_id = ?')
       .all('p', 'F001') as { status: string }[];
@@ -156,6 +178,6 @@ describe('migration 003-findings-registry — schema shape', () => {
     const appliedIds = (
       db.prepare('SELECT id FROM migrations ORDER BY id').all() as { id: number }[]
     ).map((r) => r.id);
-    expect(appliedIds).toEqual([1, 2, 3, 4, 5]);
+    expect(appliedIds).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });

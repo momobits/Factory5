@@ -31,6 +31,7 @@ import {
   runMigrations,
   type Database,
 } from '@factory5/state';
+import { loadOrCreateProjectMetadata, ProjectMetadataCorruptError } from '@factory5/wiki';
 import type { Command } from 'commander';
 
 const log = createLogger('cli.build');
@@ -158,12 +159,20 @@ export function registerBuildCommand(program: Command): void {
           const db = openDatabase();
           runMigrations(db);
 
+          // Resolve project identity (ADR 0021): read or create
+          // <project>/.factory/project.json. The id is the canonical
+          // handle, stable across path moves; downstream queries
+          // (spend rollups, findings registry) join on it.
+          const projectMeta = await loadOrCreateProjectMetadata(projectPath, project);
+
+          const nowIso = new Date().toISOString();
           projectsQ.upsert(db, {
-            name: project,
+            id: projectMeta.id,
+            name: projectMeta.name,
             workspacePath: projectPath,
             status: 'active',
-            createdAt: new Date().toISOString(),
-            lastTouchedAt: new Date().toISOString(),
+            createdAt: projectMeta.createdAt,
+            lastTouchedAt: nowIso,
           });
 
           // Resolve budget ceilings: explicit CLI flag wins over
@@ -184,8 +193,9 @@ export function registerBuildCommand(program: Command): void {
             intent: 'build' satisfies Intent,
             payload: { project, projectPath, workspace },
             autonomy,
-            createdAt: new Date().toISOString(),
+            createdAt: nowIso,
             status: 'pending' as const,
+            projectId: projectMeta.id,
             ...(hasLimits ? { limits } : {}),
           });
           directivesQ.insert(db, directive);
@@ -209,8 +219,21 @@ export function registerBuildCommand(program: Command): void {
           }
         } catch (err) {
           const msg = (err as Error).message;
-          log.error({ err }, 'build failed');
-          stdout.write(`\nfactory build: error: ${msg}\n`);
+          if (err instanceof ProjectMetadataCorruptError) {
+            log.error(
+              { err, filePath: err.filePath },
+              'build failed: project identity file is corrupt',
+            );
+            stdout.write(
+              `\nfactory build: ${msg}\n` +
+                `\nThis project's identity file (.factory/project.json) cannot be parsed; refusing\n` +
+                `to silently re-tag it (would lose the project's spend / findings / build history).\n` +
+                `Restore the file from backup, or delete it to claim a new identity.\n`,
+            );
+          } else {
+            log.error({ err }, 'build failed');
+            stdout.write(`\nfactory build: error: ${msg}\n`);
+          }
           exit(1);
         }
       },

@@ -128,29 +128,86 @@ describe('events queries', () => {
 });
 
 describe('projects queries', () => {
-  it('upsert + getByName + listAll', () => {
+  it('upsert + getById + listAll (id-keyed per ADR 0021)', () => {
     const db = freshDb();
     const now = new Date().toISOString();
+    const id = newId();
     projects.upsert(db, {
+      id,
       name: 'demo',
       workspacePath: '/tmp/demo',
       status: 'active',
       createdAt: now,
       lastTouchedAt: now,
     });
-    const got = projects.getByName(db, 'demo');
+    const got = projects.getById(db, id);
     expect(got?.workspacePath).toBe('/tmp/demo');
+    expect(got?.id).toBe(id);
 
     projects.upsert(db, {
+      id,
       name: 'demo',
       workspacePath: '/tmp/demo',
       status: 'paused',
       createdAt: now,
       lastTouchedAt: new Date().toISOString(),
     });
-    expect(projects.getByName(db, 'demo')?.status).toBe('paused');
+    expect(projects.getById(db, id)?.status).toBe('paused');
 
     expect(projects.listAll(db)).toHaveLength(1);
+  });
+
+  it('two projects sharing a name are distinct rows when ids differ', () => {
+    const db = freshDb();
+    const now = new Date().toISOString();
+    const idA = newId();
+    const idB = newId();
+    projects.upsert(db, {
+      id: idA,
+      name: 'example',
+      workspacePath: '/c/Users/Momo/factory5-v5f-example-2/example',
+      status: 'active',
+      createdAt: now,
+      lastTouchedAt: now,
+    });
+    projects.upsert(db, {
+      id: idB,
+      name: 'example',
+      workspacePath: '/c/Users/Momo/factory5-v6c-example/example',
+      status: 'active',
+      createdAt: now,
+      lastTouchedAt: now,
+    });
+    expect(projects.listAll(db)).toHaveLength(2);
+    const byName = projects.findByName(db, 'example');
+    expect(byName).toHaveLength(2);
+    expect(new Set(byName.map((p) => p.id))).toEqual(new Set([idA, idB]));
+  });
+
+  it('lastWorkspacePath round-trips when set; absent when null', () => {
+    const db = freshDb();
+    const now = new Date().toISOString();
+    const idA = newId();
+    const idB = newId();
+    projects.upsert(db, {
+      id: idA,
+      name: 'a',
+      workspacePath: '/tmp/a',
+      lastWorkspacePath: '/old/path/a',
+      status: 'active',
+      createdAt: now,
+      lastTouchedAt: now,
+    });
+    projects.upsert(db, {
+      id: idB,
+      name: 'b',
+      workspacePath: '/tmp/b',
+      status: 'active',
+      createdAt: now,
+      lastTouchedAt: now,
+    });
+    expect(projects.getById(db, idA)?.lastWorkspacePath).toBe('/old/path/a');
+    expect(projects.getById(db, idB)?.lastWorkspacePath).toBeUndefined();
   });
 });
 

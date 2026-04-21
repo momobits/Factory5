@@ -2,20 +2,11 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { Finding } from '@factory5/core';
-import {
-  findingsRegistry,
-  openDatabase,
-  runMigrations,
-  type Database,
-} from '@factory5/state';
+import { newId, type Finding } from '@factory5/core';
+import { findingsRegistry, openDatabase, runMigrations, type Database } from '@factory5/state';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import {
-  runFindingsBackfill,
-  runFindingsList,
-  runFindingsShow,
-} from './findings.js';
+import { runFindingsBackfill, runFindingsList, runFindingsShow } from './findings.js';
 
 function mkFinding(overrides: Partial<Finding> & { id: string }): Finding {
   return {
@@ -230,14 +221,37 @@ describe('runFindingsBackfill', () => {
     await rm(workspace, { recursive: true, force: true });
   });
 
-  async function writeProjectFindings(name: string, findings: Finding[]): Promise<void> {
+  /**
+   * Per ADR 0021, the backfill resolves project identity from
+   * `<project>/.factory/project.json` (the ULID lives there). Tests must
+   * seed both the project file and the findings file. The helper returns
+   * the ULID it wrote so assertions can look up the rows.
+   */
+  async function writeProjectFindings(name: string, findings: Finding[]): Promise<string> {
     const factoryDir = join(workspace, name, '.factory');
     await mkdir(factoryDir, { recursive: true });
+    const projectId = newId();
+    await writeFile(
+      join(factoryDir, 'project.json'),
+      JSON.stringify(
+        {
+          id: projectId,
+          name,
+          createdAt: '2026-04-21T00:00:00.000Z',
+          factoryVersion: '0.x',
+          metadata: {},
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
     await writeFile(
       join(factoryDir, 'findings.json'),
       JSON.stringify({ nextSequence: findings.length + 1, findings }, null, 2),
       'utf8',
     );
+    return projectId;
   }
 
   it('workspace not readable returns exitCode 2', async () => {
@@ -249,11 +263,13 @@ describe('runFindingsBackfill', () => {
   });
 
   it('imports every finding from every project one level deep', async () => {
-    await writeProjectFindings('alpha', [
+    const alphaId = await writeProjectFindings('alpha', [
       mkFinding({ id: 'F001', severity: 'HIGH' }),
       mkFinding({ id: 'F002', severity: 'LOW' }),
     ]);
-    await writeProjectFindings('beta', [mkFinding({ id: 'F001', severity: 'CRITICAL' })]);
+    const betaId = await writeProjectFindings('beta', [
+      mkFinding({ id: 'F001', severity: 'CRITICAL' }),
+    ]);
 
     const { stdout, exitCode } = await runFindingsBackfill(db, { workspace });
     expect(exitCode).toBe(0);
@@ -263,13 +279,15 @@ describe('runFindingsBackfill', () => {
     expect(stdout).toContain('alpha');
     expect(stdout).toContain('+2 imported');
 
-    expect(findingsRegistry.getByProjectAndId(db, 'alpha', 'F001')).toBeDefined();
-    expect(findingsRegistry.getByProjectAndId(db, 'alpha', 'F002')).toBeDefined();
-    expect(findingsRegistry.getByProjectAndId(db, 'beta', 'F001')).toBeDefined();
+    expect(findingsRegistry.getByProjectAndId(db, alphaId, 'F001')).toBeDefined();
+    expect(findingsRegistry.getByProjectAndId(db, alphaId, 'F002')).toBeDefined();
+    expect(findingsRegistry.getByProjectAndId(db, betaId, 'F001')).toBeDefined();
   });
 
   it('is idempotent — second run reports updated-only, no duplicate inserts', async () => {
-    await writeProjectFindings('alpha', [mkFinding({ id: 'F001', severity: 'HIGH' })]);
+    const alphaId = await writeProjectFindings('alpha', [
+      mkFinding({ id: 'F001', severity: 'HIGH' }),
+    ]);
     await runFindingsBackfill(db, { workspace });
     const second = await runFindingsBackfill(db, { workspace });
     expect(second.exitCode).toBe(0);
@@ -277,7 +295,7 @@ describe('runFindingsBackfill', () => {
     expect(second.stdout).toContain('updated 1');
     const total = db
       .prepare('SELECT COUNT(*) AS c FROM findings_registry WHERE project_id = ?')
-      .get('alpha') as { c: number };
+      .get(alphaId) as { c: number };
     expect(total.c).toBe(1);
   });
 
@@ -287,15 +305,15 @@ describe('runFindingsBackfill', () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain('(dry-run)');
     expect(stdout).toContain('would import 1');
-    const count = db
-      .prepare('SELECT COUNT(*) AS c FROM findings_registry')
-      .get() as { c: number };
+    const count = db.prepare('SELECT COUNT(*) AS c FROM findings_registry').get() as { c: number };
     expect(count.c).toBe(0);
   });
 
   it('malformed findings.json increments errors but does not abort the run', async () => {
     // Valid project + invalid project side-by-side.
-    await writeProjectFindings('alpha', [mkFinding({ id: 'F001', severity: 'HIGH' })]);
+    const alphaId = await writeProjectFindings('alpha', [
+      mkFinding({ id: 'F001', severity: 'HIGH' }),
+    ]);
     const badDir = join(workspace, 'beta', '.factory');
     await mkdir(badDir, { recursive: true });
     await writeFile(join(badDir, 'findings.json'), '{ not json', 'utf8');
@@ -304,8 +322,9 @@ describe('runFindingsBackfill', () => {
     expect(exitCode).toBe(1); // errors > 0
     expect(stdout).toContain('1 error(s)');
     expect(stdout).toContain('imported 1'); // alpha still made it in
-    expect(findingsRegistry.getByProjectAndId(db, 'alpha', 'F001')).toBeDefined();
-    expect(findingsRegistry.getByProjectAndId(db, 'beta', 'F001')).toBeUndefined();
+    expect(findingsRegistry.getByProjectAndId(db, alphaId, 'F001')).toBeDefined();
+    // beta has no project.json at all (only findings.json), and even if it
+    // did the malformed findings.json would have prevented the import.
   });
 
   it('skips directories without a .factory/findings.json file', async () => {
@@ -315,5 +334,27 @@ describe('runFindingsBackfill', () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain('2 dir(s) scanned');
     expect(stdout).toContain('1 with findings.json');
+  });
+
+  it('skips projects without .factory/project.json (ADR 0021) and reports them', async () => {
+    // findings.json present but no project.json — backfill cannot resolve identity.
+    const factoryDir = join(workspace, 'unidentified', '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    await writeFile(
+      join(factoryDir, 'findings.json'),
+      JSON.stringify({
+        nextSequence: 2,
+        findings: [mkFinding({ id: 'F001', severity: 'HIGH' })],
+      }),
+      'utf8',
+    );
+
+    const { stdout, exitCode } = await runFindingsBackfill(db, { workspace });
+    expect(exitCode).toBe(0); // skip is not an error
+    expect(stdout).toContain('1 skipped');
+    expect(stdout).toContain('skipped (no identity file');
+    expect(stdout).toContain('unidentified');
+    const count = db.prepare('SELECT COUNT(*) AS c FROM findings_registry').get() as { c: number };
+    expect(count.c).toBe(0);
   });
 });
