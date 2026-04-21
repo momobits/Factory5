@@ -97,19 +97,41 @@ function defaultWorkspace(): string {
   return join(homedir(), 'factory5-workspace');
 }
 
+function parsePositiveFloat(flag: string, raw: string): number {
+  const n = Number.parseFloat(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`${flag} must be a positive number, got: ${raw}`);
+  }
+  return n;
+}
+
+function parsePositiveInt(flag: string, raw: string): number {
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1) {
+    throw new Error(`${flag} must be a positive integer, got: ${raw}`);
+  }
+  return n;
+}
+
 export function registerBuildCommand(program: Command): void {
   program
     .command('build <project>')
     .description('build a project from its CLAUDE.md spec (delegates to factoryd if running)')
     .option('--autonomy <mode>', 'chat | assisted | autonomous', 'assisted')
     .option('--workspace <path>', 'root directory under which projects live', defaultWorkspace())
-    .option('--concurrency <n>', 'max parallel worker tasks (default: min(4, cpuCount))', (v) => {
-      const n = Number.parseInt(v, 10);
-      if (!Number.isFinite(n) || n < 1) {
-        throw new Error(`--concurrency must be a positive integer, got: ${v}`);
-      }
-      return n;
-    })
+    .option('--concurrency <n>', 'max parallel worker tasks (default: min(4, cpuCount))', (v) =>
+      parsePositiveInt('--concurrency', v),
+    )
+    .option(
+      '--max-usd <n>',
+      'hard USD ceiling for this directive (ADR 0020). Absent = unlimited.',
+      (v) => parsePositiveFloat('--max-usd', v),
+    )
+    .option(
+      '--max-steps <n>',
+      'hard call-count ceiling for this directive (ADR 0020). Absent = unlimited.',
+      (v) => parsePositiveInt('--max-steps', v),
+    )
     .option('--inline', 'force inline execution even when a daemon is running')
     .option('--verbose', 'log at debug level')
     .action(
@@ -119,6 +141,8 @@ export function registerBuildCommand(program: Command): void {
           autonomy: string;
           workspace: string;
           concurrency?: number;
+          maxUsd?: number;
+          maxSteps?: number;
           inline?: boolean;
           verbose?: boolean;
         },
@@ -142,6 +166,11 @@ export function registerBuildCommand(program: Command): void {
             lastTouchedAt: new Date().toISOString(),
           });
 
+          const limits: { maxUsd?: number; maxSteps?: number } = {};
+          if (options.maxUsd !== undefined) limits.maxUsd = options.maxUsd;
+          if (options.maxSteps !== undefined) limits.maxSteps = options.maxSteps;
+          const hasLimits = Object.keys(limits).length > 0;
+
           const directive = directiveSchema.parse({
             id: newId(),
             source: 'cli',
@@ -152,11 +181,15 @@ export function registerBuildCommand(program: Command): void {
             autonomy,
             createdAt: new Date().toISOString(),
             status: 'pending' as const,
+            ...(hasLimits ? { limits } : {}),
           });
           directivesQ.insert(db, directive);
 
+          const limitsLine = hasLimits
+            ? `  limits:   ${options.maxUsd !== undefined ? `max_usd=$${options.maxUsd.toFixed(2)} ` : ''}${options.maxSteps !== undefined ? `max_steps=${String(options.maxSteps)}` : ''}\n`
+            : '';
           stdout.write(
-            `factory build ${project}\n  directive: ${directive.id}\n  path: ${projectPath}\n  autonomy: ${autonomy}\n\n`,
+            `factory build ${project}\n  directive: ${directive.id}\n  path: ${projectPath}\n  autonomy: ${autonomy}\n${limitsLine}\n`,
           );
 
           const daemonAvailable = options.inline !== true && isDaemonRunning();
