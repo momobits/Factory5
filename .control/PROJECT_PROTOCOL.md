@@ -336,6 +336,20 @@ Then wait for me to confirm before editing code.
 Current context (as of <session-end-date>):
 - Phase <N> — <name>, at step <N.M>
 - <one-line note on where work is mid-flight, if applicable>
+
+## Decisions awaiting your input
+
+*(Optional — populate when an upcoming step has a design choice that needs operator
+judgment. Empty when there are none. The session-start protocol expands every entry
+here into full option detail before asking for go. Do NOT shorthand options as
+labeled footnotes — the next session's reader needs the full context up front.)*
+
+- **<short title of the decision>**
+  - Context: <one or two sentences on why the decision is open>
+  - Options: <list each option with what concretely changes, what the operator sees,
+    cost / scope impact, and the trade-off being accepted — the shape the
+    session-start protocol will expand to>
+  - Recommendation: <preferred option with the trade-off named, or "no lean">
 ```
 
 ### `.control/phases/phase-N-<name>/README.md`
@@ -469,6 +483,7 @@ Only used for **major** and **blocker** severity. Minor bugs never create a file
    Proposed next action: <from STATE.md>
    Ready to proceed?
    ```
+5b. **Design decisions awaiting operator input.** If `.control/progress/next.md` surfaces a `## Decisions awaiting your input` section, or STATE.md's "Notes for next session" / "Next action" flags an open design choice for the upcoming step, expand it inline before asking for go. For each option present: **(i) what concretely changes** (schema additions, code shape, file additions), **(ii) what the operator sees** (sample CLI output, sample data shape, sample error), **(iii) cost / scope impact** (how it affects the current step's budget and surrounding work), **(iv) trade-off being accepted** (what each option costs, not just what it gains). End with a recommendation that names the trade-off, not just the lean. Do not shorthand design choices as labeled footnotes (`(a)` / `(b)` with one-line summaries) — that forces the operator to ask for the detail in a second turn, wasting context.
 6. **Wait for confirmation.** Do not edit code before the user says go.
 ```
 
@@ -540,6 +555,7 @@ Follow `.control/runbooks/session-start.md` exactly:
    Proposed next action: <from STATE.md>
    Ready to proceed?
    ```
+5b. **Design decisions awaiting operator input.** If `.control/progress/next.md` surfaces a `## Decisions awaiting your input` section, or STATE.md's "Notes for next session" / "Next action" flags an open design choice for the upcoming step, expand it inline before asking for go. For each option present: **(i) what concretely changes** (schema additions, code shape, file additions), **(ii) what the operator sees** (sample CLI output, sample data shape, sample error), **(iii) cost / scope impact** (how it affects the current step's budget and surrounding work), **(iv) trade-off being accepted** (what each option costs, not just what it gains). End with a recommendation that names the trade-off, not just the lean. Do not shorthand design choices as labeled footnotes (`(a)` / `(b)` with one-line summaries) — that forces the operator to ask for the detail in a second turn, wasting context.
 6. Wait for the user's go before editing any code.
 ```
 

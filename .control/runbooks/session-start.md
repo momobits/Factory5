@@ -15,6 +15,7 @@
    Proposed next action: <from STATE.md>
    Ready to proceed?
    ```
+5b. **Design decisions awaiting operator input.** If `.control/progress/next.md` surfaces a `## Decisions awaiting your input` section, or STATE.md's "Notes for next session" / "Next action" flags an open design choice for the upcoming step, expand it inline before asking for go. For each option present: **(i) what concretely changes** (schema additions, code shape, file additions), **(ii) what the operator sees** (sample CLI output, sample data shape, sample error), **(iii) cost / scope impact** (how it affects the current step's budget and surrounding work), **(iv) trade-off being accepted** (what each option costs, not just what it gains). End with a recommendation that names the trade-off, not just the lean. Do not shorthand design choices as labeled footnotes (`(a)` / `(b)` with one-line summaries) — that forces the operator to ask for the detail in a second turn, wasting context.
 6. **Wait for confirmation.** Do not edit code before the user says go.
 
 If `SessionStart` hook is installed (`.claude/hooks/session-start-load.sh`), steps 1-5 run automatically and prefix the session with bootstrap instructions.
