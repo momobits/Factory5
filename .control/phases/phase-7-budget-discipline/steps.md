@@ -7,7 +7,7 @@
 ## Phase 7a — Budget enforcement
 
 - [x] 7a.1 — ADR: pre-call cost estimate approach (how `brain` knows whether the next LLM call will exceed `max_usd`) — [ADR 0020](../../../docs/decisions/0020-pre-call-budget-enforcement.md)
-- [ ] 7a.2 — `@factory5/state` — running-total query over `model_usage` by directive
+- [x] 7a.2 — `@factory5/state` — running-total query over `model_usage` by directive (`countForDirective` + `averageCostByCategory` + `mode` column via migration 004)
 - [ ] 7a.3 — `@factory5/providers` — expose per-call cost estimate (input-token + expected-output-token × model-rate)
 - [ ] 7a.4 — `@factory5/brain` — pre-call ceiling check in the main loop; halt + escalate when exceeded
 - [ ] 7a.5 — `@factory5/cli` — `--max-usd <N>` / `--max-steps <N>` flags on `factory build`

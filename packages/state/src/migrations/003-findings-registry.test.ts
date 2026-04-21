@@ -156,6 +156,6 @@ describe('migration 003-findings-registry — schema shape', () => {
     const appliedIds = (
       db.prepare('SELECT id FROM migrations ORDER BY id').all() as { id: number }[]
     ).map((r) => r.id);
-    expect(appliedIds).toEqual([1, 2, 3]);
+    expect(appliedIds).toEqual([1, 2, 3, 4]);
   });
 });

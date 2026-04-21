@@ -121,7 +121,7 @@ class BudgetExceededError extends Error {
   kind: 'budget_exceeded_usd' | 'budget_exceeded_steps';
   ceiling: number;
   spentSoFar: number;
-  estimatedCost: number;  // 0 for the steps variant
+  estimatedCost: number; // 0 for the steps variant
   callsMadeSoFar: number;
   category: ModelCategory;
   agent: string;
@@ -135,7 +135,7 @@ The pool and the inline loop catch it at the outer boundary (same
    in `tasks_inflight` as `blocked` (not `failed` — the task did nothing
    wrong, its budget ran out).
 2. Mark the directive `blocked` and set `directives.blocked_reason =
-   'budget_exceeded_usd: spent=$1.23 ceiling=$3.00 est=$0.80 calls=7'`
+'budget_exceeded_usd: spent=$1.23 ceiling=$3.00 est=$0.80 calls=7'`
    (or `budget_exceeded_steps: calls=40/40`). The `blocked_reason`
    column already exists (migration 002); prefix with the error `kind`
    keeps it machine-parseable.
@@ -143,7 +143,7 @@ The pool and the inline loop catch it at the outer boundary (same
    escalation path (not inventing a new channel). The message tells
    the operator the directive is halted, how much it had spent, and
    how to resume with a higher ceiling (`factory resume <directive>
-   --max-usd <new-N>` — exact CLI syntax defined in step 7a.5).
+--max-usd <new-N>` — exact CLI syntax defined in step 7a.5).
 
 No half-torn-down task state. The provider was never called, so there
 is nothing mid-flight to kill.
@@ -316,8 +316,8 @@ reverted.
 Steps 7a.2 through 7a.7 land the plumbing. Rough split:
 
 - **7a.2 — `@factory5/state`.** Add `averageCostByCategory(db,
-  category, mode, sampleSize=20)` and `countForDirective(db,
-  directiveId)` to `packages/state/src/queries/model-usage.ts`.
+category, mode, sampleSize=20)` and `countForDirective(db,
+directiveId)` to `packages/state/src/queries/model-usage.ts`.
   Additive, no schema change.
 - **7a.3 — `@factory5/providers`.** No change. Providers stay dumb
   about budgets; the brain owns policy. (Step 7a.3 in the plan was
