@@ -32,7 +32,13 @@ import type {
   ProviderResponse,
   ProviderUsage,
 } from '@factory5/providers';
-import { addFinding, appendBuildLog, listFindings, readWiki } from '@factory5/wiki';
+import {
+  addFinding,
+  appendBuildLog,
+  listFindings,
+  readWiki,
+  type FindingRegistryBinding,
+} from '@factory5/wiki';
 import { simpleGit } from 'simple-git';
 
 import { parseFindings } from './parse-findings.js';
@@ -59,6 +65,15 @@ export interface WorkerOptions {
    * `['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep']` is used.
    */
   allowedTools?: readonly string[];
+  /**
+   * Optional binding to the cross-project `findings_registry` (Phase
+   * 6a). When supplied, every finding raised during this task is
+   * dual-written: the per-project `findings.json` remains the source
+   * of truth; the registry row is upserted best-effort. Pass
+   * `originDirectiveId` so the registry can tie findings back to the
+   * directive for cross-project traceability.
+   */
+  findingRegistry?: FindingRegistryBinding;
   /** Optional cancellation signal — propagates into the provider call. */
   signal?: AbortSignal;
 }
@@ -144,17 +159,22 @@ async function persistFindings(
   agent: AgentRole,
   taskId: string,
   responseText: string,
+  findingRegistry: FindingRegistryBinding | undefined,
 ): Promise<string[]> {
   const findingIds: string[] = [];
   if (responseText.length === 0) return findingIds;
   const parsed = parseFindings(responseText);
   for (const p of parsed) {
-    const f: Finding = await addFinding(projectPath, {
-      source: agent,
-      target: p.target,
-      severity: p.severity,
-      description: p.description,
-    });
+    const f: Finding = await addFinding(
+      projectPath,
+      {
+        source: agent,
+        target: p.target,
+        severity: p.severity,
+        description: p.description,
+      },
+      findingRegistry,
+    );
     findingIds.push(f.id);
   }
   if (parsed.length > 0) {
@@ -207,6 +227,7 @@ async function runReadOnly(opts: WorkerOptions, fullUserPrompt: string): Promise
     opts.task.agent,
     opts.task.id,
     responseText,
+    opts.findingRegistry,
   );
 
   const durationMs = Date.now() - started;
@@ -310,6 +331,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
     opts.task.agent,
     opts.task.id,
     responseText,
+    opts.findingRegistry,
   );
 
   const desiredOutcome: 'success' | 'failure' = error === undefined ? 'success' : 'failure';

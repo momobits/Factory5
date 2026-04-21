@@ -1,8 +1,14 @@
 import { mkdtemp, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import { newId } from '@factory5/core';
+import {
+  directives as directivesQ,
+  openDatabase,
+  runMigrations,
+  type Database,
+} from '@factory5/state';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -175,6 +181,197 @@ describe('findings', () => {
     });
     expect(verifierBlocking.advisory).toBeUndefined();
     expect(reviewerAdvisory.advisory).toBe(true);
+  });
+});
+
+// Phase 6a.2 — dual-write into the cross-project findings_registry.
+// Full coverage lands in 6a.6; these cases verify the contract:
+//   - registry receives the row with the expected column values,
+//   - advisory is persisted as 0/1 mirroring Finding.advisory,
+//   - updateFindingStatus upserts status + resolved_at,
+//   - no-registry callsites keep writing file-only (backwards compat).
+describe('findings registry dual-write', () => {
+  let db: Database;
+  beforeEach(() => {
+    db = openDatabase(':memory:');
+    runMigrations(db);
+  });
+  afterEach(() => {
+    try {
+      db.close();
+    } catch {
+      /* db may already be closed by a test that exercised the failure path */
+    }
+  });
+
+  // Seeds a directive row so that findings referencing its id via
+  // `origin_directive_id` pass the FK constraint.
+  function seedDirective(id: string = newId()): string {
+    directivesQ.insert(db, {
+      id,
+      source: 'cli',
+      principal: 'tester',
+      channelRef: 'wiki-test',
+      intent: 'build',
+      payload: {},
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'running',
+    });
+    return id;
+  }
+
+  interface RegistryRow {
+    project_id: string;
+    project_path: string;
+    finding_id: string;
+    source: string;
+    target: string;
+    severity: string;
+    status: string;
+    description: string;
+    resolution: string | null;
+    advisory: number;
+    origin_directive_id: string | null;
+    created_at: string;
+    resolved_at: string | null;
+    updated_at: string;
+  }
+
+  it('addFinding with registry writes both file and registry row', async () => {
+    const directiveId = seedDirective();
+    const f = await addFinding(
+      projectDir,
+      {
+        source: 'reviewer',
+        target: 'src/api.py',
+        severity: 'HIGH',
+        description: 'missing timeout',
+      },
+      { db, originDirectiveId: directiveId },
+    );
+    const rows = db
+      .prepare('SELECT * FROM findings_registry WHERE finding_id = ?')
+      .all(f.id) as RegistryRow[];
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(row.project_id).toBe(basename(projectDir));
+    expect(row.project_path).toBe(projectDir);
+    expect(row.source).toBe('reviewer');
+    expect(row.severity).toBe('HIGH');
+    expect(row.status).toBe('OPEN');
+    expect(row.advisory).toBe(0);
+    expect(row.origin_directive_id).toBe(directiveId);
+    expect(row.resolved_at).toBeNull();
+  });
+
+  it('addFinding persists advisory=1 for verifier source', async () => {
+    const f = await addFinding(
+      projectDir,
+      {
+        source: 'verifier',
+        target: 'architecture',
+        severity: 'MEDIUM',
+        description: 'potential contract drift',
+      },
+      { db },
+    );
+    const row = db
+      .prepare('SELECT advisory, source FROM findings_registry WHERE finding_id = ?')
+      .get(f.id) as { advisory: number; source: string } | undefined;
+    expect(row?.advisory).toBe(1);
+    expect(row?.source).toBe('verifier');
+  });
+
+  it('addFinding without a registry binding writes file-only (back-compat)', async () => {
+    const f = await addFinding(projectDir, {
+      source: 'reviewer',
+      target: 'x',
+      severity: 'LOW',
+      description: 'nit',
+    });
+    const count = db
+      .prepare('SELECT COUNT(*) AS c FROM findings_registry WHERE finding_id = ?')
+      .get(f.id) as { c: number };
+    expect(count.c).toBe(0);
+    // File write still happens.
+    const fileCopy = await getFinding(projectDir, f.id);
+    expect(fileCopy?.id).toBe(f.id);
+  });
+
+  it('updateFindingStatus upserts into the registry and bumps resolved_at', async () => {
+    const directiveId = seedDirective();
+    const f = await addFinding(
+      projectDir,
+      {
+        source: 'fixer',
+        target: 'src/x.py',
+        severity: 'LOW',
+        description: 'nit',
+      },
+      { db, originDirectiveId: directiveId },
+    );
+    const before = db
+      .prepare('SELECT updated_at FROM findings_registry WHERE finding_id = ?')
+      .get(f.id) as { updated_at: string };
+    await new Promise((r) => setTimeout(r, 2));
+    await updateFindingStatus(projectDir, f.id, 'FIXED', 'patched in abc', {
+      db,
+      originDirectiveId: directiveId,
+    });
+    const after = db
+      .prepare('SELECT status, resolution, resolved_at, updated_at FROM findings_registry WHERE finding_id = ?')
+      .get(f.id) as {
+      status: string;
+      resolution: string | null;
+      resolved_at: string | null;
+      updated_at: string;
+    };
+    expect(after.status).toBe('FIXED');
+    expect(after.resolution).toBe('patched in abc');
+    expect(after.resolved_at).not.toBeNull();
+    expect(after.updated_at >= before.updated_at).toBe(true);
+  });
+
+  it('registry upsert preserves created_at across re-raise', async () => {
+    const fixedCreated = '2026-01-01T00:00:00.000+00:00';
+    const f = await addFinding(
+      projectDir,
+      {
+        source: 'reviewer',
+        target: 'src/a',
+        severity: 'LOW',
+        description: 'first',
+        createdAt: fixedCreated,
+      },
+      { db },
+    );
+    // Manually re-upsert with a different updated_at — created_at should stick.
+    await updateFindingStatus(projectDir, f.id, 'WONTFIX', 'stale rule', { db });
+    const row = db
+      .prepare('SELECT created_at, status FROM findings_registry WHERE finding_id = ?')
+      .get(f.id) as { created_at: string; status: string };
+    expect(row.created_at).toBe(fixedCreated);
+    expect(row.status).toBe('WONTFIX');
+  });
+
+  it('registry failure does not fail addFinding (best-effort)', async () => {
+    // Close the DB so the registry upsert throws. The per-project file
+    // must still be written — afterEach tolerates the already-closed db.
+    db.close();
+    const f = await addFinding(
+      projectDir,
+      {
+        source: 'reviewer',
+        target: 'x',
+        severity: 'LOW',
+        description: 'y',
+      },
+      { db },
+    );
+    expect(f.id).toBe('F001');
+    const fileCopy = await getFinding(projectDir, f.id);
+    expect(fileCopy?.id).toBe(f.id);
   });
 });
 

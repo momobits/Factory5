@@ -15,6 +15,7 @@
  */
 
 import { cpus } from 'node:os';
+import { basename } from 'node:path';
 
 import type { Plan, Task } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
@@ -142,6 +143,11 @@ async function executeTask(
       registry,
       systemPrompt,
       userPrompt,
+      findingRegistry: {
+        db,
+        projectId: basename(plan.projectPath),
+        originDirectiveId: directiveId,
+      },
       ...(signal !== undefined ? { signal } : {}),
     });
   } finally {

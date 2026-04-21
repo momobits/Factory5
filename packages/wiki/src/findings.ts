@@ -8,10 +8,11 @@
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { basename, dirname } from 'node:path';
 
 import { findingId, findingSchema, type Finding, type FindingStatus } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
+import { findingsRegistry, type Database } from '@factory5/state';
 import { z } from 'zod';
 
 import { projectPaths } from './paths.js';
@@ -68,6 +69,44 @@ export interface AddFindingInput {
 }
 
 /**
+ * Optional binding to the cross-project `findings_registry` (Phase 6a).
+ * When supplied, {@link addFinding} and {@link updateFindingStatus}
+ * dual-write: the per-project `findings.json` remains the source of
+ * truth and the registry row is upserted best-effort afterwards. A
+ * registry failure logs a warning but does not fail the per-project
+ * write — the backfill (6a.5) is the recovery path.
+ */
+export interface FindingRegistryBinding {
+  db: Database;
+  /** Stable project handle — defaults to `basename(projectPath)`. */
+  projectId?: string;
+  /** Directive that raised this finding; recorded as `origin_directive_id`. */
+  originDirectiveId?: string;
+}
+
+function mirrorToRegistry(
+  finding: Finding,
+  projectPath: string,
+  registry: FindingRegistryBinding,
+): void {
+  try {
+    findingsRegistry.upsert(registry.db, {
+      projectId: registry.projectId ?? basename(projectPath),
+      projectPath,
+      finding,
+      ...(registry.originDirectiveId !== undefined
+        ? { originDirectiveId: registry.originDirectiveId }
+        : {}),
+    });
+  } catch (err) {
+    log.warn(
+      { err, projectPath, id: finding.id },
+      'wiki.findings: registry mirror failed — per-project file still authoritative',
+    );
+  }
+}
+
+/**
  * Resolve the `advisory` flag for a new finding. Verifier-sourced findings
  * default to advisory (ADR 0018); callers may override explicitly. Returns
  * `true` only when the resulting finding should carry the flag — consumers
@@ -82,8 +121,17 @@ function resolveAdvisory(input: AddFindingInput): boolean | undefined {
 /**
  * Append a new finding. Assigns the next sequential ID and writes the
  * updated `findings.json`. Returns the assigned finding.
+ *
+ * When `registry` is supplied, the finding is also upserted into the
+ * cross-project `findings_registry` (Phase 6a) on a best-effort basis —
+ * registry failures log a warning and do not fail the per-project
+ * write.
  */
-export async function addFinding(projectPath: string, input: AddFindingInput): Promise<Finding> {
+export async function addFinding(
+  projectPath: string,
+  input: AddFindingInput,
+  registry?: FindingRegistryBinding,
+): Promise<Finding> {
   const { findings } = projectPaths(projectPath);
   const file = await loadFile(findings);
   const id = findingId(file.nextSequence);
@@ -104,6 +152,9 @@ export async function addFinding(projectPath: string, input: AddFindingInput): P
     findings: [...file.findings, newFinding],
   };
   await writeFileAtomic(findings, JSON.stringify(updated, null, 2));
+  if (registry !== undefined) {
+    mirrorToRegistry(newFinding, projectPath, registry);
+  }
   log.info(
     { projectPath, id, severity: newFinding.severity, advisory: advisory === true },
     'finding added',
@@ -123,12 +174,17 @@ export function isAdvisory(f: Finding): boolean {
 /**
  * Update a finding's status (+ optional resolution note). Sets `resolvedAt`
  * automatically when transitioning to `FIXED`, `VERIFIED`, or `WONTFIX`.
+ *
+ * When `registry` is supplied, the updated finding is also upserted
+ * into the cross-project `findings_registry` (Phase 6a) on a
+ * best-effort basis.
  */
 export async function updateFindingStatus(
   projectPath: string,
   id: string,
   status: FindingStatus,
   resolution?: string,
+  registry?: FindingRegistryBinding,
 ): Promise<Finding> {
   const { findings } = projectPaths(projectPath);
   const file = await loadFile(findings);
@@ -151,6 +207,9 @@ export async function updateFindingStatus(
   nextList[idx] = next;
   const updated: FindingsFile = { nextSequence: file.nextSequence, findings: nextList };
   await writeFileAtomic(findings, JSON.stringify(updated, null, 2));
+  if (registry !== undefined) {
+    mirrorToRegistry(next, projectPath, registry);
+  }
   log.info({ projectPath, id, status }, 'finding updated');
   return next;
 }
