@@ -7,11 +7,12 @@ Before creating anything, ask the user two questions:
 
 1. **Symptom** — one-line description of what's wrong.
 2. **Severity** — blocker | major | minor.
-   - *blocker*: prevents phase advancement
-   - *major*: needs tracking + regression test, but not blocking
-   - *minor*: typo / obvious fix / cosmetic — no file, no regression test required
+   - _blocker_: prevents phase advancement
+   - _major_: needs tracking + regression test, but not blocking
+   - _minor_: typo / obvious fix / cosmetic — no file, no regression test required
 
 **If minor:**
+
 - Do NOT create a file.
 - Fix it inline in this session.
 - Commit the fix.
@@ -19,6 +20,7 @@ Before creating anything, ask the user two questions:
 - Done.
 
 **If major or blocker:**
+
 - Create `.control/issues/OPEN/<today>-$ARGUMENTS.md` from `.control/templates/issue.md`.
 - Fill: Discovered (today), Phase/step (from STATE.md), Symptom, Severity, Tags (`phase:<N>-blocker` if blocker).
 - Append journal: `- Opened ISSUE-<today>-$ARGUMENTS (severity:<sev>) — <symptom>`.

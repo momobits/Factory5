@@ -3117,12 +3117,12 @@ reproducible. Tag `phase-7a-budget-enforcement-closed`.
    persistence as `abandoned`, and zero `tasks_inflight` rows for
    the refused task.
 8. **7a.8 — live validation — passed.** `factory build example
-   --max-usd 3` against a fresh `factory5-v7a-example` workspace.
+--max-usd 3` against a fresh `factory5-v7a-example` workspace.
    Tripped cleanly at the 6th dispatch (builder-2):
    `spentSoFar=$1.9151 + estimatedCost=$2.00 > ceiling=$3.00`.
    Directive `01KPRHNEX1T3VR3S4ZTTSJ8F0M` ended `blocked` with
    `blockedReason='budget_exceeded_usd: spent=$1.9151 ceiling=$3.00
-   est=$2.0000 calls=5 agent=builder'`. 5 `model_usage` rows
+est=$2.0000 calls=5 agent=builder'`. 5 `model_usage` rows
    persisted, all with correct `mode` values. Phase 6c-style silent
    overrun not reproducible; $1.08 headroom at the halt.
 

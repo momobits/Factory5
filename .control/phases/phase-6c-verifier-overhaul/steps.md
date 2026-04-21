@@ -40,11 +40,13 @@ Update `docs/decisions/INDEX.md` with the new ADR row.
 ### 6c.3 — Implement the chosen path
 
 **Advisory path implementation sketch:**
+
 - In `packages/brain/src/loop.ts` (or wherever findings roll into gate calc): filter out `source: "verifier"` findings from gate contribution. They still persist to `wiki.addFinding`, still show in `factory findings`, but no longer flip `gate.verify`.
 - Tag verifier-sourced findings with a new field `advisory: true` (add to `core` Finding schema in `packages/core/src/schemas.ts`, wire through).
 - Consider: should verifier findings be a separate severity ceiling? E.g. cap at WARNING. Decide in the ADR.
 
 **Authoritative path implementation sketch:**
+
 - In `packages/brain/src/agents.ts` (or wherever agent tool allowlists are): add `Read`, `Glob`, `Grep` to verifier's allowlist.
 - Update `packages/worker/src/runWorker.ts` to pass these through for verifier runs.
 - Evidence-citation discipline enforced at the prompt level (6c.4).
@@ -54,6 +56,7 @@ Update `docs/decisions/INDEX.md` with the new ADR row.
 ### 6c.4 — Rewrite `prompts/agents/verifier.md`
 
 Replace the 6-line Phase 1 stub with a real prompt. It must state:
+
 - What the verifier is for (post-builder, post-assessor second-opinion pass; **not** ground-truth on file presence).
 - What claims the verifier may/may not make, given its tool surface after 6c.3.
 - Evidence discipline (authoritative path: cite file path + line number for every finding; advisory path: scope to architectural/observation claims).
@@ -85,6 +88,7 @@ factory build example --autonomy autonomous --concurrency 2
 ```
 
 Expect:
+
 - `terminalStatus: complete`
 - `gate: {build: true, integration: true, verify: true}`
 - Zero verifier-sourced CRITICAL findings in `<workspace>/example/.factory/findings.json`

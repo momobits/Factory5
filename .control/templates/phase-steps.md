@@ -7,7 +7,9 @@
 ## Sub-step detail
 
 ### <N>.2 — <action>
+
 <What exactly to do. What to verify. Links to interface/decision docs. Commit message template.>
 
 ### <N>.3 — <action>
+
 ...

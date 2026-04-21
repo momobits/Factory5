@@ -31,11 +31,11 @@ Operating surface at Phase 6 close:
 Three sub-phases, strict order, each a cohesive chunk (see
 `.control/phases/phase-7-budget-discipline/README.md`):
 
-| Order | Sub-phase | Name                                         | Pitch                                                                                                                                                       | Est. sessions | Status                                                                            |
-| ----- | --------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | --------------------------------------------------------------------------------- |
-| 1st   | **7a**    | Budget enforcement (`max_usd` / `max_steps`) | Pre-call ceilings enforced before each LLM call. CLI flags + config defaults. Graceful escalation when exceeded.                                            | 1             | 🟢 closed (this document)                                                         |
-| 2nd   | **7b**    | Cross-session spend dashboard                | `factory spend` subcommand — per-project / per-directive / per-day spend aggregations over `model_usage`.                                                   | 1             | 📝 queued                                                                         |
-| 3rd   | **7c**    | Telegram channel                             | Third `ChannelPlugin` (after CLI + Discord). Long-polling event source. Discord is the reference channel (GitHub was dropped Phase 6 per ADR 0019).         | 1–2           | 📝 queued                                                                         |
+| Order | Sub-phase | Name                                         | Pitch                                                                                                                                               | Est. sessions | Status                    |
+| ----- | --------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------------------------- |
+| 1st   | **7a**    | Budget enforcement (`max_usd` / `max_steps`) | Pre-call ceilings enforced before each LLM call. CLI flags + config defaults. Graceful escalation when exceeded.                                    | 1             | 🟢 closed (this document) |
+| 2nd   | **7b**    | Cross-session spend dashboard                | `factory spend` subcommand — per-project / per-directive / per-day spend aggregations over `model_usage`.                                           | 1             | 📝 queued                 |
+| 3rd   | **7c**    | Telegram channel                             | Third `ChannelPlugin` (after CLI + Discord). Long-polling event source. Discord is the reference channel (GitHub was dropped Phase 6 per ADR 0019). | 1–2           | 📝 queued                 |
 
 Each sub-phase closes independently (`phase-7a-budget-enforcement-closed`,
 etc.). Phase 7 as a whole closes when all three ship, with tag
@@ -114,17 +114,17 @@ exited `0` with `status=blocked`.
 
 Per-call breakdown from `model_usage`:
 
-| # | Agent       | Category / mode      | Model               | Spend     | Cumulative |
-| - | ----------- | -------------------- | ------------------- | --------- | ---------- |
-| 1 | triage      | `quick` / `call`     | claude-haiku-4-5    | $0.0157   | $0.0157    |
-| 2 | architect   | `reasoning` / `call` | claude-opus-4-7     | $0.4749   | $0.4906    |
-| 3 | planner     | `planning` / `call`  | claude-sonnet-4-6   | $0.1040   | $0.5946    |
-| 4 | scaffolder  | `planning` / stream  | claude-sonnet-4-6   | $0.1438   | $0.7384    |
-| 5 | builder #1  | `deep` / stream      | claude-opus-4-7     | $1.1767   | $1.9151    |
+| #   | Agent      | Category / mode      | Model             | Spend   | Cumulative |
+| --- | ---------- | -------------------- | ----------------- | ------- | ---------- |
+| 1   | triage     | `quick` / `call`     | claude-haiku-4-5  | $0.0157 | $0.0157    |
+| 2   | architect  | `reasoning` / `call` | claude-opus-4-7   | $0.4749 | $0.4906    |
+| 3   | planner    | `planning` / `call`  | claude-sonnet-4-6 | $0.1040 | $0.5946    |
+| 4   | scaffolder | `planning` / stream  | claude-sonnet-4-6 | $0.1438 | $0.7384    |
+| 5   | builder #1 | `deep` / stream      | claude-opus-4-7   | $1.1767 | $1.9151    |
 
 At the 6th dispatch (builder #2), the pre-call check fired:
 
-  `spentSoFar=$1.9151, estimatedCost=$2.00 (cold-start default for
+`spentSoFar=$1.9151, estimatedCost=$2.00 (cold-start default for
   deep/stream — only one stream sample in history, below the 2-sample
   floor), ceiling=$3.00 → $1.9151 + $2.00 = $3.9151 > $3.00 → trip.`
 
@@ -161,7 +161,7 @@ One follow-up noted, not blocking close:
 
 - `InlineResult.taskResults` is empty when the budget-catch returns
   a minimal result, so the CLI build summary shows `0 passed, 0
-  failed` even when prior tasks completed. The directive's full
+failed` even when prior tasks completed. The directive's full
   history is recoverable via `factory status` / direct SQL, but the
   in-command summary loses signal. A future polish can propagate the
   partial task outcomes through the catch block.

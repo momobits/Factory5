@@ -14,9 +14,9 @@ Internal issue tracker for factory5 itself. Mirrors the finding-lifecycle patter
 
 ## Open
 
-| ID                                                                      | Severity | Area                     | Title                                                                         | Opened     |
-| ----------------------------------------------------------------------- | -------- | ------------------------ | ----------------------------------------------------------------------------- | ---------- |
-| [I008](I008-findings-registry-project-id-collision.md)                  | MEDIUM   | state/findings-registry  | `findings_registry` collides when two workspaces share a project name         | 2026-04-21 |
+| ID                                                     | Severity | Area                    | Title                                                                 | Opened     |
+| ------------------------------------------------------ | -------- | ----------------------- | --------------------------------------------------------------------- | ---------- |
+| [I008](I008-findings-registry-project-id-collision.md) | MEDIUM   | state/findings-registry | `findings_registry` collides when two workspaces share a project name | 2026-04-21 |
 
 ## Resolved (last 20)
 

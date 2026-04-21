@@ -78,12 +78,12 @@ The core idea in one line: **`.control/progress/STATE.md` is the single source o
 
 ### Purpose of `.control/` vs `.claude/` vs `docs/`
 
-| Path | Purpose | Who writes |
-|---|---|---|
-| `.control/` | Framework private area — version tracking, tunable config, hook snapshots | Framework (setup + hooks) |
-| `.claude/` | Claude Code standard area — settings, slash commands, hook scripts | Framework (setup updates) |
-| `docs/` | Project documentation — phases, issues, decisions, state | You + Claude per project |
-| `CLAUDE.md`, `.control/PROJECT_PROTOCOL.md` | Root-level, visible | Installed by setup; project-specific tweaks allowed in `CLAUDE.md` |
+| Path                                        | Purpose                                                                   | Who writes                                                         |
+| ------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `.control/`                                 | Framework private area — version tracking, tunable config, hook snapshots | Framework (setup + hooks)                                          |
+| `.claude/`                                  | Claude Code standard area — settings, slash commands, hook scripts        | Framework (setup updates)                                          |
+| `docs/`                                     | Project documentation — phases, issues, decisions, state                  | You + Claude per project                                           |
+| `CLAUDE.md`, `.control/PROJECT_PROTOCOL.md` | Root-level, visible                                                       | Installed by setup; project-specific tweaks allowed in `CLAUDE.md` |
 
 The split lets `setup.sh --upgrade` refresh framework files (`.claude/*`, templates, runbooks) without touching project content.
 
@@ -106,6 +106,7 @@ bash /path/to/control/setup.sh
 ```
 
 The installer:
+
 1. Verifies `git` and `bash` are available
 2. Initialises git in the target if not already a repo
 3. Copies `.control/`, `.claude/{settings.json,commands,hooks}`, `docs/` scaffolding, `CLAUDE.md`, `.control/PROJECT_PROTOCOL.md`
@@ -165,6 +166,7 @@ Keep this small — it loads every session. Use pointers, not content.
 This project follows the **phased session protocol** — see `.control/runbooks/session-start.md`.
 
 ## At session start
+
 1. Read `.control/progress/STATE.md`
 2. Read the current phase's `README.md` and `steps.md` (path in STATE.md)
 3. Check `.control/issues/OPEN/` for blockers
@@ -172,6 +174,7 @@ This project follows the **phased session protocol** — see `.control/runbooks/
 5. **Wait for user confirmation before editing code**
 
 ## Invariants
+
 - **Git is not optional.** Every sub-step closes with a commit. Every phase closes with a tag (`phase-<N>-<name>-closed`). Never advance a step with uncommitted work unless STATE.md's "In-flight work" section explains why.
 - **Commit message shape:** `<type>(<phase>.<step>): <subject>` — e.g. `feat(2.3): add DSPy QueryPlanner signature`, `fix(2.3): ISSUE-2026-04-19-themes-parse`, `test(2.3): eval regression for theme discovery`.
 - Never edit accepted ADRs in `.control/architecture/decisions/` — they're immutable. New decisions get a new ADR that supersedes the old one (and mark the old as `superseded by ADR-<M>`).
@@ -180,6 +183,7 @@ This project follows the **phased session protocol** — see `.control/runbooks/
 - <add project-specific invariants here>
 
 ## Key references
+
 - Full architecture: `.control/architecture/overview.md`
 - Phase plan: `.control/architecture/phase-plan.md`
 - Current state: `.control/progress/STATE.md`
@@ -196,13 +200,14 @@ This project follows the **phased session protocol** — see `.control/runbooks/
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose — fill each.
 
 **Last updated:** <YYYY-MM-DD HH:MM UTC> by <session-id or "hook:pre-compact">
-**Current phase:** <N> — <name>  (see `.control/phases/phase-<N>-<name>/`)
+**Current phase:** <N> — <name> (see `.control/phases/phase-<N>-<name>/`)
 **Current step:** <N.M> — <short name>
 **Status:** in-progress | blocked | done-criteria-pending | ready-to-close
 
 ---
 
 ## Next action
+
 <One or two sentences. The very next concrete thing to do. If blocked, state the
 blocker and what has to clear to unblock. No vagueness — if you can't articulate
 the next action in a sentence, the step is wrong.>
@@ -210,23 +215,26 @@ the next action in a sentence, the step is wrong.>
 ---
 
 ## Git state
+
 - **Branch:** <branch-name>
 - **Last commit:** <short-sha> — <commit subject>
 - **Uncommitted changes:** <yes — one-line summary of what / why uncommitted> | <none>
-- **Last phase tag:** <tag-name> — <date>  (e.g. `phase-1-foundation-closed`)
+- **Last phase tag:** <tag-name> — <date> (e.g. `phase-1-foundation-closed`)
 
-*(If `Uncommitted changes: yes` at session start, that's a flag — either finish and commit, or document why it's intentional in "In-flight work" below.)*
+_(If `Uncommitted changes: yes` at session start, that's a flag — either finish and commit, or document why it's intentional in "In-flight work" below.)_
 
 ---
 
 ## Open blockers
+
 - None
-  *or*
+  _or_
 - [ISSUE-<YYYY-MM-DD>-<slug>] severity:<blocker|major> — <one-line> — `.control/issues/OPEN/...`
 
 ---
 
 ## In-flight work
+
 Files currently mid-edit, partially implemented, or in-review. Empty if the last
 session ended with everything committed.
 
@@ -236,15 +244,17 @@ session ended with everything committed.
 ---
 
 ## Test / eval status
+
 - **Last test run:** <YYYY-MM-DD HH:MM> — <pass | fail (N failing)> — `<test command>`
 - **Eval score** (agent phases only): <current> — baseline: <baseline>, target: <target>
 - **Regression tests:** all green | <N> failing — see `<path>`
 
-*(If any are failing, they block phase-close. Fix or open an issue.)*
+_(If any are failing, they block phase-close. Fix or open an issue.)_
 
 ---
 
 ## Recent decisions (last 3 ADRs)
+
 - ADR-<NNNN>: <title> — <YYYY-MM-DD> — status: <accepted|proposed>
 - ...
 
@@ -253,13 +263,15 @@ Full context in `.control/architecture/decisions/`.
 ---
 
 ## Recently completed (last 5 steps)
+
 - <N.M> — <action> — <YYYY-MM-DD> — commit `<short-sha>`
 - <N.M-1> — <action> — <YYYY-MM-DD> — commit `<short-sha>`
 
 ---
 
 ## Attempts that didn't work (current step only)
-Approaches tried and ruled out for the *current* step. Stops the next session
+
+Approaches tried and ruled out for the _current_ step. Stops the next session
 re-trying the same dead-end. Cleared when the step closes. If a rejected
 approach is structurally important, write an ADR instead.
 
@@ -268,6 +280,7 @@ approach is structurally important, write an ADR instead.
 ---
 
 ## Environment snapshot
+
 Only update when it changes. Helps diagnose "it worked yesterday" failures.
 
 - **Language / runtime:** <e.g. Python 3.12.1>
@@ -278,6 +291,7 @@ Only update when it changes. Helps diagnose "it worked yesterday" failures.
 ---
 
 ## Notes for next session
+
 <Catchall — unresolved debates, quirks discovered mid-session, user preferences
 that came up in chat, things worth keeping an eye on. Anything that would make
 a cold-start session say "wait, what?">
@@ -285,19 +299,19 @@ a cold-start session say "wait, what?">
 
 **Why each field exists:**
 
-| Field | Defeats |
-|---|---|
-| Last updated / Current phase-step / Status | Cold-start "where are we?" |
-| Next action | "What do I do first?" paralysis |
-| Git state | Divergence between what's in files vs what's committed |
-| Open blockers | Forgetting about a known-broken thing |
-| In-flight work | Losing mid-edit context across sessions |
-| Test / eval status | Pushing forward while tests are red |
-| Recent decisions | Rehashing settled arguments |
-| Recently completed | "What just changed?" confusion |
-| Attempts that didn't work | Re-trying the same dead-end |
-| Environment snapshot | "Worked yesterday" regressions |
-| Notes for next session | Everything else that doesn't fit a field |
+| Field                                      | Defeats                                                |
+| ------------------------------------------ | ------------------------------------------------------ |
+| Last updated / Current phase-step / Status | Cold-start "where are we?"                             |
+| Next action                                | "What do I do first?" paralysis                        |
+| Git state                                  | Divergence between what's in files vs what's committed |
+| Open blockers                              | Forgetting about a known-broken thing                  |
+| In-flight work                             | Losing mid-edit context across sessions                |
+| Test / eval status                         | Pushing forward while tests are red                    |
+| Recent decisions                           | Rehashing settled arguments                            |
+| Recently completed                         | "What just changed?" confusion                         |
+| Attempts that didn't work                  | Re-trying the same dead-end                            |
+| Environment snapshot                       | "Worked yesterday" regressions                         |
+| Notes for next session                     | Everything else that doesn't fit a field               |
 
 ### `.control/progress/journal.md`
 
@@ -307,7 +321,8 @@ Append-only, newest on top. One entry per session, short. Minor-fix bugs (severi
 # Journal
 
 ## <YYYY-MM-DD> — Session <short-id>
-- Phase <N>, steps <N.M> → <N.M+1>  (commits: <sha-range>)
+
+- Phase <N>, steps <N.M> → <N.M+1> (commits: <sha-range>)
 - <key decisions made, with ADR refs>
 - Issues opened: <IDs with severity>
 - Issues closed: <IDs>
@@ -315,6 +330,7 @@ Append-only, newest on top. One entry per session, short. Minor-fix bugs (severi
 - <significant blockers hit>
 
 ## <earlier date> — Session <earlier-id>
+
 - ...
 ```
 
@@ -334,15 +350,16 @@ Report back a 4-line status: phase / step / open blockers / proposed next action
 Then wait for me to confirm before editing code.
 
 Current context (as of <session-end-date>):
+
 - Phase <N> — <name>, at step <N.M>
 - <one-line note on where work is mid-flight, if applicable>
 
 ## Decisions awaiting your input
 
-*(Optional — populate when an upcoming step has a design choice that needs operator
+_(Optional — populate when an upcoming step has a design choice that needs operator
 judgment. Empty when there are none. The session-start protocol expands every entry
 here into full option detail before asking for go. Do NOT shorthand options as
-labeled footnotes — the next session's reader needs the full context up front.)*
+labeled footnotes — the next session's reader needs the full context up front.)_
 
 - **<short title of the decision>**
   - Context: <one or two sentences on why the decision is open>
@@ -361,15 +378,19 @@ labeled footnotes — the next session's reader needs the full context up front.
 **Estimated duration:** ~<X> sessions
 
 ## Goal
+
 <One sentence — what problem does this phase solve?>
 
 ## Outcome
+
 <What exists / works at the end that didn't before? User-visible when possible.>
 
 ## Sub-steps
+
 See `steps.md` for the detailed checklist.
 
 ## Done criteria
+
 All must be verified before `/phase-close` advances:
 
 - [ ] All items in `steps.md` checked off, each with a commit reference
@@ -382,11 +403,13 @@ All must be verified before `/phase-close` advances:
 - [ ] Phase will be tagged `phase-<N>-<name>-closed` by `/phase-close`
 
 ## Rollback plan
+
 If this phase's changes need to be undone: `git reset --hard phase-<N-1>-<prev-name>-closed`
 then force-push if applicable. Document any state that doesn't roll back with git
 (external resources created, migrations applied, etc.).
 
 ## ADRs decided in this phase
+
 - <will be filled in as decisions are made>
 ```
 
@@ -402,9 +425,11 @@ then force-push if applicable. Document any state that doesn't roll back with gi
 ## Sub-step detail
 
 ### <N>.2 — <action>
+
 <What exactly to do. What to verify. Links to interface/decision docs.>
 
 ### <N>.3 — <action>
+
 ...
 ```
 
@@ -415,24 +440,29 @@ Only used for **major** and **blocker** severity. Minor bugs never create a file
 ```markdown
 # ISSUE-<YYYY-MM-DD>-<slug>
 
-**Severity:** blocker | major   *(minor bugs don't get a file)*
+**Severity:** blocker | major _(minor bugs don't get a file)_
 **Discovered:** <YYYY-MM-DD>
 **Phase/step:** <N.M>
 **Status:** open | in-progress | fix-pending-test | resolved
 **Tags:** `phase:<N>-blocker` if blocking current phase | <other>
 
 ## Symptom
+
 <What's wrong, concretely observable.>
 
 ## Repro
+
 1. <steps>
 2. ...
 
 ## Hypothesis
+
 <Best guess at cause. Update as investigation proceeds.>
 
 ## Resolution
-*(Filled in when fixed — refuses close without all three.)*
+
+_(Filled in when fixed — refuses close without all three.)_
+
 - **Fix commit:** `<sha>` — <one-line>
 - **Regression test:** `<path>` — covers <specific failure mode>
 - **Diff summary:** <what changed and why>
@@ -448,16 +478,20 @@ Only used for **major** and **blocker** severity. Minor bugs never create a file
 **Phase when decided:** <N>
 
 ## Context
+
 <The forces at play, the problem, the constraints.>
 
 ## Decision
+
 <The choice made.>
 
 ## Alternatives considered
+
 - <Option A> — rejected because <reason>
 - <Option B> — rejected because <reason>
 
 ## Consequences
+
 - Positive: <...>
 - Negative: <...>
 - Follow-up work: <...>
@@ -473,16 +507,18 @@ Only used for **major** and **blocker** severity. Minor bugs never create a file
 3. **Scan open issues** — list every file in `.control/issues/OPEN/`. Identify items tagged as blockers for the current phase.
 4. **Verify git** — run `git status --porcelain`, `git log -1 --oneline`, `git rev-parse --abbrev-ref HEAD`, `git describe --tags --abbrev=0`. Compare against STATE.md's Git state section. Any mismatch is a drift signal — flag it, don't silently proceed.
 5. **Report to user**, in this exact shape:
-   ```
-   Phase <N> — <name>, step <N.M>
-   Last action: <what was done last>
-   Git: branch=<...>, last=<sha> <subject>, uncommitted=<yes/no>, tag=<last phase tag>
-   Git sync: ✓ matches STATE.md  OR  ⚠ drift: <details>
-   Open blockers: <count, with IDs> OR None
-   Test/eval status: <from STATE.md>
-   Proposed next action: <from STATE.md>
-   Ready to proceed?
-   ```
+```
+
+Phase <N> — <name>, step <N.M>
+Last action: <what was done last>
+Git: branch=<...>, last=<sha> <subject>, uncommitted=<yes/no>, tag=<last phase tag>
+Git sync: ✓ matches STATE.md OR ⚠ drift: <details>
+Open blockers: <count, with IDs> OR None
+Test/eval status: <from STATE.md>
+Proposed next action: <from STATE.md>
+Ready to proceed?
+
+```
 5b. **Design decisions awaiting operator input.** If `.control/progress/next.md` surfaces a `## Decisions awaiting your input` section, or STATE.md's "Notes for next session" / "Next action" flags an open design choice for the upcoming step, expand it inline before asking for go. For each option present: **(i) what concretely changes** (schema additions, code shape, file additions), **(ii) what the operator sees** (sample CLI output, sample data shape, sample error), **(iii) cost / scope impact** (how it affects the current step's budget and surrounding work), **(iv) trade-off being accepted** (what each option costs, not just what it gains). End with a recommendation that names the trade-off, not just the lean. Do not shorthand design choices as labeled footnotes (`(a)` / `(b)` with one-line summaries) — that forces the operator to ask for the detail in a second turn, wasting context.
 6. **Wait for confirmation.** Do not edit code before the user says go.
 ```
@@ -545,16 +581,18 @@ Follow `.control/runbooks/session-start.md` exactly:
 3. List files in `.control/issues/OPEN/` and identify blockers for the current phase.
 4. **Verify git state matches STATE.md.** Run `git status --porcelain`, `git log -1 --oneline`, `git rev-parse --abbrev-ref HEAD`, `git describe --tags --abbrev=0`. Compare against STATE.md's "Git state" section. If any mismatch (last commit sha differs, uncommitted changes STATE.md doesn't mention, branch differs, etc.), flag it before reporting status.
 5. Report a status block:
-   ```
-   Phase <N> — <name>, step <N.M>
-   Last action: <from STATE.md's recently completed[0]>
-   Git: branch=<...>, last=<sha> <subject>, uncommitted=<yes/no>, tag=<last phase tag>
-   Git sync: ✓ matches STATE.md  OR  ⚠ drift detected: <what>
-   Open blockers: <count, with IDs> OR None
-   Test/eval status: <from STATE.md>
-   Proposed next action: <from STATE.md>
-   Ready to proceed?
-   ```
+```
+
+Phase <N> — <name>, step <N.M>
+Last action: <from STATE.md's recently completed[0]>
+Git: branch=<...>, last=<sha> <subject>, uncommitted=<yes/no>, tag=<last phase tag>
+Git sync: ✓ matches STATE.md OR ⚠ drift detected: <what>
+Open blockers: <count, with IDs> OR None
+Test/eval status: <from STATE.md>
+Proposed next action: <from STATE.md>
+Ready to proceed?
+
+```
 5b. **Design decisions awaiting operator input.** If `.control/progress/next.md` surfaces a `## Decisions awaiting your input` section, or STATE.md's "Notes for next session" / "Next action" flags an open design choice for the upcoming step, expand it inline before asking for go. For each option present: **(i) what concretely changes** (schema additions, code shape, file additions), **(ii) what the operator sees** (sample CLI output, sample data shape, sample error), **(iii) cost / scope impact** (how it affects the current step's budget and surrounding work), **(iv) trade-off being accepted** (what each option costs, not just what it gains). End with a recommendation that names the trade-off, not just the lean. Do not shorthand design choices as labeled footnotes (`(a)` / `(b)` with one-line summaries) — that forces the operator to ask for the detail in a second turn, wasting context.
 6. Wait for the user's go before editing any code.
 ```
@@ -610,11 +648,12 @@ Before creating anything, ask the user two questions:
 
 1. **Symptom** — one-line description of what's wrong.
 2. **Severity** — blocker | major | minor.
-   - *blocker*: prevents phase advancement
-   - *major*: needs tracking + regression test, but not blocking
-   - *minor*: typo / obvious fix / cosmetic — no file, no regression test required
+   - _blocker_: prevents phase advancement
+   - _major_: needs tracking + regression test, but not blocking
+   - _minor_: typo / obvious fix / cosmetic — no file, no regression test required
 
 **If minor:**
+
 - Do NOT create a file.
 - Fix it inline in this session.
 - Commit the fix.
@@ -622,6 +661,7 @@ Before creating anything, ask the user two questions:
 - Done.
 
 **If major or blocker:**
+
 - Create `.control/issues/OPEN/<today>-$ARGUMENTS.md` from `.control/templates/issue.md`.
 - Fill: Discovered (today), Phase/step (from STATE.md), Symptom, Severity, Tags (`phase:<N>-blocker` if blocker).
 - Append journal: `- Opened ISSUE-<today>-$ARGUMENTS (severity:<sev>) — <symptom>`.
@@ -688,6 +728,7 @@ Find the highest-numbered ADR in `.control/architecture/decisions/` and incremen
 Create `.control/architecture/decisions/<NNNN>-$ARGUMENTS.md` from `.control/templates/adr.md`.
 
 Prompt the user for:
+
 - Context, Decision, Alternatives considered, Consequences.
 
 Set Status to `proposed` initially. The user changes it to `accepted` once they confirm.
@@ -729,6 +770,7 @@ Read `.control/progress/STATE.md`. Apply this priority order — do the first on
    - **HALT** with: "All phases complete. No work queued."
 
 After executing the chosen action:
+
 - Update STATE.md (every field, per session-end protocol).
 - Append `journal.md`.
 - Commit the docs updates.
@@ -816,16 +858,17 @@ The manual protocol requires discipline — remember to `/session-end`, remember
 
 Control uses four hook events, each tackling a specific failure mode:
 
-| Hook | Fires | Defeats | Script |
-|---|---|---|---|
-| **`PreCompact`** | Before Claude Code compacts the conversation to free context | "Lost what we were doing when context collapsed" | `.claude/hooks/pre-compact-dump.sh` |
-| **`SessionStart`** | At the beginning of every session | "Cold start with no context" | `.claude/hooks/session-start-load.sh` |
-| **`SessionEnd`** | When a session shuts down (user quits, terminal closed) | "Session ended without running /session-end" | `.claude/hooks/session-end-commit.sh` |
-| **`Stop`** | After each Claude response completes | "STATE.md drifted between session end calls" | `.claude/hooks/stop-snapshot.sh` |
+| Hook               | Fires                                                        | Defeats                                          | Script                                |
+| ------------------ | ------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------- |
+| **`PreCompact`**   | Before Claude Code compacts the conversation to free context | "Lost what we were doing when context collapsed" | `.claude/hooks/pre-compact-dump.sh`   |
+| **`SessionStart`** | At the beginning of every session                            | "Cold start with no context"                     | `.claude/hooks/session-start-load.sh` |
+| **`SessionEnd`**   | When a session shuts down (user quits, terminal closed)      | "Session ended without running /session-end"     | `.claude/hooks/session-end-commit.sh` |
+| **`Stop`**         | After each Claude response completes                         | "STATE.md drifted between session end calls"     | `.claude/hooks/stop-snapshot.sh`      |
 
 Configured in `.claude/settings.json` (project-scoped) or `~/.claude/settings.json` (global).
 
 **Layering rationale:**
+
 - `PreCompact` + `SessionEnd` = reactive capture at the two points where state is at risk.
 - `SessionStart` = cold-boot bootstrap.
 - `Stop` = proactive per-turn snapshot (cheap — only writes when STATE.md changed). Alternative to a status-line script; remove if the overhead is noticeable.
@@ -838,16 +881,28 @@ All snapshots land in `.control/snapshots/` (gitignored) with timestamped filena
 {
   "hooks": {
     "PreCompact": [
-      { "matcher": "", "hooks": [ { "type": "command", "command": "bash .claude/hooks/pre-compact-dump.sh" } ] }
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/pre-compact-dump.sh" }]
+      }
     ],
     "SessionStart": [
-      { "matcher": "", "hooks": [ { "type": "command", "command": "bash .claude/hooks/session-start-load.sh" } ] }
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/session-start-load.sh" }]
+      }
     ],
     "SessionEnd": [
-      { "matcher": "", "hooks": [ { "type": "command", "command": "bash .claude/hooks/session-end-commit.sh" } ] }
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/session-end-commit.sh" }]
+      }
     ],
     "Stop": [
-      { "matcher": "", "hooks": [ { "type": "command", "command": "bash .claude/hooks/stop-snapshot.sh" } ] }
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/stop-snapshot.sh" }]
+      }
     ]
   }
 }
@@ -888,12 +943,12 @@ The four together cover: cold start, catastrophic context loss, voluntary shutdo
 
 ### Enforcement lattice
 
-| Layer | Mechanism | Example | Installed by |
-|---|---|---|---|
-| Manual | User discipline | Remembers to run `/session-end` | — |
-| Semi-automated | Slash commands + templates | `/close-issue` refuses without regression test | `setup.sh` |
-| **Reactive hooks** | `PreCompact`, `SessionEnd` | Snapshot state before compaction / on shutdown | `setup.sh` (settings.json + scripts) |
-| **Proactive hooks** | `SessionStart`, `Stop` | Auto-bootstrap; per-turn snapshot when STATE.md changes | `setup.sh` (settings.json + scripts) |
+| Layer               | Mechanism                  | Example                                                 | Installed by                         |
+| ------------------- | -------------------------- | ------------------------------------------------------- | ------------------------------------ |
+| Manual              | User discipline            | Remembers to run `/session-end`                         | —                                    |
+| Semi-automated      | Slash commands + templates | `/close-issue` refuses without regression test          | `setup.sh`                           |
+| **Reactive hooks**  | `PreCompact`, `SessionEnd` | Snapshot state before compaction / on shutdown          | `setup.sh` (settings.json + scripts) |
+| **Proactive hooks** | `SessionStart`, `Stop`     | Auto-bootstrap; per-turn snapshot when STATE.md changes | `setup.sh` (settings.json + scripts) |
 
 All layers ship wired up in Control v1+. The progressive-adoption story now lives in the **Autonomy model** section (stages 0→3) — once the framework is installed, you decide how much autonomy to grant, not whether to install the persistence.
 
@@ -919,12 +974,12 @@ Result: paste `/loop /work-next` once, walk away, come back to progress. The `/c
 
 **Do not flip to full autonomy on day one.** Earn trust stage by stage.
 
-| Stage | Trigger | What runs autonomous | What you do |
-|---|---|---|---|
-| **0. Manual** | You type each command | Nothing — you drive | Run `/session-start`, `/work-next`, `/session-end` manually. Validate the priority logic. |
-| **1. Semi-auto** | You say "go" / "continue" | `/work-next` picks + executes one item, then stops | Review after each step. One word per step. |
-| **2. Step-loop** | `/loop /work-next` | Claude self-paces step → step → step within one session until a HALT | Review at natural breakpoints (typically phase close). |
-| **3. Phase-loop** | `/loop /work-next` with phase-close auto-approved | Claude advances across phases; halts only on ADRs, blockers, manual criteria | Review at end of each phase. |
+| Stage             | Trigger                                           | What runs autonomous                                                         | What you do                                                                               |
+| ----------------- | ------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **0. Manual**     | You type each command                             | Nothing — you drive                                                          | Run `/session-start`, `/work-next`, `/session-end` manually. Validate the priority logic. |
+| **1. Semi-auto**  | You say "go" / "continue"                         | `/work-next` picks + executes one item, then stops                           | Review after each step. One word per step.                                                |
+| **2. Step-loop**  | `/loop /work-next`                                | Claude self-paces step → step → step within one session until a HALT         | Review at natural breakpoints (typically phase close).                                    |
+| **3. Phase-loop** | `/loop /work-next` with phase-close auto-approved | Claude advances across phases; halts only on ADRs, blockers, manual criteria | Review at end of each phase.                                                              |
 
 **Move up only when the previous stage felt solid.** Skipping to stage 3 on a greenfield project is how you wake up to 100 commits of confidently wrong work.
 
@@ -946,6 +1001,7 @@ Hard cap on autonomous iterations per `/loop` invocation. Belt and suspenders ag
 - **Configurable:** set `MAX_AUTO_ITERATIONS` near the top of `.claude/commands/work-next.md` and reference it in the halt logic.
 
 On budget exhaustion, Claude:
+
 1. Runs `/session-end` (updates STATE.md, commits docs).
 2. Surfaces: `[BUDGET] Hit iteration cap of N. Review progress; restart with /loop /work-next when ready.`
 3. Stops.
@@ -955,12 +1011,14 @@ This ensures a check-in at least every N iterations even when nothing else halts
 ### What autonomous mode is and isn't for
 
 **Good fit:**
+
 - Executing a phase plan that's already designed
 - Grinding through routine sub-steps (scaffolding, plumbing, tests)
 - Fixing blocker issues where a hypothesis is already written down
 - Running through the done-criteria of a phase
 
 **Bad fit:**
+
 - Before the protocol is proven — run stage 0 manually through at least one phase first
 - Destructive or irreversible work — migrations, force-pushes, production changes; always human-gated
 - Exploratory / research work — autonomy executes a plan, it doesn't design one
@@ -969,6 +1027,7 @@ This ensures a check-in at least every N iterations even when nothing else halts
 ### Interrupt anytime
 
 Autonomy is opt-in per session and interruptible. Whatever Claude is doing:
+
 - Send any message to interrupt the loop.
 - `/session-end` cleanly halts, commits state, prepares the next prompt.
 - Ctrl+C at the CLI stops the current turn.
@@ -981,14 +1040,14 @@ You're never locked in. The loop is a convenience, not a contract.
 
 Each phase is a self-contained unit with:
 
-| Element | Purpose |
-|---|---|
-| **Goal** (1 sentence) | What problem this phase solves |
-| **Outcome** | What exists after that didn't before (user-visible) |
-| **Sub-steps** (3-8) | Concrete, verifiable items |
-| **Done criteria** | Tests pass, no open blockers, manual smoke |
-| **Rollback plan** | How to undo if needed |
-| **Dependencies** | Which prior phases must be closed |
+| Element               | Purpose                                             |
+| --------------------- | --------------------------------------------------- |
+| **Goal** (1 sentence) | What problem this phase solves                      |
+| **Outcome**           | What exists after that didn't before (user-visible) |
+| **Sub-steps** (3-8)   | Concrete, verifiable items                          |
+| **Done criteria**     | Tests pass, no open blockers, manual smoke          |
+| **Rollback plan**     | How to undo if needed                               |
+| **Dependencies**      | Which prior phases must be closed                   |
 
 **A phase cannot close** until done criteria verify via `/phase-close`. This is the primary enforcement point of the protocol. If you skip it, everything else degrades.
 
@@ -996,15 +1055,16 @@ Each phase is a self-contained unit with:
 
 The protocol only works if git history mirrors the phase/step structure. Conventions:
 
-| Event | Git action |
-|---|---|
-| Sub-step closed | Commit with message `<type>(<phase>.<step>): <subject>` |
-| ADR accepted | Commit alone: `docs(adr): ADR-<NNNN> <title>` |
+| Event                        | Git action                                                           |
+| ---------------------------- | -------------------------------------------------------------------- |
+| Sub-step closed              | Commit with message `<type>(<phase>.<step>): <subject>`              |
+| ADR accepted                 | Commit alone: `docs(adr): ADR-<NNNN> <title>`                        |
 | Issue closed (major/blocker) | Commit with fix + regression test: `fix(<phase>.<step>): ISSUE-<id>` |
-| Phase closed | Tag: `phase-<N>-<name>-closed` — set by `/phase-close` |
-| Protocol bootstrap | Tag: `protocol-initialised` |
+| Phase closed                 | Tag: `phase-<N>-<name>-closed` — set by `/phase-close`               |
+| Protocol bootstrap           | Tag: `protocol-initialised`                                          |
 
 **Why per-step commits:**
+
 - `git log` becomes a readable progress narrative parallel to the journal.
 - `git bisect` works across step boundaries when a regression sneaks in.
 - Rollback to `phase-<N-1>-<name>-closed` is a real escape hatch, not a hope.
@@ -1022,11 +1082,11 @@ Severity drives flow — the OPEN/ directory is for things that need tracking, n
 
 ### Severity rules
 
-| Severity | Flow | Regression test | Blocks phase-close? |
-|---|---|---|---|
-| **blocker** | Full file in `.control/issues/OPEN/` | Required before close | Yes |
-| **major** | Full file in `.control/issues/OPEN/` | Required before close | If tagged `phase:<N>-blocker` |
-| **minor** | **Journal line only, fix inline** | Not required (but encouraged) | Never |
+| Severity    | Flow                                 | Regression test               | Blocks phase-close?           |
+| ----------- | ------------------------------------ | ----------------------------- | ----------------------------- |
+| **blocker** | Full file in `.control/issues/OPEN/` | Required before close         | Yes                           |
+| **major**   | Full file in `.control/issues/OPEN/` | Required before close         | If tagged `phase:<N>-blocker` |
+| **minor**   | **Journal line only, fix inline**    | Not required (but encouraged) | Never                         |
 
 A **minor** bug is: a small, contained fix (typo, obvious off-by-one, a cosmetic UI nit) that doesn't change architecture, doesn't need investigation, and can be fixed and committed in the same action. A brief line in `journal.md` is enough:
 

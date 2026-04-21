@@ -4,15 +4,19 @@
 **Estimated duration:** ~<X> sessions
 
 ## Goal
+
 <One sentence — what problem does this phase solve?>
 
 ## Outcome
+
 <What exists / works at the end that didn't before? User-visible when possible.>
 
 ## Sub-steps
+
 See `steps.md` for the detailed checklist.
 
 ## Done criteria
+
 All must be verified before `/phase-close` advances:
 
 - [ ] All items in `steps.md` checked off, each with a commit reference
@@ -25,7 +29,9 @@ All must be verified before `/phase-close` advances:
 - [ ] Phase will be tagged `phase-<N>-<name>-closed` by `/phase-close`
 
 ## Rollback plan
+
 If this phase's changes need to be undone: `git reset --hard phase-<N-1>-<prev-name>-closed` then force-push if applicable. Document any state that doesn't roll back with git (external resources created, migrations applied, etc.).
 
 ## ADRs decided in this phase
+
 - <filled in as decisions are made>

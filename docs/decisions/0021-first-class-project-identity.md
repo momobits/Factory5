@@ -25,13 +25,13 @@ rollup keyed on `basename(projectPath)`.
 Two candidate fixes were considered at the start of Phase 7b:
 
 A. **Per-directive primary view; per-project as a fuzzy secondary view with a
-   `--by-path` escape hatch.** Stays in 7b's "pure query work" budget but ships
-   a known-fuzzy view that operators have to learn the caveat for. Defers I008.
+`--by-path` escape hatch.** Stays in 7b's "pure query work" budget but ships
+a known-fuzzy view that operators have to learn the caveat for. Defers I008.
 B. **Use `project_path` as the canonical key on `findings_registry` and
-   `directives`.** Resolves the collision but conflates *location* with
-   *identity*. Copying a project to a new folder changes its identity (and
-   severs spend / findings history); moving a project changes identity for the
-   duration of the move; the same project in two folders becomes two projects.
+`directives`.** Resolves the collision but conflates _location_ with
+_identity_. Copying a project to a new folder changes its identity (and
+severs spend / findings history); moving a project changes identity for the
+duration of the move; the same project in two folders becomes two projects.
 
 (B) is what I008's preferred-fix #1 names. Operating-experience surfaces its
 limitation: paths are not stable. The operator's mental model of "is this the
@@ -79,7 +79,7 @@ Five parts.
   project-scoped flags, etc.).
 
 The file is gitignored via the existing `.factory/` guard, so it is intentionally
-project-local — *not* checked into version control by factory. Operators who
+project-local — _not_ checked into version control by factory. Operators who
 want to share a project's identity across collaborators can opt into committing
 the file themselves; factory does not impose either way.
 
@@ -121,7 +121,7 @@ Migration 006 makes the canonical key first-class:
   path seen for this project; not used for joins, populated for operator
   display only).
 - **`directives` table** — add `project_id TEXT REFERENCES projects(id) ON
-  DELETE SET NULL`. Nullable, since chat / system directives are not tied to
+DELETE SET NULL`. Nullable, since chat / system directives are not tied to
   a project.
 - **`findings_registry` table** — change PK from `(project_id, finding_id)`
   where `project_id = basename(path)` to `(project_id, finding_id)` where

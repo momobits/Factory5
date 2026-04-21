@@ -7,6 +7,7 @@
 This project uses the **Control framework** for session management — cursor, phase gating, commit discipline, hook-driven snapshots. Framework reference: [`.control/PROJECT_PROTOCOL.md`](.control/PROJECT_PROTOCOL.md). Tunables: [`.control/config.sh`](.control/config.sh).
 
 **At session start:**
+
 1. Read [`.control/progress/STATE.md`](.control/progress/STATE.md) — current phase, step, next action.
 2. Read the current phase's `README.md` and `steps.md` (path in STATE.md).
 3. Check `.control/issues/OPEN/` for blockers (operational); check [`docs/issues/INDEX.md`](docs/issues/INDEX.md) for the rich issue backlog.
@@ -14,12 +15,14 @@ This project uses the **Control framework** for session management — cursor, p
 5. **Wait for user confirmation before editing code.**
 
 **Content vs operational split — important:**
+
 - **Long-form content stays in `docs/`** — `CompleteArchitecture.md`, `docs/ARCHITECTURE.md`, `docs/CONTRACTS.md`, `docs/SKILLS.md`, `docs/AGENTS.md`, `docs/PROGRESS.md`, `docs/decisions/` (ADRs), `docs/issues/` (rich issue files), `docs/Phase*_Progress.md`, `docs/Phases/`. These are authoritative for **what the system is**.
 - **Operational cursor lives in `.control/`** — `progress/STATE.md` (current position), `progress/journal.md` (per-step log), `progress/next.md` (handoff prompt), `phases/phase-<N>/` (active step checklist), `snapshots/` (PreCompact auto-saves).
 - **ADRs: write under `docs/decisions/`** (factory5's richer shape, `INNN` numbering). `.control/architecture/decisions/` is kept empty — don't fork the set.
 - **Issues: write under `docs/issues/`** with factory5's frontmatter shape. `.control/issues/OPEN|RESOLVED/` is reserved for Control's `/new-issue` + `/close-issue` flow if ever used; do not duplicate.
 
 **Control invariants:**
+
 - Commit message shape: `<type>(<phase>.<step>): <subject>` (e.g. `feat(6c.1): add read tools to verifier allowlist`). Allowed types: `feat fix test docs refactor chore`.
 - Every sub-step closes with a commit. Every phase/sub-phase closes with a tag (`phase-6c-verifier-overhaul-closed`, etc.) via `/phase-close`.
 - In the same commit that closes a sub-step, flip the matching `- [ ]` in `.control/phases/<phase>/steps.md` to `- [x]`. The commit remains the authoritative signal; the checkbox makes the cursor visible without requiring a reader to scan the log.

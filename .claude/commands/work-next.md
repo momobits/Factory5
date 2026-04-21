@@ -27,6 +27,7 @@ Read `.control/progress/STATE.md`. Apply this priority order — do the first on
    - **HALT** with: "All phases complete. No work queued."
 
 After executing the chosen action:
+
 - Update STATE.md (every field, per `/session-end` protocol).
 - Append `journal.md`.
 - Commit the docs updates.

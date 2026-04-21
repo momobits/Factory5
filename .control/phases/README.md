@@ -4,13 +4,13 @@ One directory per active or queued phase. Each directory contains `README.md` (g
 
 ## Current state (2026-04-21)
 
-| Phase | Directory | Status |
-|---|---|---|
-| 0–5 | — (closed pre-Control) | See [`phase-1-through-5-closed.md`](phase-1-through-5-closed.md) for summaries + pointers into `docs/` |
-| 6c — Verifier overhaul | [`phase-6c-verifier-overhaul/`](phase-6c-verifier-overhaul/) | 🟢 active (execution order 1 of 3 within Phase 6) |
-| 6a — Findings registry | [`phase-6a-findings-registry/`](phase-6a-findings-registry/) | ⏸ queued (execution order 2 of 3) |
-| 6b — GitHub channel | [`phase-6b-github-channel/`](phase-6b-github-channel/) | ⏸ queued (execution order 3 of 3) |
-| 7a/b/c | — (scaffolded at 6b close) | Charter in [`.control/architecture/phase-plan.md`](../architecture/phase-plan.md) |
+| Phase                  | Directory                                                    | Status                                                                                                 |
+| ---------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| 0–5                    | — (closed pre-Control)                                       | See [`phase-1-through-5-closed.md`](phase-1-through-5-closed.md) for summaries + pointers into `docs/` |
+| 6c — Verifier overhaul | [`phase-6c-verifier-overhaul/`](phase-6c-verifier-overhaul/) | 🟢 active (execution order 1 of 3 within Phase 6)                                                      |
+| 6a — Findings registry | [`phase-6a-findings-registry/`](phase-6a-findings-registry/) | ⏸ queued (execution order 2 of 3)                                                                      |
+| 6b — GitHub channel    | [`phase-6b-github-channel/`](phase-6b-github-channel/)       | ⏸ queued (execution order 3 of 3)                                                                      |
+| 7a/b/c                 | — (scaffolded at 6b close)                                   | Charter in [`.control/architecture/phase-plan.md`](../architecture/phase-plan.md)                      |
 
 ## Why Phases 0–5 don't have dirs
 

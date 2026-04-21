@@ -5,16 +5,20 @@
 **Phase when decided:** <N>
 
 ## Context
+
 <The forces at play, the problem, the constraints.>
 
 ## Decision
+
 <The choice made.>
 
 ## Alternatives considered
+
 - <Option A> — rejected because <reason>
 - <Option B> — rejected because <reason>
 
 ## Consequences
+
 - Positive: <...>
 - Negative: <...>
 - Follow-up work: <...>

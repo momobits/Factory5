@@ -25,6 +25,7 @@ Artifacts are the mechanism by which the project spec grows over time without re
 3. If the artifact **supersedes** content in `SPEC.md` or an earlier artifact, add a prominent `**Supersedes:**` field near the top of the new artifact. Do NOT edit `SPEC.md` itself -- the superseded section stays there for historical record; the artifact is authoritative from its date forward.
 
 4. If the artifact affects the phase plan (e.g. a new phase, a changed outcome, a dropped step), update `.control/architecture/phase-plan.md` to reference the artifact and describe the change. Example:
+
    ```
    Phase 4 outcome updated by .control/spec/artifacts/2026-05-01-pivot-central-store.md (was Postgres; now Postgres + Redis).
    ```

@@ -56,12 +56,12 @@ factory5's current operator reality:
 
 Both framings also sit in front of an unsolved budget discipline
 problem: Phase 6c's live-validation build cost $7.71 against a $4–6
-envelope (Phase6_Progress.md), with no pre-call `max_usd` enforcement
+envelope (Phase6*Progress.md), with no pre-call `max_usd` enforcement
 (CompleteArchitecture.md §12, line 454). Adding a channel or observer
 that can autonomously trigger autonomous-mode builds — while the brain
 still has no hard spend ceiling — pushes operator-trust in the wrong
 direction. Phase 7a is already charted to land pre-call budget gates;
-running any GitHub-triggered autonomous build _before_ Phase 7a lands
+running any GitHub-triggered autonomous build \_before* Phase 7a lands
 means the first real use of the integration also tests the spend
 ceiling that does not exist.
 

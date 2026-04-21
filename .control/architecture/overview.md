@@ -10,24 +10,24 @@ An agentic build system. The user describes a project in natural language (a "di
 
 Read these in order:
 
-| Doc | Purpose | When to read |
-|---|---|---|
-| [`../../CompleteArchitecture.md`](../../CompleteArchitecture.md) | Snapshot at scaffold — canonical design (698 lines) | Once, end-to-end |
-| [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) | Current architecture, component table | Anytime the component surface is in play |
-| [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md) | Typed data shapes (Directive, Event, Finding, Plan, Task, AssessResult, etc.) | Any time you touch inter-package wires |
-| [`../../docs/SKILLS.md`](../../docs/SKILLS.md) | Skill catalog — what each agent skill does and when it's used | Changes to `skills/` or agent prompts |
-| [`../../docs/AGENTS.md`](../../docs/AGENTS.md) | Agent catalog — roles (architect, planner, scaffolder, builder, verifier, assessor, fixer, triage, gatekeeper) | Any brain/worker changes |
-| [`../../docs/decisions/INDEX.md`](../../docs/decisions/INDEX.md) | 17 ADRs, the _why_ | Before any architectural change |
-| [`../../docs/issues/INDEX.md`](../../docs/issues/INDEX.md) | Open/resolved issue backlog | When not directed to a specific task |
-| [`../../docs/PROGRESS.md`](../../docs/PROGRESS.md) | Session-by-session history (2500+ lines) | For deep context on a past decision |
+| Doc                                                              | Purpose                                                                                                        | When to read                             |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| [`../../CompleteArchitecture.md`](../../CompleteArchitecture.md) | Snapshot at scaffold — canonical design (698 lines)                                                            | Once, end-to-end                         |
+| [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)       | Current architecture, component table                                                                          | Anytime the component surface is in play |
+| [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md)             | Typed data shapes (Directive, Event, Finding, Plan, Task, AssessResult, etc.)                                  | Any time you touch inter-package wires   |
+| [`../../docs/SKILLS.md`](../../docs/SKILLS.md)                   | Skill catalog — what each agent skill does and when it's used                                                  | Changes to `skills/` or agent prompts    |
+| [`../../docs/AGENTS.md`](../../docs/AGENTS.md)                   | Agent catalog — roles (architect, planner, scaffolder, builder, verifier, assessor, fixer, triage, gatekeeper) | Any brain/worker changes                 |
+| [`../../docs/decisions/INDEX.md`](../../docs/decisions/INDEX.md) | 17 ADRs, the _why_                                                                                             | Before any architectural change          |
+| [`../../docs/issues/INDEX.md`](../../docs/issues/INDEX.md)       | Open/resolved issue backlog                                                                                    | When not directed to a specific task     |
+| [`../../docs/PROGRESS.md`](../../docs/PROGRESS.md)               | Session-by-session history (2500+ lines)                                                                       | For deep context on a past decision      |
 
 ## Phase-level history
 
-| Doc | Scope |
-|---|---|
-| [`../../docs/Phase5_Progress.md`](../../docs/Phase5_Progress.md) | Phase 5 arc — autonomous loop validated end-to-end, all 7 issues resolved, Outcome α |
+| Doc                                                              | Scope                                                                                                  |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| [`../../docs/Phase5_Progress.md`](../../docs/Phase5_Progress.md) | Phase 5 arc — autonomous loop validated end-to-end, all 7 issues resolved, Outcome α                   |
 | [`../../docs/Phase6_Progress.md`](../../docs/Phase6_Progress.md) | Phase 6 charter — three sub-phases (6a registry, 6b github, 6c verifier); **executed as 6c → 6a → 6b** |
-| [`../../docs/Phases/`](../../docs/Phases/) | Per-phase working directories with start-prompts and session notes |
+| [`../../docs/Phases/`](../../docs/Phases/)                       | Per-phase working directories with start-prompts and session notes                                     |
 
 ## Package map (quick reference)
 

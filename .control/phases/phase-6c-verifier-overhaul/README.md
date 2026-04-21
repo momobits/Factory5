@@ -12,6 +12,7 @@ The verifier's claims never contradict ground truth again. Today it is read-only
 ## Outcome
 
 At close, the verifier is either:
+
 - **Authoritative path:** given `Read`, `Glob`, `Grep` tools (parallel to the builder's tool surface). Its findings stay in the gate. Its prompt is rewritten to require evidence citations (file paths, line numbers) for every claim. F001 becomes unreproducible.
 - **Advisory path:** its findings are stripped from `brain.loop`'s gate calculation. They appear in `factory findings` tagged `verifier: advisory` but never block. The assessor remains the sole ground-truth gate. The verifier prompt is scoped to the claims it _can_ make from context alone (lint-quality suggestions, architecture observations) — it no longer asserts filesystem presence.
 
