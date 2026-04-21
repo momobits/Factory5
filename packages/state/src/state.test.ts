@@ -1,10 +1,11 @@
-import { newId } from '@factory5/core';
+import { newId, type Finding } from '@factory5/core';
 import BetterSqlite3 from 'better-sqlite3';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { runMigrations, currentSchemaVersion } from './migrations/index.js';
 import * as directives from './queries/directives.js';
 import * as events from './queries/events.js';
+import * as findingsRegistry from './queries/findings-registry.js';
 import * as projects from './queries/projects.js';
 
 function freshDb(): BetterSqlite3.Database {
@@ -153,5 +154,117 @@ describe('projects queries', () => {
     expect(projects.getByName(db, 'demo')?.status).toBe('paused');
 
     expect(projects.listAll(db)).toHaveLength(1);
+  });
+});
+
+describe('findings_registry queries', () => {
+  function seedFinding(
+    db: BetterSqlite3.Database,
+    projectId: string,
+    findingId: string,
+    overrides: Partial<Finding> = {},
+    projectPath = `/tmp/${projectId}`,
+    updatedAt = '2026-04-21T10:00:00.000Z',
+  ): void {
+    const f: Finding = {
+      id: findingId,
+      source: 'reviewer',
+      target: 'src/x',
+      severity: 'MEDIUM',
+      status: 'OPEN',
+      description: `${findingId} default desc`,
+      createdAt: '2026-04-21T09:00:00.000Z',
+      ...overrides,
+    };
+    findingsRegistry.upsert(db, { projectId, projectPath, finding: f, updatedAt });
+  }
+
+  it('upsert preserves created_at and overwrites mutable fields on conflict', () => {
+    const db = freshDb();
+    seedFinding(db, 'alpha', 'F001', { status: 'OPEN', description: 'first', createdAt: '2026-04-01T00:00:00.000Z' });
+    seedFinding(db, 'alpha', 'F001', {
+      status: 'FIXED',
+      description: 'second',
+      resolution: 'patched',
+      resolvedAt: '2026-04-10T00:00:00.000Z',
+      createdAt: '2026-04-05T00:00:00.000Z', // input carries later createdAt — must be ignored
+    });
+    const got = findingsRegistry.getByProjectAndId(db, 'alpha', 'F001');
+    expect(got?.finding.status).toBe('FIXED');
+    expect(got?.finding.description).toBe('second');
+    expect(got?.finding.resolution).toBe('patched');
+    expect(got?.finding.createdAt).toBe('2026-04-01T00:00:00.000Z');
+  });
+
+  it('list filters by severity and status', () => {
+    const db = freshDb();
+    seedFinding(db, 'alpha', 'F001', { severity: 'HIGH', status: 'OPEN' });
+    seedFinding(db, 'alpha', 'F002', { severity: 'LOW', status: 'OPEN' });
+    seedFinding(db, 'beta', 'F001', { severity: 'HIGH', status: 'FIXED' });
+    const openHigh = findingsRegistry.list(db, { severity: 'HIGH', status: 'OPEN' });
+    expect(openHigh).toHaveLength(1);
+    expect(openHigh[0]?.projectId).toBe('alpha');
+    const allHigh = findingsRegistry.list(db, { severity: 'HIGH' });
+    expect(allHigh).toHaveLength(2);
+  });
+
+  it('list filters advisory: true vs false vs undefined', () => {
+    const db = freshDb();
+    seedFinding(db, 'alpha', 'F001', { source: 'reviewer' });              // blocking
+    seedFinding(db, 'alpha', 'F002', { source: 'verifier', advisory: true }); // advisory
+    const advisory = findingsRegistry.list(db, { advisory: true });
+    const blocking = findingsRegistry.list(db, { advisory: false });
+    const both = findingsRegistry.list(db, {});
+    expect(advisory.map((e) => e.finding.id)).toEqual(['F002']);
+    expect(blocking.map((e) => e.finding.id)).toEqual(['F001']);
+    expect(both.map((e) => e.finding.id).sort()).toEqual(['F001', 'F002']);
+  });
+
+  it('list project filter — exact match + glob (*, ?)', () => {
+    const db = freshDb();
+    seedFinding(db, 'alpha', 'F001');
+    seedFinding(db, 'alpha-two', 'F001');
+    seedFinding(db, 'beta', 'F001');
+    const exact = findingsRegistry.list(db, { project: 'alpha' });
+    expect(exact.map((e) => e.projectId)).toEqual(['alpha']);
+    const glob = findingsRegistry.list(db, { project: 'alpha*' });
+    expect(glob.map((e) => e.projectId).sort()).toEqual(['alpha', 'alpha-two']);
+    const questionMark = findingsRegistry.list(db, { project: 'bet?' });
+    expect(questionMark.map((e) => e.projectId)).toEqual(['beta']);
+  });
+
+  it('list project filter escapes literal % and _ in the source', () => {
+    const db = freshDb();
+    seedFinding(db, 'my_project', 'F001');
+    seedFinding(db, 'myXproject', 'F001');
+    // Plain string without glob chars → exact match; the underscore must
+    // be treated literally, not as SQL single-character wildcard.
+    const got = findingsRegistry.list(db, { project: 'my_project' });
+    expect(got.map((e) => e.projectId)).toEqual(['my_project']);
+  });
+
+  it('list orders by updated_at DESC and honours limit', () => {
+    const db = freshDb();
+    seedFinding(db, 'alpha', 'F001', undefined, undefined, '2026-04-21T10:00:00.000Z');
+    seedFinding(db, 'alpha', 'F002', undefined, undefined, '2026-04-21T12:00:00.000Z');
+    seedFinding(db, 'alpha', 'F003', undefined, undefined, '2026-04-21T11:00:00.000Z');
+    const all = findingsRegistry.list(db, {});
+    expect(all.map((e) => e.finding.id)).toEqual(['F002', 'F003', 'F001']);
+    const capped = findingsRegistry.list(db, { limit: 2 });
+    expect(capped).toHaveLength(2);
+    expect(capped.map((e) => e.finding.id)).toEqual(['F002', 'F003']);
+  });
+
+  it('findByFindingId surfaces every project that raised the same F-ID', () => {
+    const db = freshDb();
+    seedFinding(db, 'alpha', 'F001');
+    seedFinding(db, 'beta', 'F001');
+    const got = findingsRegistry.findByFindingId(db, 'F001');
+    expect(got.map((e) => e.projectId).sort()).toEqual(['alpha', 'beta']);
+  });
+
+  it('getByProjectAndId returns undefined on miss', () => {
+    const db = freshDb();
+    expect(findingsRegistry.getByProjectAndId(db, 'nope', 'F001')).toBeUndefined();
   });
 });

@@ -11,6 +11,7 @@ import { registerChatCommand } from './commands/chat.js';
 import { registerDaemonCommand } from './commands/daemon.js';
 import { registerDirectiveCommand } from './commands/directive.js';
 import { registerDoctorCommand } from './commands/doctor.js';
+import { registerFindingsCommand } from './commands/findings.js';
 import { registerInitCommand } from './commands/init.js';
 import { registerResumeCommand } from './commands/resume.js';
 import { registerStatusCommand } from './commands/status.js';
@@ -36,6 +37,7 @@ export function buildCli(opts: BuildCliOptions = {}): Command {
   registerDaemonCommand(program);
   registerDirectiveCommand(program);
   registerDoctorCommand(program);
+  registerFindingsCommand(program);
   registerInitCommand(program);
   registerResumeCommand(program);
   registerStatusCommand(program);

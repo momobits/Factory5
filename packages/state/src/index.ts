@@ -21,4 +21,8 @@ export * as projects from './queries/projects.js';
 export * as learnings from './queries/learnings.js';
 export * as modelUsage from './queries/model-usage.js';
 export * as findingsRegistry from './queries/findings-registry.js';
-export type { FindingsRegistryUpsertInput } from './queries/findings-registry.js';
+export type {
+  FindingsRegistryUpsertInput,
+  ListFilter as FindingsRegistryListFilter,
+  RegistryEntry as FindingsRegistryEntry,
+} from './queries/findings-registry.js';

@@ -1,17 +1,17 @@
 /**
- * Typed upsert for the `findings_registry` table — the SQLite mirror
- * of every per-project `findings.json`. Phase 6a.
+ * Typed CRUD for the `findings_registry` table — the SQLite mirror of
+ * every per-project `findings.json`. Phase 6a.
  *
  * The per-project file is the source of truth; the registry is a
  * derived aggregate. The dual-write contract (step 6a.2) calls
  * {@link upsert} after the per-project write succeeds so a registry
- * hiccup cannot lose or corrupt findings.
- *
- * Read helpers (`listBy`, `getById`) land in 6a.3 when the CLI needs
- * them. This file ships only what 6a.2 requires.
+ * hiccup cannot lose or corrupt findings. Read helpers ({@link list},
+ * {@link getByProjectAndId}) drive `factory findings list|show`
+ * (steps 6a.3 / 6a.4) and the 6a.5 backfill's "already imported?"
+ * check.
  */
 
-import type { Finding } from '@factory5/core';
+import { findingSchema, type Finding } from '@factory5/core';
 
 import type { Database } from '../db.js';
 
@@ -80,4 +80,144 @@ export function upsert(db: Database, input: FindingsRegistryUpsertInput): void {
     f.resolvedAt ?? null,
     updatedAt,
   );
+}
+
+/**
+ * A single row from `findings_registry`, rehydrated into its {@link
+ * Finding} shape plus the registry-specific metadata (project handle,
+ * snapshot path, directive link, last-updated marker).
+ */
+export interface RegistryEntry {
+  projectId: string;
+  projectPath: string;
+  finding: Finding;
+  originDirectiveId?: string;
+  /** ISO timestamp of the most recent upsert. */
+  updatedAt: string;
+}
+
+interface Row {
+  project_id: string;
+  project_path: string;
+  finding_id: string;
+  source: string;
+  target: string;
+  severity: string;
+  status: string;
+  description: string;
+  resolution: string | null;
+  advisory: number;
+  origin_directive_id: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  updated_at: string;
+}
+
+function rowToEntry(row: Row): RegistryEntry {
+  const finding = findingSchema.parse({
+    id: row.finding_id,
+    source: row.source,
+    target: row.target,
+    severity: row.severity,
+    status: row.status,
+    description: row.description,
+    createdAt: row.created_at,
+    ...(row.resolution !== null ? { resolution: row.resolution } : {}),
+    ...(row.resolved_at !== null ? { resolvedAt: row.resolved_at } : {}),
+    ...(row.advisory === 1 ? { advisory: true } : {}),
+  });
+  return {
+    projectId: row.project_id,
+    projectPath: row.project_path,
+    finding,
+    ...(row.origin_directive_id !== null ? { originDirectiveId: row.origin_directive_id } : {}),
+    updatedAt: row.updated_at,
+  };
+}
+
+export interface ListFilter {
+  severity?: Finding['severity'];
+  status?: Finding['status'];
+  /**
+   * Project filter. Bare string → exact match on `project_id`. If the
+   * string contains `*` or `?`, glob wildcards translate to SQL LIKE
+   * patterns (`*` → `%`, `?` → `_`) with backslash-escaping of any
+   * literal `%` or `_` in the source.
+   */
+  project?: string;
+  /** `true` → advisory-only, `false` → blocking-only, `undefined` → both. */
+  advisory?: boolean;
+  /** Caps the result set. Defaults to 100; clamped to [1, 1000]. */
+  limit?: number;
+}
+
+function compileProjectFilter(filter: string): { sql: string; param: string } {
+  if (!/[*?]/.test(filter)) {
+    return { sql: 'project_id = ?', param: filter };
+  }
+  const escaped = filter.replace(/([%_])/g, '\\$1');
+  const pattern = escaped.replace(/\*/g, '%').replace(/\?/g, '_');
+  return { sql: "project_id LIKE ? ESCAPE '\\'", param: pattern };
+}
+
+/**
+ * List registry entries matching the supplied filter. Results ordered
+ * by `updated_at DESC` so the most recently touched findings surface
+ * first. Advisory filter (ADR 0018) — `advisory: false` is the default
+ * in {@link listBlocking}-style callers; this helper stays agnostic.
+ */
+export function list(db: Database, filter: ListFilter = {}): RegistryEntry[] {
+  const parts: string[] = [];
+  const params: (string | number)[] = [];
+  if (filter.severity !== undefined) {
+    parts.push('severity = ?');
+    params.push(filter.severity);
+  }
+  if (filter.status !== undefined) {
+    parts.push('status = ?');
+    params.push(filter.status);
+  }
+  if (filter.project !== undefined && filter.project.length > 0) {
+    const f = compileProjectFilter(filter.project);
+    parts.push(f.sql);
+    params.push(f.param);
+  }
+  if (filter.advisory === true) parts.push('advisory = 1');
+  else if (filter.advisory === false) parts.push('advisory = 0');
+
+  const where = parts.length > 0 ? `WHERE ${parts.join(' AND ')}` : '';
+  const limit = Math.min(1000, Math.max(1, Math.floor(filter.limit ?? 100)));
+  const rows = db
+    .prepare(
+      `SELECT * FROM findings_registry ${where} ORDER BY updated_at DESC LIMIT ?`,
+    )
+    .all(...params, limit) as Row[];
+  return rows.map(rowToEntry);
+}
+
+/** Fetch a specific registry row by composite key. */
+export function getByProjectAndId(
+  db: Database,
+  projectId: string,
+  findingId: string,
+): RegistryEntry | undefined {
+  const row = db
+    .prepare('SELECT * FROM findings_registry WHERE project_id = ? AND finding_id = ?')
+    .get(projectId, findingId) as Row | undefined;
+  return row !== undefined ? rowToEntry(row) : undefined;
+}
+
+/**
+ * Search by finding_id alone (across all projects). Used by
+ * `factory findings show <id>` when the operator omits the project
+ * prefix — if exactly one row matches, we resolve unambiguously;
+ * otherwise the CLI asks the operator to disambiguate.
+ */
+export function findByFindingId(db: Database, findingId: string): RegistryEntry[] {
+  const rows = db
+    .prepare(
+      'SELECT * FROM findings_registry WHERE finding_id = ? ORDER BY updated_at DESC',
+    )
+    .all(findingId) as Row[];
+  return rows.map(rowToEntry);
 }
