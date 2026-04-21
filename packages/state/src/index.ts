@@ -27,3 +27,11 @@ export type {
   ListFilter as FindingsRegistryListFilter,
   RegistryEntry as FindingsRegistryEntry,
 } from './queries/findings-registry.js';
+export * as spend from './queries/spend.js';
+export type {
+  SpendFilter,
+  PerProjectSpend,
+  PerDirectiveSpend,
+  PerDaySpend,
+  PerModelSpend,
+} from './queries/spend.js';
