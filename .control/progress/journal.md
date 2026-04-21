@@ -2,6 +2,22 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-04-21 (session `2026-04-21T17`) — Phase 7a closed (budget enforcement shipped)
+
+- **Commit range:** `d295dd3` → close commit. **Phase step range:** 7a.1 → 7a.9.
+- **Decisions:** ADR 0020 (pre-call budget enforcement; rolling average from `model_usage` per `(category, mode)` with cold-start defaults; `assertBudget` wrapper in `@factory5/brain/src/budget.ts`; `budget_exceeded_*:` prefix on `directives.blocked_reason`; per-directive scope — not per-session, not cumulative).
+- **Issues:** none opened, none closed. Open backlog unchanged: {I008 MEDIUM, findings-registry project-id collision — may surface in Phase 7b if grouping by project_id}.
+- **Schema additions:** migration 004 (`model_usage.mode` nullable TEXT), migration 005 (`directives.max_usd REAL` + `max_steps INTEGER` nullable). Both additive; absent = unlimited (pre-ADR-0020 behaviour).
+- **Call-site integration:** triage / architect / planner call `assertBudget` before the registry provider call; pool invokes it pre-dispatch using `isToolUsingAgent(task.agent)` to pick `'stream'` vs `'call'`; `loop.runInline` catches `BudgetExceededError` at the outer boundary, flips directive to `blocked` via `formatBlockedReason`, queues outbound escalation with a `factory resume --max-usd <higher>` hint. Providers + worker untouched — they stay dumb about budgets.
+- **CLI + config:** `--max-usd <n>` / `--max-steps <n>` flags on `factory build` (7a.5); `[budget.defaults]` section in `~/.factory5/config.toml` (7a.6). Explicit flag wins over config default; both absent = unlimited.
+- **Regression test:** `packages/brain/src/budget-regression.test.ts` — 3 scenarios covering maxUsd trip (pre-seeded spend against $3 ceiling), maxSteps trip (3rd call against maxSteps=2), happy path (limits well above estimate). Asserts on error kind, directive blocked_reason, `tasks_inflight` emptiness, and `readPlan` persistence as `abandoned`.
+- **Live validation passed.** `factory build example --max-usd 3` against fresh workspace. Tripped cleanly at builder-2 dispatch: `spentSoFar=$1.9151 + estimatedCost=$2.00 > ceiling=$3.00`. Directive `01KPRHNEX1T3VR3S4ZTTSJ8F0M` ended `blocked` with the expected `budget_exceeded_usd:` blocked_reason. 5 `model_usage` rows recorded with correct mode values. Phase 6c's silent $7.71-over-$4-6 overshoot is not reproducible; $1.08 headroom at the halt.
+- **Tests: 347 green** (was 309 at Phase 6 close; +38 across 7a: 3 migration 004 shape, 14 model-usage queries, 3 migration 005 shape, 12 budget unit, 3 budget integration regression, 2 config budget-defaults, with one existing migration-idempotency assertion updated).
+- **Spend:** $1.9151 (live validation only) — right at the bottom of the $2–4 envelope the user scoped for the session.
+- **Minor polish.** Pool.ts's `running.size === 0` branch now labels pending tasks with the budget reason (not "deadlock") when `budgetError` is set. Doesn't affect directive-level state; improves per-task blocked_reason readability if anyone ever surfaces it.
+- **Follow-up noted, not blocking:** CLI build-summary omits partial task results when the budget catches (returns `taskResults: []` from the catch arm); `InlineResult.triage` is optional now but the CLI still falls back cleanly when missing.
+- Phase tagged `phase-7a-budget-enforcement-closed` on this close commit. Phase 7b (spend dashboard) kicks off next session; next step is 7b.1 — spend-aggregation queries in `@factory5/state`.
+
 ## 2026-04-21 (session `2026-04-21T16`) — Phase 6 closed (6c + 6a shipped; 6b dropped per ADR 0019)
 
 - **Commit range:** `c780180` → `47cf160` (4 commits). **Phase step range:** 6b.1 → phase-6-close.

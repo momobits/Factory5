@@ -13,7 +13,7 @@
 | 4     | Phase 2 finale + autonomy modes          | ✅ closed pre-Control              | 3          | ~3                        | Category routing, autonomy-mode end-to-end, 201 tests                                                                                                       |
 | 5     | Green-verify end-to-end                  | ✅ closed pre-Control (2026-04-19) | 4          | ~5 (5a–5f)                | Autonomous loop proven end-to-end; I001–I007 all resolved; `factory build example` fully green; 255 tests                                                   |
 | **6** | **Operator-trust + multi-surface**       | ✅ closed 2026-04-21               | 5          | 2 of 3 sub-phases shipped | 6c ✅ verifier advisory; 6a ✅ findings registry; 6b ❌ dropped per [ADR 0019](../../docs/decisions/0019-drop-github-integration.md). Tag `phase-6-closed`. |
-| **7** | **Operator-control + budget discipline** | 🟢 **active**                      | 6          | 3–5 (7a+7b+7c)            | Budget enforcement + cross-session spend dashboard + Telegram channel                                                                                       |
+| **7** | **Operator-control + budget discipline** | 🟢 **active** (7a shipped 2026-04-21) | 6          | 3–5 (7a+7b+7c)            | Budget enforcement ✅ + cross-session spend dashboard + Telegram channel                                                                                    |
 | 8     | (TBD)                                    | ⏸ not yet charted                  | 7          | —                         | Options: Web UI, assessor tier-3 pluggable runtimes, worker-subprocess `ask_user`                                                                           |
 
 ## Phase 6 — sub-phase schedule
@@ -71,22 +71,17 @@ Three sub-phases, execution order **7a → 7b → 7c**. Each closes independentl
 | 2nd   | **7b**    | Cross-session spend dashboard                | `factory spend` subcommand — per-project, per-directive, per-day spend. Aggregates `model_usage` table. Makes expensive rebuilds visible.                                                 | `state`, `cli`, `wiki`               | 1             |
 | 3rd   | **7c**    | Telegram channel                             | Third `ChannelPlugin` implementation after CLI (shipped) and Discord (shipped). Discord is the reference channel — 6b GH channel was dropped per ADR 0019 before its patterns could lock. | `channels`, `events`, `daemon`       | 1–2           |
 
-### Phase 7a — Budget enforcement _(queued, execution order #1 of Phase 7)_
+### Phase 7a — Budget enforcement _(✅ shipped 2026-04-21, tag `phase-7a-budget-enforcement-closed`)_
 
-**Goal:** a runaway build can no longer burn unbounded spend or step-count.
+**Outcome:** pre-call `max_usd` / `max_steps` enforcement in the brain. ADR 0020 picked approach (3) + (2) fallback: rolling average from `model_usage` per `(category, mode)` with a baked-in `DEFAULT_CATEGORY_COST` cold-start table. Enforcement via `assertBudget` in `packages/brain/src/budget.ts`; providers stay dumb about budgets.
 
-**Source material:**
+**Proved end-to-end:** `factory build example --max-usd 3` tripped cleanly at $1.9151 / $3.00 ceiling (builder-2's pre-call check), directive ended `blocked` with `blocked_reason='budget_exceeded_usd: spent=$1.9151 ceiling=$3.00 est=$2.0000 calls=5 agent=builder'`. No orphan `tasks_inflight` rows. Phase 6c's silent $7.71-over-$4-6 overshoot is not reproducible.
 
-- `CompleteArchitecture.md §12` line 454 — `max_usd` / `max_steps` listed alongside retry budgets, stall detector, circuit breakers (the "anti-loop guardrails lifted from OmO" section).
-- Operational signal: Phase 5 builds cost $5–8 with no pre-call enforcement. A stuck retry loop would have been bounded only by the step-level retry budget.
+**Schema additions:** migration 004 (`model_usage.mode`) + migration 005 (`directives.max_usd` / `max_steps`). Both nullable — absent = unlimited, pre-ADR-0020 behaviour.
 
-**Key sub-steps (expand to full steps.md at phase start):**
+**ADR 0020** — pre-call budget enforcement estimator + escalation shape.
 
-- CLI flags: `factory build <spec> --max-usd <N> --max-steps <N>`; defaults read from config.
-- `state` extends `model_usage` with per-build running total (or query-derive).
-- `brain.loop` pre-call check: read running total + per-build ceiling; halt + escalate if exceeded.
-- `providers` exposes per-call cost _estimate_ so the ceiling check fires _before_ the call, not after.
-- Regression test: a synthetic build hits ceiling → escalates cleanly with useful error, doesn't half-fail mid-task.
+Detailed narrative: `docs/Phase7_Progress.md` §"Phase 7a".
 
 ### Phase 7b — Cross-session spend dashboard _(queued, execution order #2 of Phase 7)_
 

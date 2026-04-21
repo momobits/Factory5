@@ -3060,3 +3060,103 @@ Carry-forwards into 7a:
   touches project identity.
 - **Spend overrun from 6c** — Phase 7a is the fix.
 - **Operator GH cleanup** — out-of-band, non-blocking.
+
+---
+
+## 2026-04-21 — Phase 7a closed (budget enforcement shipped)
+
+**Headline:** Phase 7a lands pre-call `max_usd` / `max_steps`
+enforcement in a single session. ADR 0020 picks the rolling-average
+estimator with baked-in cold-start defaults; the enforcement wrapper
+lives in `@factory5/brain/src/budget.ts` and intercepts every
+brain-side provider call before it fires. Live validation tripped
+cleanly at $1.92 / $3.00 ceiling — Phase 6c's silent overrun is not
+reproducible. Tag `phase-7a-budget-enforcement-closed`.
+
+### Session arc
+
+1. **7a.1 — ADR 0020 authored** (commit `d295dd3`). Rolling average
+   per `(category, mode)` from `model_usage`, with hardcoded defaults
+   for cold-start. Escalation via `BudgetExceededError` caught at the
+   inline loop's outer boundary; directive flipped to `blocked` with
+   a `budget_exceeded_*:` prefix on `blocked_reason`. Per-directive
+   scope (not per-session / not cumulative — that's Phase 7b's lane).
+2. **7a.2 — state queries** (commit `9a22cc1`). Migration 004 added
+   a nullable `mode TEXT` column to `model_usage` plus an
+   `idx_usage_category_mode` index. Two new queries:
+   `countForDirective` (for `max_steps`) and `averageCostByCategory`
+   (for the cold-start-aware rolling estimate; excludes error and
+   NULL-mode rows).
+3. **7a.3 — closed as no-op** (checkbox flipped in 7a.4). The
+   pre-ADR scoping envisioned a provider-layer estimator; the ADR
+   moved the estimator to state + brain, leaving providers dumb about
+   budgets.
+4. **7a.4 — brain enforcement** (commit `194ef4f`, 19 files).
+   Migration 005 added nullable `max_usd REAL` + `max_steps INTEGER`
+   to `directives`. `Directive.limits` added to the core schema.
+   `budget.ts` scaffolded with `BudgetExceededError`,
+   `DEFAULT_CATEGORY_COST`, `estimateCostFor`, `assertBudget`,
+   `formatBlockedReason`. Call sites in triage / architect / planner
+   invoke `assertBudget` pre-call; pool invokes it pre-dispatch
+   (using `isToolUsingAgent` to pick `'stream'` vs `'call'`);
+   `loop.runInline` catches at the outer boundary and produces the
+   blocked directive + outbound escalation. `InlineResult.triage`
+   became optional (budget can trip before triage completes).
+5. **7a.5 — CLI flags** (commit `d7b250c`). `--max-usd <n>` +
+   `--max-steps <n>` on `factory build`. `parsePositiveFloat` /
+   `parsePositiveInt` validators extracted for reuse.
+6. **7a.6 — config defaults** (commit `56aaafb`). New
+   `[budget.defaults]` section in `~/.factory5/config.toml`. CLI
+   flag wins over config default; both absent = unlimited (strict
+   no-op for operators who don't opt in).
+7. **7a.7 — regression test** (commit `3dafa13`). Three tests in
+   `budget-regression.test.ts` exercising the maxUsd trip (pre-seeded
+   $4 spend against $3 ceiling), the maxSteps trip (3rd call against
+   maxSteps=2), and the happy-path (limits well above the estimate).
+   Asserts on `BudgetExceededError` detail fields, `readPlan`
+   persistence as `abandoned`, and zero `tasks_inflight` rows for
+   the refused task.
+8. **7a.8 — live validation — passed.** `factory build example
+   --max-usd 3` against a fresh `factory5-v7a-example` workspace.
+   Tripped cleanly at the 6th dispatch (builder-2):
+   `spentSoFar=$1.9151 + estimatedCost=$2.00 > ceiling=$3.00`.
+   Directive `01KPRHNEX1T3VR3S4ZTTSJ8F0M` ended `blocked` with
+   `blockedReason='budget_exceeded_usd: spent=$1.9151 ceiling=$3.00
+   est=$2.0000 calls=5 agent=builder'`. 5 `model_usage` rows
+   persisted, all with correct `mode` values. Phase 6c-style silent
+   overrun not reproducible; $1.08 headroom at the halt.
+
+Plus a small pool.ts polish (top-level commit, not its own step):
+when budget trips on the same iteration that `running` goes empty,
+the pool's `if (running.size === 0)` branch now labels the pending
+tasks with the budget reason rather than the misleading "deadlock"
+reason (reserved for actual cycles / unsatisfiable dependencies).
+
+### Test counts across the arc
+
+- Phase 6 close: 309 tests
+- End of 7a: 347 tests (+38: migration shape tests for 004 and 005,
+  model-usage query coverage, budget unit + integration tests,
+  config budget-defaults round-trip). All green on Windows.
+
+### Carry-forward into Phase 7b
+
+- **I008** (MEDIUM, findings-registry `project_id` collision) —
+  still deferred. May surface when 7b's spend dashboard touches
+  project identity.
+- **CLI build-summary omits partial tasks when the budget catches**
+  — noted in `Phase7_Progress.md` 7a.8 section. Directive-level state
+  is correct; only the in-process stdout summary loses signal.
+  Future polish, not Phase-7 blocking.
+- **Mid-call enforcement for overshooting streams** — flagged in
+  ADR 0020 negatives. A watchdog phase can address later; not in
+  Phase 7's scope.
+- **Config-tunable per-category cold-start defaults** — the
+  `DEFAULT_CATEGORY_COST` table is baked in today. Tunable-from-config
+  extension is obvious but out of 7a scope.
+
+### Phase 7b opens next
+
+`factory spend` subcommand + cross-session aggregations over
+`model_usage`. Natural handoff from 7a: everything it needs is now
+recorded with `mode` + `category` + `directive_id`.

@@ -370,7 +370,16 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
     }
 
     if (running.size === 0) {
-      // Nothing running, nothing ready — we must have a cycle or a bug; bail.
+      // Budget-halted: label the pending rows with the budget reason
+      // rather than the deadlock reason (which is meant for cycles /
+      // unsatisfiable dependencies, not a deliberate stop).
+      if (budgetError !== undefined) {
+        for (const id of [...pending]) {
+          markBlocked(id, `budget_exceeded: ${budgetError.detail.kind} — aborted before start`);
+        }
+        break;
+      }
+      // Otherwise: nothing running, nothing ready — cycle or bug; bail.
       if (pending.size > 0) {
         log.error(
           { pending: [...pending] },
