@@ -3160,3 +3160,80 @@ reason (reserved for actual cycles / unsatisfiable dependencies).
 `factory spend` subcommand + cross-session aggregations over
 `model_usage`. Natural handoff from 7a: everything it needs is now
 recorded with `mode` + `category` + `directive_id`.
+
+---
+
+## 2026-04-22 — Phase 7b closed (cross-session spend dashboard shipped)
+
+**Headline:** Phase 7b ships the `factory spend` subcommand with
+per-project / per-directive / per-day / per-model rollups, on top of
+first-class project identity (ADR 0021 + migration 006) that landed
+in 7b.1 last session. The round-trip test locks the I008 regression
+end-to-end: two workspaces named `example` with distinct identity
+files appear as distinct dashboard rows, raw `model_usage` sums match
+the rollup. 428 tests green; tag `phase-7b-spend-dashboard-closed`.
+
+### Session arc (7b.2 → 7b.5)
+
+1. **7b.2 — `@factory5/state.queries.spend`** (commit `beb540a`).
+   Four rollups — `perProject`, `perDirective`, `perDay`, `perModel`
+   — over `model_usage`, all joined through `directives.project_id`.
+   Shared `SpendFilter { since, until, projectId }`. Exported helper
+   `formatProjectDisplay(name, id)` canonises the ADR 0021 §5
+   `name (…xxxx)` rule. Orphan-directive and NULL-project_id rows
+   collapse into a single `(unassigned)` bucket rather than vanishing.
+   +23 tests, including the ADR 0021 regression (two projects sharing
+   basename surface distinctly).
+
+2. **7b.3 — `factory spend` CLI subcommand** (commit `87ef9dd`).
+   Pure `runSpend(db, opts)` handler + Commander wrapper, mirroring
+   findings.ts. `--group-by {project|directive|day|model}` (default
+   project). `--since` / `--until` accept relative durations (`7d` /
+   `24h` / `30m`) or ISO8601; bare numeric strings rejected (the JS
+   `Date.parse('5')` year-5 trap). `--project` accepts ULID / name /
+   suffix (case-insensitive via LIKE); ambiguous refs exit 2 with a
+   disambiguation list. `--json` emits NDJSON; tabular output appends
+   a `TOTAL  N calls  $X` line. +24 tests.
+
+   Live smoke against the real local DB: migration 006 ran for the
+   first time on that DB during the smoke itself, and `factory spend`
+   rendered 2 projects (`example (…SG6H)` + `parallel-example (…9PR3)`)
+   - 2 `(unassigned)` calls, totalling $63.17 across 116 calls.
+
+3. **7b.4 — round-trip regression** (commit `6743ee3`).
+   `packages/cli/src/commands/spend-roundtrip.test.ts` — two tmp
+   workspaces with basename `example`, `loadOrCreateProjectMetadata`
+   writes distinct-ULID identity files, directives + `model_usage`
+   seeded, `runSpend` driven directly. Six assertions cover: distinct
+   on-disk identity files, both rows present with different suffixes,
+   rollup matches `totalCostForDirective` ground truth, `--project
+<ulid>` / `--project <suffix>` isolate individually, `--project
+example` (bare basename) hits ambiguity. I008 regression fails
+   immediately if any layer reverts to basename-keying.
+
+4. **7b.5 — phase close.** This commit. `docs/Phase7_Progress.md` 7b
+   row flipped ✅; this entry; tag `phase-7b-spend-dashboard-closed`.
+
+### Test counts
+
+- 7a close: 347 tests
+- 7b.1 close: 375 tests (+28 for migration 006 + identity helper)
+- **7b.5 close: 428 tests** (+53 over 7a close across the full 7b arc:
+  +28 at 7b.1, +23 at 7b.2, +24 at 7b.3, +6 at 7b.4). All green on
+  Windows, `pnpm lint` + `pnpm format:check` clean.
+
+Per-package at close: core 14, logger 5, ipc 5, providers 37,
+state 92, assessor 42, wiki 39, channels 25, events 3, worker 24,
+brain 59, daemon 28, cli 55.
+
+### Carry-forward into Phase 7c (Telegram channel)
+
+Phase 7c is the final Phase 7 sub-phase and the only one with a HALT
+gate: operator must provide a Telegram bot token + target chat-id
+(step 7c.1) before implementation can begin. After 7c closes, Phase 7
+itself closes with tag `phase-7-closed`.
+
+No blockers, no open issues for Phase 7b (the single open blocker
+I008 resolved in 7b.1). Operator follow-up from Phase 6 close
+(GitHub PAT revocation, throwaway repo delete, env var clear)
+still out-of-band and does not block 7c.
