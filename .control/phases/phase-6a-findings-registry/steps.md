@@ -5,7 +5,7 @@
 - [x] 6a.3 — `cli findings list` with `--severity`, `--status`, `--project`, `--advisory|--blocking` filters
 - [x] 6a.4 — `cli findings show <id>` with full content + origin metadata
 - [x] 6a.5 — Backfill script for existing `<workspace>/*/.factory/findings.json`
-- [ ] 6a.6 — Test coverage (state migration, wiki dual-write, cli round-trip)
+- [x] 6a.6 — Test coverage (state migration, wiki dual-write, cli round-trip)
 - [ ] 6a.7 — Live validation on the Phase 5 `example` corpus
 - [ ] 6a.8 — Close Phase 6a
 

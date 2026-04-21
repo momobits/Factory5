@@ -25,6 +25,13 @@
  * The backfill subcommand walks `<workspace>/<project>/.factory/findings.json`
  * one level deep and upserts each finding into the registry — idempotent
  * by the composite PK `(project_id, finding_id)`.
+ *
+ * Testability: each subcommand's logic is a pure async `run*` function
+ * that takes a `Database` + opts and returns `{ stdout, exitCode }`.
+ * The Commander `.action()` callbacks are thin wrappers that open the
+ * DB, call the handler, write stdout, and exit on non-zero. Tests
+ * import the handlers directly and drive them against an in-memory
+ * DB — see `findings.test.ts`.
  */
 
 import { readdir, readFile, stat } from 'node:fs/promises';
@@ -46,7 +53,16 @@ import type { Command } from 'commander';
 
 const log = createLogger('cli.findings');
 
-interface ListCommandOptions {
+export interface HandlerResult {
+  stdout: string;
+  exitCode: number;
+}
+
+// -----------------------------------------------------------------------------
+// Option types + validation
+// -----------------------------------------------------------------------------
+
+export interface ListCommandOptions {
   severity?: string;
   status?: string;
   project?: string;
@@ -54,6 +70,15 @@ interface ListCommandOptions {
   blocking?: boolean;
   limit?: string;
   json?: boolean;
+}
+
+export interface ShowCommandOptions {
+  json?: boolean;
+}
+
+export interface BackfillCommandOptions {
+  workspace?: string;
+  dryRun?: boolean;
 }
 
 const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
@@ -69,6 +94,10 @@ function isSeverity(s: string): s is Severity {
 function isStatus(s: string): s is Status {
   return (STATUSES as readonly string[]).includes(s);
 }
+
+// -----------------------------------------------------------------------------
+// Rendering helpers
+// -----------------------------------------------------------------------------
 
 function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
@@ -144,148 +173,6 @@ function renderNdjson(rows: FindingsRegistryEntry[]): string {
     .concat('\n');
 }
 
-interface ShowCommandOptions {
-  json?: boolean;
-}
-
-interface BackfillCommandOptions {
-  workspace?: string;
-  dryRun?: boolean;
-}
-
-interface BackfillSummary {
-  projectsScanned: number;
-  projectsWithFindings: number;
-  imported: number;
-  updated: number;
-  errors: number;
-  /** Per-project counters, keyed by projectId — surfaced in the summary. */
-  byProject: Map<string, { imported: number; updated: number }>;
-}
-
-function resolveWorkspace(raw: string | undefined): string {
-  const base = raw ?? join(homedir(), 'factory5-workspace');
-  if (base.startsWith('~/') || base === '~') {
-    return join(homedir(), base.slice(2));
-  }
-  return base;
-}
-
-async function loadFindingsFile(path: string): Promise<Finding[] | 'missing' | 'invalid'> {
-  try {
-    await stat(path);
-  } catch {
-    return 'missing';
-  }
-  let raw: string;
-  try {
-    raw = await readFile(path, 'utf8');
-  } catch {
-    return 'invalid';
-  }
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null || !('findings' in parsed)) {
-      return 'invalid';
-    }
-    const arr = (parsed as { findings: unknown }).findings;
-    if (!Array.isArray(arr)) return 'invalid';
-    return arr.map((f) => findingSchema.parse(f));
-  } catch {
-    return 'invalid';
-  }
-}
-
-async function backfillWorkspace(
-  db: Database,
-  workspace: string,
-  dryRun: boolean,
-): Promise<BackfillSummary> {
-  const summary: BackfillSummary = {
-    projectsScanned: 0,
-    projectsWithFindings: 0,
-    imported: 0,
-    updated: 0,
-    errors: 0,
-    byProject: new Map(),
-  };
-
-  let entries: string[];
-  try {
-    entries = await readdir(workspace);
-  } catch (err) {
-    stdout.write(
-      `factory findings backfill: workspace "${workspace}" not readable: ${(err as Error).message}\n`,
-    );
-    exit(2);
-  }
-
-  for (const name of entries.sort()) {
-    const projectPath = join(workspace, name);
-    const projectStat = await stat(projectPath).catch(() => undefined);
-    if (projectStat === undefined || !projectStat.isDirectory()) continue;
-    summary.projectsScanned++;
-
-    const findingsPath = join(projectPath, '.factory', 'findings.json');
-    const loaded = await loadFindingsFile(findingsPath);
-    if (loaded === 'missing') continue;
-    if (loaded === 'invalid') {
-      summary.errors++;
-      log.warn({ projectPath, findingsPath }, 'backfill: findings.json unreadable or invalid');
-      continue;
-    }
-    summary.projectsWithFindings++;
-    const projectId = basename(projectPath);
-    const counters = { imported: 0, updated: 0 };
-    for (const finding of loaded) {
-      const existing = findingsRegistry.getByProjectAndId(db, projectId, finding.id);
-      if (!dryRun) {
-        findingsRegistry.upsert(db, {
-          projectId,
-          projectPath,
-          finding,
-          updatedAt: new Date().toISOString(),
-        });
-      }
-      if (existing === undefined) {
-        summary.imported++;
-        counters.imported++;
-      } else {
-        summary.updated++;
-        counters.updated++;
-      }
-    }
-    summary.byProject.set(projectId, counters);
-  }
-
-  return summary;
-}
-
-function renderBackfillSummary(workspace: string, s: BackfillSummary, dryRun: boolean): void {
-  const verb = dryRun ? 'would import' : 'imported';
-  const verbUpd = dryRun ? 'would update' : 'updated';
-  stdout.write(`factory findings backfill — workspace: ${workspace}${dryRun ? ' (dry-run)' : ''}\n`);
-  stdout.write(
-    `  ${String(s.projectsScanned)} dir(s) scanned; ` +
-      `${String(s.projectsWithFindings)} with findings.json; ` +
-      `${String(s.errors)} error(s)\n`,
-  );
-  if (s.projectsWithFindings === 0) return;
-  stdout.write(`  ${verb} ${String(s.imported)}; ${verbUpd} ${String(s.updated)}\n\n`);
-  const projectWidth = Math.max(7, ...[...s.byProject.keys()].map((k) => k.length));
-  for (const [projectId, counters] of s.byProject) {
-    stdout.write(
-      `    ${projectId.padEnd(projectWidth)}  +${String(counters.imported)} imported  ~${String(counters.updated)} updated\n`,
-    );
-  }
-}
-
-function splitShowArg(raw: string): { projectId?: string; findingId: string } {
-  const slash = raw.indexOf('/');
-  if (slash === -1) return { findingId: raw };
-  return { projectId: raw.slice(0, slash), findingId: raw.slice(slash + 1) };
-}
-
 function renderFindingDetail(e: FindingsRegistryEntry): string {
   const f = e.finding;
   const advisory = f.advisory === true ? 'yes (ADR 0018 — does not contribute to gate)' : 'no';
@@ -350,6 +237,267 @@ function renderAmbiguity(findingId: string, matches: FindingsRegistryEntry[]): s
   return `${lines.join('\n')}\n`;
 }
 
+// -----------------------------------------------------------------------------
+// Handlers — pure, testable, do not touch process.exit or stdout directly.
+// -----------------------------------------------------------------------------
+
+/**
+ * `factory findings list` handler. Returns rendered stdout + exit code.
+ * `exitCode === 2` on invalid input (bad --severity / --status). Does
+ * not open or close the DB — the caller owns the lifecycle.
+ */
+export function runFindingsList(db: Database, opts: ListCommandOptions): HandlerResult {
+  if (opts.severity !== undefined && !isSeverity(opts.severity)) {
+    return {
+      stdout: `factory findings list: invalid --severity "${opts.severity}"\n`,
+      exitCode: 2,
+    };
+  }
+  // Default status is 'OPEN' per steps.md §6a.3. The CLI Commander layer
+  // also passes 'OPEN' as its default, so in practice opts.status is
+  // always set when invoked from the shell; defaulting here keeps the
+  // handler's contract honest for direct callers (tests, future
+  // programmatic callers) without relying on Commander wiring.
+  const statusArg = opts.status ?? 'OPEN';
+  if (statusArg !== 'all' && !isStatus(statusArg)) {
+    return {
+      stdout: `factory findings list: invalid --status "${statusArg}"\n`,
+      exitCode: 2,
+    };
+  }
+
+  const limit = Math.max(1, Number.parseInt(opts.limit ?? '50', 10) || 50);
+
+  // Advisory resolution: explicit --advisory wins, otherwise default to
+  // blocking-only per steps.md §6a.3. Both flags set → don't filter on
+  // advisory (show everything).
+  let advisoryFilter: boolean | undefined;
+  if (opts.advisory === true && opts.blocking === true) advisoryFilter = undefined;
+  else if (opts.advisory === true) advisoryFilter = true;
+  else advisoryFilter = false;
+
+  const filter: FindingsRegistryListFilter = {
+    ...(opts.severity !== undefined ? { severity: opts.severity as Severity } : {}),
+    ...(statusArg !== 'all' ? { status: statusArg as Status } : {}),
+    ...(opts.project !== undefined ? { project: opts.project } : {}),
+    ...(advisoryFilter !== undefined ? { advisory: advisoryFilter } : {}),
+    limit,
+  };
+
+  const rows = findingsRegistry.list(db, filter);
+  return {
+    stdout: opts.json === true ? renderNdjson(rows) : renderTable(rows),
+    exitCode: 0,
+  };
+}
+
+/**
+ * `factory findings show <id>` handler. `exitCode === 2` for
+ * not-found / ambiguous-bare-id cases; `stdout` explains.
+ */
+export function runFindingsShow(
+  db: Database,
+  rawId: string,
+  opts: ShowCommandOptions,
+): HandlerResult {
+  const { projectId, findingId } = splitShowArg(rawId);
+  if (projectId !== undefined) {
+    const entry = findingsRegistry.getByProjectAndId(db, projectId, findingId);
+    if (entry === undefined) {
+      return {
+        stdout: `factory findings show: no finding ${findingId} in project "${projectId}"\n`,
+        exitCode: 2,
+      };
+    }
+    return {
+      stdout: opts.json === true ? renderShowJson(entry) : renderFindingDetail(entry),
+      exitCode: 0,
+    };
+  }
+  const matches = findingsRegistry.findByFindingId(db, findingId);
+  if (matches.length === 0) {
+    return {
+      stdout: `factory findings show: no finding with id "${findingId}"\n`,
+      exitCode: 2,
+    };
+  }
+  if (matches.length > 1) {
+    return { stdout: renderAmbiguity(findingId, matches), exitCode: 2 };
+  }
+  const only = matches[0]!;
+  return {
+    stdout: opts.json === true ? renderShowJson(only) : renderFindingDetail(only),
+    exitCode: 0,
+  };
+}
+
+/**
+ * `factory findings backfill` handler. Walks
+ * `<workspace>/<project>/.factory/findings.json` one level deep and
+ * upserts every finding. Best-effort per project — one bad file does
+ * not abort the whole run; `exitCode === 1` if any errors surfaced.
+ * Workspace-not-readable is a fatal input error (`exitCode === 2`).
+ */
+export async function runFindingsBackfill(
+  db: Database,
+  opts: BackfillCommandOptions,
+): Promise<HandlerResult> {
+  const workspace = resolveWorkspace(opts.workspace);
+  const dryRun = opts.dryRun === true;
+  let entries: string[];
+  try {
+    entries = await readdir(workspace);
+  } catch (err) {
+    return {
+      stdout: `factory findings backfill: workspace "${workspace}" not readable: ${(err as Error).message}\n`,
+      exitCode: 2,
+    };
+  }
+
+  const summary: BackfillSummary = {
+    projectsScanned: 0,
+    projectsWithFindings: 0,
+    imported: 0,
+    updated: 0,
+    errors: 0,
+    byProject: new Map(),
+  };
+
+  for (const name of entries.sort()) {
+    const projectPath = join(workspace, name);
+    const projectStat = await stat(projectPath).catch(() => undefined);
+    if (projectStat === undefined || !projectStat.isDirectory()) continue;
+    summary.projectsScanned++;
+
+    const findingsPath = join(projectPath, '.factory', 'findings.json');
+    const loaded = await loadFindingsFile(findingsPath);
+    if (loaded === 'missing') continue;
+    if (loaded === 'invalid') {
+      summary.errors++;
+      log.warn({ projectPath, findingsPath }, 'backfill: findings.json unreadable or invalid');
+      continue;
+    }
+    summary.projectsWithFindings++;
+    const projectId = basename(projectPath);
+    const counters = { imported: 0, updated: 0 };
+    for (const finding of loaded) {
+      const existing = findingsRegistry.getByProjectAndId(db, projectId, finding.id);
+      if (!dryRun) {
+        findingsRegistry.upsert(db, {
+          projectId,
+          projectPath,
+          finding,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      if (existing === undefined) {
+        summary.imported++;
+        counters.imported++;
+      } else {
+        summary.updated++;
+        counters.updated++;
+      }
+    }
+    summary.byProject.set(projectId, counters);
+  }
+
+  return {
+    stdout: renderBackfillSummary(workspace, summary, dryRun),
+    exitCode: summary.errors > 0 ? 1 : 0,
+  };
+}
+
+interface BackfillSummary {
+  projectsScanned: number;
+  projectsWithFindings: number;
+  imported: number;
+  updated: number;
+  errors: number;
+  byProject: Map<string, { imported: number; updated: number }>;
+}
+
+function resolveWorkspace(raw: string | undefined): string {
+  const base = raw ?? join(homedir(), 'factory5-workspace');
+  if (base.startsWith('~/') || base === '~') {
+    return join(homedir(), base.slice(2));
+  }
+  return base;
+}
+
+async function loadFindingsFile(path: string): Promise<Finding[] | 'missing' | 'invalid'> {
+  try {
+    await stat(path);
+  } catch {
+    return 'missing';
+  }
+  let raw: string;
+  try {
+    raw = await readFile(path, 'utf8');
+  } catch {
+    return 'invalid';
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || !('findings' in parsed)) {
+      return 'invalid';
+    }
+    const arr = (parsed as { findings: unknown }).findings;
+    if (!Array.isArray(arr)) return 'invalid';
+    return arr.map((f) => findingSchema.parse(f));
+  } catch {
+    return 'invalid';
+  }
+}
+
+function renderBackfillSummary(workspace: string, s: BackfillSummary, dryRun: boolean): string {
+  const verb = dryRun ? 'would import' : 'imported';
+  const verbUpd = dryRun ? 'would update' : 'updated';
+  const lines: string[] = [];
+  lines.push(`factory findings backfill — workspace: ${workspace}${dryRun ? ' (dry-run)' : ''}`);
+  lines.push(
+    `  ${String(s.projectsScanned)} dir(s) scanned; ` +
+      `${String(s.projectsWithFindings)} with findings.json; ` +
+      `${String(s.errors)} error(s)`,
+  );
+  if (s.projectsWithFindings === 0) return `${lines.join('\n')}\n`;
+  lines.push(`  ${verb} ${String(s.imported)}; ${verbUpd} ${String(s.updated)}`, '');
+  const projectWidth = Math.max(7, ...[...s.byProject.keys()].map((k) => k.length));
+  for (const [projectId, counters] of s.byProject) {
+    lines.push(
+      `    ${projectId.padEnd(projectWidth)}  +${String(counters.imported)} imported  ~${String(counters.updated)} updated`,
+    );
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+function splitShowArg(raw: string): { projectId?: string; findingId: string } {
+  const slash = raw.indexOf('/');
+  if (slash === -1) return { findingId: raw };
+  return { projectId: raw.slice(0, slash), findingId: raw.slice(slash + 1) };
+}
+
+// -----------------------------------------------------------------------------
+// Commander wiring — thin wrappers that open the DB and route to handlers.
+// -----------------------------------------------------------------------------
+
+function runWithDb<T>(fn: (db: Database) => T | Promise<T>): Promise<T> | T {
+  const db = openDatabase();
+  runMigrations(db);
+  try {
+    const result = fn(db);
+    if (result instanceof Promise) {
+      return result.finally(() => {
+        db.close();
+      });
+    }
+    db.close();
+    return result;
+  } catch (err) {
+    db.close();
+    throw err;
+  }
+}
+
 export function registerFindingsCommand(program: Command): void {
   const group = program
     .command('findings')
@@ -366,44 +514,9 @@ export function registerFindingsCommand(program: Command): void {
     .option('--limit <n>', 'max rows to show (capped at 1000)', '50')
     .option('--json', 'emit NDJSON instead of a table')
     .action((opts: ListCommandOptions) => {
-      // Validate enums up-front so we don't silently send invalid values to SQL.
-      if (opts.severity !== undefined && !isSeverity(opts.severity)) {
-        stdout.write(`factory findings list: invalid --severity "${opts.severity}"\n`);
-        exit(2);
-      }
-      if (opts.status !== undefined && opts.status !== 'all' && !isStatus(opts.status)) {
-        stdout.write(`factory findings list: invalid --status "${opts.status}"\n`);
-        exit(2);
-      }
-
-      const limit = Math.max(1, Number.parseInt(opts.limit ?? '50', 10) || 50);
-
-      // Advisory resolution: explicit --advisory wins, otherwise default
-      // to blocking-only per steps.md §6a.3. If the user sets both flags
-      // we treat that as "don't filter on advisory" — both shown.
-      let advisoryFilter: boolean | undefined;
-      if (opts.advisory === true && opts.blocking === true) advisoryFilter = undefined;
-      else if (opts.advisory === true) advisoryFilter = true;
-      else advisoryFilter = false;
-
-      const filter: FindingsRegistryListFilter = {
-        ...(opts.severity !== undefined ? { severity: opts.severity as Severity } : {}),
-        ...(opts.status !== undefined && opts.status !== 'all'
-          ? { status: opts.status as Status }
-          : {}),
-        ...(opts.project !== undefined ? { project: opts.project } : {}),
-        ...(advisoryFilter !== undefined ? { advisory: advisoryFilter } : {}),
-        limit,
-      };
-
-      const db = openDatabase();
-      try {
-        runMigrations(db);
-        const rows = findingsRegistry.list(db, filter);
-        stdout.write(opts.json === true ? renderNdjson(rows) : renderTable(rows));
-      } finally {
-        db.close();
-      }
+      const result = runWithDb((db) => runFindingsList(db, opts)) as HandlerResult;
+      stdout.write(result.stdout);
+      if (result.exitCode !== 0) exit(result.exitCode);
     });
 
   group
@@ -417,16 +530,9 @@ export function registerFindingsCommand(program: Command): void {
     )
     .option('--dry-run', 'report what would change without writing to the registry')
     .action(async (opts: BackfillCommandOptions) => {
-      const workspace = resolveWorkspace(opts.workspace);
-      const db = openDatabase();
-      try {
-        runMigrations(db);
-        const summary = await backfillWorkspace(db, workspace, opts.dryRun === true);
-        renderBackfillSummary(workspace, summary, opts.dryRun === true);
-        if (summary.errors > 0) exit(1);
-      } finally {
-        db.close();
-      }
+      const result = (await runWithDb((db) => runFindingsBackfill(db, opts))) as HandlerResult;
+      stdout.write(result.stdout);
+      if (result.exitCode !== 0) exit(result.exitCode);
     });
 
   group
@@ -436,35 +542,8 @@ export function registerFindingsCommand(program: Command): void {
     )
     .option('--json', 'emit one JSON object instead of formatted text')
     .action((rawId: string, opts: ShowCommandOptions) => {
-      const { projectId, findingId } = splitShowArg(rawId);
-      const db = openDatabase();
-      try {
-        runMigrations(db);
-        if (projectId !== undefined) {
-          const entry = findingsRegistry.getByProjectAndId(db, projectId, findingId);
-          if (entry === undefined) {
-            stdout.write(
-              `factory findings show: no finding ${findingId} in project "${projectId}"\n`,
-            );
-            exit(2);
-          }
-          stdout.write(opts.json === true ? renderShowJson(entry) : renderFindingDetail(entry));
-          return;
-        }
-        // Bare id path — resolve across all projects; require exactly one match.
-        const matches = findingsRegistry.findByFindingId(db, findingId);
-        if (matches.length === 0) {
-          stdout.write(`factory findings show: no finding with id "${findingId}"\n`);
-          exit(2);
-        }
-        if (matches.length > 1) {
-          stdout.write(renderAmbiguity(findingId, matches));
-          exit(2);
-        }
-        const only = matches[0]!;
-        stdout.write(opts.json === true ? renderShowJson(only) : renderFindingDetail(only));
-      } finally {
-        db.close();
-      }
+      const result = runWithDb((db) => runFindingsShow(db, rawId, opts)) as HandlerResult;
+      stdout.write(result.stdout);
+      if (result.exitCode !== 0) exit(result.exitCode);
     });
 }
