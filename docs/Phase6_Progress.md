@@ -120,8 +120,28 @@ a single session with minimal schema churn; it leaves room for a
 future ADR 0019+ to reintroduce an authoritative verifier if demand
 surfaces.
 
-**Budget:** 6 commits, well inside the $4–6 envelope (no live-LLM
-calls — all validation via stub provider). Tests: 262 green (was 255).
+**Budget:** 6 unit/doc commits plus the live validation run. Unit /
+integration coverage: 262 tests green (was 255) via the stub provider
+— $0 in LLM spend for that surface.
+
+**Live validation (step 6c.7) — passed.** Directive
+`01KPQK61F9967TT8JZWCMCV3NW`, 2026-04-21, workspace
+`C:/Users/Momo/factory5-v6c-example/example`.
+`factory build example --autonomy autonomous --concurrency 2`
+terminated `complete` with `gate: {build: true, integration: true,
+verify: true}` and 119/0 pytest results. The verifier raised two
+findings (F001 MEDIUM, F002 LOW) — both persisted with `advisory:
+true`, neither a filesystem-presence claim, neither contradicting the
+assessor's ground truth. F002 was even explicitly self-tagged
+"Unverified — depends on whether a lint config exists on disk",
+exercising the anti-hallucination discipline from the new prompt. The
+`brain.loop` terminal log confirmed the breakdown:
+`openFindings:2, blockingFindings:0, advisoryFindings:2`. The Phase 5f
+F001-class defect (CRITICAL absence hallucination blocking or
+misleading readers of `factory findings`) was not reproducible.
+Live-run spend $7.71 — above the $4–6 envelope, but inside the
+typical Opus-4.7-heavy builder range (6 tasks × ~$1.30 avg); Phase 7b
+will make that visible and enforceable.
 
 After 6c: **6a (findings registry)** is the natural follow-on —
 every project factory has ever built lives in
