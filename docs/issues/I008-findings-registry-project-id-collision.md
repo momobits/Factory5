@@ -2,8 +2,9 @@
 id: I008
 severity: MEDIUM
 area: state/findings-registry
-status: OPEN
+status: RESOLVED
 created: 2026-04-21
+resolved: 2026-04-21
 ---
 
 # `findings_registry` collides when two workspaces share a project name
@@ -100,35 +101,55 @@ against real multi-workspace corpuses.
 
 ## Resolution
 
-Open. Candidate fixes, ordered by intrusiveness:
+Resolved 2026-04-21 via Phase 7b step 7b.1 (commit `92bebf4`,
+[ADR 0021](../decisions/0021-first-class-project-identity.md)).
 
-1. **Use `project_path` as the dedup key.** Change the registry PK
-   to `(project_path, finding_id)`, let `project_id` be a
-   non-unique human label derived as today. This mirrors the
-   file-system truth (the per-project `findings.json` _is_ identified
-   by path). Downside: a project physically moved to a new path
-   becomes a new set of registry rows.
+The candidate fixes considered above all dealt with **identity in the
+findings_registry alone** — patching the symptom. The accepted fix
+goes a layer deeper: **make project identity first-class system-wide**,
+not collision-prone basenames anywhere. The implementation:
 
-2. **Derive `project_id` from workspace + name.** Set the default to
-   `<basename(parentOf(projectPath))>/<basename(projectPath)>`
-   (e.g. `factory5-v5f-example-2/example`). Keeps the composite PK
-   shape, keeps `project_id` readable. Downside: longer ids in `list`
-   output; still collides if two workspaces happen to share both
-   parent basename and project basename.
+- New `<project>/.factory/project.json` carries a stable ULID as the
+  canonical project handle (`wiki.loadOrCreateProjectMetadata`).
+  Stable across path moves; explicit at fork (delete file before
+  next build). Mirrors how git, npm, uv claim per-project identity.
+- Migration 006 makes `projects.id TEXT PRIMARY KEY` (was `name`),
+  adds `directives.project_id`, and translates
+  `findings_registry.project_id` from basename → ULID via a one-shot
+  backfill. `learnings.source_project` similarly migrated.
+- All call paths (CLI build / resume / findings backfill, brain pool,
+  wiki addFinding) now resolve identity through the helper or inherit
+  it from the directive's `projectId` field. Wiki's
+  `mirrorToRegistry` skips the registry write when no projectId is
+  available rather than fall back to the basename trap.
 
-3. **Require explicit `projectId` at every caller.** Drop the
-   basename default entirely; make callers pass a globally-unique
-   handle from `projects.name` (which in turn would have to be
-   canonicalized cross-workspace too). Largest churn — touches
-   `projects.upsert` semantics.
+Two `example` projects in different workspaces are now distinct
+`projects` rows with distinct ULIDs; their `findings_registry`
+entries no longer collide. The historical collision (the v5f vs v6c
+`example` case in this issue's repro) is preserved as-is — the
+migration does not invent rows it cannot prove — but new writes from
+either workspace land cleanly.
 
-Preferred shape per operator experience: #1 (PK on `project_path`) —
-the source-of-truth for "is this the same project?" is the
-filesystem path, not the name. Defer until an operator actually runs
-into the limitation in earnest; the Phase 5/6c corpus is the only
-known repro and the workaround (backfill per-workspace) is
-functional.
+**Regression coverage:**
 
-Candidate phase: defer to Phase 7 or later. Not blocking any
-operator-trust criterion; the advisory-flag display and per-project
-`factory findings` still work.
+- `packages/state/src/migrations/006-project-identity.test.ts` — 11
+  tests covering migration shape and backfill correctness, including
+  the explicit "two projects with the same name are storable when
+  ids differ" case which would have failed under the old `name`-PK
+  schema.
+- `packages/wiki/src/project-metadata.test.ts` — 11 tests covering
+  the four resolution outcomes (fresh / adopt / corrupt / read-only)
+  and injection points for deterministic ids in tests.
+- `packages/state/src/state.test.ts` — new "two projects sharing a
+  name are distinct rows when ids differ" test on the projects CRUD
+  layer.
+- `packages/cli/src/commands/findings.test.ts` — backfill tests now
+  seed `.factory/project.json` per project; identity is resolved via
+  `readProjectMetadata`. New "skips projects without identity file"
+  test covers the deliberate skip behaviour.
+
+The future "what if the operator wants per-workspace `findings_registry`
+rollups for a single project" question (pre-fix this was a
+side-effect of the basename trap) is now an explicit query design
+choice — a clean composition of `projects.name` + `projects.workspace_path`
+joins rather than an artifact of identity collision.
