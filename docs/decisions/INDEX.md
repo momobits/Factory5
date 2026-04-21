@@ -30,6 +30,7 @@ Decisions are append-only. To overturn a decision, write a new ADR with `Superse
 | [0016](0016-planner-materialisation-and-turn-budgets.md) | Planner materialisation: category floor, file-ownership deps, per-task turn budgets   | Accepted           | 2026-04-18 |
 | [0017](0017-assessor-project-env-provisioning.md)        | Assessor project-env provisioning: venv + requires-python + pip install               | Accepted           | 2026-04-19 |
 | [0018](0018-verifier-advisory-only.md)                   | Verifier becomes advisory-only (findings don't block the gate)                        | Accepted           | 2026-04-21 |
+| [0019](0019-drop-github-integration.md)                  | Drop GitHub integration from factory5; future output-to-GH is operator-directed       | Accepted           | 2026-04-21 |
 
 ## Adding a new ADR
 
