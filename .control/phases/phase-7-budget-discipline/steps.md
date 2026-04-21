@@ -12,7 +12,7 @@
 - [x] 7a.4 — `@factory5/brain` — pre-call ceiling check in the main loop; halt + escalate when exceeded — migration 005 for `directives.max_usd` / `max_steps`; `budget.ts` module with `assertBudget` / `BudgetExceededError` / `DEFAULT_CATEGORY_COST`; wrappers wired into triage / architect / planner / pool; `loop.ts` catches + flips directive to `blocked` with `formatBlockedReason`
 - [x] 7a.5 — `@factory5/cli` — `--max-usd <N>` / `--max-steps <N>` flags on `factory build` write through to `directive.limits`
 - [x] 7a.6 — Config defaults in `~/.factory5/config.toml` `[budget.defaults]` (maxUsd / maxSteps). CLI flag wins over config default; both absent = unlimited
-- [ ] 7a.7 — Regression test: synthetic build hits `max_usd` → clean escalation (not mid-task half-failure)
+- [x] 7a.7 — Regression test: synthetic build hits `max_usd` → clean escalation (not mid-task half-failure). `packages/brain/src/budget-regression.test.ts` covers maxUsd trip (pre-seeded model_usage), maxSteps trip, and the under-budget happy path
 - [ ] 7a.8 — Live validation: `factory build example --max-usd 3` either lands clean or escalates cleanly
 - [ ] 7a.9 — Close Phase 7a (tag `phase-7a-budget-enforcement-closed`)
 
