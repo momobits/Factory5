@@ -10,13 +10,17 @@
  *     [--limit <n>]                                (default: 50, cap 1000)
  *     [--json]
  *
- * Tabular by default; `--json` emits NDJSON so scripts can pipe.
- * `--project` accepts a bare name (exact match) or a glob with `*` /
- * `?` wildcards (translated to SQL LIKE).
+ *   factory findings show <project>/<id>
+ *   factory findings show <id>                     (if unambiguous)
+ *     [--json]
  *
- * The `show <id>` subcommand lands in step 6a.4; the backfill
- * subcommand in 6a.5. Both hang off the same `findings` group and
- * will share the `openDatabase()` + `runMigrations()` pattern below.
+ * Tabular by default; `--json` emits NDJSON (list) or a single JSON
+ * object (show). `--project` accepts a bare name (exact match) or a
+ * glob with `*` / `?` wildcards (translated to SQL LIKE).
+ *
+ * The backfill subcommand lands in step 6a.5; it hangs off the same
+ * `findings` group and reuses the `openDatabase()` + `runMigrations()`
+ * pattern below.
  */
 
 import { exit, stdout } from 'node:process';
@@ -128,6 +132,80 @@ function renderNdjson(rows: FindingsRegistryEntry[]): string {
     .concat('\n');
 }
 
+interface ShowCommandOptions {
+  json?: boolean;
+}
+
+function splitShowArg(raw: string): { projectId?: string; findingId: string } {
+  const slash = raw.indexOf('/');
+  if (slash === -1) return { findingId: raw };
+  return { projectId: raw.slice(0, slash), findingId: raw.slice(slash + 1) };
+}
+
+function renderFindingDetail(e: FindingsRegistryEntry): string {
+  const f = e.finding;
+  const advisory = f.advisory === true ? 'yes (ADR 0018 — does not contribute to gate)' : 'no';
+  const rows: Array<[string, string]> = [
+    ['Project', e.projectId],
+    ['Path', e.projectPath],
+    ['Finding', f.id],
+    ['Severity', f.severity],
+    ['Status', f.status],
+    ['Source', f.source],
+    ['Target', f.target],
+    ['Advisory', advisory],
+    ['Directive', e.originDirectiveId ?? '(unrecorded)'],
+    ['Created', f.createdAt],
+    ['Updated', e.updatedAt],
+    ['Resolved', f.resolvedAt ?? '-'],
+  ];
+  const labelWidth = Math.max(...rows.map(([k]) => k.length));
+  const header = rows.map(([k, v]) => `${(`${k}:`).padEnd(labelWidth + 2)}${v}`).join('\n');
+  const description = f.description.trim().length > 0 ? f.description.trim() : '(none)';
+  const resolution = f.resolution !== undefined ? f.resolution.trim() : '(unresolved)';
+  const indent = (block: string): string =>
+    block
+      .split('\n')
+      .map((line) => `  ${line}`)
+      .join('\n');
+  return `${header}\n\nDescription:\n${indent(description)}\n\nResolution:\n${indent(resolution)}\n`;
+}
+
+function renderShowJson(e: FindingsRegistryEntry): string {
+  return `${JSON.stringify(
+    {
+      projectId: e.projectId,
+      projectPath: e.projectPath,
+      updatedAt: e.updatedAt,
+      ...(e.originDirectiveId !== undefined ? { originDirectiveId: e.originDirectiveId } : {}),
+      finding: e.finding,
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function renderAmbiguity(findingId: string, matches: FindingsRegistryEntry[]): string {
+  const lines: string[] = [
+    `factory findings show: ${findingId} exists in ${String(matches.length)} projects:`,
+  ];
+  const projectWidth = Math.max(7, ...matches.map((m) => m.projectId.length));
+  for (const m of matches) {
+    lines.push(
+      `  ${m.projectId.padEnd(projectWidth)}  ` +
+        `${m.finding.status.padEnd(8)}  ` +
+        `${(m.finding.advisory === true ? `[adv]${m.finding.severity}` : m.finding.severity).padEnd(14)}  ` +
+        `${m.finding.source}`,
+    );
+  }
+  lines.push(
+    '',
+    `Disambiguate with \`factory findings show <project>/${findingId}\`.`,
+    '',
+  );
+  return `${lines.join('\n')}\n`;
+}
+
 export function registerFindingsCommand(program: Command): void {
   const group = program
     .command('findings')
@@ -179,6 +257,45 @@ export function registerFindingsCommand(program: Command): void {
         runMigrations(db);
         const rows = findingsRegistry.list(db, filter);
         stdout.write(opts.json === true ? renderNdjson(rows) : renderTable(rows));
+      } finally {
+        db.close();
+      }
+    });
+
+  group
+    .command('show <id>')
+    .description(
+      'show a single finding in full. <id> is either "<project>/F001" or bare "F001" (must be unambiguous)',
+    )
+    .option('--json', 'emit one JSON object instead of formatted text')
+    .action((rawId: string, opts: ShowCommandOptions) => {
+      const { projectId, findingId } = splitShowArg(rawId);
+      const db = openDatabase();
+      try {
+        runMigrations(db);
+        if (projectId !== undefined) {
+          const entry = findingsRegistry.getByProjectAndId(db, projectId, findingId);
+          if (entry === undefined) {
+            stdout.write(
+              `factory findings show: no finding ${findingId} in project "${projectId}"\n`,
+            );
+            exit(2);
+          }
+          stdout.write(opts.json === true ? renderShowJson(entry) : renderFindingDetail(entry));
+          return;
+        }
+        // Bare id path — resolve across all projects; require exactly one match.
+        const matches = findingsRegistry.findByFindingId(db, findingId);
+        if (matches.length === 0) {
+          stdout.write(`factory findings show: no finding with id "${findingId}"\n`);
+          exit(2);
+        }
+        if (matches.length > 1) {
+          stdout.write(renderAmbiguity(findingId, matches));
+          exit(2);
+        }
+        const only = matches[0]!;
+        stdout.write(opts.json === true ? renderShowJson(only) : renderFindingDetail(only));
       } finally {
         db.close();
       }
