@@ -32,6 +32,7 @@ describe('migrations', () => {
     for (const expected of [
       'directives',
       'events_audit',
+      'findings_registry',
       'learnings',
       'migrations',
       'model_usage',
