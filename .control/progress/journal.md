@@ -2,9 +2,12 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
-## 2026-04-21 — Phase 6 closed (6c + 6a shipped; 6b dropped per ADR 0019)
+## 2026-04-21 (session `2026-04-21T16`) — Phase 6 closed (6c + 6a shipped; 6b dropped per ADR 0019)
 
-- Phase tagged `phase-6-closed` on this close commit. Phase 7 (Operator-control + budget discipline) kicked off; next step is 7a.1 — ADR for pre-call cost estimate approach.
+- **Commit range:** `c780180` → `47cf160` (4 commits). **Phase step range:** 6b.1 → phase-6-close.
+- **Decisions:** ADR 0019 (drop GitHub integration; durable doctrine: factory's effects are operator-directed per-directive, not pattern-driven).
+- **Issues:** none opened, none closed. Open backlog unchanged: {I008 MEDIUM, findings-registry project-id collision}.
+- Phase tagged `phase-6-closed` on commit `47cf160`. Phase 7 (Operator-control + budget discipline) kicked off; next step is 7a.1 — ADR for pre-call cost estimate approach.
 - **Phase 6b dropped wholesale.** Session opened Phase 6b cleanly (6b.1 commit `c780180` recorded PAT + test repo scaffolding). At 6b.2 — the event-source design ADR — the session surfaced that (a) the charter had silently pivoted GitHub from event-source (scaffold intent) to channel (Phase 6b charter) without justification, and (b) neither framing earned its keep for a solo dev-box operator: channel duplicates the CLI; observer needs factory's outputs to live on GitHub first, which no phase has built. Drop was wholesale.
 - **ADR 0019 records the decision + durable doctrine.** Commit `c39ef8f`. Three decisions in one doc: no GitHub channel; no GitHub observer; future output-to-GH (if and when it ships) is operator-directed per-directive, not pattern-driven. This last principle generalises — factory's side-effects in the world happen because a directive asks for them, not because a daemon observer or channel plugin silently decides.
 - **Code + doc prune.** Commit `ee85efd`. Pruned: `'github'` + `'webhook'` from `CHANNEL_IDS`; three `github.*` event kinds from `eventBodySchema`; github narrative from `CompleteArchitecture.md`, `docs/ARCHITECTURE.md`, `docs/CONTRACTS.md`, `README.md`; `github-poll` + `webhook-server` stub mentions from `packages/events/README.md`; "GitHub polling" phrase from `packages/daemon/README.md` + `apps/factoryd/package.json` description; "GitHub event description" from `prompts/agents/triage.md`. Migration 001's CHECK constraints intentionally left in-place (SQLite cannot ALTER a CHECK; stricter-TS-over-wider-DB is harmless; comment added pointing to ADR 0019). Tests re-pointed at `fs.changed`. 309 tests green (no delta).

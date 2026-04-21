@@ -2,11 +2,11 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-21 by Phase 6 close commit
+**Last updated:** 2026-04-21T16:49:28Z — session `2026-04-21T16` (Phase 6 close + Phase 7 open, `/session-end`)
 **Current phase:** 7 — Operator-control + budget discipline
 **Current sub-phase:** 7a — Budget enforcement (`max_usd` / `max_steps`)
-**Current step:** 7a.1 — ADR: pre-call cost-estimate approach (authored at 7a session start)
-**Status:** queued — Phase 7 active but no 7a work landed yet. Next session opens with the 7a.1 ADR.
+**Current step:** 7a.1 — ADR: pre-call cost-estimate approach (not started; authored at 7a session start)
+**Status:** queued — Phase 7 active, no 7a work landed yet. Next session opens with the 7a.1 ADR.
 
 ---
 
@@ -37,10 +37,10 @@ Detailed Phase 7a plan: `.control/phases/phase-7-budget-discipline/README.md` + 
 
 ## Git state
 
-- **Branch:** main
-- **Last commit:** `<to be filled by this phase-6-close commit>` — `chore(phase-6): close Phase 6, scaffold Phase 7 budget discipline`
-- **Uncommitted changes:** no (post-phase-close)
-- **Last phase tag:** `phase-6-closed` — tags the phase-6-close commit. Earlier per-sub-phase tags intact: `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`.
+- **Branch:** main (28 commits ahead of `origin/main` — push at operator discretion)
+- **Last commit:** `47cf160` — `chore(phase-6): close Phase 6, scaffold Phase 7 budget discipline`
+- **Uncommitted changes:** no
+- **Last phase tag:** `phase-6-closed` (tags `47cf160`). Earlier per-sub-phase tags intact: `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`.
 
 ---
 
@@ -77,7 +77,7 @@ All 19 ADRs live under `docs/decisions/` (factory5's authoritative shape — do 
 
 ## Recently completed (last 5 steps)
 
-- **Phase 6 closed** — 2026-04-21 — tag `phase-6-closed`; 2 of 3 sub-phases shipped (6c ✅, 6a ✅, 6b ❌ dropped per ADR 0019). Commits `c780180` (6b.1 PAT/repo scaffold, retired), `c39ef8f` (ADR 0019), `ee85efd` (github scaffolding pruned from code + docs), this phase-close commit. Phase 6 exit criterion #2 amended via charter clause.
+- **Phase 6 closed** — 2026-04-21 — tag `phase-6-closed` on commit `47cf160`; 2 of 3 sub-phases shipped (6c ✅, 6a ✅, 6b ❌ dropped per ADR 0019). Session commits: `c780180` (6b.1 PAT/repo scaffold, retired), `c39ef8f` (ADR 0019), `ee85efd` (github scaffolding pruned from code + docs), `47cf160` (phase-6 close + Phase 7 scaffold). Phase 6 exit criterion #2 amended via charter clause.
 - **6b.2 — ADR 0019 authored + code prune** — 2026-04-21 — commits `c39ef8f` + `ee85efd`. Replaces the original 6b.2 event-source ADR (webhook vs polling vs hybrid) — that design session surfaced neither framing earned its keep for a solo dev-box operator.
 - **6b.1 — Record GitHub test repo + PAT ref** — 2026-04-21 — commit `c780180`. Scaffold-only; retired when Phase 6b was dropped. Operator-level cleanup (revoke PAT, delete repo, clear env var) is out-of-band.
 - **Phase 6a closed (findings registry)** — 2026-04-21 — tag `phase-6a-findings-registry-closed`; 8 sub-steps across commits `5d81fe2` → `fd3837e`.
