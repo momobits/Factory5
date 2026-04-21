@@ -2697,3 +2697,210 @@ ran $5.84, Phase 5-closeout ran $4.74, 6c ran $7.71. Phase 7b
 (per-directive `max_usd` cap + cross-session spend tracking) is
 pre-charted in `.control/architecture/phase-plan.md` precisely for
 this. No action in 6a; just don't let 6a's agent-heavy steps surprise.
+
+## 2026-04-21 — Phase 6a closed (cross-project findings registry)
+
+Second same-day session after the 6c close. Aggregates every
+`<workspace>/<project>/.factory/findings.json` into a SQLite
+registry the operator can cross-query with `factory findings list`
+/ `factory findings show`, plus a backfill path for legacy
+corpuses. Carries the ADR 0018 advisory flag end-to-end so the
+display layer distinguishes blocking vs. verifier-sourced
+informational findings. Three surfaces shipped (schema, wiki
+dual-write, CLI), one backfill, two rounds of tests, one live
+validation, one new factory5 issue filed (I008 — project_id
+collision across workspaces). All 309 tests green; zero LLM
+spend (this was a pure scaffolding session).
+
+### Shipped
+
+1. **6a.1 — State migration (commit `5d81fe2`).** New
+   `findings_registry` table with composite PK `(project_id,
+   finding_id)`, 14 columns, CHECK on severity/status/advisory,
+   FK `origin_directive_id → directives(id) ON DELETE SET NULL`,
+   index on `(severity, status)`. Advisory persists as 0/1
+   mirroring Finding.advisory (ADR 0018). No FK on project_id —
+   backfill is expected to hit projects never formally registered
+   in the `projects` table.
+
+2. **6a.2 — Wiki dual-write (commit `e6a2640`).** `wiki.addFinding`
+   and `wiki.updateFindingStatus` gain an optional `registry:
+   FindingRegistryBinding` arg (`{ db, projectId?,
+   originDirectiveId? }`). When present, per-project file writes
+   first (source of truth), registry upserts second (best-effort —
+   failures log warnings, never fail the per-project write).
+   Worker's `WorkerOptions` picks up `findingRegistry?`; brain's
+   pool constructs the binding (`db`, `basename(plan.projectPath)`,
+   `directiveId`) for every task. Six new wiki tests (+27 total)
+   cover round-trip, advisory=1 persistence for verifier source,
+   back-compat (no binding), status-update upsert with
+   resolved_at bump, created_at preservation across re-raise,
+   best-effort behaviour when the registry handle is unusable.
+
+3. **Control discipline (commit `87ea1c0`).** Added a line to
+   `CLAUDE.md` Control-invariants: "In the same commit that closes
+   a sub-step, flip the matching `- [ ]` in
+   `.control/phases/<phase>/steps.md` to `- [x]`." Backfilled
+   6a.1 and 6a.2 checkboxes. Proposal filed as Improvement 6 in
+   the Control repo's `improvement.md` for v1.3.1 / v1.4.0
+   inclusion. Gap observed mid-session when the user asked
+   "what's next per Control?" and the steps.md checklist
+   disagreed with `git log`.
+
+4. **6a.3 — `cli findings list` (commit `73ff8fb`).** Surface:
+   `--severity`, `--status` (default OPEN), `--project` (exact or
+   glob), `--advisory | --blocking` (default blocking), `--limit`
+   (default 50, cap 1000), `--json` (NDJSON). Table output
+   annotates advisory rows with `[adv]SEVERITY`. Project glob
+   translates `*` → `%`, `?` → `_`, with backslash-escape of
+   literal `%` and `_` so `my_project` doesn't inadvertently
+   match `myXproject`. Query helpers shipped alongside:
+   `findingsRegistry.list`, `.getByProjectAndId`,
+   `.findByFindingId`, `rowToEntry`, `RegistryEntry`, `ListFilter`
+   (+8 state tests, 24 total).
+
+5. **6a.4 — `cli findings show <id>` (commit `b17b16e`).** Two
+   input forms: `<project>/<id>` (composite-PK lookup) and bare
+   `<id>` (cross-project `findByFindingId` — resolves when
+   unambiguous, prints per-project disambiguation list + exit 2
+   when multiple match). Renders a key/value header plus
+   Description/Resolution blocks. Advisory text reads "yes (ADR
+   0018 — does not contribute to gate)" so operators get the
+   semantic, not just a flag. `--json` emits one
+   RegistryEntry-shaped object.
+
+6. **6a.5 — Backfill (commit `ae933e7`).** `factory findings
+   backfill [--workspace <path>] [--dry-run]`. Walks one level
+   deep (`<workspace>/<project>/.factory/findings.json`),
+   validates each finding individually via core's
+   `findingSchema`, upserts into the registry. Per-project
+   counters + totals. Idempotent by composite PK; bad files
+   logged + counted as errors without aborting the run;
+   exit code 1 if any errors surfaced. Default workspace
+   `~/factory5-workspace`; `~/` prefix expansion supported.
+
+7. **6a.6 — Test coverage (commit `cc2447c`).** +9 state
+   migration-shape tests (column types/notnull/pk via PRAGMA
+   `table_info`, composite PK ordering, FK on_delete SET NULL,
+   CHECK rejects invalid severity/status/advisory, non-unique
+   `idx_findings_registry_severity_status` covers `(severity,
+   status)` in order). +24 CLI handler tests across
+   `runFindingsList` / `runFindingsShow` / `runFindingsBackfill`
+   (default filters, all option permutations, enum validation,
+   --json shapes, ambiguity path, back-to-back idempotence,
+   malformed-JSON per-file error, workspace-not-readable
+   exit-2). findings.ts refactored so Commander `.action()`
+   callbacks are thin wrappers around pure
+   `{ stdout, exitCode }` handlers — opens the path to future
+   CLI tests without subprocess overhead.
+
+8. **6a.7 — Live validation (commit `46606ee`).** Real backfill
+   against both corpora living on the user's machine:
+   `/c/Users/Momo/factory5-v5f-example-2` imported 1 (the Phase
+   5f verifier CRITICAL hallucination that kicked off 6c);
+   `/c/Users/Momo/factory5-v6c-example` imported 1 + updated 1
+   (the Phase 6c advisory F001/F002 pair overwrote v5f's F001 on
+   the composite PK). `factory findings list --advisory` shows
+   the two v6c rows with `[adv]MEDIUM` / `[adv]LOW` badges.
+   `factory findings show F001` resolves unambiguously (registry
+   only holds one). `factory findings show F002` renders the
+   self-tagged "Unverified — depends on whether a lint config
+   exists on disk" snippet from the 6c advisory discipline.
+   Round-trip confirmed: dual-write + backfill write through the
+   same upsert; list/show render consistently; advisory
+   propagates end-to-end (SQLite 1/0 → boolean → `[adv]` badge →
+   "yes (ADR 0018 — …)" text).
+
+9. **I008 filed (MEDIUM, OPEN).** `findings_registry` collides
+   when two workspaces share a project name:
+   `project_id = basename(path)` makes v5f/example and
+   v6c/example share the composite PK. Per-project `findings.json`
+   files are untouched; registry-only representation limit.
+   Three candidate fixes enumerated
+   (`docs/issues/I008-findings-registry-project-id-collision.md`);
+   preferred is changing PK to `(project_path, finding_id)` —
+   path is the true file-system identity. Deferred to Phase 7+;
+   not blocking any Phase 6 exit criterion (all five still met).
+
+10. **6a.8 — Close (this entry + `/phase-close`).**
+
+### Decided
+
+- **Register via binding, not shared singleton.** Wiki's
+  `FindingRegistryBinding` is passed per-call rather than as a
+  module-level singleton so tests and scripts can open their own
+  registries; production callers (brain/pool.ts) construct the
+  binding at task-dispatch time with the current directive id.
+- **No FK on `project_id`.** The backfill will see projects
+  never registered in the `projects` table (legacy corpuses, ad
+  hoc workspaces) — a FK would force the backfill to upsert
+  into `projects` first, which muddies ownership. The
+  per-project `findings.json` file is the source of truth; the
+  registry is a derived mirror, not a sovereign over project
+  identity.
+- **Severity + status CHECK constraints, source unconstrained.**
+  `SEVERITIES` and `FINDING_STATUSES` are frozen enums in
+  core/constants.ts so the DB CHECK is safe. `AGENT_ROLES` can
+  evolve; constraining `source` would force a migration every
+  time a new agent role appears. Zod validation at the wiki
+  boundary catches typos before they reach the DB.
+- **`--advisory --blocking` together means "show both".** The
+  two flags read naturally as a union rather than a
+  contradiction; if the operator passes both, they get the
+  unfiltered view. Default stays `--blocking` (matches
+  `factory findings list`'s documented steps.md spec).
+- **I008 stays open, deferred.** The cleanest fix is a PK
+  change — a real migration with a data path. Not a 6a scope
+  item; captured as an issue for Phase 7 or a stand-alone
+  follow-up sub-phase.
+
+### Verification — PASSED 2026-04-21
+
+- ✅ `pnpm build` — clean.
+- ✅ `pnpm test` — **309 passing** (was 262 at Phase 6c close;
+  +9 state migration shape, +8 state registry queries, +6 wiki
+  dual-write, +24 CLI handlers). Per-package: logger 5, core 14,
+  ipc 5, state 33, providers 37, assessor 42, wiki 27, channels
+  25, events 3, worker 24, brain 42, daemon 28, cli 24.
+- ✅ `pnpm lint` — clean.
+- ✅ `pnpm format:check` — same 28 pre-existing warnings as
+  Phase 6c close (CLAUDE.md + `.control/` + `.claude/`
+  templates). Zero new entries.
+- ✅ Live `factory findings backfill` on both Phase 5f and
+  Phase 6c corpora — idempotent, completes `exitCode 0`, writes
+  consistent rows.
+- ✅ Live `factory findings list --advisory` / `show` — renders
+  the expected v6c advisory findings with correct `[adv]` badge
+  and ADR-0018-linked semantic text.
+- ✅ No new CRITICAL or HIGH issues opened (I008 is MEDIUM).
+  Phase 6 exit criterion #5 holds.
+
+### Spend
+
+Zero LLM spend this session — pure scaffolding + test + doc
+work. First meaningful deviation from the Phase 5-6c pattern
+($5.84 / $4.74 / $7.71 over the $4-6 envelope). The agent-heavy
+step in Phase 6a was 6a.7 live validation, but the backfill and
+list/show commands are all local SQL — no model calls.
+
+### Next session — Phase 6b opens
+
+Per the Phase 6 phase-plan execution order, **6b — GitHub
+channel + event source** is next:
+
+- A `github` channel parallel to the existing `discord` channel —
+  GitHub issues / PR comments become directives;
+  finding-raise / terminalStatus posts back as comments.
+- Plumbing-heavy; unlocks non-CLI build triggers.
+- Estimated 2-3 sessions. **Requires OAuth / PAT coordination
+  with the user before the session starts.**
+
+Carry-forwards into 6b:
+- **I008** — may be touched by 6b if the GitHub channel's
+  directive-ingest routes through `projects.upsert` and exposes
+  the collision. Otherwise deferred as-is.
+- **Spend envelope overrun from 6c ($7.71 vs $4-6).** 6b's
+  plumbing is mostly unit-level; agent-heavy spend returns when
+  the channel is wired against a real GitHub issue. Phase 7b
+  (per-directive `max_usd` enforcement) remains the structural
+  fix.

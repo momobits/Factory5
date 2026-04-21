@@ -59,7 +59,7 @@ independent — pick the one that matches the session's appetite.
 
 | Sub-phase | Track    | Pitch                                                                                                                                                                                                                                                                                                       | Est. sessions | Status     |
 | --------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------- |
-| **6a**    | Data     | **Cross-project findings registry.** Aggregate `<project>/.factory/findings.json` into a factory-home index (`~/.factory5/findings-registry.sqlite`). Surface `factory findings list [--severity HIGH] [--status OPEN] [--project <glob>]` and `factory findings show <id>`. Original Phase 6 charter item. | 1-2           | ⏸ Pending  |
+| **6a**    | Data     | **Cross-project findings registry.** Aggregate `<project>/.factory/findings.json` into a factory-home index (`~/.factory5/findings-registry.sqlite`). Surface `factory findings list [--severity HIGH] [--status OPEN] [--project <glob>]` and `factory findings show <id>`. Original Phase 6 charter item. | 1-2           | ✅ Shipped |
 | **6b**    | Triggers | **GitHub channel + event source.** A `github` channel parallel to the existing `discord` channel — GitHub issues / PR comments become directives; finding-raise / terminalStatus posts back as comments. Plumbing-heavy, unlocks non-CLI build triggers.                                                    | 2-3           | ⏸ Pending  |
 | **6c**    | Quality  | **Verifier overhaul.** Either give the verifier filesystem access (upgrade to tool-using, parallel to builder) or formally downgrade its claims to advisory (never blocking, always informational). Today's F001 hallucination is the forcing function.                                                     | 1             | ✅ Shipped |
 
@@ -143,13 +143,36 @@ Live-run spend $7.71 — above the $4–6 envelope, but inside the
 typical Opus-4.7-heavy builder range (6 tasks × ~$1.30 avg); Phase 7b
 will make that visible and enforceable.
 
-After 6c: **6a (findings registry)** is the natural follow-on —
-every project factory has ever built lives in
-`<workspace>/<project>/.factory/findings.json`, and Phase 5 produced
-enough projects that the aggregation has real signal. The advisory
-flag added in 6c will propagate into 6a's display layer (e.g.
-`factory findings list` can now annotate or filter by blocking vs
-advisory).
+After 6c: **6a (findings registry) — ✅ shipped 2026-04-21**, same
+day as 6c. Eight sub-steps across commits `5d81fe2`→`46606ee`
+(migration → wiki dual-write → CLI list → CLI show → backfill →
+test coverage → live validation → close). Registry schema is
+`(project_id, finding_id)` composite PK with `advisory INTEGER`
+mirroring ADR 0018's Finding.advisory; `wiki.addFinding` gained an
+optional `FindingRegistryBinding` arg so the per-project
+`findings.json` stays source-of-truth and the registry is a
+best-effort derived mirror; the brain's pool wires the binding
+automatically for every task. CLI surface shipped:
+`factory findings list` (filters: severity / status / project-glob
+/ advisory-blocking / limit / json-ndjson) and `factory findings
+show <project>/<id>` (or bare id when unambiguous, with
+disambiguation output when not). Backfill walks
+`<workspace>/<project>/.factory/findings.json` one level deep,
+idempotent by composite PK. 309 tests green (was 262 at 6c close;
++47 across state registry queries + migration shape + wiki
+dual-write + CLI handlers). Zero LLM spend — first factory5
+session that cost nothing since Phase 3. Live validation against
+the v5f and v6c corpora confirmed end-to-end round-trip and the
+advisory flag propagating through to `[adv]` badges and show-detail
+semantic text.
+
+One follow-up filed: **I008** (MEDIUM) — `project_id =
+basename(path)` means same-named projects in different workspaces
+share the composite PK and overwrite each other in the registry.
+Per-project `findings.json` files are untouched; the registry is
+the only collision point. Three candidate fixes enumerated;
+preferred is changing PK to `(project_path, finding_id)`. Deferred
+to Phase 7+; not blocking any Phase 6 exit criterion.
 
 **6b (GitHub channel)** is the bigger build and probably wants
 coordination with the user on OAuth / webhook setup before a session
