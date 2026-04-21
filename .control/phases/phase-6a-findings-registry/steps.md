@@ -1,7 +1,7 @@
 # Phase 6a Steps — Cross-project findings registry
 
-- [ ] 6a.1 — Schema design + `state` migration for `findings_registry`
-- [ ] 6a.2 — `wiki.addFinding` dual-write (per-project file + registry)
+- [x] 6a.1 — Schema design + `state` migration for `findings_registry` — `5d81fe2`
+- [x] 6a.2 — `wiki.addFinding` dual-write (per-project file + registry) — `e6a2640`
 - [ ] 6a.3 — `cli findings list` with `--severity`, `--status`, `--project`, `--advisory|--blocking` filters
 - [ ] 6a.4 — `cli findings show <id>` with full content + origin metadata
 - [ ] 6a.5 — Backfill script for existing `<workspace>/*/.factory/findings.json`
