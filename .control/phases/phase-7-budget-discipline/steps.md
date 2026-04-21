@@ -18,10 +18,11 @@
 
 ## Phase 7b — Cross-session spend dashboard
 
-- [ ] 7b.1 — `@factory5/state.queries.spend` — aggregations by project / directive / day / model
-- [ ] 7b.2 — `factory spend` CLI subcommand with filters (`--since`, `--project`, `--group-by`)
-- [ ] 7b.3 — Round-trip test: seed two builds → query dashboard → rows match raw `model_usage`
-- [ ] 7b.4 — Close Phase 7b (tag `phase-7b-spend-dashboard-closed`)
+- [ ] 7b.1 — Data-model prep: [ADR 0021](../../../docs/decisions/0021-first-class-project-identity.md) — first-class project identity via `<project>/.factory/project.json` (ULID, stable across path moves) + migration 006 (`projects.id` PK; `directives.project_id`; `findings_registry` PK rebased on ULID; `learnings.source_project` migrated) + `loadOrCreateProjectMetadata` helper + insert-path wiring + backfill + tests. Closes [I008](../../../docs/issues/I008-findings-registry-project-id-collision.md) as a beneficial side-effect.
+- [ ] 7b.2 — `@factory5/state.queries.spend` — aggregations by project / directive / day / model (joins `model_usage → directives.project_id`)
+- [ ] 7b.3 — `factory spend` CLI subcommand with filters (`--since`, `--project`, `--group-by`)
+- [ ] 7b.4 — Round-trip test: seed two builds in separate workspaces sharing project basename `example` (each with its own `.factory/project.json`) → query dashboard → both projects appear distinctly with correct totals; raw `model_usage` matches per-project rollup
+- [ ] 7b.5 — Close Phase 7b (tag `phase-7b-spend-dashboard-closed`)
 
 ## Phase 7c — Telegram channel
 
