@@ -16,6 +16,7 @@ import {
   newId,
   planSchema,
   type AgentRole,
+  type DirectiveLimits,
   type ModelCategory,
   type Plan,
   type Task,
@@ -27,6 +28,7 @@ import { projectPaths, readWiki, writePlan } from '@factory5/wiki';
 import { z } from 'zod';
 
 import { getAgent } from './agents/registry.js';
+import { assertBudget } from './budget.js';
 import { buildAgentSystemPrompt } from './prompts.js';
 import { extractJsonObject } from './triage.js';
 import { recordUsage } from './usage.js';
@@ -198,6 +200,8 @@ export interface PlannerOptions {
   directiveId: string;
   db?: Database;
   category?: ModelCategory;
+  /** Per-directive budget ceilings (ADR 0020). See {@link TriageOptions.limits}. */
+  limits?: DirectiveLimits;
 }
 
 export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
@@ -289,6 +293,18 @@ export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
     'planner: calling planning provider',
   );
 
+  if (opts.db !== undefined) {
+    assertBudget({
+      db: opts.db,
+      directiveId: opts.directiveId,
+      ...(opts.limits?.maxUsd !== undefined ? { maxUsd: opts.limits.maxUsd } : {}),
+      ...(opts.limits?.maxSteps !== undefined ? { maxSteps: opts.limits.maxSteps } : {}),
+      category,
+      mode: 'call',
+      agent: 'planner',
+    });
+  }
+
   const started = Date.now();
   const response = await resolution.provider.call({
     model: resolution.model,
@@ -306,6 +322,7 @@ export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
       resolution,
       response,
       durationMs,
+      mode: 'call',
     });
   }
 

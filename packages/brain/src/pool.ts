@@ -17,13 +17,14 @@
 import { cpus } from 'node:os';
 import { basename } from 'node:path';
 
-import type { Plan, Task } from '@factory5/core';
+import type { DirectiveLimits, Plan, Task } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import type { ProviderRegistry } from '@factory5/providers';
-import { tasksInflight, type Database } from '@factory5/state';
+import { tasksInflight, type Database, type UsageMode } from '@factory5/state';
 import { writePlan } from '@factory5/wiki';
-import { runWorker, type WorkerOutcome } from '@factory5/worker';
+import { isToolUsingAgent, runWorker, type WorkerOutcome } from '@factory5/worker';
 
+import { assertBudget, BudgetExceededError } from './budget.js';
 import { buildAgentSystemPrompt } from './prompts.js';
 import { recordUsage } from './usage.js';
 
@@ -48,6 +49,25 @@ export interface PoolOptions {
   /** Max concurrent workers. Defaults to `min(4, cpuCount)`. Floors to 1. */
   concurrency?: number;
   signal?: AbortSignal;
+  /**
+   * Per-directive budget ceilings (ADR 0020). When set, the pool calls
+   * {@link assertBudget} before dispatching each task. A throwing check
+   * stops new dispatches, lets in-flight tasks drain, marks remaining
+   * pending tasks as blocked with a budget-specific reason, and
+   * re-raises the {@link BudgetExceededError} from `runPlanPool` so
+   * `loop.runInline` can flip the directive to `blocked`.
+   */
+  limits?: DirectiveLimits;
+}
+
+/**
+ * Map an agent's invocation mode. Read-only agents go through
+ * `provider.call()`; the three tool-using agents spawn a `stream()`
+ * subprocess. {@link isToolUsingAgent} from `@factory5/worker` is the
+ * single source of truth for the split.
+ */
+function agentMode(agent: Task['agent']): UsageMode {
+  return isToolUsingAgent(agent) ? 'stream' : 'call';
 }
 
 export function defaultConcurrency(): number {
@@ -163,6 +183,7 @@ async function executeTask(
       resolution: outcome.usage.resolution,
       response: outcome.usage.response,
       durationMs: outcome.usage.durationMs,
+      mode: agentMode(task.agent),
     });
   }
 
@@ -197,6 +218,13 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
   const pending = new Set<string>(order.map((t) => t.id));
   const running = new Map<string, RunningEntry>();
   const concurrency = Math.max(1, opts.concurrency ?? defaultConcurrency());
+  /**
+   * Set when a {@link BudgetExceededError} trips during dispatch. Stops
+   * further launches; in-flight tasks finish; remaining pending tasks
+   * are marked blocked with a budget-specific reason; the error is
+   * re-raised from `runPlanPool` after the pool drains.
+   */
+  let budgetError: BudgetExceededError | undefined;
 
   // Resume path: treat already-complete tasks as no-ops.
   for (const t of order) {
@@ -262,8 +290,17 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
       }
     }
 
+    // If a prior dispatch tripped the budget, do not launch anything else;
+    // drain the in-flight set and mark the remainder blocked when we fall
+    // out of this outer while loop.
+    if (budgetError !== undefined) {
+      for (const id of [...pending]) {
+        markBlocked(id, `budget_exceeded: ${budgetError.detail.kind} — aborted before start`);
+      }
+    }
+
     // Launch up to concurrency.
-    while (running.size < concurrency) {
+    while (running.size < concurrency && budgetError === undefined) {
       if (opts.signal?.aborted === true) break;
       const id = [...pending].find((tid) => {
         const t = byId.get(tid);
@@ -271,6 +308,31 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
       });
       if (id === undefined) break;
       const task = byId.get(id) as Task;
+
+      if (opts.limits !== undefined) {
+        try {
+          assertBudget({
+            db: opts.db,
+            directiveId: opts.directiveId,
+            ...(opts.limits.maxUsd !== undefined ? { maxUsd: opts.limits.maxUsd } : {}),
+            ...(opts.limits.maxSteps !== undefined ? { maxSteps: opts.limits.maxSteps } : {}),
+            category: task.category,
+            mode: agentMode(task.agent),
+            agent: task.agent,
+          });
+        } catch (err) {
+          if (err instanceof BudgetExceededError) {
+            log.warn(
+              { taskId: id, detail: err.detail },
+              'pool: budget ceiling reached — halting further dispatch',
+            );
+            budgetError = err;
+            break;
+          }
+          throw err;
+        }
+      }
+
       pending.delete(id);
       const promise = executeTask(
         task,
@@ -345,13 +407,21 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
     );
   }
 
+  // If dispatch tripped the budget, make sure every task that never
+  // ran is marked blocked before we persist plan.json.
+  if (budgetError !== undefined) {
+    for (const id of [...pending]) {
+      markBlocked(id, `budget_exceeded: ${budgetError.detail.kind} — aborted before start`);
+    }
+  }
+
   // Persist the plan with updated task statuses + results.
   const mergedTasks: Task[] = opts.plan.tasks.map((t) => updatedTasks.get(t.id) ?? t);
   const anyFailed = [...results.values()].some((r) => r.exitCode !== 0);
   const final: Plan = {
     ...opts.plan,
     tasks: mergedTasks,
-    status: anyFailed ? 'abandoned' : 'complete',
+    status: anyFailed || budgetError !== undefined ? 'abandoned' : 'complete',
   };
   await writePlan(final);
 
@@ -360,9 +430,12 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
       total: order.length,
       succeeded: [...results.values()].filter((r) => r.exitCode === 0).length,
       failed: [...results.values()].filter((r) => r.exitCode !== 0).length,
+      budgetHalted: budgetError !== undefined,
     },
     'pool: complete',
   );
+
+  if (budgetError !== undefined) throw budgetError;
 
   // Return in the original plan order for stable output.
   return opts.plan.tasks.map(

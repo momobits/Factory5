@@ -15,6 +15,7 @@ import { migration001 } from './001-initial.js';
 import { migration002 } from './002-directive-blocked-reason.js';
 import { migration003 } from './003-findings-registry.js';
 import { migration004 } from './004-model-usage-mode.js';
+import { migration005 } from './005-directive-limits.js';
 
 const log = createLogger('state.migrations');
 
@@ -32,6 +33,7 @@ export const migrations: readonly Migration[] = [
   migration002,
   migration003,
   migration004,
+  migration005,
 ];
 
 /** Highest migration id currently shipped. Useful for clients gating on schema. */

@@ -10,7 +10,7 @@
 
 import { readFile } from 'node:fs/promises';
 
-import type { ModelCategory } from '@factory5/core';
+import type { DirectiveLimits, ModelCategory } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import type { ProviderRegistry } from '@factory5/providers';
 import type { Database } from '@factory5/state';
@@ -23,6 +23,7 @@ import {
 } from '@factory5/wiki';
 import { z } from 'zod';
 
+import { assertBudget } from './budget.js';
 import { buildAgentSystemPrompt } from './prompts.js';
 import { extractJsonObject } from './triage.js';
 import { recordUsage } from './usage.js';
@@ -54,6 +55,8 @@ export interface ArchitectOptions {
   db?: Database;
   directiveId?: string;
   category?: ModelCategory;
+  /** Per-directive budget ceilings (ADR 0020). See {@link TriageOptions.limits}. */
+  limits?: DirectiveLimits;
 }
 
 async function readClaudeMd(projectPath: string): Promise<string> {
@@ -116,6 +119,18 @@ export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectRes
     'architect: calling reasoning provider',
   );
 
+  if (opts.db !== undefined && opts.directiveId !== undefined) {
+    assertBudget({
+      db: opts.db,
+      directiveId: opts.directiveId,
+      ...(opts.limits?.maxUsd !== undefined ? { maxUsd: opts.limits.maxUsd } : {}),
+      ...(opts.limits?.maxSteps !== undefined ? { maxSteps: opts.limits.maxSteps } : {}),
+      category,
+      mode: 'call',
+      agent: 'architect',
+    });
+  }
+
   const started = Date.now();
   const response = await resolution.provider.call({
     model: resolution.model,
@@ -134,6 +149,7 @@ export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectRes
       resolution,
       response,
       durationMs,
+      mode: 'call',
     });
   }
 

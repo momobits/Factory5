@@ -8,8 +8,8 @@
 
 - [x] 7a.1 — ADR: pre-call cost estimate approach (how `brain` knows whether the next LLM call will exceed `max_usd`) — [ADR 0020](../../../docs/decisions/0020-pre-call-budget-enforcement.md)
 - [x] 7a.2 — `@factory5/state` — running-total query over `model_usage` by directive (`countForDirective` + `averageCostByCategory` + `mode` column via migration 004)
-- [ ] 7a.3 — `@factory5/providers` — expose per-call cost estimate (input-token + expected-output-token × model-rate)
-- [ ] 7a.4 — `@factory5/brain` — pre-call ceiling check in the main loop; halt + escalate when exceeded
+- [x] 7a.3 — `@factory5/providers` — expose per-call cost estimate — **closed as no-op per ADR 0020** (estimator lives in `@factory5/state` + `@factory5/brain`; providers stay dumb about budgets)
+- [x] 7a.4 — `@factory5/brain` — pre-call ceiling check in the main loop; halt + escalate when exceeded — migration 005 for `directives.max_usd` / `max_steps`; `budget.ts` module with `assertBudget` / `BudgetExceededError` / `DEFAULT_CATEGORY_COST`; wrappers wired into triage / architect / planner / pool; `loop.ts` catches + flips directive to `blocked` with `formatBlockedReason`
 - [ ] 7a.5 — `@factory5/cli` — `--max-usd <N>` / `--max-steps <N>` flags on `factory build`
 - [ ] 7a.6 — Config defaults in `~/.factory5/config.toml`
 - [ ] 7a.7 — Regression test: synthetic build hits `max_usd` → clean escalation (not mid-task half-failure)

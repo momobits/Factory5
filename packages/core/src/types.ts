@@ -12,6 +12,7 @@ import type {
   agentRoleSchema,
   autonomyModeSchema,
   channelIdSchema,
+  directiveLimitsSchema,
   directiveSchema,
   directiveStatusSchema,
   eventBodySchema,
@@ -51,6 +52,7 @@ export type ModelCategory = z.infer<typeof modelCategorySchema>;
 // -----------------------------------------------------------------------------
 
 export type Directive = z.infer<typeof directiveSchema>;
+export type DirectiveLimits = z.infer<typeof directiveLimitsSchema>;
 export type EventBody = z.infer<typeof eventBodySchema>;
 export type Event = z.infer<typeof eventSchema>;
 export type Finding = z.infer<typeof findingSchema>;

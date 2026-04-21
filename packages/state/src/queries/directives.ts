@@ -25,9 +25,15 @@ interface Row {
   claimed_by: string | null;
   parent_directive_id: string | null;
   blocked_reason: string | null;
+  max_usd: number | null;
+  max_steps: number | null;
 }
 
 function rowToDirective(row: Row): Directive {
+  const limits: { maxUsd?: number; maxSteps?: number } = {};
+  if (row.max_usd !== null) limits.maxUsd = row.max_usd;
+  if (row.max_steps !== null) limits.maxSteps = row.max_steps;
+  const hasLimits = Object.keys(limits).length > 0;
   return directiveSchema.parse({
     id: row.id,
     source: row.source,
@@ -41,6 +47,7 @@ function rowToDirective(row: Row): Directive {
     ...(row.claimed_by !== null ? { claimedBy: row.claimed_by } : {}),
     ...(row.parent_directive_id !== null ? { parentDirectiveId: row.parent_directive_id } : {}),
     ...(row.blocked_reason !== null ? { blockedReason: row.blocked_reason } : {}),
+    ...(hasLimits ? { limits } : {}),
   });
 }
 
@@ -50,8 +57,9 @@ export function insert(db: Database, d: Directive): void {
   db.prepare(
     `INSERT INTO directives
        (id, source, principal, channel_ref, intent, payload_json, autonomy,
-        created_at, status, claimed_by, parent_directive_id, blocked_reason)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        created_at, status, claimed_by, parent_directive_id, blocked_reason,
+        max_usd, max_steps)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     validated.id,
     validated.source,
@@ -65,6 +73,8 @@ export function insert(db: Database, d: Directive): void {
     validated.claimedBy ?? null,
     validated.parentDirectiveId ?? null,
     validated.blockedReason ?? null,
+    validated.limits?.maxUsd ?? null,
+    validated.limits?.maxSteps ?? null,
   );
 }
 

@@ -8,12 +8,13 @@
  * harden independently.
  */
 
-import type { Intent, ModelCategory } from '@factory5/core';
+import type { DirectiveLimits, Intent, ModelCategory } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import type { ProviderRegistry } from '@factory5/providers';
 import type { Database } from '@factory5/state';
 import { z } from 'zod';
 
+import { assertBudget } from './budget.js';
 import { buildAgentSystemPrompt } from './prompts.js';
 import { recordUsage } from './usage.js';
 
@@ -41,6 +42,13 @@ export interface TriageOptions {
   directiveId?: string;
   /** Override the default `quick` category, e.g. during tests. */
   category?: ModelCategory;
+  /**
+   * Per-directive budget ceilings (ADR 0020). When `db` + `directiveId`
+   * are also set, {@link assertBudget} runs before the provider call
+   * and throws {@link BudgetExceededError} if the next call would
+   * breach the ceiling.
+   */
+  limits?: DirectiveLimits;
 }
 
 /**
@@ -73,6 +81,18 @@ export async function triageDirective(text: string, opts: TriageOptions): Promis
 
   const userPrompt = `Directive text:\n\n${text}\n\nRespond with ONLY a JSON object: {"intent": "...", "confidence": 0.0-1.0, "reasoning": "..."}.`;
 
+  if (opts.db !== undefined && opts.directiveId !== undefined) {
+    assertBudget({
+      db: opts.db,
+      directiveId: opts.directiveId,
+      ...(opts.limits?.maxUsd !== undefined ? { maxUsd: opts.limits.maxUsd } : {}),
+      ...(opts.limits?.maxSteps !== undefined ? { maxSteps: opts.limits.maxSteps } : {}),
+      category,
+      mode: 'call',
+      agent: 'triage',
+    });
+  }
+
   const started = Date.now();
   let response;
   try {
@@ -97,6 +117,7 @@ export async function triageDirective(text: string, opts: TriageOptions): Promis
       resolution,
       response,
       durationMs,
+      mode: 'call',
     });
   }
 

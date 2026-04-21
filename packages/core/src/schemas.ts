@@ -47,6 +47,21 @@ export const ulidSchema = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 // Directive
 // -----------------------------------------------------------------------------
 
+/**
+ * Per-directive budget ceilings (ADR 0020). Absent = unlimited, which
+ * preserves pre-Phase-7 behaviour for directives that did not opt in.
+ *
+ *   - `maxUsd` — USD ceiling on the sum of `model_usage.cost_usd` rows
+ *     scoped to this directive. Enforced pre-call by the brain.
+ *   - `maxSteps` — call-count ceiling (one row per LLM call) scoped to
+ *     this directive. Catches retry loops and stall-grind loops that
+ *     do not otherwise trip `--max-turns` or the planner's task cap.
+ */
+export const directiveLimitsSchema = z.object({
+  maxUsd: z.number().positive().optional(),
+  maxSteps: z.number().int().positive().optional(),
+});
+
 export const directiveSchema = z.object({
   id: ulidSchema,
   source: channelIdSchema,
@@ -67,6 +82,11 @@ export const directiveSchema = z.object({
    * and most assisted-mode aborts leave it empty.
    */
   blockedReason: z.string().min(1).optional(),
+  /**
+   * Budget ceilings for this directive. See {@link directiveLimitsSchema}.
+   * Absent means unlimited (pre-ADR-0020 behaviour).
+   */
+  limits: directiveLimitsSchema.optional(),
 });
 
 // -----------------------------------------------------------------------------

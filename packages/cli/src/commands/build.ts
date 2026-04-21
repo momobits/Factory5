@@ -244,9 +244,11 @@ async function runInline(
   }
   stdout.write('\n=== Build summary ===\n');
   stdout.write(`directive: ${result.directive.id}\n`);
-  stdout.write(
-    `triage:    intent=${result.triage.intent} confidence=${String(result.triage.confidence)}\n`,
-  );
+  if (result.triage !== undefined) {
+    stdout.write(
+      `triage:    intent=${result.triage.intent} confidence=${String(result.triage.confidence)}\n`,
+    );
+  }
   if (result.architect !== undefined) {
     const failedChecks = result.architect.readiness.checks.filter((c) => !c.ok).map((c) => c.id);
     stdout.write(
