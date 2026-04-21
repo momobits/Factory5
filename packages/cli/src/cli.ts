@@ -14,6 +14,7 @@ import { registerDoctorCommand } from './commands/doctor.js';
 import { registerFindingsCommand } from './commands/findings.js';
 import { registerInitCommand } from './commands/init.js';
 import { registerResumeCommand } from './commands/resume.js';
+import { registerSpendCommand } from './commands/spend.js';
 import { registerStatusCommand } from './commands/status.js';
 import { registerStubCommands } from './commands/stubs.js';
 
@@ -40,6 +41,7 @@ export function buildCli(opts: BuildCliOptions = {}): Command {
   registerFindingsCommand(program);
   registerInitCommand(program);
   registerResumeCommand(program);
+  registerSpendCommand(program);
   registerStatusCommand(program);
   registerStubCommands(program);
 
