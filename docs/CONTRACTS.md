@@ -21,10 +21,12 @@ How much human-in-the-loop the brain expects:
 ## `ChannelId`
 
 ```ts
-type ChannelId = 'cli' | 'discord' | 'telegram' | 'github' | 'webhook';
+type ChannelId = 'cli' | 'discord' | 'telegram';
 ```
 
-Where a directive originated. Drives reply routing.
+Where a directive originated. Drives reply routing. `telegram` is a
+forward scaffold for Phase 7c; `cli` and `discord` are live. (`'github'`
+and `'webhook'` were retired by ADR 0019.)
 
 ## `Intent`
 
@@ -86,37 +88,13 @@ A normalized observation from the outside world. Daemon writes; brain reads when
 ```ts
 type Event = {
   id: string;
-  source: string; // "github" | "git" | "fs" | "tmux" | "channel"
+  source: string; // "git" | "fs" | "tmux" | "channel"
   body: EventBody; // typed union
   metadata: Record<string, unknown>;
   receivedAt: string;
 };
 
 type EventBody =
-  | {
-      kind: 'github.issue.opened';
-      repo: string;
-      number: number;
-      title: string;
-      author: string;
-      body: string;
-    }
-  | {
-      kind: 'github.issue.commented';
-      repo: string;
-      number: number;
-      commentId: string;
-      author: string;
-      body: string;
-    }
-  | {
-      kind: 'github.pr.status';
-      repo: string;
-      number: number;
-      status: string;
-      conclusion?: string;
-      sha: string;
-    }
   | {
       kind: 'git.commit';
       repo: string;
@@ -128,6 +106,10 @@ type EventBody =
   | { kind: 'fs.changed'; path: string; type: 'create' | 'modify' | 'delete' }
   | { kind: 'channel.message'; channel: ChannelId; principal: string; ref: string; text: string };
 ```
+
+GitHub event kinds (`github.issue.opened`, `github.issue.commented`,
+`github.pr.status`) were scaffolded but retired by ADR 0019 before ever
+being emitted. See that ADR for the rationale.
 
 Stored in SQLite `events_audit` table.
 

@@ -1,17 +1,17 @@
 # Factory 5
 
-Autonomous (and human-directable) software builder. Drop a spec, get a project. Talk to the factory in chat, point it at a GitHub issue, or kick off an inline build from the CLI — same brain, multiple channels.
+Autonomous (and human-directable) software builder. Drop a spec, get a project. Talk to the factory in chat or kick off an inline build from the CLI — same brain, multiple channels.
 
 > **Status:** scaffolding phase. Skeleton compiles; no build flow yet. See [`docs/PROGRESS.md`](docs/PROGRESS.md) for the running log.
 
 ## What this is
 
-- **Multi-channel input:** CLI, Discord (day 1), Telegram + Web UI (later), GitHub events
+- **Multi-channel input:** CLI (shipped), Discord (shipped), Telegram (Phase 7c)
 - **Multi-provider models:** Claude subscription (primary), Claude API, Codex, OpenRouter, OpenAI — selected per agent role via category routing
 - **Three autonomy modes:** `chat` (turn-by-turn), `assisted` (default — autonomous between checkpoints), `autonomous` (full self-drive with mid-flight escalation when stuck)
 - **Verification-first:** ground-truth assessor (real `pytest`/`jest`/`cargo test`/etc.) — agents can't claim false progress
 - **Knowledge wiki + finding lifecycle:** designs codified before code; cross-agent dialogue with stable IDs
-- **Two-process design:** `factory` (CLI + brain) and `factoryd` (daemon owning all I/O). Daemon optional for inline builds.
+- **Two-process design:** `factory` (CLI + brain) and `factoryd` (daemon owning Discord, fs watching, and the localhost IPC server). Daemon optional for inline builds.
 
 See **[`CompleteArchitecture.md`](CompleteArchitecture.md)** for the full design.
 

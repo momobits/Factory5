@@ -5,10 +5,11 @@ Event sources for the daemon. Each source runs as a long-lived async loop, norma
 ## Status
 
 - **`EventSource` interface** — defined (`src/types.ts`)
-- **`github-poll`** — stub (Phase 5)
-- **`git-poll`** — stub (Phase 5)
-- **`fs-watch`** — stub (future)
-- **`webhook-server`** — stub (future)
+- **`fs-watcher`** — implemented (chokidar, debounced 500 ms; Phase 3)
+- **`git-poll`** — stub (future; no concrete use case yet)
+
+GitHub event sources (`github-poll`, `webhook-server`) were dropped by
+ADR 0019 along with the GitHub channel. See that ADR for rationale.
 
 ## Pattern (lifted from clawhip)
 

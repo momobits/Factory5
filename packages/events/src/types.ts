@@ -1,6 +1,6 @@
 /**
  * `EventSource` — uniform contract for any source that observes the outside
- * world (GitHub, git, filesystem, webhooks, tmux, ...).
+ * world (filesystem, git, tmux, ...).
  *
  * Each source emits typed `Event` objects via the supplied `emit` callback.
  * The daemon writes them to `events_audit` and (when appropriate) materializes
@@ -17,7 +17,7 @@ export interface EventSourceContext {
 }
 
 export interface EventSource {
-  /** Stable name like "github-poll", "git-poll". */
+  /** Stable name like "fs-watcher", "git-poll". */
   name: string;
   /** Bring the source online. Idempotent. Config is source-specific. */
   start(ctx: EventSourceContext, config?: unknown): Promise<void>;

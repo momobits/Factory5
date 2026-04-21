@@ -3,8 +3,16 @@
  * runtime checks all reference the same source.
  */
 
-/** All channels factory can ingest from / reply to. */
-export const CHANNEL_IDS = ['cli', 'discord', 'telegram', 'github', 'webhook'] as const;
+/**
+ * All channels factory can ingest from / reply to.
+ *
+ * `telegram` is forward-declared for Phase 7c; `discord` ships today; `cli`
+ * is the default. `github` and `webhook` were retired by ADR 0019 — see
+ * that ADR for the rationale and for the durable doctrine that factory's
+ * side-effects in the world are operator-directed per-directive, not
+ * pattern-driven.
+ */
+export const CHANNEL_IDS = ['cli', 'discord', 'telegram'] as const;
 
 /** All intents the triage agent can classify a directive into. */
 export const INTENTS = [

@@ -11,7 +11,7 @@ For the full design context (philosophy, rationale, control flow), see [`../Comp
 Two binaries:
 
 - **`factory`** — CLI + brain. Per-invocation for CLI, long-lived for chat/serve.
-- **`factoryd`** — Daemon. Long-lived. Owns Discord, GitHub polling, fs/git watching, webhooks, IPC server.
+- **`factoryd`** — Daemon. Long-lived. Owns Discord, fs watching, and the localhost IPC server; hosts the brain supervisor. (GitHub polling and webhook ingress were retired by ADR 0019.)
 
 Both Node 20+, TypeScript, ESM.
 
@@ -56,11 +56,14 @@ Both Node 20+, TypeScript, ESM.
 
 ## Event sources
 
-| Source        | Status  | Library / approach                                                          |
-| ------------- | ------- | --------------------------------------------------------------------------- |
-| `fs-watcher`  | phase-3 | chokidar; watches each registered project's workspacePath; debounced 500 ms |
-| `github-poll` | phase-5 | Octokit + cursor persistence                                                |
-| `git-poll`    | phase-5 | `simple-git` log diff                                                       |
+| Source       | Status  | Library / approach                                                          |
+| ------------ | ------- | --------------------------------------------------------------------------- |
+| `fs-watcher` | phase-3 | chokidar; watches each registered project's workspacePath; debounced 500 ms |
+| `git-poll`   | stub    | `simple-git` log diff — scaffolded, no active use case                      |
+
+GitHub polling was retired by ADR 0019 (2026-04-21). See that ADR for the
+rationale and the durable doctrine that follows: factory's effects in the
+world are operator-directed per-directive, not pattern-driven.
 
 ## Models / providers (planned)
 

@@ -10,9 +10,8 @@ Daemon assembly. Wires together:
 - `@factory5/ipc` server (Fastify on `127.0.0.1:25295` — Phase 3 step 2)
 - brain supervisor (runs `runBrain({ mode: 'serve' })` with exponential
   backoff on crashes — Phase 3 step 3)
-- `@factory5/channels` (CLI-RPC, eventually Discord — Phase 3 step 4)
-- `@factory5/events` (filesystem watcher, eventually GitHub poll — Phase 3
-  step 5)
+- `@factory5/channels` (CLI-RPC + Discord — Phase 3 step 4)
+- `@factory5/events` (filesystem watcher — Phase 3 step 5)
 
 Consumed by `apps/factoryd` (the binary entry point).
 

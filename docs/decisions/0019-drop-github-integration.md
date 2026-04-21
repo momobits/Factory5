@@ -20,7 +20,7 @@ source — the design session surfaced that the Phase 6b charter had
 silently pivoted from the original scaffold intent. `CompleteArchitecture.md`
 §3 / §19 had positioned GitHub as an **event source** (observer):
 factoryd polls repos factory cares about, emits typed events, and
-*things that happen there* ("PR opened in a tracked repo", "CI fails")
+_things that happen there_ ("PR opened in a tracked repo", "CI fails")
 become signal the brain can react to. The canonical example was "PR
 opened → review directive." Phase 6b's charter reframed the same slot
 as a **channel** (inbound directives from GitHub issues, outbound
@@ -41,12 +41,12 @@ factory5's current operator reality:
   source, `github_channel_config` migration, HMAC or polling cursor
   code, fixture test harness, live-smoke coordination).
 
-- **Observer framing.** Value depends on factory having *context* on
+- **Observer framing.** Value depends on factory having _context_ on
   the repos it watches. The natural observer integration is "factory
   watches repos it built" — a closed loop where CI failures on a
   factory-authored project spawn fix directives, PRs against a
   factory-authored project spawn review directives. That closed loop
-  requires the *other* half of the integration, which does not exist:
+  requires the _other_ half of the integration, which does not exist:
   **factory outputs do not live on GitHub.** `factory build <project>`
   produces a local directory under `<workspace>/<project>/` and never
   pushes anywhere. Without an output-to-GH path, the observer would
@@ -61,7 +61,7 @@ envelope (Phase6_Progress.md), with no pre-call `max_usd` enforcement
 that can autonomously trigger autonomous-mode builds — while the brain
 still has no hard spend ceiling — pushes operator-trust in the wrong
 direction. Phase 7a is already charted to land pre-call budget gates;
-running any GitHub-triggered autonomous build *before* Phase 7a lands
+running any GitHub-triggered autonomous build _before_ Phase 7a lands
 means the first real use of the integration also tests the spend
 ceiling that does not exist.
 
@@ -144,9 +144,9 @@ Three decisions, one ADR:
   same-repo ADR.
 - **Phase 7c (Telegram channel) loses its stated pattern reference.**
   The existing phase-plan describes Telegram as "parallel to Discord
-  + GitHub (6b), patterns locked by 6b." With 6b dropped, Telegram's
-  reference model is Discord alone. The phase-plan is updated to
-  reflect this; 7c itself is unaffected structurally.
+  - GitHub (6b), patterns locked by 6b." With 6b dropped, Telegram's
+    reference model is Discord alone. The phase-plan is updated to
+    reflect this; 7c itself is unaffected structurally.
 - **Migration 001's CHECK constraints on `directives.source` and
   `outbound_messages.target_channel`** still permit `'github'` and
   `'webhook'` as historical artefacts. Rewriting a SQLite CHECK
@@ -260,8 +260,8 @@ TS layer will ever write.
   full (README, steps.md, config.md). No stub left behind; the
   phase-plan and this ADR are the authoritative record.
 - `.control/phases/phase-7-budget-discipline/` scaffolded with README
-  + placeholder steps (detailed bodies authored at phase start per
-  existing convention).
+  - placeholder steps (detailed bodies authored at phase start per
+    existing convention).
 - `.control/architecture/phase-plan.md` — Phase 6 row status flipped
   to closed; 6b row flipped to "Dropped — see ADR 0019"; Phase 7
   promoted to active; 7c's "patterns locked by 6b" phrase revised to

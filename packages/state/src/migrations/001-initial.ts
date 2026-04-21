@@ -8,6 +8,14 @@ import type { Migration } from './index.js';
  *  - All timestamps are TEXT in ISO8601 form.
  *  - JSON columns store stringified JSON; helpers parse on read.
  *  - Status enums are TEXT with CHECK constraints to catch typos at insert.
+ *
+ * Note on `'github'` / `'webhook'` in the `source` and `target_channel`
+ * CHECK lists: these were part of the original scaffold and are retained
+ * in-place as a historical superset. The TypeScript `CHANNEL_IDS` constant
+ * narrowed to `['cli','discord','telegram']` in ADR 0019; the DB CHECK is
+ * stricter-superset-harmless and left untouched because SQLite cannot ALTER
+ * a CHECK constraint without a full table recreation. Consult ADR 0019 for
+ * the decision context.
  */
 export const migration001: Migration = {
   id: 1,

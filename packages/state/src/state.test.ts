@@ -110,20 +110,17 @@ describe('events queries', () => {
     const db = freshDb();
     const e = {
       id: newId(),
-      source: 'github',
+      source: 'fs',
       body: {
-        kind: 'github.issue.opened' as const,
-        repo: 'owner/name',
-        number: 1,
-        title: 't',
-        author: 'u',
-        body: 'b',
+        kind: 'fs.changed' as const,
+        path: '/workspace/demo/src/api.py',
+        type: 'modify' as const,
       },
       metadata: { foo: 'bar' },
       receivedAt: new Date().toISOString(),
     };
     events.append(db, e);
-    const recent = events.recentByKind(db, 'github.issue.opened');
+    const recent = events.recentByKind(db, 'fs.changed');
     expect(recent).toHaveLength(1);
     expect(recent[0]?.id).toBe(e.id);
     expect(recent[0]?.metadata['foo']).toBe('bar');
@@ -181,7 +178,11 @@ describe('findings_registry queries', () => {
 
   it('upsert preserves created_at and overwrites mutable fields on conflict', () => {
     const db = freshDb();
-    seedFinding(db, 'alpha', 'F001', { status: 'OPEN', description: 'first', createdAt: '2026-04-01T00:00:00.000Z' });
+    seedFinding(db, 'alpha', 'F001', {
+      status: 'OPEN',
+      description: 'first',
+      createdAt: '2026-04-01T00:00:00.000Z',
+    });
     seedFinding(db, 'alpha', 'F001', {
       status: 'FIXED',
       description: 'second',
@@ -210,7 +211,7 @@ describe('findings_registry queries', () => {
 
   it('list filters advisory: true vs false vs undefined', () => {
     const db = freshDb();
-    seedFinding(db, 'alpha', 'F001', { source: 'reviewer' });              // blocking
+    seedFinding(db, 'alpha', 'F001', { source: 'reviewer' }); // blocking
     seedFinding(db, 'alpha', 'F002', { source: 'verifier', advisory: true }); // advisory
     const advisory = findingsRegistry.list(db, { advisory: true });
     const blocking = findingsRegistry.list(db, { advisory: false });

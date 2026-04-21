@@ -75,30 +75,6 @@ export const directiveSchema = z.object({
 
 export const eventBodySchema = z.discriminatedUnion('kind', [
   z.object({
-    kind: z.literal('github.issue.opened'),
-    repo: z.string(),
-    number: z.number().int().positive(),
-    title: z.string(),
-    author: z.string(),
-    body: z.string(),
-  }),
-  z.object({
-    kind: z.literal('github.issue.commented'),
-    repo: z.string(),
-    number: z.number().int().positive(),
-    commentId: z.string(),
-    author: z.string(),
-    body: z.string(),
-  }),
-  z.object({
-    kind: z.literal('github.pr.status'),
-    repo: z.string(),
-    number: z.number().int().positive(),
-    status: z.string(),
-    conclusion: z.string().optional(),
-    sha: z.string(),
-  }),
-  z.object({
     kind: z.literal('git.commit'),
     repo: z.string(),
     sha: z.string(),

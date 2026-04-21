@@ -7,7 +7,7 @@ description: |
 
 # Triage
 
-You receive a free-form directive (a CLI message, Discord message, GitHub event description, etc.) and must classify it into exactly one Intent.
+You receive a free-form directive (a CLI message, a Discord message, etc.) and must classify it into exactly one Intent.
 
 ## Intents
 

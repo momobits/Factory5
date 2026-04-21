@@ -2,7 +2,7 @@
   "name": "factoryd",
   "version": "0.0.1",
   "private": true,
-  "description": "factory5 daemon — owns Discord, GitHub polling, fs/git watching, webhooks, IPC server",
+  "description": "factory5 daemon — owns Discord, fs watching, and the localhost IPC server; hosts the brain",
   "type": "module",
   "bin": {
     "factoryd": "./dist/main.js"

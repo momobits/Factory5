@@ -8,7 +8,7 @@
 
 Factory 5 is an autonomous (and human-directable) software builder.
 
-It accepts a software requirement — from a CLI command, a Discord message, a GitHub event, or a file — and produces working, tested, documented software. It can run **completely autonomously** (build to completion, ask only when stuck), **assisted** (autonomous between human-set checkpoints), or **chat** (turn-by-turn conversation).
+It accepts a software requirement — from a CLI command, a Discord message, or a local spec file — and produces working, tested, documented software. It can run **completely autonomously** (build to completion, ask only when stuck), **assisted** (autonomous between human-set checkpoints), or **chat** (turn-by-turn conversation).
 
 It uses the user's Claude subscription as the primary model provider, with first-class fallbacks to Claude API, OpenAI/Codex, OpenRouter, and other providers — selectable per agent role via category-based routing.
 
@@ -43,18 +43,18 @@ Three lessons inform the design.
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                          USER / EXTERNAL                             │
-│   CLI prompt       Discord channel       GitHub events (poll)        │
-└──────┬─────────────────────┬──────────────────────┬──────────────────┘
-       │                     │                      │
-       ▼                     ▼                      ▼
+│   CLI prompt                     Discord channel                     │
+└──────┬───────────────────────────────────┬───────────────────────────┘
+       │                                   │
+       ▼                                   ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │  factoryd  — DAEMON  (Node + TypeScript)                             │
 │                                                                      │
 │  Channels (inbound + outbound):                                      │
 │    cli-rpc       discord (discord.js)        [telegram later]        │
 │                                                                      │
-│  Event sources (poll + watch):                                       │
-│    github-poll   git-poll   fs-watch (chokidar)   webhooks (fastify) │
+│  Event sources (watch):                                              │
+│    fs-watch (chokidar)                                               │
 │                                                                      │
 │  Normalizer: external → typed Event/Directive (Zod-validated)        │
 │                                                                      │
@@ -107,12 +107,12 @@ Three lessons inform the design.
 
 Two binaries, both Node + TypeScript:
 
-| Binary         | Role                                                                                                                                                                                                              | Lifetime                                                                          |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| **`factory`**  | CLI + brain. Commander-based subcommands. Spawns the brain in-process for inline work, or claims directives from SQLite when serving long-running flows.                                                          | Per-invocation for CLI; long-lived when `factory chat` or `factory serve` is up   |
-| **`factoryd`** | Daemon. Owns all outside-world I/O: Discord websocket, GitHub polling, git watching, fs watching, webhook HTTP server, channel sinks. Normalizes external input to typed events/directives. Hosts the IPC server. | Long-lived background service; can run as systemd unit (Linux) or Windows Service |
+| Binary         | Role                                                                                                                                                                                             | Lifetime                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| **`factory`**  | CLI + brain. Commander-based subcommands. Spawns the brain in-process for inline work, or claims directives from SQLite when serving long-running flows.                                         | Per-invocation for CLI; long-lived when `factory chat` or `factory serve` is up   |
+| **`factoryd`** | Daemon. Owns outside-world I/O: Discord websocket, fs watching, channel sinks. Normalizes external input to typed events/directives. Hosts the IPC server and the long-running brain supervisor. | Long-lived background service; can run as systemd unit (Linux) or Windows Service |
 
-Why split: brain restarts during dev shouldn't kill Discord connections; a webhook HTTP server shouldn't compete with brain's event loop; LLM crash shouldn't drop pending events; daemon can serve multiple brains in future SaaS form.
+Why split: brain restarts during dev shouldn't kill Discord connections; LLM crash shouldn't drop pending events; daemon can serve multiple brains in a future SaaS form. (GitHub polling / webhook ingress were part of the original scaffold but retired by ADR 0019 — factory's effects in the world are operator-directed per-directive, not pattern-driven.)
 
 ### Inter-process communication
 
@@ -125,29 +125,29 @@ If HTTP is down: 250ms SQLite polling fallback. If SQLite is down: we're broken.
 
 ### Graceful degradation
 
-The daemon is required for **chat / events / GitHub-driven** work. It is **not** required for inline `factory build my-project` runs. First-time users can build without setting up the daemon; they opt in with `factory daemon start` when they want chat/events.
+The daemon is required for **chat / events / Discord-driven** work. It is **not** required for inline `factory build my-project` runs. First-time users can build without setting up the daemon; they opt in with `factory daemon start` when they want chat or Discord.
 
 ---
 
 ## 4. Components
 
-| Component       | Location             | Process            | Responsibility                                                                                                                          |
-| --------------- | -------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `core`          | `packages/core`      | shared lib         | Types: `Directive`, `Event`, `Finding`, `Plan`, `Task`, `AgentRole`, `ModelCategory`, `AutonomyMode`. Zod schemas. Constants.           |
-| `state`         | `packages/state`     | shared lib         | SQLite (better-sqlite3) wrapper, migrations, typed CRUD.                                                                                |
-| `ipc`           | `packages/ipc`       | shared lib         | HTTP contracts (Zod) + typed clients for daemon↔brain.                                                                                  |
-| `logger`        | `packages/logger`    | shared lib         | Pino-based logger factory; correlation-ID propagation.                                                                                  |
-| `channels`      | `packages/channels`  | daemon             | `ChannelPlugin` interface + impls (`cli-rpc`, `discord`).                                                                               |
-| `events`        | `packages/events`    | daemon             | Event sources (`github-poll`, `git-poll`, `fs-watch`, `webhook-server`).                                                                |
-| `daemon`        | `packages/daemon`    | daemon             | Hosts channels + events + IPC server; lifecycle, config, signals.                                                                       |
-| `providers`     | `packages/providers` | brain              | LLM clients: anthropic-sdk, openai-sdk, openrouter, claude-cli (subprocess), codex-cli (subprocess). Unified `ModelProvider` interface. |
-| `wiki`          | `packages/wiki`      | brain              | Read/write `docs/knowledge/`, `BUILD.md`, findings JSON; readiness gates.                                                               |
-| `assessor`      | `packages/assessor`  | brain              | Ground-truth checks: spawn pytest/jest/cargo/go-test, parse output, file/git/import checks. **No LLM**.                                 |
-| `brain`         | `packages/brain`     | brain              | Triage → architect → plan → delegate → verify loop. Agent registry. Category routing. `ask_user`/`escalate_blocked` tools.              |
-| `worker`        | `packages/worker`    | brain (subprocess) | Per-task subprocess: allocate worktree, spawn coding-agent CLI, stream output, persist results.                                         |
-| `cli`           | `packages/cli`       | brain              | Commander-based CLI. Wraps brain operations and daemon control.                                                                         |
-| `apps/factory`  | `apps/factory`       | brain entry        | Wires `cli` + `brain` + `worker` + `providers` into the `factory` binary.                                                               |
-| `apps/factoryd` | `apps/factoryd`      | daemon entry       | Wires `daemon` + `channels` + `events` into the `factoryd` binary.                                                                      |
+| Component       | Location             | Process            | Responsibility                                                                                                                             |
+| --------------- | -------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `core`          | `packages/core`      | shared lib         | Types: `Directive`, `Event`, `Finding`, `Plan`, `Task`, `AgentRole`, `ModelCategory`, `AutonomyMode`. Zod schemas. Constants.              |
+| `state`         | `packages/state`     | shared lib         | SQLite (better-sqlite3) wrapper, migrations, typed CRUD.                                                                                   |
+| `ipc`           | `packages/ipc`       | shared lib         | HTTP contracts (Zod) + typed clients for daemon↔brain.                                                                                     |
+| `logger`        | `packages/logger`    | shared lib         | Pino-based logger factory; correlation-ID propagation.                                                                                     |
+| `channels`      | `packages/channels`  | daemon             | `ChannelPlugin` interface + impls (`cli-rpc`, `discord`).                                                                                  |
+| `events`        | `packages/events`    | daemon             | Event sources — today `fs-watcher` (chokidar, debounced). `git-poll` stub pending a concrete use case. GitHub sources retired by ADR 0019. |
+| `daemon`        | `packages/daemon`    | daemon             | Hosts channels + events + IPC server; lifecycle, config, signals.                                                                          |
+| `providers`     | `packages/providers` | brain              | LLM clients: anthropic-sdk, openai-sdk, openrouter, claude-cli (subprocess), codex-cli (subprocess). Unified `ModelProvider` interface.    |
+| `wiki`          | `packages/wiki`      | brain              | Read/write `docs/knowledge/`, `BUILD.md`, findings JSON; readiness gates.                                                                  |
+| `assessor`      | `packages/assessor`  | brain              | Ground-truth checks: spawn pytest/jest/cargo/go-test, parse output, file/git/import checks. **No LLM**.                                    |
+| `brain`         | `packages/brain`     | brain              | Triage → architect → plan → delegate → verify loop. Agent registry. Category routing. `ask_user`/`escalate_blocked` tools.                 |
+| `worker`        | `packages/worker`    | brain (subprocess) | Per-task subprocess: allocate worktree, spawn coding-agent CLI, stream output, persist results.                                            |
+| `cli`           | `packages/cli`       | brain              | Commander-based CLI. Wraps brain operations and daemon control.                                                                            |
+| `apps/factory`  | `apps/factory`       | brain entry        | Wires `cli` + `brain` + `worker` + `providers` into the `factory` binary.                                                                  |
+| `apps/factoryd` | `apps/factoryd`      | daemon entry       | Wires `daemon` + `channels` + `events` into the `factoryd` binary.                                                                         |
 
 ---
 
@@ -671,9 +671,11 @@ node apps/factoryd/dist/main.js --help
 
 **Phase 4 — Discord channel.** Discord adapter, threaded conversations, ask_user round-trips through Discord, escalate_blocked posts to channel.
 
-**Phase 5 — GitHub events.** GitHub polling source, webhook ingress, GitHub-driven directives ("PR opened" → review directive).
+**Phase 5 — Green-verify end-to-end.** Autonomous loop proven end-to-end against a live corpus; ground-truth assessor gate owns the success criterion; every factory5 self-issue from phases 4–5 resolved. (Originally scoped as "GitHub events" at scaffold time; retargeted during actual execution, with the GitHub work retired by ADR 0019.)
 
-**Phase 6 — Polishing.** Telegram channel, web UI, learnings extraction, cross-project intelligence, SaaS posture.
+**Phase 6 — Operator-trust + multi-surface.** Cross-project findings registry (6a ✅); verifier advisory-only (6c ✅); GitHub channel dropped (6b, per ADR 0019).
+
+**Phase 7 — Operator-control + budget discipline.** Pre-call `max_usd` / `max_steps` enforcement (7a); cross-session spend dashboard (7b); Telegram channel (7c).
 
 ---
 
@@ -695,4 +697,4 @@ node apps/factoryd/dist/main.js --help
 - `templates/` ported verbatim from `factory2/templates/`
 - `prompts/agents/` ported from `factory2/agents/`
 
-After scaffold: `pnpm install && pnpm build` compiles cleanly on Windows + Linux. No LLM calls yet, no Discord yet, no actual builds yet. But every subsequent slice (CLI channel, brain triage, first worker, Discord adapter, GitHub source) drops cleanly into the structure without re-shaping anything.
+After scaffold: `pnpm install && pnpm build` compiles cleanly on Windows + Linux. No LLM calls yet, no Discord yet, no actual builds yet. But every subsequent slice (CLI channel, brain triage, first worker, Discord adapter) drops cleanly into the structure without re-shaping anything. (The scaffold also included GitHub-event slots that were retired by ADR 0019 before ever being implemented — see that ADR for the design reversal.)

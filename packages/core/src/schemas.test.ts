@@ -71,23 +71,20 @@ describe('directiveSchema', () => {
 });
 
 describe('eventSchema', () => {
-  it('parses a github issue event', () => {
+  it('parses a fs.changed event', () => {
     const e = {
       id: newId(),
-      source: 'github',
+      source: 'fs',
       body: {
-        kind: 'github.issue.opened' as const,
-        repo: 'owner/name',
-        number: 42,
-        title: 'Bug: foo',
-        author: 'someone',
-        body: 'Description',
+        kind: 'fs.changed' as const,
+        path: '/workspace/demo/src/api.py',
+        type: 'modify' as const,
       },
       metadata: {},
       receivedAt: new Date().toISOString(),
     };
     const parsed = eventSchema.parse(e);
-    expect(parsed.body.kind).toBe('github.issue.opened');
+    expect(parsed.body.kind).toBe('fs.changed');
   });
 
   it('parses a channel message event', () => {
