@@ -2,7 +2,7 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-21T17:45:00Z — session `2026-04-21T17` (Phase 7a shipped)
+**Last updated:** 2026-04-21T17:50:00Z — session `2026-04-21T17` (Phase 7a shipped; `/session-end`)
 **Current phase:** 7 — Operator-control + budget discipline
 **Current sub-phase:** 7b — Cross-session spend dashboard (queued)
 **Current step:** 7b.1 — `@factory5/state.queries.spend` aggregations (not started)
@@ -40,10 +40,10 @@ Detailed Phase 7b plan: `.control/phases/phase-7-budget-discipline/README.md` + 
 
 ## Git state
 
-- **Branch:** main (ahead of `origin/main` by many commits — push at operator discretion)
-- **Last commit:** (will be the phase-7a close commit + tag)
-- **Uncommitted changes:** no (at session start)
-- **Last phase tag:** `phase-7a-budget-enforcement-closed` (on the close commit)
+- **Branch:** main (ahead of `origin/main` by ~39 commits since Phase 5 close — push at operator discretion)
+- **Last commit:** `0923628` — `chore(phase-7a): close Phase 7a — budget enforcement shipped`
+- **Uncommitted changes:** no (pending this session-end docs commit)
+- **Last phase tag:** `phase-7a-budget-enforcement-closed` (tags `0923628`)
 
 Earlier tags intact: `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`.
 
