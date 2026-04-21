@@ -14,25 +14,37 @@
  *   factory findings show <id>                     (if unambiguous)
  *     [--json]
  *
+ *   factory findings backfill
+ *     [--workspace <path>]                         (default: ~/factory5-workspace)
+ *     [--dry-run]
+ *
  * Tabular by default; `--json` emits NDJSON (list) or a single JSON
  * object (show). `--project` accepts a bare name (exact match) or a
  * glob with `*` / `?` wildcards (translated to SQL LIKE).
  *
- * The backfill subcommand lands in step 6a.5; it hangs off the same
- * `findings` group and reuses the `openDatabase()` + `runMigrations()`
- * pattern below.
+ * The backfill subcommand walks `<workspace>/<project>/.factory/findings.json`
+ * one level deep and upserts each finding into the registry — idempotent
+ * by the composite PK `(project_id, finding_id)`.
  */
 
+import { readdir, readFile, stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
 import { exit, stdout } from 'node:process';
 
+import { findingSchema, type Finding } from '@factory5/core';
+import { createLogger } from '@factory5/logger';
 import {
   findingsRegistry,
   openDatabase,
   runMigrations,
+  type Database,
   type FindingsRegistryEntry,
   type FindingsRegistryListFilter,
 } from '@factory5/state';
 import type { Command } from 'commander';
+
+const log = createLogger('cli.findings');
 
 interface ListCommandOptions {
   severity?: string;
@@ -134,6 +146,138 @@ function renderNdjson(rows: FindingsRegistryEntry[]): string {
 
 interface ShowCommandOptions {
   json?: boolean;
+}
+
+interface BackfillCommandOptions {
+  workspace?: string;
+  dryRun?: boolean;
+}
+
+interface BackfillSummary {
+  projectsScanned: number;
+  projectsWithFindings: number;
+  imported: number;
+  updated: number;
+  errors: number;
+  /** Per-project counters, keyed by projectId — surfaced in the summary. */
+  byProject: Map<string, { imported: number; updated: number }>;
+}
+
+function resolveWorkspace(raw: string | undefined): string {
+  const base = raw ?? join(homedir(), 'factory5-workspace');
+  if (base.startsWith('~/') || base === '~') {
+    return join(homedir(), base.slice(2));
+  }
+  return base;
+}
+
+async function loadFindingsFile(path: string): Promise<Finding[] | 'missing' | 'invalid'> {
+  try {
+    await stat(path);
+  } catch {
+    return 'missing';
+  }
+  let raw: string;
+  try {
+    raw = await readFile(path, 'utf8');
+  } catch {
+    return 'invalid';
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || !('findings' in parsed)) {
+      return 'invalid';
+    }
+    const arr = (parsed as { findings: unknown }).findings;
+    if (!Array.isArray(arr)) return 'invalid';
+    return arr.map((f) => findingSchema.parse(f));
+  } catch {
+    return 'invalid';
+  }
+}
+
+async function backfillWorkspace(
+  db: Database,
+  workspace: string,
+  dryRun: boolean,
+): Promise<BackfillSummary> {
+  const summary: BackfillSummary = {
+    projectsScanned: 0,
+    projectsWithFindings: 0,
+    imported: 0,
+    updated: 0,
+    errors: 0,
+    byProject: new Map(),
+  };
+
+  let entries: string[];
+  try {
+    entries = await readdir(workspace);
+  } catch (err) {
+    stdout.write(
+      `factory findings backfill: workspace "${workspace}" not readable: ${(err as Error).message}\n`,
+    );
+    exit(2);
+  }
+
+  for (const name of entries.sort()) {
+    const projectPath = join(workspace, name);
+    const projectStat = await stat(projectPath).catch(() => undefined);
+    if (projectStat === undefined || !projectStat.isDirectory()) continue;
+    summary.projectsScanned++;
+
+    const findingsPath = join(projectPath, '.factory', 'findings.json');
+    const loaded = await loadFindingsFile(findingsPath);
+    if (loaded === 'missing') continue;
+    if (loaded === 'invalid') {
+      summary.errors++;
+      log.warn({ projectPath, findingsPath }, 'backfill: findings.json unreadable or invalid');
+      continue;
+    }
+    summary.projectsWithFindings++;
+    const projectId = basename(projectPath);
+    const counters = { imported: 0, updated: 0 };
+    for (const finding of loaded) {
+      const existing = findingsRegistry.getByProjectAndId(db, projectId, finding.id);
+      if (!dryRun) {
+        findingsRegistry.upsert(db, {
+          projectId,
+          projectPath,
+          finding,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      if (existing === undefined) {
+        summary.imported++;
+        counters.imported++;
+      } else {
+        summary.updated++;
+        counters.updated++;
+      }
+    }
+    summary.byProject.set(projectId, counters);
+  }
+
+  return summary;
+}
+
+function renderBackfillSummary(workspace: string, s: BackfillSummary, dryRun: boolean): void {
+  const verb = dryRun ? 'would import' : 'imported';
+  const verbUpd = dryRun ? 'would update' : 'updated';
+  stdout.write(`factory findings backfill — workspace: ${workspace}${dryRun ? ' (dry-run)' : ''}\n`);
+  stdout.write(
+    `  ${String(s.projectsScanned)} dir(s) scanned; ` +
+      `${String(s.projectsWithFindings)} with findings.json; ` +
+      `${String(s.errors)} error(s)\n`,
+  );
+  if (s.projectsWithFindings === 0) return;
+  stdout.write(`  ${verb} ${String(s.imported)}; ${verbUpd} ${String(s.updated)}\n\n`);
+  const projectWidth = Math.max(7, ...[...s.byProject.keys()].map((k) => k.length));
+  for (const [projectId, counters] of s.byProject) {
+    stdout.write(
+      `    ${projectId.padEnd(projectWidth)}  +${String(counters.imported)} imported  ~${String(counters.updated)} updated\n`,
+    );
+  }
 }
 
 function splitShowArg(raw: string): { projectId?: string; findingId: string } {
@@ -257,6 +401,29 @@ export function registerFindingsCommand(program: Command): void {
         runMigrations(db);
         const rows = findingsRegistry.list(db, filter);
         stdout.write(opts.json === true ? renderNdjson(rows) : renderTable(rows));
+      } finally {
+        db.close();
+      }
+    });
+
+  group
+    .command('backfill')
+    .description(
+      'walk <workspace>/<project>/.factory/findings.json and upsert every finding into the registry',
+    )
+    .option(
+      '--workspace <path>',
+      'workspace root holding <project> subdirs (default: ~/factory5-workspace)',
+    )
+    .option('--dry-run', 'report what would change without writing to the registry')
+    .action(async (opts: BackfillCommandOptions) => {
+      const workspace = resolveWorkspace(opts.workspace);
+      const db = openDatabase();
+      try {
+        runMigrations(db);
+        const summary = await backfillWorkspace(db, workspace, opts.dryRun === true);
+        renderBackfillSummary(workspace, summary, opts.dryRun === true);
+        if (summary.errors > 0) exit(1);
       } finally {
         db.close();
       }
