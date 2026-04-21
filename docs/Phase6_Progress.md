@@ -57,11 +57,11 @@ independent — pick the one that matches the session's appetite.
 
 ### Candidate sub-phases
 
-| Sub-phase | Track    | Pitch                                                                                                                                                                                                                                                                                                       | Est. sessions | Status     |
-| --------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------- |
-| **6a**    | Data     | **Cross-project findings registry.** Aggregate `<project>/.factory/findings.json` into a factory-home index (`~/.factory5/findings-registry.sqlite`). Surface `factory findings list [--severity HIGH] [--status OPEN] [--project <glob>]` and `factory findings show <id>`. Original Phase 6 charter item. | 1-2           | ✅ Shipped |
-| **6b**    | Triggers | **GitHub channel + event source.** A `github` channel parallel to the existing `discord` channel — GitHub issues / PR comments become directives; finding-raise / terminalStatus posts back as comments. Plumbing-heavy, unlocks non-CLI build triggers.                                                    | 2-3           | ⏸ Pending  |
-| **6c**    | Quality  | **Verifier overhaul.** Either give the verifier filesystem access (upgrade to tool-using, parallel to builder) or formally downgrade its claims to advisory (never blocking, always informational). Today's F001 hallucination is the forcing function.                                                     | 1             | ✅ Shipped |
+| Sub-phase | Track    | Pitch                                                                                                                                                                                                                                                                                                       | Est. sessions | Status                                                                 |
+| --------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------------------------------------------------------------------- |
+| **6a**    | Data     | **Cross-project findings registry.** Aggregate `<project>/.factory/findings.json` into a factory-home index (`~/.factory5/findings-registry.sqlite`). Surface `factory findings list [--severity HIGH] [--status OPEN] [--project <glob>]` and `factory findings show <id>`. Original Phase 6 charter item. | 1-2           | ✅ Shipped                                                             |
+| **6b**    | Triggers | **GitHub channel + event source.** A `github` channel parallel to the existing `discord` channel — GitHub issues / PR comments become directives; finding-raise / terminalStatus posts back as comments. Plumbing-heavy, unlocks non-CLI build triggers.                                                    | 2-3           | ❌ Dropped — see [ADR 0019](decisions/0019-drop-github-integration.md) |
+| **6c**    | Quality  | **Verifier overhaul.** Either give the verifier filesystem access (upgrade to tool-using, parallel to builder) or formally downgrade its claims to advisory (never blocking, always informational). Today's F001 hallucination is the forcing function.                                                     | 1             | ✅ Shipped                                                             |
 
 Three _deferred_ items that logically live in Phase 6+ but aren't in
 the initial scope:
@@ -174,16 +174,44 @@ the only collision point. Three candidate fixes enumerated;
 preferred is changing PK to `(project_path, finding_id)`. Deferred
 to Phase 7+; not blocking any Phase 6 exit criterion.
 
-**6b (GitHub channel)** is the bigger build and probably wants
-coordination with the user on OAuth / webhook setup before a session
-kicks off.
+**6b (GitHub channel) — ❌ dropped 2026-04-21 per
+[ADR 0019](decisions/0019-drop-github-integration.md).** Phase 6b
+opened cleanly on 2026-04-21 and committed 6b.1 (PAT + test repo
+scaffolding, commit `c780180`). At 6b.2 — the event-source ADR
+(webhook vs polling vs hybrid) — the design session surfaced that
+the charter had silently pivoted GitHub from its scaffold role as an
+event-source (observer) to a channel (operator-triggered directives),
+and that neither framing earned its keep: channel duplicates what
+CLI does for a solo operator; observer needs factory's outputs to
+live on GitHub first, a prerequisite no phase has built. The
+integration was dropped wholesale and the scaffold pruned from the
+codebase. `'github'` + `'webhook'` exited `CHANNEL_IDS`; three
+`github.*` event kinds exited `eventBodySchema`; narrative scaffold
+in `CompleteArchitecture.md`, `docs/ARCHITECTURE.md`, and
+`docs/CONTRACTS.md` was pruned with pointers to the ADR. Migration
+001's CHECK constraints left in place (SQLite cannot ALTER a CHECK;
+stricter-TS-over-wider-DB is harmless; called out in a comment).
+Tests re-pointed at `fs.changed`. 309 tests green (no delta).
+Durable doctrine recorded in ADR 0019: **factory's effects in the
+world are operator-directed per-directive, not pattern-driven** —
+future output-to-GH capabilities (e.g. `factory push <project>` or
+`factory build --publish-to-gh`) stay optional flags on a directive,
+never daemon observers or default rules.
+
+Operator follow-up (out-of-band, not automatable from factory5):
+revoke the `env:GITHUB_TOKEN` PAT at
+https://github.com/settings/tokens, delete the test repo
+`momobits/factory5-6b-smoke` (`gh repo delete … --yes`), clear the
+env var (`reg delete "HKCU\Environment" /v GITHUB_TOKEN /f`).
 
 ## Out of scope for Phase 6
 
 Carry-forward items that are explicitly deferred until Phase 7 or a
 demand signal appears:
 
-- **Telegram channel.** Slot in after 6b locks the channel-shape.
+- **Telegram channel.** Deferred to Phase 7c. Discord is the reference
+  channel (6b dropped per ADR 0019, so "patterns locked by 6b" no
+  longer applies).
 - **Web UI.** Multi-session build.
 - **Assessor tier 3 — pluggable runtimes (Go / Rust / JS provisioners).**
   Wait for a non-Python project to surface the need. ADR 0017 flags
@@ -196,33 +224,35 @@ demand signal appears:
   wired.
 - **Cross-session spend tracking / dashboard.** Belongs with the web UI.
 
-## Phase 6 exit criteria (proposed)
+## Phase 6 exit criteria (amended at close)
 
-Phase 6 is done when the factory can:
+Phase 6 closed 2026-04-21 with 6c + 6a shipped, 6b dropped per ADR 0019.
+Criterion #2 is struck through per the charter's "scope is flexible"
+clause and replaced with the amended form below.
 
-1. **Aggregate findings across projects** — `factory findings list
---severity HIGH` returns real rows from ≥2 projects without
-   bespoke shell scripting, **OR** (if 6a is deferred) the scope is
-   narrowed and this criterion is struck through with a charter amend.
-2. **Accept at least one non-CLI trigger live** — a real GitHub
-   issue or PR comment produces a `directive:new` row, runs through
-   the pipeline, and posts a response back. **OR** (if 6b is deferred)
-   struck through with charter amend.
+1. **Aggregate findings across projects** — ✅ satisfied by 6a.
+   `factory findings list --severity HIGH` returns real rows from ≥2
+   projects (Phase 5f corpus + Phase 6c corpus). Backfill is
+   idempotent; per-project `findings.json` stays source-of-truth.
+2. ~~**Accept at least one non-CLI trigger live** — a real GitHub
+   issue or PR comment produces a `directive:new` row…~~
+   **Amended:** factory accepts at least one non-CLI trigger.
+   Discord (shipped Phase 4) fills this slot. GitHub integration
+   dropped per [ADR 0019](decisions/0019-drop-github-integration.md);
+   the durable doctrine recorded there is that factory's effects in
+   the world are operator-directed per-directive, not pattern-driven.
 3. **Verifier signal is either authoritative or explicitly advisory.**
-   No more cases like today's F001 where a CRITICAL claim from the
-   verifier is flat-out contradicted by the assessor. Either verifier
-   gets filesystem access (authoritative) or its claims never enter
-   `brain.loop`'s gate calculation (advisory).
-4. **No regressions to Phase 5 exit criteria.** `factory build
-example` still ends `complete` with all gates true; `factory
-build parallel-example` still exhibits same-ms sibling start.
+   ✅ satisfied by 6c. Verifier findings now persist with
+   `advisory: true` and do not enter `brain.loop`'s gate calculation
+   ([ADR 0018](decisions/0018-verifier-advisory-only.md)).
+4. **No regressions to Phase 5 exit criteria.** ✅ 309 tests green at
+   Phase 6 close (was 255 at Phase 5 close; +54 across 6c + 6a). No
+   live regression run required for the close since neither 6b (dropped)
+   nor the prune commit changed runtime behaviour.
 5. **No new CRITICAL or HIGH issues filed against factory5 itself
-   during the Phase 6 session(s) that close out Phase 6.**
-
-The scope is flexible: if the user picks only 6c in a given session,
-criteria 1+2 may be struck through with a charter amend (`Phase 6
-narrow scope — 6c only`). The point is the charter sets the bar for
-what "Phase 6 closed" means; sub-phase picks refine it.
+   during the Phase 6 sessions.** ✅ one MEDIUM issue opened (I008 —
+   findings-registry project-id collision), deferred to Phase 7+.
+   `docs/issues/INDEX.md` Open list: {I008 MEDIUM}.
 
 ## Pointers
 

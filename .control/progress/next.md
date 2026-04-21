@@ -1,49 +1,53 @@
 # Next session — paste this to start
 
-Continue factory5 Phase 6, sub-phase 6b — GitHub channel.
+Open Phase 7, sub-phase 7a — budget enforcement (`max_usd` / `max_steps`).
 
 Read `CLAUDE.md`, then `.control/progress/STATE.md`, then
-`.control/phases/phase-6b-github-channel/README.md` and
-`.control/phases/phase-6b-github-channel/steps.md` (the 9-step
-checklist is placeholder-level; detailed per-step bodies get
-authored at session start once the 6b.2 ADR decision — webhook
-vs polling vs hybrid — is made).
+`.control/phases/phase-7-budget-discipline/README.md` and
+`.control/phases/phase-7-budget-discipline/steps.md` for the 9-step
+7a checklist + 7b / 7c previews.
 
-Also read `docs/Phase6_Progress.md` for the cross-sub-phase
-charter context (6c ✅, 6a ✅, 6b is the last sub-phase) and
-`docs/issues/I008-findings-registry-project-id-collision.md` — the
-one open factory5 self-issue; may touch 6b if GitHub directive
-ingest routes through `projects.upsert`.
+Also read:
 
-**6b.1 is `[HALT] secret_needed`.** The session cannot begin
-without:
-- A GitHub Personal Access Token with minimum scopes (`repo`,
-  `read:org`) — cite the token via a reference you keep out of
-  the repo (env var, secrets manager), not the token itself
-- A throwaway test repo URL for the 6b.8 live-smoke run
+- `docs/decisions/0019-drop-github-integration.md` — the Phase 6
+  close ADR. Not strictly required for 7a, but the durable doctrine
+  it records ("factory's effects in the world are operator-directed
+  per-directive, not pattern-driven") is relevant if 7a's escalation
+  shape touches any external-effect surface.
+- `docs/Phase6_Progress.md` closed narrative — context for how
+  Phase 6 ended (6c + 6a shipped, 6b dropped).
+- `CompleteArchitecture.md` §12 line 454 — the original `max_usd` /
+  `max_steps` note from the scaffold.
 
-Have both ready before running `/session-start`.
+**No pause-for-human.** 7a needs no secrets; it's an internal
+budget-tracking phase. The first concrete work is **7a.1** — draft
+ADR for the pre-call cost-estimate approach. Three candidates are
+already enumerated in STATE.md's Next-action section; the ADR picks
+one and documents the escalation shape.
 
 Report back a 5-line status in this shape:
 
 ```
-Phase 6 — Operator-trust, sub-phase 6b — GitHub channel, step 6b.1
-Last action: Phase 6a closed (tag phase-6a-findings-registry-closed; commit <sha>)
+Phase 7 — Operator-control + budget discipline, sub-phase 7a — budget enforcement, step 7a.1
+Last action: Phase 6 closed (tag phase-6-closed; commit <sha>)
 Git: branch=main, last=<sha> <subject>, uncommitted=<yes/no>, tag=<last>
-Open blockers: 1 (I008, MEDIUM, findings-registry collision — deferred)
-Proposed next action: 6b.1 pause-for-human — awaiting GitHub PAT + test repo URL
+Open blockers: 1 (I008, MEDIUM, findings-registry collision — deferred to Phase 7+)
+Proposed next action: 7a.1 — draft ADR for pre-call cost estimate approach
 Ready to proceed?
 ```
 
-Then wait for the user to paste the PAT reference and repo URL
-before editing code.
+Budget for 7a: ~1 session, $2–4 LLM spend for the regression
+validation (synthetic build hits the ceiling → clean escalation).
+Live validation `factory build example --max-usd 3` is intentionally
+cheap — the point is halting early, not finishing.
 
-Budget for 6b: 2–3 sessions, estimated $6–15 across the arc (the
-live-smoke in 6b.8 runs a real `factory build` triggered by the
-GH channel). Carry-forward concern: live-run spend trending
-above envelope across 5f ($5.84) / 6c ($7.71); Phase 7a remains
-pre-charted to enforce `max_usd` caps.
+Execution order for Phase 7: **7a → 7b → 7c** (strict). After 7c
+closes, Phase 7 as a whole closes with tag `phase-7-closed`, and
+Phase 8 opens (not yet charted).
 
-Execution order for Phase 6: **6c (done) → 6a (done) → 6b
-(next)**. After 6b: Phase 6 as a whole closes, Phase 7 opens
-(Operator-control + budget discipline — 7a/7b/7c).
+**Operator follow-up from Phase 6 close, out-of-band whenever
+convenient:** revoke the `env:GITHUB_TOKEN` PAT at
+https://github.com/settings/tokens, delete the throwaway repo
+(`gh repo delete momobits/factory5-6b-smoke --yes`), clear the env
+var (`reg delete "HKCU\Environment" /v GITHUB_TOKEN /f`). None of
+these block Phase 7.

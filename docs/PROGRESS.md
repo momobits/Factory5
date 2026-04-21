@@ -2716,7 +2716,7 @@ spend (this was a pure scaffolding session).
 
 1. **6a.1 — State migration (commit `5d81fe2`).** New
    `findings_registry` table with composite PK `(project_id,
-   finding_id)`, 14 columns, CHECK on severity/status/advisory,
+finding_id)`, 14 columns, CHECK on severity/status/advisory,
    FK `origin_directive_id → directives(id) ON DELETE SET NULL`,
    index on `(severity, status)`. Advisory persists as 0/1
    mirroring Finding.advisory (ADR 0018). No FK on project_id —
@@ -2725,8 +2725,8 @@ spend (this was a pure scaffolding session).
 
 2. **6a.2 — Wiki dual-write (commit `e6a2640`).** `wiki.addFinding`
    and `wiki.updateFindingStatus` gain an optional `registry:
-   FindingRegistryBinding` arg (`{ db, projectId?,
-   originDirectiveId? }`). When present, per-project file writes
+FindingRegistryBinding` arg (`{ db, projectId?,
+originDirectiveId? }`). When present, per-project file writes
    first (source of truth), registry upserts second (best-effort —
    failures log warnings, never fail the per-project write).
    Worker's `WorkerOptions` picks up `findingRegistry?`; brain's
@@ -2770,7 +2770,7 @@ spend (this was a pure scaffolding session).
    RegistryEntry-shaped object.
 
 6. **6a.5 — Backfill (commit `ae933e7`).** `factory findings
-   backfill [--workspace <path>] [--dry-run]`. Walks one level
+backfill [--workspace <path>] [--dry-run]`. Walks one level
    deep (`<workspace>/<project>/.factory/findings.json`),
    validates each finding individually via core's
    `findingSchema`, upserts into the registry. Per-project
@@ -2784,7 +2784,7 @@ spend (this was a pure scaffolding session).
    `table_info`, composite PK ordering, FK on_delete SET NULL,
    CHECK rejects invalid severity/status/advisory, non-unique
    `idx_findings_registry_severity_status` covers `(severity,
-   status)` in order). +24 CLI handler tests across
+status)` in order). +24 CLI handler tests across
    `runFindingsList` / `runFindingsShow` / `runFindingsBackfill`
    (default filters, all option permutations, enum validation,
    --json shapes, ambiguity path, back-to-back idempotence,
@@ -2896,6 +2896,7 @@ channel + event source** is next:
   with the user before the session starts.**
 
 Carry-forwards into 6b:
+
 - **I008** — may be touched by 6b if the GitHub channel's
   directive-ingest routes through `projects.upsert` and exposes
   the collision. Otherwise deferred as-is.
@@ -2904,3 +2905,158 @@ Carry-forwards into 6b:
   the channel is wired against a real GitHub issue. Phase 7b
   (per-directive `max_usd` enforcement) remains the structural
   fix.
+
+---
+
+## 2026-04-21 — Phase 6 closed (6c + 6a shipped; 6b dropped per ADR 0019)
+
+**Headline:** Phase 6 closes with two sub-phases shipped and one
+dropped. Phase 6b (GitHub channel) opened cleanly but was dropped
+wholesale at step 6b.2 after a design session surfaced that neither
+the channel framing (Phase 6b charter) nor the observer framing
+(original scaffold intent) earned its keep for a solo-operator
+dev-box user. Durable doctrine recorded in ADR 0019: **factory's
+effects in the world are operator-directed per-directive, not
+pattern-driven.** Tag `phase-6-closed`. Phase 7 (budget discipline)
+scaffolded and opens next session.
+
+### Session arc
+
+1. **6b.1 — PAT + test repo provisioned** (commit `c780180`).
+   Operator provisioned a classic PAT in `HKCU\Environment` and a
+   throwaway public repo `momobits/factory5-6b-smoke`. The commit
+   recorded references (`env:GITHUB_TOKEN` + the repo slug) in a
+   local scratch file `.control/phases/phase-6b-github-channel/config.md`
+   — not the secret value. Caveats: bash processes spawned **before**
+   the `setx` don't see the env var (parent-process env was frozen);
+   factoryd spawned after `setx` inherits it cleanly.
+
+2. **6b.2 — design session surfaced a scope mismatch.** The phase
+   had been charted to pick between three event-source transports
+   (webhook / polling / hybrid). The session rewound past the
+   transport question to the framing question: **what is GitHub to
+   factory5?** Discovery: `CompleteArchitecture.md` §3 / §19
+   positioned GitHub as an **event-source** (factory observes repos
+   it cares about; "PR opened → review directive" is the canonical
+   example). The Phase 6b charter reframed the same slot as a
+   **channel** (operator files an issue → directive → reply
+   comment). The pivot was never documented in an ADR. Both
+   framings were evaluated and both found wanting:
+   - **Channel** duplicates the CLI for a solo dev-box user.
+     Opening github.com, filing an issue, and waiting on a poll
+     is slower than `factory build <project>` in the terminal.
+   - **Observer** needs factory's outputs to live on GitHub first
+     (so factory has _context_ on what it's watching). No phase has
+     built that prerequisite; without it, observer is a notification
+     stream over repos factory has never touched, duplicating
+     GitHub's email/web/mobile notifications.
+
+3. **Decision: drop GitHub wholesale.** ADR 0019 authored (commit
+   `c39ef8f`). Three decisions: no channel, no observer, and —
+   durably — future output-to-GH (if ever built) is operator-
+   directed per-directive (`factory build --publish-to-gh`, or a
+   chat directive that asks to publish), not a default daemon
+   pattern. The `factory push <project>` command planned in
+   `packages/cli/README.md` fits that shape.
+
+4. **Code + doc prune** (commit `ee85efd`). Removed from the
+   TypeScript layer: `'github'` + `'webhook'` from `CHANNEL_IDS`
+   (kept `'cli'`, `'discord'`, `'telegram'`); three `github.*`
+   event kinds from `eventBodySchema`; tests re-pointed at
+   `fs.changed` to preserve discriminated-union coverage.
+   Removed from narrative: `CompleteArchitecture.md` §1/§3/§4/§19/§20,
+   `docs/ARCHITECTURE.md` (factoryd + event sources), `docs/CONTRACTS.md`
+   (`ChannelId` + `Event` + `EventBody`), `README.md` (opening +
+   feature list), `prompts/agents/triage.md` (GitHub event mention),
+   `packages/events/README.md` (github-poll + webhook-server stubs),
+   `packages/daemon/README.md` (GitHub poll phrase),
+   `apps/factoryd/package.json` (description simplified),
+   `packages/events/src/types.ts` (JSDoc examples).
+   **Migration 001's CHECK constraints intentionally left alone.**
+   SQLite cannot ALTER a CHECK without table recreation; the cost
+   of ceremony is greater than the benefit of a narrower DB check
+   that's already a stricter superset of what the TS layer will
+   write. A comment block in 001-initial.ts points future readers
+   at ADR 0019.
+
+5. **Charter amend + phase close** (this commit).
+   `docs/Phase6_Progress.md` exit criterion #2 struck through and
+   replaced with the amended form ("factory accepts at least one
+   non-CLI trigger — Discord, shipped Phase 4"). 6b row in the
+   sub-phase table flipped to ❌ Dropped. `.control/architecture/phase-plan.md`
+   updated — Phase 6 row marked closed, Phase 7 promoted to active,
+   7c no longer depends on 6b (Discord is the reference channel).
+   `.control/phases/phase-6b-github-channel/` directory deleted in
+   full. `.control/phases/phase-7-budget-discipline/` scaffolded
+   with README + steps.md (7a 9 steps + 7b + 7c placeholders).
+
+### Tests
+
+- 309 tests green across 13 packages — same count as Phase 6a close.
+  The prune re-pointed two tests (`packages/core/src/schemas.test.ts`,
+  `packages/state/src/state.test.ts`) at `fs.changed` without
+  changing the total.
+- Per-package counts unchanged: logger 5, core 14, ipc 5, state 33,
+  providers 37, assessor 42, wiki 27, channels 25, events 3,
+  worker 24, brain 42, daemon 28, cli 24.
+
+### Spend
+
+- $0 — second consecutive zero-LLM-spend session. Phase 6 closed
+  cheap.
+
+### Decisions (ADR 0019)
+
+- **No GitHub channel.** `'github'` is not a valid `ChannelId`.
+- **No GitHub observer.** Factoryd does not poll GitHub, runs no
+  webhook server for GitHub payloads.
+- **Future output-to-GH is operator-directed per-directive.** This
+  principle generalises beyond GitHub — factory's effects in the
+  world are never silently pattern-triggered. This is durable
+  doctrine regardless of whether output-to-GH ever ships.
+
+### Issues
+
+- No new issues opened this session. `docs/issues/INDEX.md` Open
+  list unchanged: {I008 MEDIUM, findings-registry project-id
+  collision — still deferred to Phase 7+}.
+
+### Operator follow-up (out-of-band, non-blocking for Phase 7)
+
+1. Revoke PAT at https://github.com/settings/tokens.
+2. Delete throwaway repo:
+   `gh repo delete momobits/factory5-6b-smoke --yes`.
+3. Clear env var:
+   `reg delete "HKCU\Environment" /v GITHUB_TOKEN /f`, then log
+   out/in (or broadcast `WM_SETTINGCHANGE`).
+
+None of these are factory5's work to do.
+
+### What's next — Phase 7 opens
+
+Per the phase-plan, **Phase 7 — Operator-control + budget
+discipline** is active. Three sub-phases in strict order:
+
+- **7a — Budget enforcement (`max_usd` / `max_steps`).** Pre-call
+  cost + step ceilings enforced before each LLM call. CLI flags
+  - config defaults. Graceful escalation when exceeded. ~1
+    session. This is the structural fix for the Phase 6c spend
+    overrun ($7.71 vs $4-6 envelope) — flagged as a carry-forward
+    since 6c close.
+- **7b — Cross-session spend dashboard.** `factory spend`
+  subcommand aggregating `model_usage`.
+- **7c — Telegram channel.** Third `ChannelPlugin` after CLI and
+  Discord. Discord is now the reference channel (6b dropped
+  before its patterns could lock).
+
+First concrete work: **7a.1** — draft ADR for the pre-call
+cost-estimate approach. Three candidates enumerated in STATE.md
+(input-tokens-only, input+expected-output, running average).
+No pause-for-human; no secrets needed.
+
+Carry-forwards into 7a:
+
+- **I008** — still deferred; may surface if 7b's spend dashboard
+  touches project identity.
+- **Spend overrun from 6c** — Phase 7a is the fix.
+- **Operator GH cleanup** — out-of-band, non-blocking.
