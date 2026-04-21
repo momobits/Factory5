@@ -2552,3 +2552,148 @@ Same option set as the Phase 5f entry, minus I007 (now resolved):
    downgrade its claims from CRITICAL to advisory. Surfaced by this
    session as a separate LLM-hygiene concern but not filed as an
    issue pending a decision on scope.
+
+## 2026-04-21 — Phase 6c: verifier overhaul shipped (advisory path)
+
+**Headline:** F001 closed at the gate boundary per ADR 0018. Verifier
+findings now carry an explicit `advisory: true` flag by default; the
+Finding schema + `addFinding` + `brain.loop` log breakdown are wired.
+Prompt rewritten from the Phase 1 stub to a real brief with
+anti-hallucination discipline. Live validation on directive
+`01KPQK61F9967TT8JZWCMCV3NW` ended `complete` with `gate:
+{build: true, integration: true, verify: true}` and zero verifier
+CRITICALs — the exact F001-class defect is no longer reproducible.
+Session opened under the new Control framework (instantiated same
+day).
+
+### Done
+
+**Session structure:** Phase 6c sub-phase, 8 sub-steps, per-step
+commits following the Control framework's `<type>(<phase>.<step>):
+<subject>` shape.
+
+1. **6c.1 — F001 red reproducer (commit `c35681a`).**
+   `packages/worker/src/verifier-f001.test.ts`. Mounts a temp
+   workspace matching the 2026-04-19 I007 live-run state
+   (`src/*.py`, `tests/test_*.py`, `pyproject.toml` all on disk),
+   scripts a `StubProvider` with the exact F001 hallucinated response,
+   invokes `runWorker` with a verifier task, asserts the false
+   CRITICAL still persists — documenting that nothing between the
+   LLM's text and `addFinding` cross-checks the claim.
+
+2. **6c.2 — ADR 0018 (commit `a911604`).**
+   `docs/decisions/0018-verifier-advisory-only.md`, 228 lines,
+   status Accepted. Commits to the **advisory path**: strip verifier
+   from gate contribution, tag findings `advisory: true`, rewrite
+   the prompt. Rejected the authoritative path (worktree + tools +
+   evidence-citation parser + rejection mechanism — four phase-sized
+   chunks). Index updated.
+
+3. **6c.3 — Advisory implementation (commit `0334597`).** Three
+   diffs:
+   - `packages/core/src/schemas.ts` — optional
+     `advisory?: boolean` on `findingSchema`.
+   - `packages/wiki/src/findings.ts` — `addFinding` defaults
+     `advisory: true` when `source === 'verifier'`; explicit
+     caller values respected; `isAdvisory(f)` helper exported.
+   - `packages/brain/src/loop.ts` — final log line now reports
+     `N blocking + M advisory` break-down; the inline comment
+     documents the ADR 0018 gate-contribution rule so a future
+     coder adding finding-based gate logic sees the guard-rail.
+     Tests: +2 core schema, +3 wiki addFinding cases.
+
+4. **6c.4 — Verifier prompt rewrite (commit `9c8246d`).**
+   `prompts/agents/verifier.md` goes from a 6-line Phase 1 stub to a
+   ~90-line brief with: advisory framing up front; explicit "what
+   you may claim" (architectural observations, cross-module
+   consistency, doc quality) and "what you must NOT claim" (file
+   presence, test results, binary build correctness); the anti-
+   hallucination rule ("if uncertain, say 'unverified' or don't
+   raise"); and a direct reference to ADR 0018.
+
+5. **6c.5 — F001 regression flipped green (commit `ad36c46`).** The
+   reproducer's assertions now prove the ADR 0018 invariant: the
+   hallucinated CRITICAL still persists (plumbing can't silence an
+   LLM) but carries `advisory: true`, so `isAdvisory(f) === true`.
+   Added a second case: a reviewer raising the same-shape finding
+   does NOT get the advisory default — the flag is verifier-specific.
+
+6. **6c.6 — Phase6_Progress.md outcome (commit `2daa3d0`).** 6c row
+   flipped to ✅ Shipped in the sub-phase table. "Recommended first
+   sub-phase" rewritten with outcome, rejected-alternative rationale,
+   hand-off note to 6a.
+
+7. **6c.7 — Live validation (commit `7bfee98`).** Directive
+   `01KPQK61F9967TT8JZWCMCV3NW`, workspace
+   `C:/Users/Momo/factory5-v6c-example/example`.
+   `factory build example --autonomy autonomous --concurrency 2`
+   terminated `complete` with `gate:{build:true, integration:true,
+verify:true}`, 119/0 pytest. The verifier raised two findings:
+   F001 MEDIUM ("no builder output or assessor result in this
+   verifier invocation") and F002 LOW ("no bare print lint rule not
+   documented — unverified"). Both persisted with `advisory:true`,
+   neither a filesystem-presence claim, neither contradicting the
+   assessor. `brain.loop` final log:
+   `openFindings:2, blockingFindings:0, advisoryFindings:2`.
+   Phase 5f-class F001 CRITICAL absence hallucination: not
+   reproducible. Spend $7.71 (over the $4-6 envelope — see Next
+   session).
+
+8. **6c.8 — Phase close (this entry + `/phase-close`).**
+
+### Decided
+
+- **ADR 0018 — verifier advisory-only.** Finding schema gains
+  optional `advisory: boolean`. Verifier source defaults to
+  advisory; gate logic filters on the flag (not on source, to keep
+  the door open for other future advisory sources). Severity is
+  not capped — operators still see the verifier's best-effort
+  signal; the flag is the gate enforcement.
+- **Reject the authoritative path, for now.** The LLM-with-tools
+  - evidence-citation route was the richer design but needs four
+    phase-sized pieces (worktree, tool loop, citation parser,
+    rejection mechanism). Revisitable as ADR 0019+ if demand surfaces.
+- **Don't cap verifier severity.** A legitimate CRITICAL
+  architectural observation should still read as CRITICAL to the
+  operator; the advisory flag + gate filter already make it
+  non-blocking.
+- **Live-run spend is the top open concern.** $7.71 this run vs.
+  $5.84 in Phase 5f vs. the $4-6 envelope. Phase 7b will make
+  per-directive spend visible and enforceable (`max_usd` cap).
+
+### Verification — PASSED 2026-04-21
+
+- ✅ `pnpm build` — clean.
+- ✅ `pnpm test` — **262 passing** (was 255 at Phase 5 close;
+  +2 core schema, +3 wiki addFinding, +2 worker F001 regression).
+  Per-package: logger 5, core 14, ipc 5, state 16, providers 37,
+  assessor 42, wiki 21, channels 25, events 3, worker 24, brain 42,
+  daemon 28.
+- ✅ `pnpm lint` — clean.
+- ✅ `pnpm format:check` — clean.
+- ✅ Live `factory build example` on a fresh workspace —
+  `terminalStatus: complete`, all gates true, 119 pytest green,
+  zero verifier CRITICAL, zero blocking findings, two advisory
+  findings (both non-hallucinatory).
+- ✅ F001 regression test — assertion flipped to prove advisory
+  invariant; passes against the same scripted hallucination.
+
+### Next session — Phase 6a opens
+
+Per the Phase 6 phase-plan execution order (6c → 6a → 6b), Phase 6a
+"cross-project findings registry" is next:
+
+- Aggregate `<workspace>/<project>/.factory/findings.json` into a
+  factory-home index (`~/.factory5/findings-registry.sqlite`).
+- Surface `factory findings list [--severity HIGH] [--status OPEN]
+[--project <glob>] [--advisory|--blocking]` and `factory findings
+show <id>`. The `advisory` flag added in 6c propagates into the
+  display layer.
+- Estimated 1-2 sessions, $4-6 envelope.
+
+Open concern to carry into 6a planning: **spend visibility.** This
+session's $7.71 vs $4-6 budget is a repeat pattern — Phase 5f
+ran $5.84, Phase 5-closeout ran $4.74, 6c ran $7.71. Phase 7b
+(per-directive `max_usd` cap + cross-session spend tracking) is
+pre-charted in `.control/architecture/phase-plan.md` precisely for
+this. No action in 6a; just don't let 6a's agent-heavy steps surprise.
