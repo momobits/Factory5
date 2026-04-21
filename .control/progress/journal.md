@@ -2,6 +2,22 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-04-22 (session `2026-04-21T22`) — Phase 7b closed (cross-session spend dashboard shipped)
+
+- **Commit range:** `beb540a` → `ecce6ef` (4 substantive commits + this session-end docs commit). **Phase step range:** 7b.2 → 7b.5 (phase close).
+- **Decisions:** none new. 7b.2–7b.5 are implementation of the ADR 0021 foundation laid down in 7b.1 last session. No new ADRs; no rescopes.
+- **Issues:** none opened, none closed. Open backlog remains empty (I008 closed in 7b.1). Third consecutive session with zero open blockers.
+- **Schema additions:** none. 7b runs entirely against existing tables (`model_usage` joined through `directives.project_id → projects.id`, all populated since migration 006).
+- **Query layer (7b.2):** `packages/state/src/queries/spend.ts` — four aggregations (`perProject`, `perDirective`, `perDay`, `perModel`) over `model_usage`, joined through `directives.project_id`. Shared `SpendFilter { since, until, projectId }`. Exported `formatProjectDisplay(name, id)` canonises ADR 0021 §5 label rule. LEFT-JOIN semantics so orphan / project-less rows collapse into `(unassigned)` rather than vanishing. +23 tests including the ADR 0021 regression (two projects sharing basename surface distinctly).
+- **CLI surface (7b.3):** `packages/cli/src/commands/spend.ts` — `factory spend` with `--group-by {project|directive|day|model}` (default project), `--since`/`--until` accepting relative (`7d`/`24h`/`30m`) or strict ISO8601, `--project` accepting ULID/name/suffix with case-insensitive LIKE + ambiguity exit-2 path, `--json` NDJSON, `--limit` clamped 1–1000. Pure `runSpend` handler + Commander wrapper mirroring findings.ts. Bare numeric strings rejected in the date parser (the `Date.parse('5')` year-5 v8 quirk). +24 tests.
+- **Round-trip regression (7b.4):** `packages/cli/src/commands/spend-roundtrip.test.ts` — two tmp workspaces both basename `example`, `loadOrCreateProjectMetadata` writes distinct-ULID identity files, directives + `model_usage` seed each, `runSpend` driven directly. Six assertions covering distinct on-disk files, distinct dashboard rows, rollup-matches-raw ground truth, `--project <ulid>` / `--project <suffix>` isolation, `--project example` ambiguity. If any layer reverts to basename-keying one of the six fails immediately. +6 tests.
+- **Live validation (7b.3 smoke):** `factory spend` against the real local DB — migration 006 auto-ran on first touch, dashboard rendered 2 projects (`example (…SG6H)` + `parallel-example (…9PR3)`) + 2 `(unassigned)` calls, totalling $63.17 across 116 rows.
+- **Tests: 428 green** (was 375 at 7b.1 close; +53 across the 7b arc: +28 at 7b.1 prior session, +23 at 7b.2, +24 at 7b.3, +6 at 7b.4). All green on Windows; `pnpm lint` + `pnpm format:check` clean. Per-package at close: core 14, logger 5, ipc 5, providers 37, state 92, assessor 42, wiki 39, channels 25, events 3, worker 24, brain 59, daemon 28, cli 55.
+- **Spend: $0** — pure local TS + SQLite + vitest work; no LLM calls. (Live-smoke invoked `factory spend` which is a read-only DB query, not an LLM call.)
+- **Minor polish (not its own step):** tightened `parseWindowArg` ISO fallback to require a `T` separator so bare numeric strings don't silently parse as ancient years (test caught `Date.parse('5')` → year 5). Dropped an unused `ULID_RE` constant + `isUlid` export from `spend.ts` before the first lint run to keep the module minimal.
+- **Phase 7b tagged** `phase-7b-spend-dashboard-closed` on commit `ecce6ef`.
+- **Next: 7c (Telegram channel) — blocked on operator input.** Step 7c.1 is an explicit [HALT] for a Telegram bot token + target chat-id. After secrets land, 7c.2 implements `packages/channels/src/telegram.ts` as the third `ChannelPlugin` (Discord is the reference).
+
 ## 2026-04-21 (session `2026-04-21T21`) — Phase 7b.1 shipped (first-class project identity; I008 resolved)
 
 - **Commit range:** `db87e97` → `1999a14` (6 commits in factory5 + 1 in Control source `cee27a1`). **Phase step range:** session-internal Control-fix → 7b.1 close.
