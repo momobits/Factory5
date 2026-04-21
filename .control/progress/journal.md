@@ -2,6 +2,16 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-04-21 — Phase 6a closed (cross-project findings registry)
+
+- Phase tagged `phase-6a-findings-registry-closed` on the `chore(phase-6a)` close commit. Phase 6b (GitHub channel) kicked off; paused at 6b.1 pending user PAT + test repo URL.
+- Shipped: `findings_registry` SQLite table (composite PK on `(project_id, finding_id)`, `advisory` column mirroring ADR 0018); `wiki.addFinding` + `updateFindingStatus` gain optional `FindingRegistryBinding` for best-effort dual-write; worker + brain pool wire the binding end-to-end; `factory findings list | show | backfill` CLI surface complete with filters, glob, NDJSON output, per-project dedup.
+- Tests: 309 green (was 262 at Phase 6c close; +9 state migration shape, +8 state registry queries, +6 wiki dual-write, +24 CLI handlers — CLI gained its first test file).
+- Spend: $0 — first factory5 session since Phase 3 that did no LLM calls. Validation was local SQL + filesystem only.
+- Issue opened: **I008** (MEDIUM, state/findings-registry) — `project_id = basename(path)` collides across workspaces; 6a's backfill against the v5f/v6c corpora overwrote v5f's F001 on composite-PK conflict. Per-project `findings.json` files untouched; registry-only representation limit. Candidate fix: PK on `(project_path, finding_id)`. Deferred to Phase 7+.
+- Mid-session Control discipline addition (commit `87ea1c0`): CLAUDE.md now mandates flipping the matching `- [ ]` in `.control/phases/<phase>/steps.md` to `- [x]` in the same commit as the sub-step closer. Proposal filed as Improvement 6 in `G:/Projects/Small-Projects/Control/improvement.md` for v1.3.1 / v1.4.0 inclusion.
+- Commits: 6a.1 `5d81fe2` → 6a.8 close commit; docs-side close at `fd3837e`. Phase-6a tag lands on this phase-close commit.
+
 ## 2026-04-21 — Phase 6c closed (verifier advisory-only)
 
 - Phase tagged `phase-6c-verifier-overhaul-closed` on commit `a24f883`. Phase 6a kicked off.
