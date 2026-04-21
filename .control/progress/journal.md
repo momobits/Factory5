@@ -2,6 +2,13 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-04-21 — Phase 6b kickoff (6b.1 — `[HALT] secret_needed` resolved)
+
+- PAT reference + test repo recorded: `env:GITHUB_TOKEN` stored in `HKCU\Environment` (persistent user env, classic PAT, `public_repo` scope); test repo `momobits/factory5-6b-smoke` (public, issues enabled, default branch `main`). Full caveats + rollback in `.control/phases/phase-6b-github-channel/config.md`. **No secret value** committed — only the reference shape.
+- Pre-commit verification confirmed the repo is reachable (HTTP 200 unauthenticated) and the env var is present in `HKCU\Environment`. The current Claude Code bash does not see `$GITHUB_TOKEN` (parent-process env frozen before `setx`) — factoryd spawned after `setx` will inherit it, so the 6b.6+ code paths are unblocked even though this session's bash cannot directly exercise the token.
+- No code touched, no tests changed, $0 spend. Next step **6b.2** — ADR on the event source (webhook vs polling vs hybrid); the decision gates expansion of the placeholder 6b.3–6b.9 sub-step bodies.
+- Commit: `chore(6b.1): record github test repo + PAT ref`.
+
 ## 2026-04-21 — Phase 6a closed (cross-project findings registry)
 
 - Phase tagged `phase-6a-findings-registry-closed` on the `chore(phase-6a)` close commit. Phase 6b (GitHub channel) kicked off; paused at 6b.1 pending user PAT + test repo URL.

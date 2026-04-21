@@ -2,11 +2,11 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-21 by `/phase-close` (end of Phase 6a)
+**Last updated:** 2026-04-21 by 6b.1 commit (`chore(6b.1): record github test repo + PAT ref`)
 **Current phase:** 6 — Operator-trust + multi-surface
 **Current sub-phase:** 6b — GitHub channel (execution order 3 of 3 within Phase 6)
-**Current step:** 6b.1 — `[HALT] secret_needed` — user provides GitHub PAT + test repo URL
-**Status:** paused-for-human — awaiting GitHub PAT + test repo URL before the session can begin
+**Current step:** 6b.2 — ADR: event source (webhook vs polling vs hybrid)
+**Status:** active — 6b.1 resolved; next move is the 6b.2 ADR decision before any `packages/channels` or `packages/events` code lands
 
 ---
 
@@ -21,19 +21,22 @@
 
 ## Next action
 
-Phase 6a is closed. Phase 6b — GitHub channel — is next per the phase-plan's 6c → 6a → 6b execution order. The first step (**6b.1**) is a pause-for-human: the user provides a GitHub Personal Access Token with the minimum scopes (`repo`, `read:org`) and a throwaway repo URL for the live-smoke step. Until that arrives, the session cannot proceed.
+**Step 6b.2 — ADR: GitHub event source (webhook vs polling vs hybrid).** The decision shapes every step that follows: 6b.3's `ChannelPlugin` shape, 6b.4's event-source package (`github-webhook.ts` vs `github-poller.ts`), 6b.5's migration columns (a webhook config needs a URL + secret; a poller needs a `last_seen_event_id` cursor; hybrid needs both), and 6b.6's fixture recording strategy. Until the ADR lands, the placeholder sub-steps in `.control/phases/phase-6b-github-channel/steps.md` cannot be expanded into detailed bodies.
 
-Detailed plan: `.control/phases/phase-6b-github-channel/README.md` + `steps.md` (9 sub-steps, placeholder-level; detailed per-step bodies are authored at session start once the ADR choice in 6b.2 — webhook vs polling vs hybrid — is made).
-Commit message for 6b.1 resumption: whatever records the received config; typically `chore(6b.1): record github test repo + PAT ref`.
+**Inputs recorded in 6b.1** (see `.control/phases/phase-6b-github-channel/config.md`):
+- PAT reference: `env:GITHUB_TOKEN` (stored in `HKCU\Environment`, persistent user env; classic PAT with `public_repo` scope)
+- Test repo: `momobits/factory5-6b-smoke` (public, issues enabled)
+
+**Next commit shape:** `docs(6b.2): ADR NNNN — github event source` (webhook/polling/hybrid pick + rationale; ADR number = current highest + 1, to be confirmed against `docs/decisions/INDEX.md`).
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `<to be filled by this phase-close commit>` — `chore(phase-6a): close Phase 6a, kick off Phase 6b`
-- **Uncommitted changes:** no (post-phase-close)
-- **Last phase tag:** `phase-6a-findings-registry-closed` — tags the phase-close commit above (Phase 6a ran `5d81fe2` → this commit)
+- **Last commit:** `<to be filled by this 6b.1 commit>` — `chore(6b.1): record github test repo + PAT ref`
+- **Uncommitted changes:** no (post-6b.1)
+- **Last phase tag:** `phase-6a-findings-registry-closed` — tags the previous phase-close commit `e1ab0c0`. No Phase 6b tag yet; the phase closes at 6b.9 with `phase-6b-github-channel-closed`.
 
 ---
 
@@ -45,7 +48,7 @@ Commit message for 6b.1 resumption: whatever records the received config; typica
 
 ## In-flight work
 
-- None — Phase 6a closed cleanly. Phase 6b is paused at 6b.1 pending user input.
+- None — 6b.1 committed as a pure `.control/` scratch update (no code paths touched). 6b.2 not started; the ADR will be drafted in its own commit after the webhook/polling/hybrid trade-off is presented to and decided by the user.
 
 ---
 
@@ -69,17 +72,17 @@ All 18 ADRs live under `docs/decisions/` (factory5's authoritative shape — do 
 
 ## Recently completed (last 5 steps)
 
+- **6b.1 — Record GitHub test repo + PAT ref** — 2026-04-21 — commit `<this commit>`; pure `.control/` scratch (new `phase-6b-github-channel/config.md`, steps.md checkbox flipped, STATE + journal updated). No secret value committed — only the reference `env:GITHUB_TOKEN` and repo `momobits/factory5-6b-smoke`.
 - **Phase 6a closed (findings registry)** — 2026-04-21 — tag `phase-6a-findings-registry-closed`; 8 sub-steps shipped across commits `5d81fe2`, `e6a2640`, `87ea1c0`, `73ff8fb`, `b17b16e`, `ae933e7`, `cc2447c`, `46606ee`, `fd3837e`
 - **6a.8 — PROGRESS + Phase6_Progress close narrative** — 2026-04-21 — commit `fd3837e`
 - **6a.7 — Live validation + I008 filed** — 2026-04-21 — commit `46606ee`; backfilled both v5f and v6c corpora, surfaced project_id collision
 - **6a.6 — Test coverage** — 2026-04-21 — commit `cc2447c`; +9 state migration shape, +24 CLI handler tests
-- **6a.5 — Findings backfill script** — 2026-04-21 — commit `ae933e7`
 
 ---
 
 ## Attempts that didn't work (current step only)
 
-- None yet (step 6b.1 has not started; it is a pause-for-human, not an attemptable step).
+- None yet — 6b.2 (ADR drafting) has not started; the trade-off presentation and user decision happen in a separate turn after the 6b.1 commit lands.
 
 ---
 
@@ -96,14 +99,15 @@ All 18 ADRs live under `docs/decisions/` (factory5's authoritative shape — do 
 
 If resuming after `/session-end` or a cold start:
 
-1. Read `CLAUDE.md` (root) — standing brief incl. Control-framework section; note the new steps.md-checkbox discipline line added mid-session 6a.
+1. Read `CLAUDE.md` (root) — standing brief incl. Control-framework section; note the steps.md-checkbox discipline line added mid-6a.
 2. Read this STATE.md.
-3. Read `.control/phases/phase-6b-github-channel/README.md` + `steps.md` for the Phase 6b plan. Detailed per-step bodies are not authored yet — they'll be expanded after the 6b.2 ADR decision is made (webhook vs polling vs hybrid).
-4. Read `docs/Phase6_Progress.md` for the cross-sub-phase charter context (6a and 6c rows now both ✅).
-5. Read `docs/issues/I008-findings-registry-project-id-collision.md` — open issue surfaced in 6a.7; may be touched by 6b if project-identity routes through `projects.upsert`.
-6. Run `/session-start` for the full drift check.
-7. **Be prepared to provide GitHub PAT + test repo URL before the session can start.** 6b.1 is `[HALT] secret_needed` and cannot proceed without them.
+3. Read `.control/phases/phase-6b-github-channel/README.md` + `steps.md` + **`config.md`** (the 6b.1-recorded PAT ref + repo; references only, no secrets).
+4. Read `docs/Phase6_Progress.md` for the cross-sub-phase charter context (6a and 6c rows both ✅; 6b in progress).
+5. Read `docs/issues/I008-findings-registry-project-id-collision.md` — still open; may be touched by 6b if the GitHub-directive-ingest path routes through `projects.upsert`.
+6. Read `docs/decisions/INDEX.md` — check for ADR 0019 (the 6b.2 event-source ADR); if not present, the session resumes at 6b.2 drafting.
+7. Run `/session-start` for the full drift check.
+8. **The PAT env var lives in `HKCU\Environment`; a fresh Claude Code session will inherit it.** If `$GITHUB_TOKEN` is empty in the new shell, the user may need to restart the shell / CC or the setx was rolled back — do not proceed with live GH code paths until it resolves.
 
-**Execution order reminder:** Phase 6 runs as **6c (done) → 6a (done) → 6b (next)**. After 6b, Phase 6 closes as a whole and Phase 7 (Operator-control + budget discipline — 7a/7b/7c) opens.
+**Execution order reminder:** Phase 6 runs as **6c (done) → 6a (done) → 6b (in progress)**. After 6b closes at 6b.9, Phase 6 as a whole closes and Phase 7 (Operator-control + budget discipline — 7a/7b/7c) opens.
 
-**Budget for 6b:** 2–3 sessions, estimated $6–15 across the full arc (channel skeleton is unit-level but the live smoke step runs a real `factory build` against a GH-triggered directive). Carry-forward from 6c: live-run spend still trending above envelope ($7.71 in 6c). Phase 7a (pre-call `max_usd` enforcement) stays pre-charted; 6b won't enforce, but keep the live-smoke step single-build.
+**Budget for 6b:** 2–3 sessions, estimated $6–15 across the full arc. 6b.1 spent $0 (pure `.control/` scratch). 6b.2 ADR drafting is also ~$0 (model reasoning, no LLM spend against factory5's providers). LLM spend concentrates in 6b.6 (fixture-recording integration test may re-run the pipeline with a mocked channel) and 6b.8 (live smoke — one real `factory build` triggered via the GH channel). Carry-forward from 6c: live-run spend still trending above envelope ($7.71 in 6c); Phase 7a (pre-call `max_usd` enforcement) stays pre-charted, 6b won't enforce.
