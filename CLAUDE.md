@@ -26,6 +26,7 @@ This project uses the **Control framework** for session management — cursor, p
 - Commit message shape: `<type>(<phase>.<step>): <subject>` (e.g. `feat(6c.1): add read tools to verifier allowlist`). Allowed types: `feat fix test docs refactor chore`.
 - Every sub-step closes with a commit. Every phase/sub-phase closes with a tag (`phase-6c-verifier-overhaul-closed`, etc.) via `/phase-close`.
 - In the same commit that closes a sub-step, flip the matching `- [ ]` in `.control/phases/<phase>/steps.md` to `- [x]`. The commit remains the authoritative signal; the checkbox makes the cursor visible without requiring a reader to scan the log.
+- **After any commit, tag, step-close, or phase/addendum close, state the next Control command explicitly** (e.g. "Run `/session-end` next.", "Continue with the next sub-step.", "Run `/phase-close` when all step checkboxes are flipped."). The user should never have to infer which command fits the current state — that's the assistant's job to surface at every transition.
 - Never advance a step with uncommitted work unless STATE.md's "In-flight work" explains why.
 - Regression test required before any blocker/major issue moves to RESOLVED.
 - Do not edit accepted ADRs in `docs/decisions/` — supersede with a new one.
