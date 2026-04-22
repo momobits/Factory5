@@ -6,10 +6,12 @@
   "type": "module",
   "scripts": {
     "e2e": "tsx e2e-daemon.ts",
-    "analyze-plan": "tsx analyze-plan.ts"
+    "analyze-plan": "tsx analyze-plan.ts",
+    "telegram-smoke": "tsx telegram-smoke.ts"
   },
   "dependencies": {
     "@factory5/assessor": "workspace:*",
+    "@factory5/brain": "workspace:*",
     "@factory5/channels": "workspace:*",
     "@factory5/core": "workspace:*",
     "@factory5/daemon": "workspace:*",

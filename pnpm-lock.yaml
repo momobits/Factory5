@@ -515,6 +515,9 @@ importers:
       '@factory5/assessor':
         specifier: workspace:*
         version: link:../packages/assessor
+      '@factory5/brain':
+        specifier: workspace:*
+        version: link:../packages/brain
       '@factory5/channels':
         specifier: workspace:*
         version: link:../packages/channels
