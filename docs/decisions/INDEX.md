@@ -33,6 +33,7 @@ Decisions are append-only. To overturn a decision, write a new ADR with `Superse
 | [0019](0019-drop-github-integration.md)                  | Drop GitHub integration from factory5; future output-to-GH is operator-directed       | Accepted           | 2026-04-21 |
 | [0020](0020-pre-call-budget-enforcement.md)              | Pre-call budget enforcement: rolling-average estimator and clean-escalation shape     | Accepted           | 2026-04-21 |
 | [0021](0021-first-class-project-identity.md)             | First-class project identity via `.factory/project.json` (closes I008)                | Accepted           | 2026-04-21 |
+| [0022](0022-telegram-polling-in-plugin.md)               | Telegram long-polling lives inside the ChannelPlugin, not as a separate EventSource   | Accepted           | 2026-04-22 |
 
 ## Adding a new ADR
 

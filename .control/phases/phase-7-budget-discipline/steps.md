@@ -27,8 +27,8 @@
 ## Phase 7c — Telegram channel
 
 - [x] 7c.1 — **[HALT] cleared** — operator provided Telegram bot token + private chat-id. Persisted to `%LOCALAPPDATA%\factory5\config.toml` under `[channels.telegram]` with keys `botToken` + `testChatId`. Stale `/start` update consumed via `getUpdates?offset=<id+1>` so it doesn't replay at 7c.6 live run. Bot username `@Factory5_bot`; 7c.4 formalises the final config shape and adds `--telegram-*` flags to `factory init` so onboarding stays one-shot.
-- [ ] 7c.2 — `packages/channels/src/telegram.ts` implementing `ChannelPlugin` (Discord is the reference — ADR 0019 dropped the GitHub channel)
-- [ ] 7c.3 — Long-polling event source in `@factory5/events` (Telegram's preferred transport; no webhook server needed)
+- [x] 7c.2 — `packages/channels/src/telegram.ts` implementing `ChannelPlugin` (Discord is the reference — ADR 0019 dropped the GitHub channel). `TelegramChannel` with Zod `telegramConfigSchema` (`botToken`, `allowedChatIds`, `buildPrefix`, `pollTimeoutSec`, `testChatId`), `TelegramApi` interface + `defaultTelegramApiFactory` (raw `fetch`, no SDK), private-chat vs group-chat scoping via `isDirectedAtBot`, pending-question answer routing by `reply_to_message_id`, `channelRef = <chatId>#<messageId>` so `send()` can thread via reply-to. 29 new tests (54 channels / 457 workspace). Commit `ef650af`.
+- [x] 7c.3 — **Closed as no-op per [ADR 0022](../../../docs/decisions/0022-telegram-polling-in-plugin.md).** Long-polling loop lives inside `TelegramChannel` (AbortController-cancellable, offset-maintained, exponential backoff cap 30s) mirroring Discord's websocket-inside-plugin pattern. Splitting the loop across `@factory5/events` and the plugin turned out to be premature layering for the 1:1 update-to-directive case. If future Telegram signals need `Event` rather than `Directive` treatment, we revisit; YAGNI today.
 - [ ] 7c.4 — State config for bot-token + allowed-chats allowlist
 - [ ] 7c.5 — Round-trip integration test using recorded fixtures
 - [ ] 7c.6 — Live run against user-provided test chat
