@@ -59,9 +59,9 @@ Once picked:
 Report back a 5-line status in this shape:
 
 ```
-Phase 7 — CLOSED (tag phase-7-closed; 463 tests; 22 ADRs)
-Last action: Phase 7c + Phase 7 closed (commits 74ad146 → <close sha>; tag phase-7-closed; 463 tests green)
-Git: branch=main, last=<sha> <subject>, uncommitted=<yes/no>, tag=phase-7-closed
+Phase 7 — CLOSED (tag phase-7-closed; 471 tests; 23 ADRs) + addendum-onboarding CLOSED (tag addendum-onboarding-closed)
+Last action: pre-Phase-8 addendum + Control-discipline invariant landed (commits 74ad146 → 7ce70e7 → session-end; 471 tests green)
+Git: branch=main, last=<sha> <subject>, uncommitted=<yes/no>, tag=addendum-onboarding-closed (most recent)
 Open blockers: 0
 Proposed next action: Phase 8 charter — operator to pick between Web UI / Assessor tier-3 / worker-subprocess askUser
 Ready to proceed?

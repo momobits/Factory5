@@ -2,11 +2,11 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-22T22:00:00Z — session `2026-04-22T22` (addendum-onboarding closed)
+**Last updated:** 2026-04-22T22:15:00Z — session `2026-04-22T19` (Phase 7c + Phase 7 + addendum-onboarding all closed; `/session-end`)
 **Current phase:** 7 — Operator-control + budget discipline — **🟢 CLOSED** (plus pre-Phase-8 onboarding addendum — **🟢 CLOSED**)
 **Current sub-phase:** n/a — Phase 7 fully shipped + onboarding addendum shipped
 **Current step:** n/a — awaiting Phase 8 charter decision
-**Status:** phase-complete — Phase 7 wrapped (tags `phase-7c-telegram-channel-closed` + `phase-7-closed`); pre-Phase-8 addendum wrapped (tag `addendum-onboarding-closed`; repo-local instances via cwd-walk per ADR 0023; `.factory/` at repo root replaces `%LOCALAPPDATA%\factory5\`; `factory init` now template-copy-first; `[daemon]` config block wires multi-instance ports). 471 tests across 13 packages green; `pnpm lint` + `pnpm format:check` clean; no open blockers. Phase 8 options (Web UI, assessor tier-3, worker-subprocess `ask_user`) remain live — pick in the next session.
+**Status:** phase-complete — three tags placed this session: `phase-7c-telegram-channel-closed`, `phase-7-closed`, `addendum-onboarding-closed`. Plus one additional commit (`7ce70e7`) adding a Control-discipline invariant ("state the next Control command explicitly after every commit/tag/close") mirrored into the Control source repo. 471 tests across 13 packages green; `pnpm lint` + `pnpm format:check` clean; no open blockers. Phase 8 options (Web UI, assessor tier-3, worker-subprocess `ask_user`) remain live — pick in the next session.
 
 ---
 
@@ -33,11 +33,11 @@ No HALT. Pick in the next session based on what's most painful in the current su
 
 ## Git state
 
-- **Branch:** main (ahead of `origin/main` by ~62 commits since Phase 5 close — push at operator discretion)
-- **Last commit:** addendum-onboarding close (title `chore(onboarding): close pre-Phase-8 addendum`; this commit)
-- **Uncommitted changes:** no
-- **Last addendum tag:** `addendum-onboarding-closed` (on this commit)
-- **Last phase tag:** `phase-7-closed` (still current — addendum is pre-Phase-8, doesn't reopen Phase 7).
+- **Branch:** main (ahead of `origin/main` by ~63 commits since Phase 5 close — push at operator discretion)
+- **Last commit (pre-session-end):** `7ce70e7` — `docs(onboarding): add "state next Control command" invariant to CLAUDE.md`. This session-end docs commit lands on top.
+- **Uncommitted changes:** only this session-end docs commit in-flight; tracked tree otherwise clean. `.claude/scheduled_tasks.lock` shows dirty in `git status` (Claude Code harness artifact; gitignored semantics-wise; ignored at every prior session-end).
+- **Last addendum tag:** `addendum-onboarding-closed` (on `17c393d`).
+- **Last phase tag:** `phase-7-closed` (on `7906099`) — still current. Addendum is pre-Phase-8, doesn't reopen Phase 7.
 
 Earlier tags intact: `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`.
 
@@ -51,18 +51,20 @@ Earlier tags intact: `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboa
 
 ## In-flight work
 
-- None — Phase 7b fully shipped + tagged. 7c.1 is a hard HALT gate; no files mid-edit.
+- None. Phase 7 + addendum + Control-discipline invariant all shipped and committed this session; no files mid-edit.
 
 ---
 
 ## Test / eval status
 
-- **Last test run:** Phase 7c close, 2026-04-22T17:44Z — 463 tests across 13 packages, all green. (+35 across the 7c arc: +29 at 7c.2 for the TelegramChannel unit suite, +6 at 7c.5 for the round-trip fixtures.)
-- **Per-package counts at close:** core 14, logger 5, ipc 5, providers 37, state 92, assessor 42, wiki 39, **channels 60**, events 3, worker 24, brain 59, daemon 28, cli 55.
-- **Eval score** (agent phases only): unchanged from 7a.8 — directive `01KPRHNEX1T3VR3S4ZTTSJ8F0M`, $1.9151 of $3.00 ceiling, tripped cleanly at builder-2. Not re-run at 7c — no agent-stack changes in 7c.
-- **Regression tests:** new Telegram coverage in `packages/channels/src/telegram.test.ts` (29 tests) + `packages/channels/src/telegram-roundtrip.test.ts` (6 tests). I008 / ADR 0021 regression still covered in `packages/cli/src/commands/spend-roundtrip.test.ts`. 7a budget regression in `packages/brain/src/budget-regression.test.ts`. Migration 006 shape + backfill in `packages/state/src/migrations/006-project-identity.test.ts`. F001 verifier regression in `packages/worker/src/verifier-f001.test.ts`.
+- **Last test run:** addendum-onboarding close, 2026-04-22T21:44Z — 471 tests across 13 packages, all green. (+35 over 7b close: +29 at 7c.2 TelegramChannel unit suite, +6 at 7c.5 round-trip fixtures, +8 at addendum for `paths.test.ts`; net +8 at addendum close over Phase 7c close.)
+- **Per-package counts at close:** core 14, **logger 13**, ipc 5, providers 37, state 92, assessor 42, wiki 39, **channels 60**, events 3, worker 24, brain 59, daemon 28, cli 55.
+- **Eval score** (agent phases only): unchanged from 7a.8 — directive `01KPRHNEX1T3VR3S4ZTTSJ8F0M`, $1.9151 of $3.00 ceiling, tripped cleanly at builder-2. Not re-run this session — no agent-stack changes after 7a.
+- **Regression tests (key additions this session):** `packages/channels/src/telegram.test.ts` (29 tests — plugin handler, pending-question answers, lifecycle, polling-loop offset discipline), `packages/channels/src/telegram-roundtrip.test.ts` (6 tests — realistic fixtures through full plugin → db path), `packages/logger/src/paths.test.ts` (8 tests — env wins, cwd-walk hit / miss / ignore-non-instance, homedir fallback, logsDir). Prior regressions intact: I008 / ADR 0021 in `packages/cli/src/commands/spend-roundtrip.test.ts`, 7a budget in `packages/brain/src/budget-regression.test.ts`, migration 006 in `packages/state/src/migrations/006-project-identity.test.ts`, F001 verifier in `packages/worker/src/verifier-f001.test.ts`.
 - **Live validation (7c.6):** `scripts/telegram-smoke.ts` against `@Factory5_bot`. 2026-04-22 17:37:50–17:38:13Z — identity verified, kickoff posted as `message_id 5`, operator reply captured 22s later as directive `01KPV4AQVDSPA24ZMRP944QYDG`, echo sent as `message_id 7`, poll loop exited cleanly.
 - **Live validation (7c.4):** `factory doctor --skip-call --skip-discord` returned `getMe: ok (token accepted)` / `bot: @Factory5_bot` / `testChatId: 1225367797`.
+- **Live validation (addendum migration):** `factory init` in validate mode against the migrated `.factory/config.toml` reported `Config looks healthy`. `factory spend` re-rendered the pre-migration $63.1666 / 116 calls / 2 projects + unassigned rollup — DB migrated byte-for-byte.
+- **Live validation (addendum init template-copy):** `FACTORY5_DATA_DIR=/tmp/... factory init` in a clean tmpdir copied the 7,364-byte `config.example.toml` into `<tmp>/.factory/config.toml` with next-step instructions.
 
 ---
 
@@ -78,11 +80,11 @@ All 23 ADRs live under `docs/decisions/`.
 
 ## Recently completed (last 5 steps)
 
-- **addendum-onboarding closed** — 2026-04-22 — tag `addendum-onboarding-closed`; this commit. 5 commits: gitignore `.factory/`, `dataDir()` rewrite with cwd-walk + tests, ADR 0023 + `config.example.toml` + `docs/ONBOARDING.md`, `factory init` three-mode reshape (template-copy / validate / flag-gen), `[daemon]` config + `loadDaemonEndpoint()` for multi-instance ports.
+- **"State next Control command" invariant** — 2026-04-22 — commit `7ce70e7` in factory5, `d07d6a3` in Control source. One-line assistant-side discipline add to CLAUDE.md in both repos. Also appended Improvement 7 (`/control-next` user-callable skill) to `G:\Projects\Small-Projects\Control\improvement.md` as v1.5.0 candidate. Motivated by "what do I run next?" UX gap observed between Phase 7 close and the addendum.
+- **addendum-onboarding closed** — 2026-04-22 — tag `addendum-onboarding-closed`; commit `17c393d`. 5 substantive commits: gitignore `.factory/`, `dataDir()` rewrite with cwd-walk + 8 tests, ADR 0023 + `config.example.toml` + `docs/ONBOARDING.md`, `factory init` three-mode reshape, `[daemon]` config + `loadDaemonEndpoint()` for multi-instance ports.
 - **Migration executed** — 2026-04-22 — `%LOCALAPPDATA%\factory5\*` → `G:\Projects\Large-Projects\factory\factory5\.factory\`. Verified via `factory doctor` + `factory spend` ($63.17 / 116 calls preserved). Old dir deleted. Not a git commit (tokens are gitignored).
-- **Phase 7 closed** — 2026-04-22 — tag `phase-7-closed`; commit `7906099`. All three sub-phases shipped in strict order (7a / 7b / 7c).
-- **Phase 7c closed** — 2026-04-22 — tag `phase-7c-telegram-channel-closed`; commit `7906099`. 6 sub-steps (7c.1 HALT clearance → 7c.7 close).
-- **7c.6 — Live run** — 2026-04-22 — commit `b712a09`. `scripts/telegram-smoke.ts` against `@Factory5_bot`; round-trip captured operator reply as directive `01KPV4AQVDSPA24ZMRP944QYDG` + echoed with `reply_to_message_id`.
+- **Phase 7 closed** — 2026-04-22 — tag `phase-7-closed`; commit `7906099`. All three sub-phases shipped in strict order (7a budget enforcement / 7b spend dashboard / 7c Telegram channel).
+- **Phase 7c closed** — 2026-04-22 — tag `phase-7c-telegram-channel-closed`; commit `7906099` (co-tagged with phase-7-closed). 6 sub-steps (7c.1 HALT clearance → 7c.7 close). Live round-trip against `@Factory5_bot` verified end-to-end at 7c.6.
 
 ---
 
@@ -112,6 +114,13 @@ If resuming after `/session-end` or a cold start:
 5. **Next concrete work:** pick the Phase 8 charter. Three live options (see Next action above). No HALT.
 
 **Budget for Phase 8:** TBD once the charter is picked. Web UI is probably the largest (3–5 sessions); assessor tier-3 and worker-subprocess `ask_user` are each 2–3 sessions depending on scope.
+
+**Onboarding artefacts in place** (from the addendum this session):
+
+- `config.example.toml` at repo root — hand-editable template with inline comments + Discord / Telegram walkthroughs.
+- `docs/ONBOARDING.md` — full clone-to-first-build walkthrough including multi-instance via `cd` and the new `[daemon]` port config.
+- ADR 0023 — repo-local instances via cwd-walk + `~/.factory/` fallback.
+- `factory init` now template-copy-first (copies `config.example.toml` → `<instance>/.factory/config.toml` and exits with instructions); `--force` + flags keeps CI-friendly generation.
 
 **Operator follow-up from Phase 6 close (still out-of-band whenever convenient, none blocks Phase 8):**
 
