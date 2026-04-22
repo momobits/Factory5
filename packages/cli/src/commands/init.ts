@@ -27,6 +27,25 @@ interface InitOptions {
   discordApplicationId?: string;
   discordGuild?: string;
   discordDefaultChannel?: string;
+  telegramToken?: string;
+  telegramAllowedChat?: string[];
+  telegramTestChat?: string;
+  telegramPollTimeoutSec?: string;
+}
+
+/** Parse a decimal integer flag string; throws with the flag name on failure. */
+function parseIntFlag(flag: string, raw: string): number {
+  const trimmed = raw.trim();
+  const n = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(n) || String(n) !== trimmed) {
+    throw new Error(`${flag} must be an integer (got ${JSON.stringify(raw)})`);
+  }
+  return n;
+}
+
+/** Commander collector for a repeatable `<value>` flag. */
+function collectRepeatable(value: string, previous: string[] | undefined): string[] {
+  return (previous ?? []).concat([value]);
 }
 
 function parseAutonomy(raw: string): AutonomyMode {
@@ -48,6 +67,23 @@ export function registerInitCommand(program: Command): void {
     .option(
       '--discord-default-channel <id>',
       'Default Discord channel id for directive-less replies',
+    )
+    .option(
+      '--telegram-token <token>',
+      'Telegram bot token from @BotFather (stored under [channels.telegram])',
+    )
+    .option(
+      '--telegram-allowed-chat <id>',
+      'Allow-list entry for a Telegram chat id — repeat to add several. Empty allowlist ⇒ accept any chat the bot can reach',
+      collectRepeatable,
+    )
+    .option(
+      '--telegram-test-chat <id>',
+      'Chat id used by the live-run / doctor probes (recorded under testChatId)',
+    )
+    .option(
+      '--telegram-poll-timeout-sec <seconds>',
+      'Long-poll timeout passed to getUpdates (0–60s; default 30)',
     )
     .action(async (opts: InitOptions) => {
       const path = configPath();
@@ -88,6 +124,35 @@ export function registerInitCommand(program: Command): void {
         cfg.channels['discord'] = discord;
       }
 
+      // Build [channels.telegram] block if the user supplied anything.
+      if (
+        opts.telegramToken !== undefined ||
+        (opts.telegramAllowedChat !== undefined && opts.telegramAllowedChat.length > 0) ||
+        opts.telegramTestChat !== undefined ||
+        opts.telegramPollTimeoutSec !== undefined
+      ) {
+        const telegram: Record<string, unknown> = {};
+        if (opts.telegramToken !== undefined && opts.telegramToken.length > 0) {
+          telegram['botToken'] = opts.telegramToken;
+        }
+        if (opts.telegramAllowedChat !== undefined && opts.telegramAllowedChat.length > 0) {
+          telegram['allowedChatIds'] = opts.telegramAllowedChat.map((raw) =>
+            parseIntFlag('--telegram-allowed-chat', raw),
+          );
+        }
+        if (opts.telegramTestChat !== undefined && opts.telegramTestChat.length > 0) {
+          telegram['testChatId'] = parseIntFlag('--telegram-test-chat', opts.telegramTestChat);
+        }
+        if (opts.telegramPollTimeoutSec !== undefined && opts.telegramPollTimeoutSec.length > 0) {
+          const seconds = parseIntFlag('--telegram-poll-timeout-sec', opts.telegramPollTimeoutSec);
+          if (seconds < 0 || seconds > 60) {
+            throw new Error('--telegram-poll-timeout-sec must be between 0 and 60');
+          }
+          telegram['pollTimeoutSec'] = seconds;
+        }
+        cfg.channels['telegram'] = telegram;
+      }
+
       // Verify the provider is actually reachable so users don't save a broken
       // config by accident.
       const probe = new ClaudeCliProvider(
@@ -106,6 +171,11 @@ export function registerInitCommand(program: Command): void {
       if (discordBlock !== undefined) {
         const hasToken = typeof discordBlock['token'] === 'string';
         stdout.write(`  discord:      ${hasToken ? 'configured' : '(partial — no token)'}\n`);
+      }
+      const telegramBlock = cfg.channels['telegram'] as Record<string, unknown> | undefined;
+      if (telegramBlock !== undefined) {
+        const hasToken = typeof telegramBlock['botToken'] === 'string';
+        stdout.write(`  telegram:     ${hasToken ? 'configured' : '(partial — no token)'}\n`);
       }
       if (!available) {
         stdout.write(

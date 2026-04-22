@@ -17,6 +17,7 @@ import {
   triageDirective,
 } from '@factory5/brain';
 import { ClaudeCliProvider } from '@factory5/providers';
+import { defaultTelegramApiFactory } from '@factory5/channels';
 import { Client, Events, GatewayIntentBits, REST, Routes } from 'discord.js';
 import type { Command } from 'commander';
 
@@ -26,7 +27,8 @@ export function registerDoctorCommand(program: Command): void {
     .description('verify providers + channels + environment (makes one quick Claude call)')
     .option('--skip-call', 'only check binary availability; do not call the model', false)
     .option('--skip-discord', 'skip the Discord probe even if a token is configured', false)
-    .action(async (opts: { skipCall?: boolean; skipDiscord?: boolean }) => {
+    .option('--skip-telegram', 'skip the Telegram probe even if a token is configured', false)
+    .action(async (opts: { skipCall?: boolean; skipDiscord?: boolean; skipTelegram?: boolean }) => {
       const provider = new ClaudeCliProvider();
       stdout.write('Checking claude-cli provider…\n');
       const available = await provider.available();
@@ -73,6 +75,32 @@ export function registerDoctorCommand(program: Command): void {
         stdout.write('\nDiscord probe skipped (--skip-discord)\n');
       }
 
+      // Telegram probe (only when [channels.telegram].botToken is configured).
+      const telegram = channelConfigFor(cfg, 'telegram') as
+        | { botToken?: string; testChatId?: number }
+        | undefined;
+      const hasTelegramToken =
+        typeof telegram?.botToken === 'string' && telegram.botToken.length > 0;
+      if (hasTelegramToken && opts.skipTelegram !== true) {
+        stdout.write('\nChecking Telegram (channel)…\n');
+        const tgResult = await probeTelegram(telegram!.botToken!);
+        stdout.write(
+          `  getMe:      ${tgResult.ok ? 'ok (token accepted)' : 'FAILED (token rejected)'}\n`,
+        );
+        if (tgResult.username !== undefined) {
+          stdout.write(`  bot:        @${tgResult.username}\n`);
+        }
+        if (telegram?.testChatId !== undefined) {
+          stdout.write(`  testChatId: ${String(telegram.testChatId)}\n`);
+        }
+        if (tgResult.error !== undefined) {
+          stdout.write(`  error:      ${tgResult.error}\n`);
+        }
+        if (!tgResult.ok) exit(3);
+      } else if (hasTelegramToken && opts.skipTelegram === true) {
+        stdout.write('\nTelegram probe skipped (--skip-telegram)\n');
+      }
+
       if (opts.skipCall === true) {
         stdout.write('\n--skip-call set; done.\n');
         return;
@@ -86,6 +114,25 @@ export function registerDoctorCommand(program: Command): void {
       stdout.write(`  reasoning:  ${result.reasoning}\n`);
       stdout.write('\nAll checks passed.\n');
     });
+}
+
+interface TelegramProbeResult {
+  ok: boolean;
+  username?: string;
+  error?: string;
+}
+
+async function probeTelegram(botToken: string): Promise<TelegramProbeResult> {
+  const api = defaultTelegramApiFactory(botToken);
+  try {
+    const identity = await api.getMe();
+    return { ok: true, username: identity.username };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 interface DiscordProbeResult {

@@ -28,6 +28,7 @@ import {
   createChannelRegistry,
   createCliRpcChannel,
   createDiscordChannel,
+  createTelegramChannel,
   type ChannelPlugin,
   type ChannelRegistry,
 } from '@factory5/channels';
@@ -347,24 +348,29 @@ export async function stopDaemon(handle: DaemonHandle): Promise<void> {
 
 /**
  * Default channel set. Always includes the CLI-RPC plugin; includes the
- * Discord plugin only when `config.toml` has a `[channels.discord]` block
- * with a non-empty `token`. That way a user who installs factoryd without
- * touching Discord doesn't see a "discord: failed (no token)" line on
- * every startup.
+ * Discord / Telegram plugins only when `config.toml` has a non-empty
+ * token in the matching block. That way a user who installs factoryd
+ * without touching those channels doesn't see a "discord: failed (no
+ * token)" line on every startup.
  */
 function buildDefaultChannelPlugins(
   fileConfig: Awaited<ReturnType<typeof loadConfig>>,
 ): ChannelPlugin[] {
   const plugins: ChannelPlugin[] = [createCliRpcChannel()];
-  const discord = channelConfigFor(fileConfig, 'discord');
-  const token =
-    typeof discord === 'object' && discord !== null
-      ? (discord as { token?: unknown }).token
-      : undefined;
-  if (typeof token === 'string' && token.length > 0) {
+  if (hasStringField(channelConfigFor(fileConfig, 'discord'), 'token')) {
     plugins.push(createDiscordChannel());
   }
+  if (hasStringField(channelConfigFor(fileConfig, 'telegram'), 'botToken')) {
+    plugins.push(createTelegramChannel());
+  }
   return plugins;
+}
+
+/** True when `block[field]` is a non-empty string. */
+function hasStringField(block: unknown, field: string): boolean {
+  if (typeof block !== 'object' || block === null) return false;
+  const value = (block as Record<string, unknown>)[field];
+  return typeof value === 'string' && value.length > 0;
 }
 
 /**
