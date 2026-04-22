@@ -26,7 +26,7 @@
 
 ## Phase 7c — Telegram channel
 
-- [ ] 7c.1 — **[HALT] secret_needed** — user provides Telegram bot token + target chat-id
+- [x] 7c.1 — **[HALT] cleared** — operator provided Telegram bot token + private chat-id. Persisted to `%LOCALAPPDATA%\factory5\config.toml` under `[channels.telegram]` with keys `botToken` + `testChatId`. Stale `/start` update consumed via `getUpdates?offset=<id+1>` so it doesn't replay at 7c.6 live run. Bot username `@Factory5_bot`; 7c.4 formalises the final config shape and adds `--telegram-*` flags to `factory init` so onboarding stays one-shot.
 - [ ] 7c.2 — `packages/channels/src/telegram.ts` implementing `ChannelPlugin` (Discord is the reference — ADR 0019 dropped the GitHub channel)
 - [ ] 7c.3 — Long-polling event source in `@factory5/events` (Telegram's preferred transport; no webhook server needed)
 - [ ] 7c.4 — State config for bot-token + allowed-chats allowlist
