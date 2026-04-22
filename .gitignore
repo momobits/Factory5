@@ -40,11 +40,18 @@ Thumbs.db
 # Generated
 docs/api/
 
-# Local SQLite databases (factory's own runtime state lives in ~/.factory5/)
+# Local SQLite databases — factory's runtime state lives in a repo-local
+# `.factory/` (see below) or `~/.factory/` fallback; neither should be
+# committed.
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Repo-local factory instance — holds config.toml (Discord + Telegram bot
+# tokens), factory.db (spend history + directives), and logs/. NEVER commit
+# — one `git add -A` would leak tokens to git history.
+.factory/
 
 notes.md
 
