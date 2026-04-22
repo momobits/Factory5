@@ -1,0 +1,150 @@
+# factory5 — example config
+#
+# Copy this file to your factory instance's data dir as `config.toml`:
+#   <instance>/.factory/config.toml
+#
+# Where <instance> is the directory you want factory to use as its root.
+# For the common "one factory per repo checkout" case that's the repo
+# itself (so the primary instance lives at `<repo>/.factory/config.toml`).
+# For multiple factories running in parallel, each instance lives in its
+# own tree (e.g. `~/clients/acme/.factory/config.toml`).
+#
+# dataDir() resolution precedence (see ADR 0023):
+#   1. FACTORY5_DATA_DIR env var — explicit override, wins over everything.
+#   2. Walk up from the current working directory looking for a `.factory/`
+#      directory containing config.toml. `cd` into an instance tree and
+#      factory finds itself.
+#   3. Fallback: ~/.factory/ (one implicit instance in your home dir).
+#
+# Full onboarding walkthrough (including how to create the Discord and
+# Telegram bots this file references): see `docs/ONBOARDING.md`.
+#
+# SECURITY: this file will contain real bot tokens. Keep it OUT of git.
+# The repo's .gitignore excludes `.factory/` — don't override that.
+
+# -----------------------------------------------------------------------------
+# General
+# -----------------------------------------------------------------------------
+
+[general]
+# Where factory builds projects INTO. Each project lands at
+# <workspace>/<project-name>/. This is completely separate from the factory
+# instance's data dir (which holds config, db, logs) — the workspace holds
+# the actual built source trees.
+workspace = "C:\\Users\\<you>\\factory5-workspace"   # Windows (use double-backslashes)
+# workspace = "/home/<you>/factory5-workspace"       # Linux / macOS
+
+# Default autonomy mode for new directives. One of:
+#   chat        — turn-by-turn, brain asks at every step
+#   assisted    — brain plans, asks for confirmation at checkpoints
+#   autonomous  — fire-and-forget; brain escalates when stuck
+# Override per-build with `factory build --autonomy <mode>`.
+autonomy = "assisted"
+
+# -----------------------------------------------------------------------------
+# Providers
+# -----------------------------------------------------------------------------
+
+[providers]
+# Path to the `claude` CLI binary. Leave commented to autodetect via PATH.
+# If autodetection fails, `factory doctor` will tell you; fill this in and
+# re-run.
+# claudeCliPath = "C:/Users/<you>/AppData/Roaming/npm/claude.cmd"   # Windows
+# claudeCliPath = "/usr/local/bin/claude"                           # Unix
+
+# -----------------------------------------------------------------------------
+# Category → model routing (ADR 0004)
+# -----------------------------------------------------------------------------
+# Each agent role declares a category ('quick' / 'planning' / 'reasoning' /
+# 'deep' / 'documentation'), not a model. This section binds categories to
+# specific provider+model pairs. Defaults (shipped by `factory init`) are
+# tuned for the claude-cli provider on Claude 4.x.
+
+[categories.quick]
+provider = "claude-cli"
+model = "claude-haiku-4-5"
+
+[categories.planning]
+provider = "claude-cli"
+model = "claude-sonnet-4-6"
+
+[categories.reasoning]
+provider = "claude-cli"
+model = "claude-opus-4-7"
+
+[categories.deep]
+provider = "claude-cli"
+model = "claude-opus-4-7"
+
+[categories.documentation]
+provider = "claude-cli"
+model = "claude-haiku-4-5"
+
+# Optional fallback chains when the primary provider is down or rate-limited.
+# Each entry is a list of provider+model pairs; factory tries them in order.
+# Leave empty to skip — the brain will surface the primary error.
+[fallbackChains]
+# quick = [{ provider = "claude-cli", model = "claude-haiku-4-5" }]
+
+# -----------------------------------------------------------------------------
+# Budget defaults (ADR 0020)
+# -----------------------------------------------------------------------------
+# Applied to every directive that doesn't override via CLI flags. Absent /
+# null-valued = unlimited (preserves pre-Phase-7 behaviour on a fresh
+# install). CLI flag `--max-usd <N>` on `factory build` always wins over
+# the default here.
+
+[budget.defaults]
+# maxUsd = 10.0
+# maxSteps = 50
+
+# -----------------------------------------------------------------------------
+# Channels
+# -----------------------------------------------------------------------------
+# Factory has three inbound/outbound channels: cli (always on), discord,
+# telegram. Fill in whichever you want to use. Leaving a block out is fine —
+# the daemon skips channels without a configured token.
+
+# --- Discord ---------------------------------------------------------------
+# How to create a Discord bot:
+#   1. Go to https://discord.com/developers/applications and click "New
+#      Application". Note the Application ID.
+#   2. In the application, open the "Bot" tab and copy the bot token. That
+#      goes below as `token`.
+#   3. In the OAuth2 tab, generate an invite URL with the `bot` scope and
+#      permissions `Send Messages`, `Read Message History`, `Use Slash
+#      Commands`, `Create Public Threads`, `Send Messages in Threads`.
+#   4. Invite the bot to your guild (server); note the guild id and a
+#      default channel id (right-click → Copy Channel ID with developer
+#      mode enabled).
+
+# [channels.discord]
+# token            = "<your-discord-bot-token>"
+# applicationId    = "<your-discord-application-id>"
+# guildId          = "<your-discord-guild-id>"           # scope bot to one guild; omit for any-guild
+# defaultChannelId = "<your-discord-channel-id>"         # default for directive-less replies
+# allowedUserIds   = []                                  # empty = anyone who can see the bot; or ["<id1>", "<id2>"] to restrict
+# buildPrefix      = "/build"                            # change if it collides with another bot in your server
+
+# --- Telegram --------------------------------------------------------------
+# How to create a Telegram bot:
+#   1. In Telegram, message @BotFather with `/newbot`. Follow the prompts;
+#      pick a display name and a username ending in `bot`. BotFather
+#      returns a token of the form `<digits>:<alphanumeric-35>`. That goes
+#      below as `botToken`.
+#   2. Start a chat with your new bot (tap the link BotFather returned or
+#      search `@<botusername>` in Telegram). Send it any message — this is
+#      required so Telegram surfaces a chat-id for your test chat.
+#   3. Curl the bot's getUpdates endpoint to find the chat-id:
+#        curl "https://api.telegram.org/bot<TOKEN>/getUpdates"
+#      Look for `"chat":{"id":<number>}` in the response — that's your
+#      `testChatId`.
+#   4. Optional: to restrict the bot to specific chats, add their ids to
+#      `allowedChatIds` below. Empty = any chat the bot can reach.
+
+# [channels.telegram]
+# botToken        = "<your-telegram-bot-token>"     # format: <digits>:<alphanumeric-35>
+# allowedChatIds  = []                              # empty = any chat; or [<id1>, <id2>] to restrict (ints, not strings)
+# buildPrefix     = "/build"                        # text prefix for build directives (Telegram renders `/build` natively)
+# pollTimeoutSec  = 30                              # long-poll window 0–60s; 30 is Telegram's sweet spot
+# testChatId      = <your-personal-chat-id>         # used by `factory doctor` and `scripts/telegram-smoke.ts`
