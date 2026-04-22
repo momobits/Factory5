@@ -2,11 +2,11 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-22T17:45:00Z — session `2026-04-22T17` (Phase 7c + Phase 7 closed)
-**Current phase:** 7 — Operator-control + budget discipline — **🟢 CLOSED**
-**Current sub-phase:** n/a — Phase 7 fully shipped (7a + 7b + 7c all closed)
+**Last updated:** 2026-04-22T22:00:00Z — session `2026-04-22T22` (addendum-onboarding closed)
+**Current phase:** 7 — Operator-control + budget discipline — **🟢 CLOSED** (plus pre-Phase-8 onboarding addendum — **🟢 CLOSED**)
+**Current sub-phase:** n/a — Phase 7 fully shipped + onboarding addendum shipped
 **Current step:** n/a — awaiting Phase 8 charter decision
-**Status:** phase-complete — Phase 7 wrapped with tags `phase-7c-telegram-channel-closed` + `phase-7-closed`. 463 tests across 13 packages green; `pnpm lint` + `pnpm format:check` clean; no open blockers. Phase 8 options discussed at 7b close (Web UI, assessor tier-3, worker-subprocess `ask_user`) remain live — pick in the next session.
+**Status:** phase-complete — Phase 7 wrapped (tags `phase-7c-telegram-channel-closed` + `phase-7-closed`); pre-Phase-8 addendum wrapped (tag `addendum-onboarding-closed`; repo-local instances via cwd-walk per ADR 0023; `.factory/` at repo root replaces `%LOCALAPPDATA%\factory5\`; `factory init` now template-copy-first; `[daemon]` config block wires multi-instance ports). 471 tests across 13 packages green; `pnpm lint` + `pnpm format:check` clean; no open blockers. Phase 8 options (Web UI, assessor tier-3, worker-subprocess `ask_user`) remain live — pick in the next session.
 
 ---
 
@@ -33,12 +33,13 @@ No HALT. Pick in the next session based on what's most painful in the current su
 
 ## Git state
 
-- **Branch:** main (ahead of `origin/main` by ~56 commits since Phase 5 close — push at operator discretion)
-- **Last commit:** Phase 7c + Phase 7 close commit (title `chore(phase-7c): close Phase 7c and Phase 7 — telegram channel shipped`; this commit)
+- **Branch:** main (ahead of `origin/main` by ~62 commits since Phase 5 close — push at operator discretion)
+- **Last commit:** addendum-onboarding close (title `chore(onboarding): close pre-Phase-8 addendum`; this commit)
 - **Uncommitted changes:** no
-- **Last phase tag:** `phase-7-closed` (on this commit; also `phase-7c-telegram-channel-closed` co-tagged here)
+- **Last addendum tag:** `addendum-onboarding-closed` (on this commit)
+- **Last phase tag:** `phase-7-closed` (still current — addendum is pre-Phase-8, doesn't reopen Phase 7).
 
-Earlier tags intact: `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`.
+Earlier tags intact: `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`.
 
 ---
 
@@ -67,21 +68,21 @@ Earlier tags intact: `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforce
 
 ## Recent decisions (last 3 ADRs)
 
-- **ADR 0022** (2026-04-22) — Telegram long-polling lives inside `TelegramChannel` (mirroring Discord's websocket-inside-plugin pattern), not as a separate `@factory5/events` `EventSource`. Closes 7c.3 as a no-op. Reversible if future Telegram signals need `Event` rather than `Directive` treatment.
+- **ADR 0023** (2026-04-22) — Repo-local factory instances via cwd-walk discovery. `dataDir()` precedence: `FACTORY5_DATA_DIR` env → walk up from cwd looking for `.factory/config.toml` → `~/.factory/` fallback. Name `.factory/` used consistently; disambiguated from per-project `.factory/project.json` (ADR 0021) by requiring `config.toml` as the instance marker. Partially supersedes ADR 0004's storage-location claims.
+- **ADR 0022** (2026-04-22) — Telegram long-polling lives inside `TelegramChannel` (mirroring Discord's websocket-inside-plugin pattern), not as a separate `@factory5/events` `EventSource`. Closes 7c.3 as a no-op.
 - **ADR 0021** (2026-04-21) — First-class project identity via `<project>/.factory/project.json` (ULID). Stable across path moves; explicit at fork. Closes I008. Foundation for 7b per-project rollups.
-- **ADR 0020** (2026-04-21) — Pre-call budget enforcement: rolling-average estimator per `(category, mode)` + cold-start defaults; `assertBudget` wrapper in brain; `budget_exceeded_*:` prefix on `directives.blocked_reason`.
 
-All 22 ADRs live under `docs/decisions/`.
+All 23 ADRs live under `docs/decisions/`.
 
 ---
 
 ## Recently completed (last 5 steps)
 
-- **Phase 7 closed** — 2026-04-22 — tag `phase-7-closed`; this commit. All three sub-phases shipped in strict order (7a budget enforcement, 7b spend dashboard, 7c Telegram channel).
-- **Phase 7c closed** — 2026-04-22 — tag `phase-7c-telegram-channel-closed`; this commit. 6 sub-steps (7c.1 HALT clearance → 7c.7 close).
+- **addendum-onboarding closed** — 2026-04-22 — tag `addendum-onboarding-closed`; this commit. 5 commits: gitignore `.factory/`, `dataDir()` rewrite with cwd-walk + tests, ADR 0023 + `config.example.toml` + `docs/ONBOARDING.md`, `factory init` three-mode reshape (template-copy / validate / flag-gen), `[daemon]` config + `loadDaemonEndpoint()` for multi-instance ports.
+- **Migration executed** — 2026-04-22 — `%LOCALAPPDATA%\factory5\*` → `G:\Projects\Large-Projects\factory\factory5\.factory\`. Verified via `factory doctor` + `factory spend` ($63.17 / 116 calls preserved). Old dir deleted. Not a git commit (tokens are gitignored).
+- **Phase 7 closed** — 2026-04-22 — tag `phase-7-closed`; commit `7906099`. All three sub-phases shipped in strict order (7a / 7b / 7c).
+- **Phase 7c closed** — 2026-04-22 — tag `phase-7c-telegram-channel-closed`; commit `7906099`. 6 sub-steps (7c.1 HALT clearance → 7c.7 close).
 - **7c.6 — Live run** — 2026-04-22 — commit `b712a09`. `scripts/telegram-smoke.ts` against `@Factory5_bot`; round-trip captured operator reply as directive `01KPV4AQVDSPA24ZMRP944QYDG` + echoed with `reply_to_message_id`.
-- **7c.5 — Round-trip integration tests** — 2026-04-22 — commit `e770815`. `packages/channels/src/telegram-roundtrip.test.ts` with realistic-shape fixtures; 6 new tests.
-- **7c.4 — Formalise config + wire init/doctor/daemon** — 2026-04-22 — commit `784e41b`. `factory init` Telegram flags; `factory doctor` `probeTelegram` + `--skip-telegram`; daemon auto-wires plugin when `botToken` is set.
 
 ---
 
@@ -96,7 +97,7 @@ All 22 ADRs live under `docs/decisions/`.
 - **Language / runtime:** TypeScript strict mode on Node 20+ (ADR 0001). pnpm workspaces. ESM (NodeNext) with explicit `.js` import extensions.
 - **Key pinned deps:** Pino, Zod, Commander, Fastify, better-sqlite3, discord.js, chokidar, simple-git, vitest, ulid.
 - **Model in use:** Claude Opus 4.7 for scaffolding sessions; live builds use category routing per ADR 0004 (quick=Haiku 4.5, planning=Sonnet 4.6, deep/reasoning=Opus 4.7).
-- **Other:** Windows + Linux cross-platform mandatory. 13 packages + 2 apps. **463 tests**. `CHANNEL_IDS` narrowed to `['cli','discord','telegram']` per ADR 0019 — all three plugins shipped. Budget enforcement per ADR 0020. Project identity via `.factory/project.json` per ADR 0021. Cross-session spend dashboard via `factory spend` per 7b.3. Telegram channel via `TelegramChannel` with plugin-owned long-poll loop per ADR 0022 (7c.2).
+- **Other:** Windows + Linux cross-platform mandatory. 13 packages + 2 apps. **471 tests**. `CHANNEL_IDS` narrowed to `['cli','discord','telegram']` per ADR 0019 — all three plugins shipped. Budget enforcement per ADR 0020. Project identity via `.factory/project.json` per ADR 0021. Cross-session spend dashboard via `factory spend` per 7b.3. Telegram channel via `TelegramChannel` with plugin-owned long-poll loop per ADR 0022 (7c.2). Instance data dir resolved via cwd-walk per ADR 0023 (primary at `<repo>/.factory/`).
 
 ---
 

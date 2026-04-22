@@ -1,12 +1,25 @@
 # Next session — paste this to start
 
-Phase 7 closed (tag `phase-7-closed`). All three sub-phases shipped:
-7a budget enforcement, 7b spend dashboard, 7c Telegram channel. 463
-tests across 13 packages; no open blockers.
+Phase 7 closed (tag `phase-7-closed`). Pre-Phase-8 onboarding
+addendum also closed (tag `addendum-onboarding-closed`). 471 tests
+across 13 packages; no open blockers.
+
+What's new since Phase 7 close:
+
+- Repo-local factory instances via cwd-walk — primary now at
+  `<repo>/.factory/`, migrated from `%LOCALAPPDATA%\factory5\`.
+- `factory init` is template-copy-first (walks to
+  `config.example.toml` at repo root; `--force` keeps flag-driven
+  generation for CI).
+- `[daemon]` config block lets two factoryds run on different ports
+  so you can have parallel instances.
+- See ADR 0023 for the storage-layout decision + `docs/ONBOARDING.md`
+  for the full clone-to-first-build walkthrough.
 
 Read `CLAUDE.md`, then `.control/progress/STATE.md`, then
 `docs/Phase7_Progress.md` for the full Phase 7 close (done criteria,
-carry-forward, ADRs 0020/0021/0022).
+carry-forward, ADRs 0020/0021/0022) and `docs/PROGRESS.md`'s latest
+2026-04-22 entry for the addendum.
 
 ## Decisions awaiting your input
 

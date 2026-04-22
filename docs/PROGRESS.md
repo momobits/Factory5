@@ -3371,3 +3371,120 @@ surface at Phase 7 close:
   <https://github.com/settings/tokens>, delete throwaway repo
   (`gh repo delete momobits/factory5-6b-smoke --yes`), clear env
   var (`reg delete "HKCU\Environment" /v GITHUB_TOKEN /f`).
+
+---
+
+## 2026-04-22 — Pre-Phase-8 onboarding addendum
+
+**Headline:** Repo-local factory instances. `dataDir()` now resolves
+via cwd-walk (Git-style auto-discovery of `.factory/config.toml`)
+with `FACTORY5_DATA_DIR` as an explicit override and `~/.factory/`
+as the "no instance configured" fallback. Primary instance migrated
+from `%LOCALAPPDATA%\factory5\` into `<repo>/.factory/`. `factory
+init` now template-copy-first; `config.example.toml` +
+`docs/ONBOARDING.md` walkthrough in place. `[daemon]` config block
+wires multi-instance ports so two factoryds can run in parallel.
+471 tests; ADR 0023 authored.
+
+**Scope note.** This landed between Phase 7 close and any Phase 8
+charter, scoped as a standalone addendum rather than a phase —
+commits carry `feat(onboarding): ...` / `docs(onboarding): ...`
+rather than a `<phase>.<step>` tag. Closed with tag
+`addendum-onboarding-closed`; Phase 7 stays closed.
+
+### Driver
+
+Operator intent: "I want factories to run independently so I can
+have multiple running in parallel housing their own things. Also
+where do I set which folder factory builds in?" Two pain points:
+
+- Data dir at `%LOCALAPPDATA%\factory5\` was hidden from view and
+  coupled to a single implicit instance. Operators wanted physical
+  location to mark an instance on disk, not an env var.
+- `factory init` was generator-only. Onboarding a new dev meant
+  either memorising many CLI flags or hand-editing a generated
+  config. The operator wanted "fill out a template, then run
+  init" — template-first.
+
+### What shipped
+
+1. **`.gitignore` safety** (commit `8669925`). Added `.factory/` to
+   repo `.gitignore` before anything else touched that directory.
+   One `git add -A` without this entry would leak Discord +
+   Telegram bot tokens to git history.
+
+2. **`dataDir()` rewrite** (commit `a55e201`). New precedence in
+   `packages/logger/src/paths.ts`:
+   - `FACTORY5_DATA_DIR` env var (explicit override).
+   - Walk up from `process.cwd()` for a `.factory/` dir containing
+     `config.toml` (instance-root marker, same as Git with `.git/`).
+   - `~/.factory/` fallback (all OSes — no more
+     `%LOCALAPPDATA%\factory5\` on Windows).
+   - 8 new tests in `packages/logger/src/paths.test.ts` covering
+     env-var wins, cwd-walk hit + miss + ignore-non-instance cases,
+     homedir fallback, `logsDir()` behaviour. 471 tests total.
+
+3. **Migration** (no commit; files are gitignored).
+   `%LOCALAPPDATA%\factory5\config.toml` + `factory.db` →
+   `G:\Projects\Large-Projects\factory\factory5\.factory\`. Header
+   comment in `config.toml` rewritten to the new path. Verified via
+   `factory doctor --skip-call --skip-discord`: `@Factory5_bot`
+   re-probed cleanly. `factory spend` re-rendered the same
+   $63.1666 / 116 calls / 2 projects + unassigned rollup — DB
+   migrated byte-for-byte. Old `%LOCALAPPDATA%\factory5\` dir
+   removed.
+
+4. **ADR 0023 + template + onboarding doc** (commit `e4a1c42`).
+   `docs/decisions/0023-repo-local-instance-and-cwd-walk.md`
+   documents the new precedence + why, partially supersedes ADR
+   0004's storage-location half. `config.example.toml` at repo
+   root is the hand-editable template a new dev copies into their
+   instance. `docs/ONBOARDING.md` is the clone-to-first-build
+   walkthrough — prerequisites, instance setup, per-section
+   config editing, Discord + Telegram bot creation (including
+   @BotFather interaction and `getUpdates` chat-id extraction),
+   multi-instance layout via `cd`, troubleshooting.
+
+5. **`factory init` reshape** (commit `3103449`). Three modes:
+   - **Template-copy** (default, no existing config). Copies
+     `config.example.toml` into `<instance>/.factory/config.toml`
+     and exits with instructions. Locates the template via
+     `import.meta.url` walk up to `pnpm-workspace.yaml`.
+   - **Validate** (existing config, no `--force`). Zod-parses via
+     `loadConfig()`, probes claude-cli, surfaces per-channel
+     configured/partial status. Exits 2 on schema error, 3 on
+     claude-cli unavailable.
+   - **Flag-driven generation** (`--force` or any flag given).
+     Extracted from the old action body — CI-friendly, behaviour
+     unchanged.
+
+6. **`[daemon]` config + `loadDaemonEndpoint()`** (commit
+   `0628bc7`). Persistent per-instance port setting so two
+   factoryds can run on different ports without colliding. New
+   resolver in `@factory5/brain` that reads
+   `FACTORY5_DAEMON_HOST/PORT` env vars first, then
+   `[daemon].host/port` from config, then
+   `DEFAULT_DAEMON_HOST/PORT`. Wired into
+   `apps/factoryd/src/main.ts` at bind time and into the three CLI
+   callsites (`build`, `chat`, `daemon` status). Added
+   `@factory5/brain` as a runtime dep of `apps/factoryd` (tsup was
+   failing to resolve otherwise). The commented `[daemon]` section
+   in `config.example.toml` shows operators how to set it.
+
+### Test counts
+
+- 7c close: 463 tests
+- **Addendum close: 471 tests** (+8 for `paths.test.ts`). All
+  green on Windows; `pnpm lint` + `pnpm format:check` clean.
+
+Per-package at close: **logger 13**, core 14, ipc 5, providers 37,
+state 92, assessor 42, wiki 39, channels 60, events 3, worker 24,
+brain 59, daemon 28, cli 55.
+
+### Carry-forward
+
+- **Phase 8 still not charted.** Same three options from Phase 7
+  close remain live (Web UI / assessor tier-3 / worker-subprocess
+  `ask_user`). Operator to pick at next session start.
+- **Operator follow-up from Phase 6** (unchanged; still doesn't
+  block Phase 8): PAT revoke, throwaway repo delete, env var clear.
