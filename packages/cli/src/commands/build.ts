@@ -18,7 +18,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { cwd, exit, stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { loadConfig, runBrain } from '@factory5/brain';
+import { loadConfig, loadDaemonEndpoint, runBrain } from '@factory5/brain';
 import { readPidFile } from '@factory5/daemon';
 import { type AutonomyMode, directiveSchema, newId, type Intent } from '@factory5/core';
 import { createDaemonClient } from '@factory5/ipc';
@@ -251,7 +251,8 @@ function isDaemonRunning(): boolean {
  * the directive's status until terminal. Exit code follows the directive.
  */
 async function runViaDaemon(db: Database, directiveId: string): Promise<number> {
-  const client = createDaemonClient({ timeoutMs: 5000 });
+  const endpoint = await loadDaemonEndpoint();
+  const client = createDaemonClient({ ...endpoint, timeoutMs: 5000 });
   stdout.write('daemon mode: directive enqueued — polling for completion…\n');
   try {
     await client.notifyDirective({ directiveId, reason: 'new' });

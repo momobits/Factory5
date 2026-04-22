@@ -75,6 +75,9 @@ importers:
 
   apps/factoryd:
     dependencies:
+      '@factory5/brain':
+        specifier: workspace:*
+        version: link:../../packages/brain
       '@factory5/core':
         specifier: workspace:*
         version: link:../../packages/core

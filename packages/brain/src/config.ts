@@ -78,6 +78,20 @@ export const configSchema = z.object({
    * here are passed through as-is and validated lazily.
    */
   channels: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
+  /**
+   * Daemon bind endpoint. When factoryd starts and when the CLI's
+   * daemon client is instantiated, host + port are read from this
+   * block (with the `FACTORY5_DAEMON_HOST` / `FACTORY5_DAEMON_PORT`
+   * env vars winning over config, and the core defaults winning if
+   * both are absent). Populate distinct ports per instance to run
+   * multiple factories in parallel (ADR 0023).
+   */
+  daemon: z
+    .object({
+      host: z.string().optional(),
+      port: z.number().int().positive().max(65535).optional(),
+    })
+    .default({}),
 });
 
 export type FactoryConfig = z.infer<typeof configSchema>;
@@ -193,6 +207,7 @@ export function defaultConfig(): FactoryConfig {
     fallbackChains: {},
     budget: { defaults: {} },
     channels: {},
+    daemon: {},
   });
 }
 

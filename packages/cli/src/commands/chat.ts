@@ -22,6 +22,7 @@ import process, { exit, stdin, stdout } from 'node:process';
 
 import { readPidFile } from '@factory5/daemon';
 import { directiveSchema, newId, type AutonomyMode, type Intent } from '@factory5/core';
+import { loadDaemonEndpoint } from '@factory5/brain';
 import { createDaemonClient } from '@factory5/ipc';
 import { createLogger } from '@factory5/logger';
 import {
@@ -70,7 +71,8 @@ export function registerChatCommand(program: Command): void {
       const db = openDatabase();
       runMigrations(db);
 
-      const client = createDaemonClient({ timeoutMs: 2000 });
+      const endpoint = await loadDaemonEndpoint();
+      const client = createDaemonClient({ ...endpoint, timeoutMs: 2000 });
 
       stdout.write(`factory chat — session ${sessionId}\n`);
       stdout.write(`  autonomy: ${autonomy}\n`);

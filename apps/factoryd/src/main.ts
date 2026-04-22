@@ -17,6 +17,7 @@
 import { spawn } from 'node:child_process';
 import process, { argv, execPath, exit, stdout } from 'node:process';
 
+import { loadDaemonEndpoint } from '@factory5/brain';
 import { startDaemon, stopDaemon, PidFileLockedError } from '@factory5/daemon';
 import { createLogger, initLogger } from '@factory5/logger';
 
@@ -86,7 +87,8 @@ async function runForeground(): Promise<void> {
 
   let handle: Awaited<ReturnType<typeof startDaemon>>;
   try {
-    handle = await startDaemon();
+    const endpoint = await loadDaemonEndpoint();
+    handle = await startDaemon({ host: endpoint.host, port: endpoint.port });
   } catch (err) {
     if (err instanceof PidFileLockedError) {
       stdout.write(`factoryd: ${err.message}\n`);

@@ -15,6 +15,7 @@ import process, { exit, stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { readPidFile } from '@factory5/daemon';
+import { loadDaemonEndpoint } from '@factory5/brain';
 import { createDaemonClient } from '@factory5/ipc';
 import { createLogger } from '@factory5/logger';
 import type { Command } from 'commander';
@@ -174,7 +175,8 @@ async function printStatus(): Promise<void> {
   }
   stdout.write(`factoryd: running (pid ${String(info.pid)})\n`);
 
-  const client = createDaemonClient({ timeoutMs: 2000 });
+  const endpoint = await loadDaemonEndpoint();
+  const client = createDaemonClient({ ...endpoint, timeoutMs: 2000 });
   try {
     const status = await client.status();
     stdout.write(`  version:   ${status.version}\n`);

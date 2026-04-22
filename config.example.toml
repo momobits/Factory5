@@ -99,6 +99,19 @@ model = "claude-haiku-4-5"
 # maxSteps = 50
 
 # -----------------------------------------------------------------------------
+# Daemon bind endpoint
+# -----------------------------------------------------------------------------
+# The factoryd daemon binds to host:port; the factory CLI's daemon client
+# connects to the same. Override per-instance to run multiple factories in
+# parallel (each instance needs a unique port). Omitted fields use the core
+# defaults (127.0.0.1:25295). Env vars `FACTORY5_DAEMON_HOST` /
+# `FACTORY5_DAEMON_PORT` win over config if both are set.
+
+# [daemon]
+# host = "127.0.0.1"   # localhost-only by default; never bind a public IP
+# port = 25295         # default; change per-instance (e.g. 25296, 25297...)
+
+# -----------------------------------------------------------------------------
 # Channels
 # -----------------------------------------------------------------------------
 # Factory has three inbound/outbound channels: cli (always on), discord,
