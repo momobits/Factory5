@@ -3237,3 +3237,137 @@ No blockers, no open issues for Phase 7b (the single open blocker
 I008 resolved in 7b.1). Operator follow-up from Phase 6 close
 (GitHub PAT revocation, throwaway repo delete, env var clear)
 still out-of-band and does not block 7c.
+
+---
+
+## 2026-04-22 — Phase 7c closed; Phase 7 complete
+
+**Headline:** Telegram channel shipped end-to-end as the third
+`ChannelPlugin` after CLI and Discord. Plugin-owned long-poll loop
+(ADR 0022 closed 7c.3 as a no-op). One-shot onboarding via
+`factory init --telegram-token ...` + a `factory doctor` probe.
+Live round-trip verified against `@Factory5_bot` in the operator's
+real chat. 35 new tests (463 total). Phase 7 as a whole closed —
+budget discipline → spend visibility → third operator channel,
+three sub-phases in strict order.
+
+### What shipped in this session
+
+1. **7c.1 — HALT cleared** (commit `74ad146`). Operator created
+   `@Factory5_bot` via @BotFather, messaged it once so `getUpdates`
+   surfaced their chat-id, and persisted both to
+   `%LOCALAPPDATA%\factory5\config.toml` under `[channels.telegram]`
+   with keys `botToken` + `testChatId`. The `/start` update was
+   consumed via `getUpdates?offset=<id+1>` so it wouldn't replay at
+   7c.6. The `~/.factory5/` references in STATE.md + next.md were
+   Unix-shorthand for whatever `dataDir()` resolves to per-platform
+   (`%LOCALAPPDATA%\factory5\` on Windows, `~/.factory5/` on
+   Linux/Mac) — no change needed.
+
+2. **7c.2 — TelegramChannel plugin** (commit `ef650af`).
+   `packages/channels/src/telegram.ts` mirrors Discord's plugin
+   shape: id `'telegram'`, Zod `telegramConfigSchema`, `start` /
+   `stop` / `send`, inbound handler that normalises Telegram
+   messages to `Directive` rows. Raw HTTP via `fetch` — no SDK.
+   Test seam via `TelegramApi` interface + `apiFactory` constructor
+   option. Private chats: every non-bot text message is inbound.
+   Group/supergroup: only `@<username>`-mentions or replies to
+   bot (`isDirectedAtBot` reads `entities[]`). 29 new unit tests.
+   Helpers exported with `telegram`-prefixed names
+   (`telegramChannelRefFor`, `stripTelegramMention`) to avoid
+   barrel-export collisions with Discord's same-named helpers.
+
+3. **7c.3 — closed as no-op** (commit `63aa80c`). Handoff envisioned
+   a `@factory5/events` `EventSource` emitting Telegram
+   `Event` rows, but once the plugin was implemented the split was
+   clearly premature — all scoping (allowlist, mention detection,
+   build-prefix parsing) depends on the plugin's config and bot
+   identity. Discord's websocket lives inside `DiscordChannel`;
+   Telegram's long-poll does the same. **ADR 0022** documents the
+   decision and the boundary (`ChannelPlugin` owns transports;
+   `EventSource` owns state-change observations). Reversible if
+   future Telegram signals need `Event` rather than `Directive`
+   treatment.
+
+4. **7c.4 — formalise config + wire init/doctor/daemon** (commit
+   `784e41b`). `factory init` gained `--telegram-token`,
+   `--telegram-allowed-chat` (repeatable), `--telegram-test-chat`,
+   `--telegram-poll-timeout-sec` flags so a new clone is one-shot.
+   Integer flags share `parseIntFlag` + explicit error messages;
+   poll-timeout range-checked 0–60. `factory doctor` gained a
+   `probeTelegram` call (hits `getMe` via the shared
+   `defaultTelegramApiFactory`) plus `--skip-telegram`. Daemon's
+   `buildDefaultChannelPlugins` auto-registers the plugin when
+   `[channels.telegram].botToken` is non-empty; the Discord and
+   Telegram gates share a `hasStringField` helper.
+   `@factory5/cli` now depends on `@factory5/channels` so `doctor`
+   can reach the shared API factory. Live smoke: `factory doctor
+--skip-call --skip-discord` returned `getMe: ok (token accepted)`
+   / `bot: @Factory5_bot` / `testChatId: 1225367797` — proves the
+   full config → loadConfig → channelConfigFor → probeTelegram →
+   api.telegram.org path works.
+
+5. **7c.5 — round-trip integration tests** (commit `e770815`).
+   `packages/channels/src/telegram-roundtrip.test.ts` feeds
+   realistic-shape `TelegramUpdate` fixtures (modelled on real
+   `getUpdates` responses, identifying ids sanitised) through the
+   plugin with a real SQLite db + a daemon-style `onInbound` that
+   writes via `directivesQ.insert`. Asserts against persisted rows,
+   not just the callback. Covers private-chat chat/build, supergroup
+   @-mention, group chatter dropped, chat allowlist enforcement,
+   and reply-to-bot answers the pending question without spawning
+   a new directive. 6 new tests.
+
+6. **7c.6 — live run** (commit `b712a09`). `scripts/telegram-smoke.ts`
+   drives the real HTTP path — no stubs, no daemon, no brain, no LLM
+   spend. Flow: load config → `getMe` → kickoff to `testChatId` →
+   60s deadline for operator reply → capture as `Directive` → echo
+   back with `reply_to_message_id` → clean shutdown. Live result
+   2026-04-22 17:37:50–17:38:13Z: identity `@Factory5_bot` verified,
+   kickoff posted as `message_id 5`, operator reply captured 22s
+   later as directive `01KPV4AQVDSPA24ZMRP944QYDG` (`intent=chat`,
+   `channelRef=1225367797#6`, `chatType=private`), echo posted as
+   `message_id 7`, poll loop exited cleanly.
+
+7. **7c.7 — phase close.** This commit. `docs/Phase7_Progress.md`
+   7c row flipped ✅ with the full close section authored; this
+   entry; tags `phase-7c-telegram-channel-closed` and
+   `phase-7-closed` placed.
+
+### Test counts
+
+- 7b close: 428 tests
+- **7c.7 close: 463 tests** (+35 over 7b close: +29 unit for 7c.2,
+  +6 round-trip for 7c.5). All green on Windows; `pnpm lint` +
+  `pnpm format:check` clean.
+
+Per-package at close: core 14, logger 5, ipc 5, providers 37,
+state 92, assessor 42, wiki 39, **channels 60**, events 3, worker 24,
+brain 59, daemon 28, cli 55.
+
+### Phase 7 wrapped
+
+Three sub-phases shipped in strict order, seven ADRs authored across
+the phase (0020 budget, 0021 project identity, 0022 telegram
+layering). No open blockers (I008 resolved at 7b.1). Operating
+surface at Phase 7 close:
+
+- Pre-call budget enforcement on every LLM call; Phase 6c's
+  $7.71-vs-$4-6 overshoot no longer reproducible.
+- Cross-session spend visibility per project / directive / day /
+  model with first-class project identity.
+- Three operator channels (CLI-RPC, Discord, Telegram) with a
+  uniform `ChannelPlugin` lifecycle.
+- 22 ADRs, 463 tests across 13 packages.
+
+### Carry-forward
+
+- **Phase 8 not yet charted.** Options sketched at 7b close (Web UI,
+  assessor tier-3, worker-subprocess `ask_user`) remain live. No
+  HALT — pick in the next session based on what's most painful in
+  the current surface.
+- **Operator follow-up still out-of-band** (none block Phase 8):
+  revoke `env:GITHUB_TOKEN` PAT at
+  <https://github.com/settings/tokens>, delete throwaway repo
+  (`gh repo delete momobits/factory5-6b-smoke --yes`), clear env
+  var (`reg delete "HKCU\Environment" /v GITHUB_TOKEN /f`).

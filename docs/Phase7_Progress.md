@@ -35,7 +35,7 @@ Three sub-phases, strict order, each a cohesive chunk (see
 | ----- | --------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------------------------- |
 | 1st   | **7a**    | Budget enforcement (`max_usd` / `max_steps`) | Pre-call ceilings enforced before each LLM call. CLI flags + config defaults. Graceful escalation when exceeded.                                    | 1             | 🟢 closed (this document) |
 | 2nd   | **7b**    | Cross-session spend dashboard                | `factory spend` subcommand — per-project / per-directive / per-day spend aggregations over `model_usage`.                                           | 1–2           | 🟢 closed (this document) |
-| 3rd   | **7c**    | Telegram channel                             | Third `ChannelPlugin` (after CLI + Discord). Long-polling event source. Discord is the reference channel (GitHub was dropped Phase 6 per ADR 0019). | 1–2           | 📝 queued                 |
+| 3rd   | **7c**    | Telegram channel                             | Third `ChannelPlugin` (after CLI + Discord). Long-polling event source. Discord is the reference channel (GitHub was dropped Phase 6 per ADR 0019). | 1–2           | 🟢 closed (this document) |
 
 Each sub-phase closes independently (`phase-7a-budget-enforcement-closed`,
 etc.). Phase 7 as a whole closes when all three ship, with tag
@@ -364,12 +364,194 @@ brain 59, daemon 28, cli 55.
   surfaced. A future `--group-by task` lane is trivial to add if an
   operator asks.
 
-## Phase 7c — Telegram channel (queued)
+## Phase 7c — Telegram channel (shipped 2026-04-22)
 
-Third `ChannelPlugin` parallel to Discord (6b dropped per ADR 0019,
-so "patterns locked by 6b" no longer applies — Discord is the
-reference). Long-polling event source. Secret required at 7c.1 (the
-only HALT gate in Phase 7).
+### Decision: plugin-owned polling loop (ADR 0022)
+
+The handoff from 7b-close envisioned `@factory5/events` growing a
+Telegram long-polling `EventSource` that emits `Event` rows the daemon
+materialises into directives — matching how `FsWatcher` works.
+
+Once the plugin was implemented that split turned out to be premature.
+All the scoping Telegram needs (private-chat vs group, chat allowlist,
+`@<username>` mention detection via `entities[]`, `/build` prefix
+parsing, bot-identity-aware reply handling) depends on the plugin's
+config and `getMe` response. Splitting that across two modules would
+duplicate lifecycle and leak state.
+
+Discord's reference plugin shows the alternative: the `discord.js`
+websocket lives _inside_ `DiscordChannel`, not as a separate event
+source. `TelegramChannel` follows suit — the long-poll loop is an
+internal detail of `start()`. `@factory5/events` keeps its tight
+charter (observing state changes that may or may not become
+directives; `FsWatcher` today, `GitWatcher` / `TmuxWatcher` plausibly
+next).
+
+ADR 0022 documents this and closes 7c.3 as a no-op. Reversible if
+future Telegram signals need `Event` rather than `Directive`
+treatment.
+
+### Plugin design
+
+`packages/channels/src/telegram.ts` — `TelegramChannel` implements
+`ChannelPlugin` with id `'telegram'`. Raw HTTP against
+`api.telegram.org` (no SDK — `discord.js` is Discord's huge, dedicated
+library; Telegram's Bot API is small enough to hit with `fetch`).
+
+- **Config** — `telegramConfigSchema` (`botToken` required,
+  `allowedChatIds` integer[] default `[]` = accept-any,
+  `buildPrefix` default `/build`, `pollTimeoutSec` 0–60 default 30,
+  `testChatId` optional live-run target).
+- **Test seam** — `TelegramApi` interface wraps `getMe` / `getUpdates`
+  / `sendMessage`. `apiFactory` constructor option lets unit tests
+  feed a stub; `autoPoll: false` disables the loop for deterministic
+  handler tests. `defaultTelegramApiFactory(botToken)` returns the
+  real `fetch`-backed implementation with abort-signal plumbing and
+  a network timeout separate from Telegram's long-poll timeout.
+- **Lifecycle** — `start()` verifies identity via `getMe` then
+  launches the poll loop on a background promise. `stop()` aborts
+  the `AbortController`, awaits the loop, closes the owned db handle
+  (if any).
+- **Inbound handling** — `handleMessage` mirrors Discord's shape:
+  ignore bot-authored messages, enforce chat allowlist, scope group
+  chats to `@<username>`-mentions or reply-to-bot (`isDirectedAtBot`),
+  route reply-to-bot messages to the pending-question answer path
+  when a matching row exists, otherwise normalise to a `Directive`
+  with `source='telegram'`, `principal=<from.id>`,
+  `channelRef=<chatId>#<messageId>`, intent parsed from `/build`
+  prefix.
+- **Outbound** — `send()` parses `targetRef` as `<chatId>` or
+  `<chatId>#<messageId>` and calls `sendMessage`. The `#<messageId>`
+  tail becomes `reply_to_message_id` so replies thread visually
+  under the trigger — the closest thing Telegram has to a Discord
+  thread.
+- **Polling discipline** — `getUpdates` with `timeout=30` and an
+  offset cursor that advances past each delivered update. Exponential
+  backoff on errors (1s → 2s → 4s, cap 30s). Loop exits cleanly when
+  the AbortController fires. Documented: `start()` in exactly one
+  daemon instance per token (HTTP 409 otherwise).
+
+### Onboarding wiring (so new clones stay one-shot)
+
+- `factory init` gained `--telegram-token`, `--telegram-allowed-chat`
+  (repeatable collector → int[]), `--telegram-test-chat`,
+  `--telegram-poll-timeout-sec` flags. Integer flags share a
+  `parseIntFlag` helper with explicit error messages;
+  `--telegram-poll-timeout-sec` range-checked 0–60. Output line
+  added: `telegram: configured / (partial — no token)`.
+- `factory doctor` gained a Telegram probe that hits `getMe` via
+  `defaultTelegramApiFactory` and reports bot username + `testChatId`.
+  `--skip-telegram` flag mirrors `--skip-discord`.
+- Daemon's `buildDefaultChannelPlugins` auto-wires `TelegramChannel`
+  when `[channels.telegram].botToken` is non-empty. A shared
+  `hasStringField` helper unified the Discord + Telegram gates.
+- `@factory5/cli` now depends on `@factory5/channels` so `doctor`
+  can reach the shared api factory.
+
+### Sub-step commits
+
+- **7c.1** — `74ad146` feat(7c.1) clear HALT — record Telegram
+  secrets under `[channels.telegram]`. Operator provided bot token +
+  private chat-id for `@Factory5_bot`. Persisted to
+  `%LOCALAPPDATA%\factory5\config.toml`. Stale `/start` update
+  consumed via `getUpdates?offset=<id+1>` so it wouldn't replay at
+  the 7c.6 live run. No code change — cursor advance only; secrets
+  live outside the repo.
+- **7c.2** — `ef650af` feat(7c.2) Telegram `ChannelPlugin` at
+  `packages/channels/src/telegram.ts`. 29 new tests (54 channels /
+  457 workspace).
+- **7c.3** — `63aa80c` docs(7c.3) closed as no-op per ADR 0022.
+  Long-polling lives in the plugin; `@factory5/events` stays focused
+  on state-observation sources.
+- **7c.4** — `784e41b` feat(7c.4) formalise `[channels.telegram]`
+  shape + wire init / doctor / daemon. `factory doctor --skip-call
+--skip-discord` against the real token returned `getMe: ok (token
+accepted)`, `bot: @Factory5_bot`, `testChatId: 1225367797`.
+- **7c.5** — `e770815` test(7c.5) round-trip integration tests using
+  realistic-shape fixtures modelled on real `getUpdates` responses.
+  6 new tests (60 channels / 463 workspace).
+- **7c.6** — `b712a09` test(7c.6) live smoke against `@Factory5_bot`.
+  `scripts/telegram-smoke.ts` drives the real HTTP path using the
+  operator's real config — no stubs, no daemon, no brain, no LLM
+  spend. Round-trip passed end-to-end: identity verified, kickoff
+  sent as `message_id 5`, operator reply captured 22s later as
+  directive `01KPV4AQVDSPA24ZMRP944QYDG`, echo sent as `message_id
+7` with `reply_to_message_id=6`, poll loop exited cleanly.
+
+### Test coverage at close
+
+- Per-package: core 14, logger 5, ipc 5, providers 37, state 92,
+  assessor 42, wiki 39, **channels 60 (+35 over 7b close, from the
+  new Telegram unit + round-trip suites)**, events 3, worker 24,
+  brain 59, daemon 28, cli 55.
+- **Total: 463 tests (+35 over 7b close at 428).**
+
+### Done criteria — all met at close
+
+- [x] All steps 7c.1 → 7c.6 checked off with commit references (above)
+- [x] `pnpm build` clean, `pnpm test` green (463 tests across 13
+      packages)
+- [x] `pnpm lint` clean, `pnpm format:check` clean
+- [x] Unit + integration coverage of the plugin handler (60 tests)
+- [x] Live validation: operator's real chat receives a kickoff,
+      inbound becomes a `Directive`, outbound echoes back with
+      `reply_to_message_id` (7c.6 above)
+- [x] Charter criterion: "factory can receive directives and send
+      replies via Telegram as a third channel after CLI + Discord" —
+      verifiable via `scripts/telegram-smoke.ts` and the round-trip
+      test suite
+- [x] ADR 0022 authored and accepted
+      (`docs/decisions/0022-telegram-polling-in-plugin.md`)
+- [x] `docs/PROGRESS.md` entry + this document's 7c row flipped ✅
+- [x] Working tree clean
+- [x] Tag `phase-7c-telegram-channel-closed`
+
+### Out of scope for 7c (deliberately deferred)
+
+- **Webhook transport** — Telegram supports it but requires a public
+  HTTPS endpoint. Long-polling works from anywhere (dev laptop, home
+  server without ingress). If a factory5 deployment ever sits behind
+  a reachable domain we can add a webhook variant of the event source.
+- **File attachments** — `capabilities.fileAttachments = false`.
+  Photos / documents arrive on `message` with their own fields; the
+  plugin ignores them today because there's no design for
+  surfacing a binary payload as part of a `Directive.payload`.
+- **Edited messages** — `edited_message` updates are typed in
+  `TelegramUpdate` but not processed; a future lane can mutate the
+  original `Directive` or emit a correction `Event`.
+- **Forum-topic scoping in supergroups** — Telegram's
+  `message_thread_id` for forum topics is ignored; all topics in an
+  allowed supergroup map to the same logical chat. If operators ask,
+  we can surface the topic id in `channelRef`.
+- **Slash-command menu via `setMyCommands`** — the UX nicety where
+  Telegram auto-completes `/build`. Trivial to add in a follow-up
+  `factory telegram sync-commands` subcommand.
+
+## Phase 7 close
+
+All three sub-phases shipped in strict order:
+
+1. **7a — budget enforcement** (`phase-7a-budget-enforcement-closed`)
+2. **7b — cross-session spend dashboard**
+   (`phase-7b-spend-dashboard-closed`)
+3. **7c — Telegram channel**
+   (`phase-7c-telegram-channel-closed`)
+
+Phase 7 tag: `phase-7-closed`.
+
+Operating surface at Phase 7 close:
+
+- **Pre-call budget enforcement** on every LLM call — a build can't
+  exceed its `max_usd` / `max_steps` ceiling without escalating
+  cleanly (ADR 0020). Phase 6c's $7.71-vs-$4-6 overshoot is no
+  longer reproducible.
+- **Cross-session spend visibility** — `factory spend` rolls up
+  `model_usage` per project / directive / day / model with
+  first-class project identity (ADR 0021) so the same project name
+  in two workspaces surfaces as two distinct rows.
+- **Three operator channels** — CLI-RPC, Discord, Telegram — with
+  symmetric `ChannelPlugin` lifecycle and config shape.
+- **22 ADRs**, 463 tests across 13 packages. No open blockers.
 
 ## Pointers
 
