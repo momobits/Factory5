@@ -186,6 +186,7 @@ export class DiscordChannel implements ChannelPlugin {
   private config: DiscordConfig | undefined;
   private log: Logger | undefined;
   private onInbound: ChannelContext['onInbound'] | undefined;
+  private resolveProjectPath: ChannelContext['resolveProjectPath'] | undefined;
   private db: Database | undefined;
   private ownsDb = false;
   private messageHandler: ((msg: Message) => Promise<void>) | undefined;
@@ -199,6 +200,7 @@ export class DiscordChannel implements ChannelPlugin {
   async start(ctx: ChannelContext, rawConfig: unknown): Promise<void> {
     this.log = ctx.log;
     this.onInbound = ctx.onInbound;
+    this.resolveProjectPath = ctx.resolveProjectPath;
     this.config = discordConfigSchema.parse(rawConfig);
 
     if (this.externalDb !== undefined) {
@@ -314,13 +316,37 @@ export class DiscordChannel implements ChannelPlugin {
 
     if (this.onInbound === undefined || this.db === undefined) return;
 
+    // For build intent, resolve project name to absolute workspace path
+    // before enqueueing — parallels the Telegram change (issue I011).
+    let payload: Record<string, unknown>;
+    if (intent === 'build') {
+      const buildPayload = this.parseBuildPayload(text);
+      const projectName = buildPayload['project'];
+      if (typeof projectName === 'string' && this.resolveProjectPath !== undefined) {
+        try {
+          const projectPath = await this.resolveProjectPath(projectName);
+          payload = { ...buildPayload, projectPath };
+        } catch (err) {
+          this.log?.warn(
+            { err, projectName },
+            'discord: resolveProjectPath failed — falling back to raw name',
+          );
+          payload = buildPayload;
+        }
+      } else {
+        payload = buildPayload;
+      }
+    } else {
+      payload = { text };
+    }
+
     const directive: Directive = {
       id: newId(),
       source: 'discord',
       principal: message.author.id,
       channelRef: threadOrRef,
       intent,
-      payload: intent === 'build' ? this.parseBuildPayload(text) : { text },
+      payload,
       autonomy: intent === 'build' ? 'autonomous' : 'chat',
       createdAt: new Date().toISOString(),
       status: 'pending',

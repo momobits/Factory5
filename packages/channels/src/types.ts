@@ -32,6 +32,21 @@ export interface ChannelContext {
    * responsible for normalizing platform messages into a `Directive`.
    */
   onInbound: (d: Directive) => void | Promise<void>;
+  /**
+   * Resolve a project-name argument (from a `/build <name>` command or
+   * equivalent) to an absolute workspace path. Mirrors what `factory build`
+   * does before creating a directive — copies from `templates/<name>/` into
+   * the workspace when needed, resolves relative paths, etc. Backed by
+   * {@link resolveProjectPath} in `@factory5/wiki`; the daemon binds the
+   * configured workspace at channel-registry creation time.
+   *
+   * Optional because some test harnesses / scripts wire the channel
+   * registry directly without the daemon. When unset, inbound handlers fall
+   * back to passing the raw `project` name through on the directive
+   * payload (the pre-I011 behaviour — the brain will then try to resolve
+   * the name relative to its own cwd, which is the gap I011 fixes).
+   */
+  resolveProjectPath?: (name: string) => Promise<string>;
 }
 
 export interface SendResult {

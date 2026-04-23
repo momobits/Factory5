@@ -11,12 +11,7 @@
  * mode. On completion, a summary is printed to stdout.
  */
 
-import { constants as fsConstants } from 'node:fs';
-import { access, mkdir, cp } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { cwd, exit, stdout } from 'node:process';
-import { fileURLToPath } from 'node:url';
+import { exit, stdout } from 'node:process';
 
 import { loadConfig, loadDaemonEndpoint, runBrain } from '@factory5/brain';
 import { readPidFile } from '@factory5/daemon';
@@ -31,7 +26,12 @@ import {
   runMigrations,
   type Database,
 } from '@factory5/state';
-import { loadOrCreateProjectMetadata, ProjectMetadataCorruptError } from '@factory5/wiki';
+import {
+  defaultWorkspace,
+  loadOrCreateProjectMetadata,
+  ProjectMetadataCorruptError,
+  resolveProjectPath,
+} from '@factory5/wiki';
 import type { Command } from 'commander';
 
 const log = createLogger('cli.build');
@@ -39,63 +39,6 @@ const log = createLogger('cli.build');
 function parseAutonomy(raw: string): AutonomyMode {
   if (raw === 'chat' || raw === 'assisted' || raw === 'autonomous') return raw;
   throw new Error(`--autonomy must be chat | assisted | autonomous, got: ${raw}`);
-}
-
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    await access(p, fsConstants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function findRepoTemplatesDir(): Promise<string | undefined> {
-  // Walk up from this file (works for both tsx/dev and compiled dist/ layouts)
-  let dir = dirname(fileURLToPath(import.meta.url));
-  while (true) {
-    const candidate = join(dir, 'templates');
-    if (await fileExists(candidate)) return candidate;
-    const parent = dirname(dir);
-    if (parent === dir) return undefined;
-    dir = parent;
-  }
-}
-
-async function resolveProjectPath(name: string, workspace: string): Promise<string> {
-  if (isAbsolute(name) && (await fileExists(name))) return name;
-  if (
-    (name.startsWith('./') || name.startsWith('../')) &&
-    (await fileExists(resolve(cwd(), name)))
-  ) {
-    return resolve(cwd(), name);
-  }
-
-  // Check the workspace dir first
-  const inWorkspace = join(workspace, name);
-  if (await fileExists(inWorkspace)) return inWorkspace;
-
-  // Then templates
-  const templates = await findRepoTemplatesDir();
-  if (templates !== undefined) {
-    const inTemplates = join(templates, name);
-    if (await fileExists(inTemplates)) {
-      // Copy the template into the workspace so writes don't pollute the repo
-      await mkdir(workspace, { recursive: true });
-      await cp(inTemplates, inWorkspace, { recursive: true });
-      log.info({ name, from: inTemplates, to: inWorkspace }, 'template copied into workspace');
-      return inWorkspace;
-    }
-  }
-
-  // Last resort: create an empty project directory
-  await mkdir(inWorkspace, { recursive: true });
-  log.warn({ name, created: inWorkspace }, 'project dir did not exist — created empty');
-  return inWorkspace;
-}
-
-function defaultWorkspace(): string {
-  return join(homedir(), 'factory5-workspace');
 }
 
 function parsePositiveFloat(flag: string, raw: string): number {

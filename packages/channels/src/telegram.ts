@@ -381,6 +381,7 @@ export class TelegramChannel implements ChannelPlugin {
   private botIdentity: TelegramBotIdentity | undefined;
   private log: Logger | undefined;
   private onInbound: ChannelContext['onInbound'] | undefined;
+  private resolveProjectPath: ChannelContext['resolveProjectPath'] | undefined;
   private db: Database | undefined;
   private ownsDb = false;
   private abortController: AbortController | undefined;
@@ -397,6 +398,7 @@ export class TelegramChannel implements ChannelPlugin {
   async start(ctx: ChannelContext, rawConfig: unknown): Promise<void> {
     this.log = ctx.log;
     this.onInbound = ctx.onInbound;
+    this.resolveProjectPath = ctx.resolveProjectPath;
     this.config = telegramConfigSchema.parse(rawConfig);
 
     if (this.externalDb !== undefined) {
@@ -560,13 +562,40 @@ export class TelegramChannel implements ChannelPlugin {
       message.from !== undefined ? String(message.from.id) : `chat:${String(message.chat.id)}`;
     const channelRef = telegramChannelRefFor(message);
 
+    // For build intent, resolve the project name to an absolute workspace
+    // path up-front so the brain's architect finds `<projectPath>/CLAUDE.md`
+    // on first try (issue I011). Fall back to the raw-name payload only
+    // when the resolver is unwired — tests and standalone scripts that
+    // construct the channel without the daemon pass through the old shape.
+    let payload: Record<string, unknown>;
+    if (intent === 'build') {
+      const buildPayload = this.parseBuildPayload(strippedText);
+      const projectName = buildPayload['project'];
+      if (typeof projectName === 'string' && this.resolveProjectPath !== undefined) {
+        try {
+          const projectPath = await this.resolveProjectPath(projectName);
+          payload = { ...buildPayload, projectPath };
+        } catch (err) {
+          this.log.warn(
+            { err, projectName },
+            'telegram: resolveProjectPath failed — falling back to raw name',
+          );
+          payload = buildPayload;
+        }
+      } else {
+        payload = buildPayload;
+      }
+    } else {
+      payload = { text: strippedText };
+    }
+
     const directive: Directive = {
       id: newId(),
       source: 'telegram',
       principal,
       channelRef,
       intent,
-      payload: intent === 'build' ? this.parseBuildPayload(strippedText) : { text: strippedText },
+      payload,
       autonomy: intent === 'build' ? 'autonomous' : 'chat',
       createdAt: new Date().toISOString(),
       status: 'pending',

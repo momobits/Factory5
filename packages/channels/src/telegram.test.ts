@@ -422,6 +422,79 @@ describe('TelegramChannel inbound', () => {
     const payload = d.payload as Record<string, unknown>;
     expect(payload['project']).toBe('example');
     expect(payload['spec']).toBe('a weather CLI in Python');
+    // No `projectPath` when resolveProjectPath isn't wired — pre-I011 shape.
+    expect(payload['projectPath']).toBeUndefined();
+    await plugin.stop();
+  });
+
+  it('build directive gets payload.projectPath when resolveProjectPath is wired (I011)', async () => {
+    const api = makeStubApi();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    const resolver = async (name: string): Promise<string> => `/resolved/workspace/${name}`;
+    await plugin.start(
+      {
+        log: createLogger('test.telegram'),
+        onInbound: (d) => inbounds.push(d),
+        resolveProjectPath: resolver,
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 7,
+      message: makeMessage({
+        messageId: 60,
+        text: '/build ask-user-smoke',
+        chatId: 1225367797,
+        fromId: 1225367797,
+      }),
+    });
+    expect(inbounds).toHaveLength(1);
+    const d = inbounds[0] as Directive;
+    expect(d.intent).toBe('build');
+    const payload = d.payload as Record<string, unknown>;
+    expect(payload['project']).toBe('ask-user-smoke');
+    expect(payload['projectPath']).toBe('/resolved/workspace/ask-user-smoke');
+    await plugin.stop();
+  });
+
+  it('falls back to raw name when resolveProjectPath throws', async () => {
+    const api = makeStubApi();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    const resolver = async (): Promise<string> => {
+      throw new Error('workspace unavailable');
+    };
+    await plugin.start(
+      {
+        log: createLogger('test.telegram'),
+        onInbound: (d) => inbounds.push(d),
+        resolveProjectPath: resolver,
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 8,
+      message: makeMessage({
+        messageId: 61,
+        text: '/build unknown-project',
+        chatId: 1225367797,
+        fromId: 1225367797,
+      }),
+    });
+    expect(inbounds).toHaveLength(1);
+    const d = inbounds[0] as Directive;
+    const payload = d.payload as Record<string, unknown>;
+    expect(payload['project']).toBe('unknown-project');
+    expect(payload['projectPath']).toBeUndefined();
     await plugin.stop();
   });
 

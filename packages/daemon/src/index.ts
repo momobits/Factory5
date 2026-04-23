@@ -45,6 +45,7 @@ import {
   projects as projectsQ,
   tasksInflight,
 } from '@factory5/state';
+import { defaultWorkspace, resolveProjectPath } from '@factory5/wiki';
 
 import { startBrainSupervisor } from './brain-supervisor.js';
 import { Doorbell } from './doorbell.js';
@@ -229,6 +230,14 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
         const fileBlock = channelConfigFor(fileConfig, plugin.id);
         return { plugin, config: overrideBlock ?? fileBlock };
       });
+      // Bind the workspace-aware project resolver so inbound `/build <name>`
+      // commands from any channel land with a pre-resolved absolute
+      // `payload.projectPath`, matching what `factory build` does from the
+      // CLI. Without this wire-up, the brain's architect would try to
+      // resolve the bare name against factoryd's cwd and fail (issue I011).
+      const registryWorkspace = fileConfig?.general.workspace ?? defaultWorkspace();
+      const registryResolveProjectPath = async (name: string): Promise<string> =>
+        resolveProjectPath(name, registryWorkspace);
       const registry = createChannelRegistry({
         log: createLogger('daemon.channels'),
         plugins,
@@ -242,6 +251,7 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
             log.error({ err, directiveId: d.id }, 'daemon: channel inbound insert failed');
           }
         },
+        resolveProjectPath: registryResolveProjectPath,
       });
       await registry.start();
       subsystems.push({ name: 'channels', stop: () => registry.stop() });

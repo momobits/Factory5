@@ -31,6 +31,7 @@
     "@factory5/logger": "workspace:*",
     "@factory5/providers": "workspace:*",
     "@factory5/state": "workspace:*",
+    "@factory5/wiki": "workspace:*",
     "fastify": "^4.28.0",
     "zod": "^3.23.0"
   },

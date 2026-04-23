@@ -33,6 +33,14 @@ export interface ChannelRegistryOptions {
   }>;
   /** Called when a plugin reports an inbound `Directive`. */
   onInbound: (directive: Directive) => void | Promise<void>;
+  /**
+   * Optional project-name → absolute path resolver. Threaded through to
+   * each plugin's `ChannelContext` so `/build <name>` inbound handlers
+   * can produce directives with a pre-resolved `payload.projectPath`,
+   * matching what the CLI does (see issue I011). When unset, plugins
+   * fall back to passing the raw project name — the pre-I011 behaviour.
+   */
+  resolveProjectPath?: (name: string) => Promise<string>;
 }
 
 /**
@@ -51,10 +59,12 @@ export class ChannelRegistry implements ChannelRegistryView {
   private readonly entries = new Map<ChannelId, ChannelEntry>();
   private readonly onInbound: ChannelRegistryOptions['onInbound'];
   private readonly configByPlugin: Map<ChannelPlugin, unknown>;
+  private readonly resolveProjectPath: ChannelRegistryOptions['resolveProjectPath'];
 
   constructor(opts: ChannelRegistryOptions) {
     this.log = opts.log;
     this.onInbound = opts.onInbound;
+    this.resolveProjectPath = opts.resolveProjectPath;
     this.configByPlugin = new Map(opts.plugins.map((p) => [p.plugin, p.config]));
     for (const { plugin } of opts.plugins) {
       this.entries.set(plugin.id, {
@@ -93,6 +103,9 @@ export class ChannelRegistry implements ChannelRegistryView {
           {
             log: this.log.child({ channel: entry.id }),
             onInbound: (d) => this.onInbound(d),
+            ...(this.resolveProjectPath !== undefined
+              ? { resolveProjectPath: this.resolveProjectPath }
+              : {}),
           },
           validated,
         );
