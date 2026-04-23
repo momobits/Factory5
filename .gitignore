@@ -7,6 +7,10 @@ dist/
 build/
 *.tsbuildinfo
 
+# Astro's generated type cache (apps/factory-web/.astro/) — regenerated on
+# every `astro check` / `astro build`; never commit.
+.astro/
+
 # Coverage
 coverage/
 .nyc_output/

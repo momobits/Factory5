@@ -1,0 +1,55 @@
+---
+import Dashboard from '../layouts/Dashboard.astro';
+---
+
+<Dashboard title="Overview">
+  <p>
+    Phase 9 scaffold. The read-side <code>/api/v1/*</code> endpoints land at
+    9.3–9.7; the real pages (directives, questions, spend, findings) land at 9.8.
+  </p>
+
+  <section>
+    <h2>Daemon status smoke</h2>
+    <p>
+      Fetches <code>/api/v1/status</code> with the bearer token stored in
+      <code>sessionStorage</code>. Until 9.3 wires the route, expect a 404.
+    </p>
+    <div id="status-box">Loading…</div>
+  </section>
+
+  <script>
+    import { apiFetch, captureTokenFromUrl, getToken, NoTokenError, ApiError } from '../lib/api';
+
+    captureTokenFromUrl();
+
+    const box = document.getElementById('status-box');
+    if (box === null) throw new Error('status-box missing from DOM');
+
+    function render(text: string): void {
+      if (box === null) return;
+      const pre = document.createElement('pre');
+      pre.textContent = text;
+      box.replaceChildren(pre);
+    }
+
+    if (getToken() === null) {
+      box.textContent = 'No UI token present. Reopen the URL logged by factoryd.';
+    } else {
+      apiFetch('/api/v1/status')
+        .then((data) => {
+          render(JSON.stringify(data, null, 2));
+        })
+        .catch((err: unknown) => {
+          if (err instanceof NoTokenError) {
+            box.textContent = err.message;
+          } else if (err instanceof ApiError) {
+            render(`API error ${err.status} (${err.code}): ${err.message}`);
+          } else if (err instanceof Error) {
+            render(`Fetch failed: ${err.message}`);
+          } else {
+            box.textContent = 'Unknown error';
+          }
+        });
+    }
+  </script>
+</Dashboard>

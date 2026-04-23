@@ -12,6 +12,7 @@ export default [
       '**/dist/**',
       '**/node_modules/**',
       '**/.turbo/**',
+      '**/.astro/**',
       '**/coverage/**',
       '**/*.cjs',
       '**/*.config.ts',
@@ -62,6 +63,13 @@ export default [
     // Tests can be looser about typing.
     files: ['**/*.test.ts', '**/*.spec.ts'],
     rules: { '@typescript-eslint/no-explicit-any': 'off' },
+  },
+  {
+    // Ambient type files — Astro and other tooling scaffolds these with
+    // `/// <reference path="..." />` by convention; disable the rule here
+    // rather than forbidding the convention project-wide.
+    files: ['**/*.d.ts'],
+    rules: { '@typescript-eslint/triple-slash-reference': 'off' },
   },
 
   // Prettier last so it disables stylistic rules that conflict with formatter.
