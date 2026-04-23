@@ -2,11 +2,11 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-22T22:15:00Z — session `2026-04-22T19` (Phase 7c + Phase 7 + addendum-onboarding all closed; `/session-end`)
-**Current phase:** 7 — Operator-control + budget discipline — **🟢 CLOSED** (plus pre-Phase-8 onboarding addendum — **🟢 CLOSED**)
-**Current sub-phase:** n/a — Phase 7 fully shipped + onboarding addendum shipped
-**Current step:** n/a — awaiting Phase 8 charter decision
-**Status:** phase-complete — three tags placed this session: `phase-7c-telegram-channel-closed`, `phase-7-closed`, `addendum-onboarding-closed`. Plus one additional commit (`7ce70e7`) adding a Control-discipline invariant ("state the next Control command explicitly after every commit/tag/close") mirrored into the Control source repo. 471 tests across 13 packages green; `pnpm lint` + `pnpm format:check` clean; no open blockers. Phase 8 options (Web UI, assessor tier-3, worker-subprocess `ask_user`) remain live — pick in the next session.
+**Last updated:** 2026-04-23 — session `2026-04-23` (Phase 8 opened — charter = worker-subprocess `askUser`; Web UI queued for Phase 9, assessor tier-3 for Phase 10)
+**Current phase:** 8 — Worker-subprocess `askUser` — **🟢 active**
+**Current sub-phase:** n/a — single-charter phase (no sub-letter split)
+**Current step:** 8.1 — author ADR 0024 (route choice + wall-clock budget policy + correlation contract + brain-restart recovery + tool whitelist)
+**Status:** Phase 8 directory authored at `.control/phases/phase-8-worker-ask-user/` (README + steps.md). Operator picked worker-subprocess `askUser` per charter discussion: highest leverage per session, smallest blast radius, reuses entire Phase-4 `askUser` + Phase-7c channels stack. Forward queue locked as Phase 9 = Web UI, Phase 10 = assessor tier-3. ADR 0024 in flight as 8.1; rest of the sub-step bodies are outlined in `steps.md` and expand at each session open.
 
 ---
 
@@ -21,23 +21,25 @@
 
 ## Next action
 
-**Phase 8 charter — not yet decided.** Three live options inherited from the 7b close discussion:
+**Phase 8 sub-step 8.1 — author ADR 0024.** Five decisions in one ADR:
 
-1. **Web UI** — browser-based operator dashboard (served by `factoryd`) that wraps `factory spend` + directive queue + outbound replies in one page. Probably the biggest operator-visible upgrade.
-2. **Assessor tier-3** — language-aware project environments beyond Python venv (Node `package.json` scripts, Go modules, Rust cargo). Unblocks "factory builds in $language" beyond the current Python bias.
-3. **Worker-subprocess `ask_user`** — surface the brain's `askUser` tool to tool-using workers so a mid-build agent can escalate interactively rather than marking blocked. Cleanest fix for "agent gets confused and silently thrashes" cases that budget enforcement in 7a only bounds rather than resolves.
+1. **Route**: MCP server (Claude CLI's official tool-extension; net-new infra in this repo; clean abstraction; reusable for future custom tools) vs direct-stdio JSON-RPC (smaller diff; bespoke; brittle to claude-cli protocol drift). Lean: MCP, but ADR captures the trade.
+2. **Wall-clock budget policy**: pause directive TTL + `max_steps` while waiting for human? Recommendation: yes (matches operator intent — "agent is correctly stopped, not thrashing"), with per-question soft deadline (default 1h, configurable) so subprocess doesn't pin a CLI seat indefinitely.
+3. **Correlation contract**: `taskId` mandatory in worker→brain `ask_user` envelope so two workers in same directive don't crossover.
+4. **Brain-restart recovery**: `tasks_inflight.status = 'waiting_for_human'`; on brain startup, orphans → `aborted`; late answers no-op.
+5. **Tool whitelist**: `scaffolder` / `builder` / `fixer` / `investigator` get `AskUser`; brain-checkpointed agents (architect, planner, reviewer, verifier) keep using existing `escalateBlocked`.
 
-No HALT. Pick in the next session based on what's most painful in the current surface. After a charter decision, open Phase 8 directory with `.control/phases/phase-8-<name>/README.md` + `steps.md`.
+After ADR 0024 lands: 8.2 (brain RPC endpoint), 8.3 (worker tool plumbing — implementation depends on route choice), 8.4–8.7 (registry + lifecycle + tests + live validation), 8.8 (close).
 
 ---
 
 ## Git state
 
-- **Branch:** main (ahead of `origin/main` by ~63 commits since Phase 5 close — push at operator discretion)
-- **Last commit (pre-session-end):** `7ce70e7` — `docs(onboarding): add "state next Control command" invariant to CLAUDE.md`. This session-end docs commit lands on top.
-- **Uncommitted changes:** only this session-end docs commit in-flight; tracked tree otherwise clean. `.claude/scheduled_tasks.lock` shows dirty in `git status` (Claude Code harness artifact; gitignored semantics-wise; ignored at every prior session-end).
+- **Branch:** main (ahead of `origin/main` by ~64 commits since Phase 5 close — push at operator discretion)
+- **Last commit (pre-Phase-8 open):** `6cdb6dd` — `docs(state): session end post-addendum-onboarding close`. Phase 8 opening commit (8.1 charter + ADR 0024) lands on top.
+- **Uncommitted changes:** Phase 8 charter dir + STATE.md update + ADR 0024 in-flight for the opening commit. `.claude/scheduled_tasks.lock` shows dirty in `git status` (Claude Code harness artifact; gitignored semantics-wise; ignored at every prior session-end).
 - **Last addendum tag:** `addendum-onboarding-closed` (on `17c393d`).
-- **Last phase tag:** `phase-7-closed` (on `7906099`) — still current. Addendum is pre-Phase-8, doesn't reopen Phase 7.
+- **Last phase tag:** `phase-7-closed` (on `7906099`). Phase 8 is open; new tag not placed until 8.8.
 
 Earlier tags intact: `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`.
 
@@ -51,7 +53,7 @@ Earlier tags intact: `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboa
 
 ## In-flight work
 
-- None. Phase 7 + addendum + Control-discipline invariant all shipped and committed this session; no files mid-edit.
+- Phase 8 opening commit: `.control/phases/phase-8-worker-ask-user/{README.md,steps.md}`, this STATE.md update, `docs/decisions/0024-worker-subprocess-ask-user.md`, `docs/decisions/INDEX.md` row. All to land in one `feat(8.1):` commit.
 
 ---
 
@@ -109,11 +111,13 @@ If resuming after `/session-end` or a cold start:
 
 1. Read `CLAUDE.md` (root) — standing brief incl. Control-framework section and the steps.md-checkbox discipline line.
 2. Read this STATE.md.
-3. Read `docs/Phase7_Progress.md` for the full Phase 7 close (all three sub-phases, done criteria, carry-forward).
-4. Run `/session-start` for the full drift check.
-5. **Next concrete work:** pick the Phase 8 charter. Three live options (see Next action above). No HALT.
+3. Read `.control/phases/phase-8-worker-ask-user/README.md` + `steps.md` — Phase 8 charter, sub-step schedule, done criteria.
+4. Read `docs/decisions/0024-worker-subprocess-ask-user.md` (once landed) — the architectural pin for sub-steps 8.2–8.5.
+5. Read `docs/decisions/0015-mid-flight-user-engagement.md` — the original Phase 4 deferral that Phase 8 reverses (Shape 1).
+6. Run `/session-start` for the full drift check.
+7. **Next concrete work:** continue at the next unchecked box in `steps.md`. If 8.1 is checked and 8.2 is the next box, that means the brain RPC endpoint scaffold (Zod schema + Fastify route or extension thereof + token gate + tests).
 
-**Budget for Phase 8:** TBD once the charter is picked. Web UI is probably the largest (3–5 sessions); assessor tier-3 and worker-subprocess `ask_user` are each 2–3 sessions depending on scope.
+**Budget for Phase 8:** 2–3 sessions total. 8.1 = ~½ session (ADR + charter commit). 8.2–8.4 = ~1 session (brain RPC + worker tool plumbing + registry update). 8.5–8.6 = ~½–1 session (lifecycle + regression tests). 8.7–8.8 = ~½ session (live validation + close).
 
 **Onboarding artefacts in place** (from the addendum this session):
 
