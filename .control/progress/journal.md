@@ -2,6 +2,17 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-04-23 — Phase 8 closed; Phase 9 (Web UI) kicked off
+
+- Phase tagged `phase-8-worker-ask-user-closed` on the `chore(phase-8)` close commit. Phase 9 scaffolded at `.control/phases/phase-9-web-ui/` with 10-step plan.
+- Sub-steps 8.6 → 8.8 closed this session on top of 8.1–8.5 from the earlier session: 8.6 regression suite (`34f4ab5`), `fix(8.7)` outbound drain spam (`6c9c5ce`), 8.7 live validation (`761034a`), and this phase-close commit.
+- ADR 0024 validated live: directive `01KPX1Z4RE3535H8X55E169PHR` (Telegram-initiated), $2.579 spend over 7 LLM calls; builder MCP `ask_user` fired at 11:39:27 → outbound delivered to Telegram at 11:39:28.511Z; operator's Reply-feature answer matched `maybeAnswerPendingQuestion` and wrote to `pending_questions.answer`. Directive ended `blocked` (verifier's hallucinated findings + operator `abort`); primary ADR 0024 mechanism validated end-to-end.
+- Four new issues surfaced during 8.7 live run (I009–I012): two resolved this phase (I010 WONTFIX, I011 RESOLVED via shared `resolveProjectPath` helper in `@factory5/wiki`), two OPEN (I009 Telegram budget defaults MEDIUM, I012 maybeAnswerPendingQuestion FIFO matcher LOW) — both post-close follow-ups.
+- Tests: **564** across 14 packages, +93 from Phase 7 close baseline. `pnpm build` + `pnpm test` + `pnpm lint` + `pnpm format:check` all clean. 2026-04-23T13:00Z close.
+- Code changes in Phase 8 close commit (beyond the Phase 9 scaffold): `docs/Phase8_Progress.md` authored; `docs/PROGRESS.md` entry appended; `CompleteArchitecture.md` §11 updated with inline pointer to ADR 0024; steps.md 8.8 flipped `[x]`; STATE.md + next.md updated for Phase 9 active.
+- No new factory5 self-issues opened beyond I009/I010/I011/I012 which were filed during 8.7.
+- Phase 9's first concrete work: sub-step 9.1 — author ADR 025 on web-UI architecture (framework / auth / bundle / routing).
+
 ## 2026-04-23 (session `2026-04-23T06`) — Phase 8 sub-steps 8.1 → 8.5 (charter + ADR + brain RPC + worker MCP + agent registry + lifecycle migration)
 
 - **Commit range:** `0754a69` → `37c0605` (5 substantive commits + this session-end docs commit). **Phase step range:** 8.1 (charter open) → 8.5 (lifecycle migration + brain-restart recovery).

@@ -4,6 +4,20 @@ Chronological log of work on factory5 itself. Update this at the end of every wo
 
 ---
 
+## 2026-04-23 — Phase 8 closed (worker-subprocess `ask_user`)
+
+- Phase tagged `phase-8-worker-ask-user-closed`. All 8 sub-steps shipped (8.1 ADR 0024 → 8.8 phase close). Plus one mid-phase `fix(8.7)` for outbound drain spam.
+- [ADR 0024](decisions/0024-worker-subprocess-ask-user.md) accepted: MCP route (new `@factory5/worker-mcp` package) + `taskId`-mandatory correlation + paused-budget wait with 1 h soft deadline + brain-startup orphan recovery via `tasks_inflight.status='waiting_for_human'` (migration 007) + whitelist limited to scaffolder/builder/fixer/investigator. Supersedes ADR 0015's Phase-4 deferral.
+- Live validation run (directive `01KPX1Z4RE3535H8X55E169PHR`, Telegram-initiated, $2.579 spend over 7 calls, 2026-04-23) proved the worker MCP `ask_user` → Telegram round-trip end-to-end: builder MCP call hit `/worker/ask-user`, brain's `askUser` enqueued with `channel: "telegram"`, outbound delivered to chat 1225367797 at 11:39:28, operator's Reply-feature answer matched `maybeAnswerPendingQuestion` and wrote to `pending_questions.answer`. See `docs/Phase8_Progress.md` for the full retrospective + honest nuances.
+- Three new issues filed during 8.7 live run: I009 (Telegram inbound doesn't inherit `[budget.defaults]` — OPEN), I011 (Telegram inbound didn't resolve project paths — RESOLVED this commit, via shared `resolveProjectPath` helper in `@factory5/wiki`), I012 (`maybeAnswerPendingQuestion` FIFO matcher can't target a specific question — OPEN). I010 (worker spawn ENOENT in junction cwd) closed WONTFIX / NOT_REPRODUCED once I011 was fixed.
+- Tests: **564** green on Windows (+93 from Phase 7 close baseline of 471: +9 ipc, +15 worker-mcp NEW, +2 providers, +29 state, +8 wiki, +2 channels, +5 brain, +13 daemon, +10 stashed). `pnpm lint` + `pnpm format:check` clean. 14 packages + 2 apps (was 13 + 2 — `@factory5/worker-mcp` added at 8.3).
+- New external dep: `@modelcontextprotocol/sdk ^1.0.0` (in `@factory5/worker-mcp`).
+- New shared helper in `@factory5/wiki`: `resolveProjectPath` / `findRepoTemplatesDir` / `defaultWorkspace` — used by CLI (refactored from its local copy), Telegram inbound, Discord inbound. `ChannelContext.resolveProjectPath` optional method threaded through the registry by the daemon.
+- Phase 9 kicks off: **Web UI** (browser dashboard served by `factoryd`, ~3–5 sessions). Scaffolded in this close commit.
+- Carry-forward: issues I009 + I012, the `askUser` handler resource-hygiene follow-up (poll loops outlived the worker subprocess), and the four-item Phase 6 operator follow-up (PAT revoke etc., still out-of-band).
+
+---
+
 ## 2026-04-18 — Phase 0 scaffold complete
 
 **Headline:** Workspace skeleton fully laid down. 13 packages + 2 apps + complete docs + ported skills/templates/agent-prompts. 148 files written. Ready for `pnpm install && pnpm build`.

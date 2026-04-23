@@ -442,7 +442,7 @@ Three modes per directive — the brain owns _when to talk back_:
 
 Two brain-side tools enable mid-flight engagement:
 
-- **`ask_user(question, options?, deadline?)`** — pauses execution, posts to originating channel, awaits a reply (default: indefinitely). Stored in `pending_questions`. Survives brain restart.
+- **`ask_user(question, options?, deadline?)`** — pauses execution, posts to originating channel, awaits a reply (default: indefinitely). Stored in `pending_questions`. Survives brain restart. Phase 8 ([ADR 0024](docs/decisions/0024-worker-subprocess-ask-user.md)) extends this to tool-using worker subprocesses (scaffolder/builder/fixer/investigator) via an MCP tool (`mcp__factory5-ask-user__ask_user`) that routes to `POST /worker/ask-user` on the daemon, which proxies into this same brain-level helper. `max_usd`/`max_steps` are paused while a worker is waiting (per ADR 0024 §2); `tasks_inflight.status='waiting_for_human'` lets brain-restart orphan recovery detect workers killed mid-wait.
 - **`escalate_blocked(reason, attempted, suggestions)`** — fires when retry budget exhausted or circuit breaker tripped. Posts a structured "I'm stuck — here's what I tried, here's what I'd suggest, what should I do?" message; awaits direction.
 
 ---
