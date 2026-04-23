@@ -29,7 +29,7 @@
 
 - [x] 9.7 — `/api/v1/findings`. List + filter by severity / status / project. Uses existing findings-registry helpers.
 
-- [ ] 9.8 — SPA pages:
+- [x] 9.8 — SPA pages:
   - `overview.html` — at-a-glance dashboard (directive counts by status, pending question count, today's spend, open findings)
   - `directives/` — list + detail
   - `questions/` — pending-question list

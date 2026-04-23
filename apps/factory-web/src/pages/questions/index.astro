@@ -1,0 +1,132 @@
+---
+import Dashboard from '../../layouts/Dashboard.astro';
+---
+
+<Dashboard title="Pending questions">
+  <form class="filter-form" id="filter">
+    <label>
+      Status:
+      <select name="status">
+        <option value="open" selected>open</option>
+        <option value="answered">answered</option>
+        <option value="all">all</option>
+      </select>
+    </label>
+    <label>
+      Limit:
+      <input name="limit" type="number" min="1" max="100" value="50" style="width: 4rem;" />
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+
+  <div id="mount">Loading…</div>
+
+  <script>
+    import { loadInto, el } from '../../lib/api';
+
+    interface PendingQuestion {
+      id: string;
+      directiveId: string;
+      question: string;
+      channel: string;
+      createdAt: string;
+      answeredAt?: string;
+      answer?: string;
+    }
+    interface ListResp {
+      items: PendingQuestion[];
+      total: number;
+      status: string;
+    }
+
+    function render(resp: ListResp, mount: HTMLElement): void {
+      mount.appendChild(
+        el('p', {}, `${String(resp.items.length)} of ${String(resp.total)} (status: ${resp.status})`),
+      );
+      if (resp.items.length === 0) {
+        mount.appendChild(el('p', { class: 'empty' }, 'Nothing pending.'));
+        return;
+      }
+      const table = el(
+        'table',
+        {},
+        el(
+          'thead',
+          {},
+          el(
+            'tr',
+            {},
+            el('th', {}, 'Created'),
+            el('th', {}, 'Question'),
+            el('th', {}, 'Channel'),
+            el('th', {}, 'Directive'),
+            el('th', {}, 'Answer'),
+          ),
+        ),
+      );
+      const tbody = el('tbody', {});
+      for (const q of resp.items) {
+        tbody.appendChild(
+          el(
+            'tr',
+            {},
+            el('td', {}, q.createdAt.slice(0, 19).replace('T', ' ')),
+            el(
+              'td',
+              {},
+              el(
+                'a',
+                { href: `/app/questions/detail?id=${encodeURIComponent(q.id)}`, class: 'link' },
+                q.question,
+              ),
+            ),
+            el('td', {}, q.channel),
+            el(
+              'td',
+              {},
+              el(
+                'a',
+                {
+                  href: `/app/directives/detail?id=${encodeURIComponent(q.directiveId)}`,
+                  class: 'link',
+                },
+                q.directiveId.slice(-8),
+              ),
+            ),
+            el('td', {}, q.answer ?? ''),
+          ),
+        );
+      }
+      table.appendChild(tbody);
+      mount.appendChild(table);
+    }
+
+    function mountPath(): string {
+      const params = new URLSearchParams(window.location.search);
+      const status = params.get('status') ?? 'open';
+      const limit = params.get('limit') ?? '50';
+      return `/api/v1/pending-questions?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(limit)}`;
+    }
+
+    const mount = document.getElementById('mount');
+    if (mount === null) throw new Error('mount missing');
+    loadInto<ListResp>(mount, mountPath(), render);
+
+    const form = document.getElementById('filter') as HTMLFormElement | null;
+    if (form !== null) {
+      const params = new URLSearchParams(window.location.search);
+      const statusSel = form.elements.namedItem('status') as HTMLSelectElement | null;
+      const limitInput = form.elements.namedItem('limit') as HTMLInputElement | null;
+      if (statusSel !== null) statusSel.value = params.get('status') ?? 'open';
+      if (limitInput !== null) limitInput.value = params.get('limit') ?? '50';
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const sd = new FormData(form);
+        const nextParams = new URLSearchParams();
+        nextParams.set('status', String(sd.get('status') ?? 'open'));
+        nextParams.set('limit', String(sd.get('limit') ?? '50'));
+        window.location.search = `?${nextParams.toString()}`;
+      });
+    }
+  </script>
+</Dashboard>

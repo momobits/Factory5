@@ -1,0 +1,252 @@
+---
+import Dashboard from '../../layouts/Dashboard.astro';
+---
+
+<Dashboard title="Spend">
+  <form class="filter-form" id="filter">
+    <label>
+      Since (ISO):
+      <input name="since" type="text" placeholder="2026-04-01T00:00:00Z" style="width: 14rem;" />
+    </label>
+    <label>
+      Until (ISO):
+      <input name="until" type="text" placeholder="2026-05-01T00:00:00Z" style="width: 14rem;" />
+    </label>
+    <label>
+      Project:
+      <input name="projectId" type="text" placeholder="ULID" style="width: 14rem;" />
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+
+  <div id="mount">Loading…</div>
+
+  <script>
+    import { loadInto, el, fmtUsd } from '../../lib/api';
+
+    interface PerProject {
+      projectId: string | null;
+      display: string;
+      totalUsd: number;
+      callCount: number;
+      directiveCount: number;
+    }
+    interface PerDirective {
+      directiveId: string;
+      projectName: string | null;
+      totalUsd: number;
+      callCount: number;
+      firstCalledAt: string;
+      lastCalledAt: string;
+    }
+    interface PerDay {
+      date: string;
+      totalUsd: number;
+      callCount: number;
+    }
+    interface PerModel {
+      provider: string;
+      model: string;
+      totalUsd: number;
+      callCount: number;
+    }
+    interface SpendResp {
+      perProject: PerProject[];
+      perDirective: PerDirective[];
+      perDay: PerDay[];
+      perModel: PerModel[];
+    }
+
+    function section(title: string): HTMLElement {
+      return el('h3', { style: 'margin-top: 1.5rem;' }, title);
+    }
+
+    function render(resp: SpendResp, mount: HTMLElement): void {
+      // Per-project
+      mount.appendChild(section(`Per project (${String(resp.perProject.length)})`));
+      if (resp.perProject.length === 0) {
+        mount.appendChild(el('p', { class: 'empty' }, 'No spend recorded.'));
+      } else {
+        const tbl = el(
+          'table',
+          {},
+          el(
+            'thead',
+            {},
+            el(
+              'tr',
+              {},
+              el('th', {}, 'Project'),
+              el('th', {}, 'Directives'),
+              el('th', {}, 'Calls'),
+              el('th', {}, 'Total'),
+            ),
+          ),
+        );
+        const tb = el('tbody', {});
+        for (const p of resp.perProject) {
+          tb.appendChild(
+            el(
+              'tr',
+              {},
+              el('td', {}, p.display),
+              el('td', { class: 'num' }, String(p.directiveCount)),
+              el('td', { class: 'num' }, String(p.callCount)),
+              el('td', { class: 'num' }, fmtUsd(p.totalUsd)),
+            ),
+          );
+        }
+        tbl.appendChild(tb);
+        mount.appendChild(tbl);
+      }
+
+      // Per day
+      mount.appendChild(section(`Per day (${String(resp.perDay.length)})`));
+      if (resp.perDay.length > 0) {
+        const tbl = el(
+          'table',
+          {},
+          el(
+            'thead',
+            {},
+            el('tr', {}, el('th', {}, 'Date'), el('th', {}, 'Calls'), el('th', {}, 'Total')),
+          ),
+        );
+        const tb = el('tbody', {});
+        for (const d of resp.perDay) {
+          tb.appendChild(
+            el(
+              'tr',
+              {},
+              el('td', {}, d.date),
+              el('td', { class: 'num' }, String(d.callCount)),
+              el('td', { class: 'num' }, fmtUsd(d.totalUsd)),
+            ),
+          );
+        }
+        tbl.appendChild(tb);
+        mount.appendChild(tbl);
+      }
+
+      // Per model
+      mount.appendChild(section(`Per model (${String(resp.perModel.length)})`));
+      if (resp.perModel.length > 0) {
+        const tbl = el(
+          'table',
+          {},
+          el(
+            'thead',
+            {},
+            el(
+              'tr',
+              {},
+              el('th', {}, 'Provider'),
+              el('th', {}, 'Model'),
+              el('th', {}, 'Calls'),
+              el('th', {}, 'Total'),
+            ),
+          ),
+        );
+        const tb = el('tbody', {});
+        for (const m of resp.perModel) {
+          tb.appendChild(
+            el(
+              'tr',
+              {},
+              el('td', {}, m.provider),
+              el('td', {}, m.model),
+              el('td', { class: 'num' }, String(m.callCount)),
+              el('td', { class: 'num' }, fmtUsd(m.totalUsd)),
+            ),
+          );
+        }
+        tbl.appendChild(tb);
+        mount.appendChild(tbl);
+      }
+
+      // Per directive
+      mount.appendChild(section(`Per directive (${String(resp.perDirective.length)})`));
+      if (resp.perDirective.length > 0) {
+        const tbl = el(
+          'table',
+          {},
+          el(
+            'thead',
+            {},
+            el(
+              'tr',
+              {},
+              el('th', {}, 'Directive'),
+              el('th', {}, 'Project'),
+              el('th', {}, 'First'),
+              el('th', {}, 'Last'),
+              el('th', {}, 'Calls'),
+              el('th', {}, 'Total'),
+            ),
+          ),
+        );
+        const tb = el('tbody', {});
+        for (const d of resp.perDirective) {
+          tb.appendChild(
+            el(
+              'tr',
+              {},
+              el(
+                'td',
+                {},
+                el(
+                  'a',
+                  {
+                    href: `/app/directives/detail?id=${encodeURIComponent(d.directiveId)}`,
+                    class: 'link',
+                  },
+                  d.directiveId.slice(-8),
+                ),
+              ),
+              el('td', {}, d.projectName ?? ''),
+              el('td', {}, d.firstCalledAt.slice(0, 19).replace('T', ' ')),
+              el('td', {}, d.lastCalledAt.slice(0, 19).replace('T', ' ')),
+              el('td', { class: 'num' }, String(d.callCount)),
+              el('td', { class: 'num' }, fmtUsd(d.totalUsd)),
+            ),
+          );
+        }
+        tbl.appendChild(tb);
+        mount.appendChild(tbl);
+      }
+    }
+
+    function mountPath(): string {
+      const params = new URLSearchParams(window.location.search);
+      const qs: string[] = [];
+      for (const key of ['since', 'until', 'projectId']) {
+        const v = params.get(key);
+        if (v !== null && v.length > 0) qs.push(`${key}=${encodeURIComponent(v)}`);
+      }
+      return `/api/v1/spend${qs.length > 0 ? '?' + qs.join('&') : ''}`;
+    }
+
+    const mount = document.getElementById('mount');
+    if (mount === null) throw new Error('mount missing');
+    loadInto<SpendResp>(mount, mountPath(), render);
+
+    const form = document.getElementById('filter') as HTMLFormElement | null;
+    if (form !== null) {
+      const params = new URLSearchParams(window.location.search);
+      for (const key of ['since', 'until', 'projectId']) {
+        const input = form.elements.namedItem(key) as HTMLInputElement | null;
+        if (input !== null) input.value = params.get(key) ?? '';
+      }
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const sd = new FormData(form);
+        const nextParams = new URLSearchParams();
+        for (const key of ['since', 'until', 'projectId']) {
+          const v = String(sd.get(key) ?? '');
+          if (v.length > 0) nextParams.set(key, v);
+        }
+        window.location.search = nextParams.toString().length > 0 ? `?${nextParams.toString()}` : '';
+      });
+    }
+  </script>
+</Dashboard>

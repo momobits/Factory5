@@ -1,8 +1,22 @@
 ---
+import { ClientRouter } from 'astro:transitions';
+
 interface Props {
   title: string;
 }
 const { title } = Astro.props;
+
+interface NavLink {
+  href: string;
+  label: string;
+}
+const navLinks: NavLink[] = [
+  { href: '/app/', label: 'Overview' },
+  { href: '/app/directives/', label: 'Directives' },
+  { href: '/app/questions/', label: 'Questions' },
+  { href: '/app/spend/', label: 'Spend' },
+  { href: '/app/findings/', label: 'Findings' },
+];
 ---
 
 <!doctype html>
@@ -11,6 +25,7 @@ const { title } = Astro.props;
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title} — factory5</title>
+    <ClientRouter />
     <style>
       :root {
         color-scheme: light dark;
@@ -26,6 +41,9 @@ const { title } = Astro.props;
         padding: 0;
       }
       header.shell {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
         padding: 0.75rem 1.5rem;
         border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
       }
@@ -34,10 +52,47 @@ const { title } = Astro.props;
         font-size: 1rem;
         font-weight: 600;
       }
+      header.shell nav {
+        display: flex;
+        gap: 1rem;
+      }
+      header.shell nav a {
+        color: inherit;
+        text-decoration: none;
+        font-size: 0.9rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 3px;
+      }
+      header.shell nav a[aria-current='page'],
+      header.shell nav a:hover {
+        background: color-mix(in srgb, currentColor 10%, transparent);
+      }
       main.shell {
         padding: 1.5rem;
-        max-width: 64rem;
+        max-width: 72rem;
         margin: 0 auto;
+      }
+      main.shell h2 {
+        margin-top: 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.4rem 0.6rem;
+        border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+      }
+      th {
+        font-weight: 600;
+        background: color-mix(in srgb, currentColor 4%, transparent);
+      }
+      td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
       }
       pre {
         padding: 0.75rem 1rem;
@@ -45,13 +100,68 @@ const { title } = Astro.props;
         border-radius: 4px;
         overflow-x: auto;
       }
+      .empty {
+        color: color-mix(in srgb, currentColor 60%, transparent);
+        font-style: italic;
+      }
+      .err {
+        color: #c24;
+      }
+      .filter-form {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+      }
+      .filter-form label {
+        font-size: 0.85rem;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+        gap: 1rem;
+      }
+      .card {
+        padding: 1rem;
+        border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+        border-radius: 6px;
+      }
+      .card h3 {
+        margin: 0 0 0.25rem 0;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: color-mix(in srgb, currentColor 70%, transparent);
+      }
+      .card .value {
+        font-size: 1.75rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      a.link {
+        color: inherit;
+      }
     </style>
   </head>
   <body>
     <header class="shell">
-      <h1>factory5 — {title}</h1>
+      <h1>factory5</h1>
+      <nav>
+        {
+          navLinks.map((link) => (
+            <a
+              href={link.href}
+              aria-current={Astro.url.pathname === link.href ? 'page' : undefined}
+            >
+              {link.label}
+            </a>
+          ))
+        }
+      </nav>
     </header>
     <main class="shell">
+      <h2>{title}</h2>
       <slot />
     </main>
   </body>

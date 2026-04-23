@@ -3,51 +3,91 @@ import Dashboard from '../layouts/Dashboard.astro';
 ---
 
 <Dashboard title="Overview">
-  <p>
-    Phase 9 scaffold. The read-side <code>/api/v1/*</code> endpoints land at
-    9.3–9.7; the real pages (directives, questions, spend, findings) land at 9.8.
-  </p>
-
-  <section>
-    <h2>Daemon status smoke</h2>
-    <p>
-      Fetches <code>/api/v1/status</code> with the bearer token stored in
-      <code>sessionStorage</code>. Until 9.3 wires the route, expect a 404.
-    </p>
-    <div id="status-box">Loading…</div>
-  </section>
+  <div id="mount">Loading…</div>
 
   <script>
-    import { apiFetch, captureTokenFromUrl, getToken, NoTokenError, ApiError } from '../lib/api';
+    import { apiFetch, captureTokenFromUrl, getToken, NoTokenError, ApiError, el } from '../lib/api';
+
+    interface Directive {
+      id: string;
+      status: string;
+    }
+    interface DirectivesList {
+      items: Directive[];
+      total: number;
+    }
+    interface PendingQuestion {
+      id: string;
+    }
+    interface QuestionsList {
+      total: number;
+      items: PendingQuestion[];
+    }
+    interface SpendResp {
+      perDirective: Array<{ totalUsd: number }>;
+      perDay: Array<{ date: string; totalUsd: number }>;
+    }
+    interface Finding {
+      finding: { severity: string; status: string };
+    }
+    interface FindingsList {
+      items: Finding[];
+    }
 
     captureTokenFromUrl();
 
-    const box = document.getElementById('status-box');
-    if (box === null) throw new Error('status-box missing from DOM');
-
-    function render(text: string): void {
-      if (box === null) return;
-      const pre = document.createElement('pre');
-      pre.textContent = text;
-      box.replaceChildren(pre);
-    }
+    const mount = document.getElementById('mount');
+    if (mount === null) throw new Error('mount missing');
 
     if (getToken() === null) {
-      box.textContent = 'No UI token present. Reopen the URL logged by factoryd.';
+      mount.textContent = 'No UI token present. Reopen the URL logged by factoryd.';
     } else {
-      apiFetch('/api/v1/status')
-        .then((data) => {
-          render(JSON.stringify(data, null, 2));
+      Promise.all([
+        apiFetch<DirectivesList>('/api/v1/directives?limit=1'),
+        apiFetch<QuestionsList>('/api/v1/pending-questions?limit=1'),
+        apiFetch<SpendResp>('/api/v1/spend'),
+        apiFetch<FindingsList>('/api/v1/findings?limit=500'),
+      ])
+        .then(([directives, questions, spendResp, findings]) => {
+          mount.innerHTML = '';
+          const cards = el('div', { class: 'cards' });
+          const todayIso = new Date().toISOString().slice(0, 10);
+          const todaySpend = spendResp.perDay.find((d) => d.date === todayIso)?.totalUsd ?? 0;
+          const allTimeSpend = spendResp.perDirective.reduce(
+            (a: number, d) => a + d.totalUsd,
+            0,
+          );
+          const openFindings = findings.items.filter(
+            (e) => e.finding.status === 'OPEN',
+          ).length;
+
+          const card = (title: string, value: string): HTMLElement =>
+            el('div', { class: 'card' }, el('h3', {}, title), el('div', { class: 'value' }, value));
+
+          cards.appendChild(card('Directives (total)', String(directives.total)));
+          cards.appendChild(card('Open questions', String(questions.total)));
+          cards.appendChild(card('Today spend', `$${todaySpend.toFixed(2)}`));
+          cards.appendChild(card('All-time spend', `$${allTimeSpend.toFixed(2)}`));
+          cards.appendChild(card('Open findings', String(openFindings)));
+          mount.appendChild(cards);
+
+          const tips = el(
+            'p',
+            { style: 'margin-top: 1.5rem;' },
+            'Use the nav to drill into each section. Pending questions are the most time-sensitive — answer via Telegram / Discord / CLI.',
+          );
+          mount.appendChild(tips);
         })
         .catch((err: unknown) => {
+          mount.innerHTML = '';
           if (err instanceof NoTokenError) {
-            box.textContent = err.message;
+            mount.textContent = err.message;
           } else if (err instanceof ApiError) {
-            render(`API error ${err.status} (${err.code}): ${err.message}`);
+            mount.textContent = `API error ${err.status} (${err.code}): ${err.message}`;
           } else if (err instanceof Error) {
-            render(`Fetch failed: ${err.message}`);
+            mount.textContent = `Fetch failed: ${err.message}`;
           } else {
-            box.textContent = 'Unknown error';
+            mount.textContent = 'Unknown error';
           }
         });
     }

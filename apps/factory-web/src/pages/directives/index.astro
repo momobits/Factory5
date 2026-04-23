@@ -1,0 +1,130 @@
+---
+import Dashboard from '../../layouts/Dashboard.astro';
+---
+
+<Dashboard title="Directives">
+  <form class="filter-form" id="filter">
+    <label>
+      Status:
+      <select name="status">
+        <option value="">all</option>
+        <option value="pending">pending</option>
+        <option value="claimed">claimed</option>
+        <option value="running">running</option>
+        <option value="complete">complete</option>
+        <option value="failed">failed</option>
+        <option value="blocked">blocked</option>
+      </select>
+    </label>
+    <label>
+      Limit:
+      <input name="limit" type="number" min="1" max="100" value="50" style="width: 4rem;" />
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+
+  <div id="mount">Loading…</div>
+
+  <script>
+    import { loadInto, el } from '../../lib/api';
+
+    interface Directive {
+      id: string;
+      source: string;
+      intent: string;
+      status: string;
+      createdAt: string;
+      autonomy: string;
+      projectId?: string;
+    }
+    interface ListResp {
+      items: Directive[];
+      total: number;
+      limit: number;
+      offset: number;
+    }
+
+    function render(resp: ListResp, mount: HTMLElement): void {
+      if (resp.items.length === 0) {
+        mount.appendChild(el('p', { class: 'empty' }, 'No directives match.'));
+        return;
+      }
+      mount.appendChild(
+        el('p', {}, `${String(resp.items.length)} of ${String(resp.total)} directives`),
+      );
+      const table = el(
+        'table',
+        {},
+        el(
+          'thead',
+          {},
+          el(
+            'tr',
+            {},
+            el('th', {}, 'Created'),
+            el('th', {}, 'Id'),
+            el('th', {}, 'Source'),
+            el('th', {}, 'Intent'),
+            el('th', {}, 'Status'),
+            el('th', {}, 'Autonomy'),
+          ),
+        ),
+      );
+      const tbody = el('tbody', {});
+      for (const d of resp.items) {
+        const idLink = el(
+          'a',
+          { href: `/app/directives/detail?id=${encodeURIComponent(d.id)}`, class: 'link' },
+          d.id.slice(-8),
+        );
+        tbody.appendChild(
+          el(
+            'tr',
+            {},
+            el('td', {}, d.createdAt.slice(0, 19).replace('T', ' ')),
+            el('td', {}, idLink),
+            el('td', {}, d.source),
+            el('td', {}, d.intent),
+            el('td', {}, d.status),
+            el('td', {}, d.autonomy),
+          ),
+        );
+      }
+      table.appendChild(tbody);
+      mount.appendChild(table);
+    }
+
+    function mountPath(): string {
+      const params = new URLSearchParams(window.location.search);
+      const status = params.get('status') ?? '';
+      const limit = params.get('limit') ?? '50';
+      const qs: string[] = [];
+      qs.push(`limit=${encodeURIComponent(limit)}`);
+      if (status.length > 0) qs.push(`status=${encodeURIComponent(status)}`);
+      return `/api/v1/directives?${qs.join('&')}`;
+    }
+
+    const mount = document.getElementById('mount');
+    if (mount === null) throw new Error('mount missing');
+    loadInto<ListResp>(mount, mountPath(), render);
+
+    const form = document.getElementById('filter') as HTMLFormElement | null;
+    if (form !== null) {
+      const params = new URLSearchParams(window.location.search);
+      const statusSel = form.elements.namedItem('status') as HTMLSelectElement | null;
+      const limitInput = form.elements.namedItem('limit') as HTMLInputElement | null;
+      if (statusSel !== null) statusSel.value = params.get('status') ?? '';
+      if (limitInput !== null) limitInput.value = params.get('limit') ?? '50';
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const sd = new FormData(form);
+        const nextParams = new URLSearchParams();
+        const st = String(sd.get('status') ?? '');
+        const lim = String(sd.get('limit') ?? '50');
+        if (st.length > 0) nextParams.set('status', st);
+        nextParams.set('limit', lim);
+        window.location.search = `?${nextParams.toString()}`;
+      });
+    }
+  </script>
+</Dashboard>

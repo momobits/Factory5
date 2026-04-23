@@ -1,0 +1,153 @@
+---
+import Dashboard from '../../layouts/Dashboard.astro';
+---
+
+<Dashboard title="Findings">
+  <form class="filter-form" id="filter">
+    <label>
+      Severity:
+      <select name="severity">
+        <option value="">all</option>
+        <option value="LOW">LOW</option>
+        <option value="MEDIUM">MEDIUM</option>
+        <option value="HIGH">HIGH</option>
+        <option value="CRITICAL">CRITICAL</option>
+      </select>
+    </label>
+    <label>
+      Status:
+      <select name="status">
+        <option value="">all</option>
+        <option value="OPEN">OPEN</option>
+        <option value="FIXED">FIXED</option>
+        <option value="VERIFIED">VERIFIED</option>
+        <option value="WONTFIX">WONTFIX</option>
+      </select>
+    </label>
+    <label>
+      Project (id or glob):
+      <input name="project" type="text" placeholder="ULID or *acme*" style="width: 14rem;" />
+    </label>
+    <label>
+      Advisory:
+      <select name="advisory">
+        <option value="">both</option>
+        <option value="true">advisory only</option>
+        <option value="false">blocking only</option>
+      </select>
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+
+  <div id="mount">Loading…</div>
+
+  <script>
+    import { loadInto, el } from '../../lib/api';
+
+    interface Finding {
+      id: string;
+      source: string;
+      target: string;
+      severity: string;
+      status: string;
+      description: string;
+      createdAt: string;
+      advisory?: boolean;
+    }
+    interface Entry {
+      projectId: string;
+      projectPath: string;
+      finding: Finding;
+      originDirectiveId?: string;
+      updatedAt: string;
+    }
+    interface ListResp {
+      items: Entry[];
+    }
+
+    function render(resp: ListResp, mount: HTMLElement): void {
+      if (resp.items.length === 0) {
+        mount.appendChild(el('p', { class: 'empty' }, 'No findings match.'));
+        return;
+      }
+      mount.appendChild(el('p', {}, `${String(resp.items.length)} findings`));
+      const tbl = el(
+        'table',
+        {},
+        el(
+          'thead',
+          {},
+          el(
+            'tr',
+            {},
+            el('th', {}, 'Updated'),
+            el('th', {}, 'Id'),
+            el('th', {}, 'Severity'),
+            el('th', {}, 'Status'),
+            el('th', {}, 'Source'),
+            el('th', {}, 'Target'),
+            el('th', {}, 'Description'),
+            el('th', {}, 'Advisory'),
+          ),
+        ),
+      );
+      const tb = el('tbody', {});
+      for (const e of resp.items) {
+        tb.appendChild(
+          el(
+            'tr',
+            {},
+            el('td', {}, e.updatedAt.slice(0, 19).replace('T', ' ')),
+            el('td', {}, e.finding.id),
+            el('td', {}, e.finding.severity),
+            el('td', {}, e.finding.status),
+            el('td', {}, e.finding.source),
+            el('td', {}, e.finding.target),
+            el('td', {}, e.finding.description),
+            el('td', {}, e.finding.advisory === true ? 'advisory' : ''),
+          ),
+        );
+      }
+      tbl.appendChild(tb);
+      mount.appendChild(tbl);
+    }
+
+    function mountPath(): string {
+      const params = new URLSearchParams(window.location.search);
+      const qs: string[] = [];
+      for (const key of ['severity', 'status', 'project', 'advisory']) {
+        const v = params.get(key);
+        if (v !== null && v.length > 0) qs.push(`${key}=${encodeURIComponent(v)}`);
+      }
+      qs.push('limit=500');
+      return `/api/v1/findings?${qs.join('&')}`;
+    }
+
+    const mount = document.getElementById('mount');
+    if (mount === null) throw new Error('mount missing');
+    loadInto<ListResp>(mount, mountPath(), render);
+
+    const form = document.getElementById('filter') as HTMLFormElement | null;
+    if (form !== null) {
+      const params = new URLSearchParams(window.location.search);
+      for (const key of ['severity', 'status', 'project', 'advisory']) {
+        const input = form.elements.namedItem(key) as
+          | HTMLInputElement
+          | HTMLSelectElement
+          | null;
+        if (input !== null) input.value = params.get(key) ?? '';
+      }
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const sd = new FormData(form);
+        const nextParams = new URLSearchParams();
+        for (const key of ['severity', 'status', 'project', 'advisory']) {
+          const v = String(sd.get(key) ?? '');
+          if (v.length > 0) nextParams.set(key, v);
+        }
+        window.location.search =
+          nextParams.toString().length > 0 ? `?${nextParams.toString()}` : '';
+      });
+    }
+  </script>
+</Dashboard>

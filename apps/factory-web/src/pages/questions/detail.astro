@@ -1,0 +1,71 @@
+---
+import Dashboard from '../../layouts/Dashboard.astro';
+---
+
+<Dashboard title="Question detail">
+  <div id="mount">Loading…</div>
+
+  <script>
+    import { loadInto, el } from '../../lib/api';
+
+    interface PendingQuestion {
+      id: string;
+      directiveId: string;
+      taskId?: string;
+      question: string;
+      options?: string[];
+      channel: string;
+      channelRef: string;
+      createdAt: string;
+      deadlineAt?: string;
+      answeredAt?: string;
+      answer?: string;
+    }
+    interface DetailResp {
+      question: PendingQuestion;
+    }
+
+    function render(resp: DetailResp, mount: HTMLElement): void {
+      const q = resp.question;
+      mount.appendChild(el('p', { style: 'font-size: 1.1rem;' }, q.question));
+
+      const meta = el('table', {});
+      const tbody = el('tbody', {});
+      const row = (k: string, v: string | HTMLElement): HTMLElement =>
+        el('tr', {}, el('td', {}, el('strong', {}, k)), el('td', {}, v));
+      tbody.appendChild(row('Id', q.id));
+      tbody.appendChild(
+        row(
+          'Directive',
+          el(
+            'a',
+            { href: `/app/directives/detail?id=${encodeURIComponent(q.directiveId)}`, class: 'link' },
+            q.directiveId,
+          ),
+        ),
+      );
+      if (q.taskId !== undefined) tbody.appendChild(row('Task', q.taskId));
+      tbody.appendChild(row('Channel', `${q.channel} (${q.channelRef})`));
+      tbody.appendChild(row('Created', q.createdAt.replace('T', ' ').slice(0, 19)));
+      if (q.deadlineAt !== undefined)
+        tbody.appendChild(row('Deadline', q.deadlineAt.replace('T', ' ').slice(0, 19)));
+      if (q.options !== undefined && q.options.length > 0)
+        tbody.appendChild(row('Options', q.options.join(', ')));
+      tbody.appendChild(
+        row('Status', q.answeredAt !== undefined ? `Answered at ${q.answeredAt}` : 'Open'),
+      );
+      if (q.answer !== undefined) tbody.appendChild(row('Answer', q.answer));
+      meta.appendChild(tbody);
+      mount.appendChild(meta);
+    }
+
+    const mount = document.getElementById('mount');
+    if (mount === null) throw new Error('mount missing');
+    const id = new URLSearchParams(window.location.search).get('id');
+    if (id === null || id.length === 0) {
+      mount.textContent = 'Missing ?id=<questionId> in URL.';
+    } else {
+      loadInto<DetailResp>(mount, `/api/v1/pending-questions/${encodeURIComponent(id)}`, render);
+    }
+  </script>
+</Dashboard>

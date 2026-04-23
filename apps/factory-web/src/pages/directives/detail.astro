@@ -1,0 +1,147 @@
+---
+import Dashboard from '../../layouts/Dashboard.astro';
+---
+
+<Dashboard title="Directive detail">
+  <div id="mount">Loading…</div>
+
+  <script>
+    import { loadInto, el, fmtUsd } from '../../lib/api';
+
+    interface InflightTask {
+      id: string;
+      title: string;
+      agent: string;
+      category: string;
+      status: string;
+      startedAt?: string;
+      finishedAt?: string;
+    }
+    interface PendingQuestion {
+      id: string;
+      question: string;
+    }
+    interface Directive {
+      id: string;
+      source: string;
+      principal: string;
+      intent: string;
+      autonomy: string;
+      status: string;
+      createdAt: string;
+      blockedReason?: string;
+    }
+    interface Detail {
+      directive: Directive;
+      timeline: {
+        tasks: InflightTask[];
+        openQuestions: PendingQuestion[];
+        modelUsage: { totalCostUsd: number; callCount: number };
+      };
+    }
+
+    function render(d: Detail, mount: HTMLElement): void {
+      const dt = d.directive;
+      mount.appendChild(el('h3', {}, `${dt.intent} — ${dt.status}`));
+      mount.appendChild(
+        el(
+          'p',
+          {},
+          el('strong', {}, 'Id: '),
+          dt.id,
+          el('br'),
+          el('strong', {}, 'Created: '),
+          dt.createdAt.replace('T', ' ').slice(0, 19),
+          el('br'),
+          el('strong', {}, 'Source: '),
+          `${dt.source} — ${dt.principal}`,
+          el('br'),
+          el('strong', {}, 'Autonomy: '),
+          dt.autonomy,
+        ),
+      );
+      if (dt.blockedReason !== undefined) {
+        mount.appendChild(el('p', { class: 'err' }, `Blocked: ${dt.blockedReason}`));
+      }
+      mount.appendChild(
+        el(
+          'p',
+          {},
+          el('strong', {}, 'Spend: '),
+          `${fmtUsd(d.timeline.modelUsage.totalCostUsd)} across ${String(d.timeline.modelUsage.callCount)} calls`,
+        ),
+      );
+
+      mount.appendChild(el('h3', {}, `Open questions (${String(d.timeline.openQuestions.length)})`));
+      if (d.timeline.openQuestions.length === 0) {
+        mount.appendChild(el('p', { class: 'empty' }, 'None'));
+      } else {
+        const ul = el('ul', {});
+        for (const q of d.timeline.openQuestions) {
+          ul.appendChild(
+            el(
+              'li',
+              {},
+              el(
+                'a',
+                { href: `/app/questions/detail?id=${encodeURIComponent(q.id)}`, class: 'link' },
+                q.question,
+              ),
+            ),
+          );
+        }
+        mount.appendChild(ul);
+      }
+
+      mount.appendChild(el('h3', {}, `Tasks (${String(d.timeline.tasks.length)})`));
+      if (d.timeline.tasks.length === 0) {
+        mount.appendChild(el('p', { class: 'empty' }, 'None'));
+      } else {
+        const table = el(
+          'table',
+          {},
+          el(
+            'thead',
+            {},
+            el(
+              'tr',
+              {},
+              el('th', {}, 'Id'),
+              el('th', {}, 'Title'),
+              el('th', {}, 'Agent'),
+              el('th', {}, 'Status'),
+              el('th', {}, 'Started'),
+              el('th', {}, 'Finished'),
+            ),
+          ),
+        );
+        const tbody = el('tbody', {});
+        for (const t of d.timeline.tasks) {
+          tbody.appendChild(
+            el(
+              'tr',
+              {},
+              el('td', {}, t.id.slice(-8)),
+              el('td', {}, t.title),
+              el('td', {}, `${t.agent} (${t.category})`),
+              el('td', {}, t.status),
+              el('td', {}, t.startedAt?.slice(0, 19).replace('T', ' ') ?? ''),
+              el('td', {}, t.finishedAt?.slice(0, 19).replace('T', ' ') ?? ''),
+            ),
+          );
+        }
+        table.appendChild(tbody);
+        mount.appendChild(table);
+      }
+    }
+
+    const mount = document.getElementById('mount');
+    if (mount === null) throw new Error('mount missing');
+    const id = new URLSearchParams(window.location.search).get('id');
+    if (id === null || id.length === 0) {
+      mount.textContent = 'Missing ?id=<directiveId> in URL.';
+    } else {
+      loadInto<Detail>(mount, `/api/v1/directives/${encodeURIComponent(id)}`, render);
+    }
+  </script>
+</Dashboard>
