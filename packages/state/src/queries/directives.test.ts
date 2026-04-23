@@ -239,3 +239,65 @@ describe('directives.reconcileOrphanedDirectives', () => {
     expect(res.reconciled).toEqual([id]);
   });
 });
+
+describe('directives.listPaged', () => {
+  let db: BetterSqlite3.Database;
+  beforeEach(() => {
+    db = freshDb();
+  });
+
+  function seedMany(count: number, status: DirectiveRow['status'] = 'pending'): string[] {
+    const ids: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const d = baseDirective({
+        status,
+        // stagger createdAt so ORDER BY DESC is deterministic
+        createdAt: new Date(2026, 3, 23, 12, 0, i).toISOString(),
+      });
+      directives.insert(db, d);
+      ids.push(d.id);
+    }
+    return ids;
+  }
+
+  it('returns newest first and caps limit at 100', () => {
+    const ids = seedMany(3);
+    const { items, total } = directives.listPaged(db);
+    expect(total).toBe(3);
+    expect(items.map((d) => d.id)).toEqual([...ids].reverse());
+  });
+
+  it('defaults limit to 20 when omitted', () => {
+    seedMany(25);
+    const { items, total } = directives.listPaged(db);
+    expect(items).toHaveLength(20);
+    expect(total).toBe(25);
+  });
+
+  it('applies offset + limit', () => {
+    const ids = seedMany(5);
+    const { items, total } = directives.listPaged(db, { limit: 2, offset: 2 });
+    expect(total).toBe(5);
+    // newest-first: [4, 3, 2, 1, 0]; offset 2 → start at ids[2] = index 2 from end
+    expect(items.map((d) => d.id)).toEqual([ids[2], ids[1]]);
+  });
+
+  it('filters by status when provided (total respects the filter)', () => {
+    seedMany(3, 'pending');
+    seedMany(2, 'running');
+    const res = directives.listPaged(db, { status: 'running' });
+    expect(res.total).toBe(2);
+    expect(res.items.every((d) => d.status === 'running')).toBe(true);
+  });
+
+  it('clamps limit to 100 max and 1 min', () => {
+    seedMany(5);
+    expect(directives.listPaged(db, { limit: 500 }).items.length).toBeLessThanOrEqual(100);
+    expect(directives.listPaged(db, { limit: 0 }).items.length).toBeLessThanOrEqual(5);
+    expect(directives.listPaged(db, { limit: -5 }).items.length).toBeLessThanOrEqual(5);
+  });
+
+  it('returns empty items + total 0 on empty db', () => {
+    expect(directives.listPaged(db)).toEqual({ items: [], total: 0 });
+  });
+});

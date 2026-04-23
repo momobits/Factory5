@@ -21,7 +21,7 @@
   - Fastify `/app/*` serves static, `/api/v1/*` is bearer-gated
   - `/api/v1/status` returns the same shape as IPC `/status` for smoke
 
-- [ ] 9.4 — `/api/v1/directives` list + `/api/v1/directives/:id` detail. Paged list; detail includes timeline (tasks_inflight + pending_questions for the directive + model_usage rollup).
+- [x] 9.4 — `/api/v1/directives` list + `/api/v1/directives/:id` detail. Paged list; detail includes timeline (tasks_inflight + pending_questions for the directive + model_usage rollup).
 
 - [ ] 9.5 — `/api/v1/pending-questions`. The Phase 8 forcing function for Phase 9 UX — surface open questions prominently so operators can see at a glance "what is factory waiting for me on?" Exposes `/api/v1/pending-questions/:id` too for deep-linking from outbound channel messages.
 

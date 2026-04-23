@@ -5,7 +5,16 @@
  * caught at request-time by the schema parse.
  */
 
-import { channelIdSchema, ulidSchema } from '@factory5/core';
+import {
+  agentRoleSchema,
+  channelIdSchema,
+  directiveSchema,
+  modelCategorySchema,
+  pendingQuestionSchema,
+  taskResultSchema,
+  taskStatusSchema,
+  ulidSchema,
+} from '@factory5/core';
 import { z } from 'zod';
 
 // -----------------------------------------------------------------------------
@@ -110,6 +119,80 @@ export const workerAskUserResponseSchema = z.object({
   aborted: z.boolean(),
 });
 export type WorkerAskUserResponse = z.infer<typeof workerAskUserResponseSchema>;
+
+// -----------------------------------------------------------------------------
+// GET /api/v1/directives  (web UI, ADR 0025)
+// -----------------------------------------------------------------------------
+
+/**
+ * Query string for `GET /api/v1/directives`. All fields optional.
+ *
+ *   ?limit=20     page size, clamped server-side to [1, 100]
+ *   ?offset=0     rows to skip (>= 0)
+ *   ?status=...   filter by directive status (pending | running | complete | ...)
+ */
+export const apiV1DirectivesListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().nonnegative().optional(),
+  status: directiveSchema.shape.status.optional(),
+});
+export type ApiV1DirectivesListQuery = z.infer<typeof apiV1DirectivesListQuerySchema>;
+
+export const apiV1DirectivesListResponseSchema = z.object({
+  items: z.array(directiveSchema),
+  /** Total matching rows ignoring pagination. */
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+});
+export type ApiV1DirectivesListResponse = z.infer<typeof apiV1DirectivesListResponseSchema>;
+
+// -----------------------------------------------------------------------------
+// GET /api/v1/directives/:id  (web UI, ADR 0025)
+// -----------------------------------------------------------------------------
+
+/**
+ * Runtime-state view of a task. Mirrors `InflightTask` in
+ * `@factory5/state/queries/tasks-inflight`. Kept inline here (rather than
+ * promoted to `@factory5/core`) because its audience is the web UI; brain
+ * and CLI read the concrete interface directly.
+ */
+export const apiV1InflightTaskSchema = z.object({
+  id: ulidSchema,
+  directiveId: ulidSchema,
+  planId: ulidSchema,
+  title: z.string(),
+  agent: agentRoleSchema,
+  category: modelCategorySchema,
+  worktreePath: z.string().optional(),
+  pid: z.number().int().optional(),
+  status: taskStatusSchema,
+  attempts: z.number().int().nonnegative(),
+  startedAt: z.string().datetime({ offset: true }).optional(),
+  lastHeartbeat: z.string().datetime({ offset: true }).optional(),
+  finishedAt: z.string().datetime({ offset: true }).optional(),
+  result: taskResultSchema.optional(),
+  waitingQuestionId: ulidSchema.optional(),
+  abortedReason: z.string().optional(),
+});
+export type ApiV1InflightTask = z.infer<typeof apiV1InflightTaskSchema>;
+
+export const apiV1DirectiveDetailResponseSchema = z.object({
+  directive: directiveSchema,
+  timeline: z.object({
+    tasks: z.array(apiV1InflightTaskSchema),
+    /**
+     * Currently open (unanswered) questions for this directive. The full
+     * open-and-answered list lives under `/api/v1/pending-questions` in 9.5.
+     */
+    openQuestions: z.array(pendingQuestionSchema),
+    modelUsage: z.object({
+      totalCostUsd: z.number().nonnegative(),
+      callCount: z.number().int().nonnegative(),
+    }),
+  }),
+});
+export type ApiV1DirectiveDetailResponse = z.infer<typeof apiV1DirectiveDetailResponseSchema>;
 
 // -----------------------------------------------------------------------------
 // Error envelope (returned with non-2xx responses)

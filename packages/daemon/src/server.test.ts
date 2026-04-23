@@ -675,3 +675,186 @@ describe('IPC server — /app/* static serve (ADR 0025)', () => {
     }
   });
 });
+
+describe('IPC server — /api/v1/directives (ADR 0025, sub-step 9.4)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  const UI_TOKEN = 'ui-secret-xyz';
+
+  function seedDirectives(n: number, overrides: Partial<Directive> = {}): Directive[] {
+    const out: Directive[] = [];
+    for (let i = 0; i < n; i++) {
+      const d: Directive = {
+        ...testDirective(),
+        // stagger createdAt so ORDER BY DESC is deterministic
+        createdAt: new Date(2026, 3, 23, 12, 0, i).toISOString(),
+        ...overrides,
+      };
+      directivesQ.insert(db, d);
+      out.push(d);
+    }
+    return out;
+  }
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  it('GET /api/v1/directives returns 401 without bearer', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({ method: 'GET', url: '/api/v1/directives' });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('GET /api/v1/directives returns 503 UI_DISABLED when token unset', async () => {
+    const app = await buildIpcServer({
+      ...baseOpts(),
+      uiAuthToken: undefined,
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/directives',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(503);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('UI_DISABLED');
+    await app.close();
+  });
+
+  it('GET /api/v1/directives returns newest first, default limit 20', async () => {
+    const seeded = seedDirectives(3);
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/directives',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      items: Array<{ id: string }>;
+      total: number;
+      limit: number;
+      offset: number;
+    };
+    expect(body.total).toBe(3);
+    expect(body.limit).toBe(20);
+    expect(body.offset).toBe(0);
+    expect(body.items.map((d) => d.id)).toEqual(seeded.map((d) => d.id).reverse());
+    await app.close();
+  });
+
+  it('GET /api/v1/directives honours limit + offset', async () => {
+    const seeded = seedDirectives(5);
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/directives?limit=2&offset=1',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: Array<{ id: string }>; total: number };
+    expect(body.total).toBe(5);
+    // newest-first: [4, 3, 2, 1, 0]; offset 1, limit 2 → [3, 2]
+    expect(body.items.map((d) => d.id)).toEqual([seeded[3]?.id, seeded[2]?.id]);
+    await app.close();
+  });
+
+  it('GET /api/v1/directives filters by status', async () => {
+    seedDirectives(2, { status: 'pending' });
+    const [running] = seedDirectives(1, { status: 'running' });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/directives?status=running',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: Array<{ id: string; status: string }>; total: number };
+    expect(body.total).toBe(1);
+    expect(body.items[0]?.id).toBe(running?.id);
+    expect(body.items[0]?.status).toBe('running');
+    await app.close();
+  });
+
+  it('GET /api/v1/directives returns 400 on invalid limit', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/directives?limit=9999',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('GET /api/v1/directives/:id returns 404 for unknown id', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${newId()}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('DIRECTIVE_NOT_FOUND');
+    await app.close();
+  });
+
+  it('GET /api/v1/directives/:id returns directive + timeline', async () => {
+    const [directive] = seedDirectives(1);
+    if (directive === undefined) throw new Error('seed failed');
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { id: string };
+      timeline: {
+        tasks: unknown[];
+        openQuestions: unknown[];
+        modelUsage: { totalCostUsd: number; callCount: number };
+      };
+    };
+    expect(body.directive.id).toBe(directive.id);
+    expect(body.timeline.tasks).toEqual([]);
+    expect(body.timeline.openQuestions).toEqual([]);
+    expect(body.timeline.modelUsage).toEqual({ totalCostUsd: 0, callCount: 0 });
+    await app.close();
+  });
+
+  it('GET /api/v1/directives/:id returns 401 without bearer', async () => {
+    const [directive] = seedDirectives(1);
+    if (directive === undefined) throw new Error('seed failed');
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}`,
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+});

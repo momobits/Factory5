@@ -34,6 +34,9 @@ import fastifyStatic from '@fastify/static';
 import type { ChannelId, OutboundMessage } from '@factory5/core';
 import { newId } from '@factory5/core';
 import {
+  apiV1DirectiveDetailResponseSchema,
+  apiV1DirectivesListQuerySchema,
+  apiV1DirectivesListResponseSchema,
   directiveNotifyRequestSchema,
   IpcRequestError,
   ipcErrorSchema,
@@ -43,13 +46,22 @@ import {
   statusResponseSchema,
   workerAskUserRequestSchema,
   workerAskUserResponseSchema,
+  type ApiV1DirectiveDetailResponse,
+  type ApiV1DirectivesListResponse,
   type StatusResponse,
   type WorkerAskUserRequest,
   type WorkerAskUserResponse,
 } from '@factory5/ipc';
 import type { Logger } from '@factory5/logger';
 import { createLogger } from '@factory5/logger';
-import { directives as directivesQ, outbound, type Database } from '@factory5/state';
+import {
+  directives as directivesQ,
+  modelUsage,
+  outbound,
+  pendingQuestions,
+  tasksInflight,
+  type Database,
+} from '@factory5/state';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 
@@ -332,19 +344,9 @@ function registerRoutes(
   // ----- GET /api/v1/status (ADR 0025) -----
   // UI-bearer-gated smoke endpoint — returns the same shape as /status so
   // the SPA can confirm its token and the daemon are both reachable before
-  // wiring the richer /api/v1/* endpoints (9.4–9.7). Handler-level bearer
-  // check mirrors /worker/ask-user — no preHandler plumbing needed yet.
+  // wiring the richer /api/v1/* endpoints (9.4–9.7).
   app.get('/api/v1/status', async (request, reply) => {
-    if (opts.uiAuthToken === undefined) {
-      throw new IpcRequestError(
-        503,
-        'UI_DISABLED',
-        'daemon is not configured with a UI auth token',
-      );
-    }
-    if (!checkBearer(request, opts.uiAuthToken)) {
-      throw new IpcRequestError(401, 'UI_AUTH_REQUIRED', 'missing or invalid bearer token');
-    }
+    requireUiAuth(request, opts.uiAuthToken);
     const channels = (opts.channels?.list() ?? []).map((c) => ({
       id: c.id,
       status: c.status,
@@ -359,6 +361,69 @@ function registerRoutes(
       channels,
     });
     ipcLog.debug({ reqId: request.id, channels: channels.length }, 'ipc: /api/v1/status');
+    reply.send(resp);
+  });
+
+  // ----- GET /api/v1/directives (ADR 0025, sub-step 9.4) -----
+  // Paged list with optional ?status filter. Bearer-gated; schema parse
+  // enforces the limit/offset bounds. Reuses directivesQ.listPaged verbatim.
+  app.get('/api/v1/directives', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const query = apiV1DirectivesListQuerySchema.parse(request.query);
+    const limit = query.limit ?? 20;
+    const offset = query.offset ?? 0;
+    const result = directivesQ.listPaged(opts.db, {
+      limit,
+      offset,
+      ...(query.status !== undefined ? { status: query.status } : {}),
+    });
+    const resp: ApiV1DirectivesListResponse = apiV1DirectivesListResponseSchema.parse({
+      items: result.items,
+      total: result.total,
+      limit,
+      offset,
+    });
+    ipcLog.debug(
+      { reqId: request.id, limit, offset, status: query.status, total: result.total },
+      'ipc: /api/v1/directives',
+    );
+    reply.send(resp);
+  });
+
+  // ----- GET /api/v1/directives/:id (ADR 0025, sub-step 9.4) -----
+  // Detail with timeline: inflight tasks, open pending-questions, and the
+  // spend + call-count rollup. Joins happen in SQL via the existing query
+  // helpers; the handler just assembles the envelope.
+  app.get<{ Params: { id: string } }>('/api/v1/directives/:id', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const { id } = request.params;
+    const directive = directivesQ.getById(opts.db, id);
+    if (directive === undefined) {
+      throw new IpcRequestError(404, 'DIRECTIVE_NOT_FOUND', `directive ${id} not found`);
+    }
+    const tasks = tasksInflight.listByDirective(opts.db, id);
+    const openQuestions = pendingQuestions.openForDirective(opts.db, id);
+    const totalCostUsd = modelUsage.totalCostForDirective(opts.db, id);
+    const callCount = modelUsage.countForDirective(opts.db, id);
+    const resp: ApiV1DirectiveDetailResponse = apiV1DirectiveDetailResponseSchema.parse({
+      directive,
+      timeline: {
+        tasks,
+        openQuestions,
+        modelUsage: { totalCostUsd, callCount },
+      },
+    });
+    ipcLog.debug(
+      {
+        reqId: request.id,
+        directiveId: id,
+        tasks: tasks.length,
+        openQuestions: openQuestions.length,
+        totalCostUsd,
+        callCount,
+      },
+      'ipc: /api/v1/directives/:id',
+    );
     reply.send(resp);
   });
 
@@ -402,6 +467,23 @@ function registerRoutes(
     );
     reply.send(resp);
   });
+}
+
+/**
+ * Enforce the UI bearer on `/api/v1/*` handlers. When `uiAuthToken` is
+ * undefined the daemon is in CLI-only mode; when it's set but the request
+ * lacks a matching bearer the request is unauthenticated. Throws the typed
+ * {@link IpcRequestError} the handler's error pipeline rewrites into a JSON
+ * envelope. Consolidates the 503/401 shape shared across every `/api/v1/*`
+ * route so individual handlers stay one-liners.
+ */
+function requireUiAuth(request: FastifyRequest, token: string | undefined): void {
+  if (token === undefined) {
+    throw new IpcRequestError(503, 'UI_DISABLED', 'daemon is not configured with a UI auth token');
+  }
+  if (!checkBearer(request, token)) {
+    throw new IpcRequestError(401, 'UI_AUTH_REQUIRED', 'missing or invalid bearer token');
+  }
 }
 
 /**

@@ -132,6 +132,54 @@ export function listRecent(db: Database, limit = 50): Directive[] {
   return rows.map(rowToDirective);
 }
 
+export interface ListPagedFilter {
+  /** Page size. Clamped to [1, 100]. Default 20. */
+  limit?: number;
+  /** Rows to skip. Clamped to >= 0. Default 0. */
+  offset?: number;
+  /** Optional status filter; omit to return all statuses. */
+  status?: Directive['status'];
+}
+
+export interface ListPagedResult {
+  items: Directive[];
+  /** Total matching rows ignoring pagination; feeds page-count UX. */
+  total: number;
+}
+
+/**
+ * Paged list with optional status filter, newest first. Used by the web UI's
+ * `/api/v1/directives` endpoint (Phase 9); CLI and brain paths continue to
+ * use {@link listRecent} / {@link listByStatus} as before.
+ */
+export function listPaged(db: Database, filter: ListPagedFilter = {}): ListPagedResult {
+  const limit = Math.max(1, Math.min(100, filter.limit ?? 20));
+  const offset = Math.max(0, filter.offset ?? 0);
+
+  if (filter.status !== undefined) {
+    const countRow = db
+      .prepare('SELECT COUNT(*) AS count FROM directives WHERE status = ?')
+      .get(filter.status) as { count: number };
+    const rows = db
+      .prepare(
+        `SELECT * FROM directives
+           WHERE status = ?
+           ORDER BY created_at DESC
+           LIMIT ? OFFSET ?`,
+      )
+      .all(filter.status, limit, offset) as Row[];
+    return { items: rows.map(rowToDirective), total: countRow.count };
+  }
+
+  const countRow = db.prepare('SELECT COUNT(*) AS count FROM directives').get() as {
+    count: number;
+  };
+  const rows = db
+    .prepare('SELECT * FROM directives ORDER BY created_at DESC LIMIT ? OFFSET ?')
+    .all(limit, offset) as Row[];
+  return { items: rows.map(rowToDirective), total: countRow.count };
+}
+
 /**
  * Thrown when `markBlocked` is called on a directive that doesn't exist or
  * is already in a terminal state. The CLI surfaces `code` to set an
