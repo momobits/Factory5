@@ -85,7 +85,7 @@ function seedRunningTask(db: Database, directiveId: string): string {
   return id;
 }
 
-function buildApp(db: Database): FastifyInstance {
+async function buildApp(db: Database): Promise<FastifyInstance> {
   const handler = buildWorkerAskUserHandler({
     db,
     defaultDeadlineSeconds: 3600,
@@ -132,9 +132,9 @@ describe('worker ask-user regression — happy path (ADR 0024 §6.1)', () => {
   let db: Database;
   let app: FastifyInstance;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = freshDb();
-    app = buildApp(db);
+    app = await buildApp(db);
   });
 
   afterEach(async () => {
@@ -252,9 +252,9 @@ describe('worker ask-user regression — two-workers correlation (ADR 0024 §6.3
   let db: Database;
   let app: FastifyInstance;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = freshDb();
-    app = buildApp(db);
+    app = await buildApp(db);
   });
 
   afterEach(async () => {

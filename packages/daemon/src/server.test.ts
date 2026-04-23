@@ -1,3 +1,7 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { initLogger } from '@factory5/logger';
 import {
   directiveNotifyResponseSchema,
@@ -59,7 +63,7 @@ describe('IPC server', () => {
   });
 
   it('GET /healthz returns 200 with { ok: true }', async () => {
-    const app = buildIpcServer({
+    const app = await buildIpcServer({
       host: '127.0.0.1',
       port: 0,
       db,
@@ -75,7 +79,7 @@ describe('IPC server', () => {
   });
 
   it('GET /status matches StatusResponse schema (empty channels)', async () => {
-    const app = buildIpcServer({
+    const app = await buildIpcServer({
       host: '127.0.0.1',
       port: 0,
       db,
@@ -94,7 +98,7 @@ describe('IPC server', () => {
   });
 
   it('GET /status reports channels from the registry', async () => {
-    const app = buildIpcServer({
+    const app = await buildIpcServer({
       host: '127.0.0.1',
       port: 0,
       db,
@@ -122,7 +126,7 @@ describe('IPC server', () => {
     doorbell.on('outbound.new', ({ messageId }) => {
       emitted = messageId;
     });
-    const app = buildIpcServer({
+    const app = await buildIpcServer({
       host: '127.0.0.1',
       port: 0,
       db,
@@ -162,7 +166,7 @@ describe('IPC server', () => {
       rung = payload;
     });
 
-    const app = buildIpcServer({
+    const app = await buildIpcServer({
       host: '127.0.0.1',
       port: 0,
       db,
@@ -184,7 +188,7 @@ describe('IPC server', () => {
   });
 
   it('POST /directives/notify 404s on unknown directive (with error envelope)', async () => {
-    const app = buildIpcServer({
+    const app = await buildIpcServer({
       host: '127.0.0.1',
       port: 0,
       db,
@@ -209,7 +213,7 @@ describe('IPC server', () => {
     doorbell.on('config.reloaded', () => {
       reloaded = true;
     });
-    const app = buildIpcServer({
+    const app = await buildIpcServer({
       host: '127.0.0.1',
       port: 0,
       db,
@@ -228,7 +232,7 @@ describe('IPC server', () => {
   });
 
   it('POST /send rejects non-loopback requests', async () => {
-    const app = buildIpcServer({
+    const app = await buildIpcServer({
       host: '127.0.0.1',
       port: 0,
       db,
@@ -250,7 +254,7 @@ describe('IPC server', () => {
   });
 
   it('POST /send returns 400 with error envelope on schema violation', async () => {
-    const app = buildIpcServer({
+    const app = await buildIpcServer({
       host: '127.0.0.1',
       port: 0,
       db,
@@ -284,7 +288,7 @@ describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
     db.close();
   });
 
-  function makeApp(overrides: {
+  async function makeApp(overrides: {
     workerAskUser?: (req: unknown) => Promise<unknown>;
     workerAuthToken?: string;
   }) {
@@ -329,7 +333,7 @@ describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
       timedOut: boolean;
       aborted: boolean;
     }> => ({ questionId, answer: 'jwt', timedOut: false, aborted: false });
-    const app = makeApp({ workerAskUser: handler });
+    const app = await makeApp({ workerAskUser: handler });
     const res = await app.inject({
       method: 'POST',
       url: '/worker/ask-user',
@@ -349,7 +353,7 @@ describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
       timedOut: boolean;
       aborted: boolean;
     }> => ({ questionId, timedOut: true, aborted: false });
-    const app = makeApp({ workerAskUser: handler });
+    const app = await makeApp({ workerAskUser: handler });
     const res = await app.inject({
       method: 'POST',
       url: '/worker/ask-user',
@@ -368,7 +372,7 @@ describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
   });
 
   it('returns 503 WORKER_ASK_USER_DISABLED when handler is not configured', async () => {
-    const app = makeApp({});
+    const app = await makeApp({});
     const res = await app.inject({
       method: 'POST',
       url: '/worker/ask-user',
@@ -387,7 +391,7 @@ describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
       timedOut: boolean;
       aborted: boolean;
     }> => ({ questionId: newId(), answer: 'jwt', timedOut: false, aborted: false });
-    const app = makeApp({ workerAskUser: handler, workerAuthToken: 'secret-token-xyz' });
+    const app = await makeApp({ workerAskUser: handler, workerAuthToken: 'secret-token-xyz' });
     const res = await app.inject({
       method: 'POST',
       url: '/worker/ask-user',
@@ -406,7 +410,7 @@ describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
       timedOut: boolean;
       aborted: boolean;
     }> => ({ questionId: newId(), answer: 'jwt', timedOut: false, aborted: false });
-    const app = makeApp({ workerAskUser: handler, workerAuthToken: 'secret-token-xyz' });
+    const app = await makeApp({ workerAskUser: handler, workerAuthToken: 'secret-token-xyz' });
     const res = await app.inject({
       method: 'POST',
       url: '/worker/ask-user',
@@ -424,7 +428,7 @@ describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
       timedOut: boolean;
       aborted: boolean;
     }> => ({ questionId: newId(), answer: 'jwt', timedOut: false, aborted: false });
-    const app = makeApp({ workerAskUser: handler, workerAuthToken: 'secret-token-xyz' });
+    const app = await makeApp({ workerAskUser: handler, workerAuthToken: 'secret-token-xyz' });
     const res = await app.inject({
       method: 'POST',
       url: '/worker/ask-user',
@@ -442,7 +446,7 @@ describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
       timedOut: boolean;
       aborted: boolean;
     }> => ({ questionId: newId(), answer: 'x', timedOut: false, aborted: false });
-    const app = makeApp({ workerAskUser: handler });
+    const app = await makeApp({ workerAskUser: handler });
     const res = await app.inject({
       method: 'POST',
       url: '/worker/ask-user',
@@ -461,7 +465,7 @@ describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
       timedOut: boolean;
       aborted: boolean;
     }> => ({ questionId: newId(), answer: 'x', timedOut: false, aborted: false });
-    const app = makeApp({ workerAskUser: handler, workerAuthToken: 'secret-token-xyz' });
+    const app = await makeApp({ workerAskUser: handler, workerAuthToken: 'secret-token-xyz' });
     const res = await app.inject({
       method: 'POST',
       url: '/worker/ask-user',
@@ -475,7 +479,7 @@ describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
     const handler = async (): Promise<never> => {
       throw new IpcRequestError(404, 'TASK_NOT_FOUND', 'no such task');
     };
-    const app = makeApp({ workerAskUser: handler });
+    const app = await makeApp({ workerAskUser: handler });
     const res = await app.inject({
       method: 'POST',
       url: '/worker/ask-user',
@@ -486,5 +490,188 @@ describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
     expect(body.error.code).toBe('TASK_NOT_FOUND');
     expect(body.error.message).toBe('no such task');
     await app.close();
+  });
+});
+
+describe('IPC server — GET /api/v1/status (ADR 0025)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+  });
+
+  it('returns 503 UI_DISABLED when uiAuthToken is not configured', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({ method: 'GET', url: '/api/v1/status' });
+    expect(res.statusCode).toBe(503);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('UI_DISABLED');
+    await app.close();
+  });
+
+  it('returns 401 UI_AUTH_REQUIRED when bearer is missing', async () => {
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: 'ui-secret-xyz' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/status' });
+    expect(res.statusCode).toBe(401);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('UI_AUTH_REQUIRED');
+    await app.close();
+  });
+
+  it('returns 401 when bearer is wrong', async () => {
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: 'ui-secret-xyz' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/status',
+      headers: { authorization: 'Bearer wrong-token' },
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns 200 with StatusResponse shape when bearer matches', async () => {
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: 'ui-secret-xyz' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/status',
+      headers: { authorization: 'Bearer ui-secret-xyz' },
+    });
+    expect(res.statusCode).toBe(200);
+    const parsed = statusResponseSchema.parse(res.json());
+    expect(parsed.pid).toBe(process.pid);
+    expect(parsed.process).toBe('factoryd-test');
+    expect(parsed.channels).toEqual([]);
+    await app.close();
+  });
+
+  it('rejects non-loopback requests before checking bearer', async () => {
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: 'ui-secret-xyz' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/status',
+      headers: { authorization: 'Bearer ui-secret-xyz' },
+      remoteAddress: '10.0.0.5',
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('NON_LOCALHOST');
+    await app.close();
+  });
+});
+
+describe('IPC server — /app/* static serve (ADR 0025)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('serves index.html from webUiStaticPath when set', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'factory5-ui-'));
+    try {
+      await writeFile(join(tmp, 'index.html'), '<!doctype html><html>hi</html>');
+      const app = await buildIpcServer({
+        host: '127.0.0.1',
+        port: 0,
+        db,
+        doorbell,
+        startedAt: STARTED_AT,
+        version: '0.0.1',
+        processName: 'factoryd-test',
+        webUiStaticPath: tmp,
+      });
+      const res = await app.inject({ method: 'GET', url: '/app/index.html' });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain('<html>hi</html>');
+      await app.close();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('returns 404 for /app/* when webUiStaticPath is unset', async () => {
+    const app = await buildIpcServer({
+      host: '127.0.0.1',
+      port: 0,
+      db,
+      doorbell,
+      startedAt: STARTED_AT,
+      version: '0.0.1',
+      processName: 'factoryd-test',
+    });
+    const res = await app.inject({ method: 'GET', url: '/app/index.html' });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('static serve does not require a bearer (shell is open; /api/v1/* is gated)', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'factory5-ui-'));
+    try {
+      await writeFile(join(tmp, 'index.html'), '<!doctype html>');
+      const app = await buildIpcServer({
+        host: '127.0.0.1',
+        port: 0,
+        db,
+        doorbell,
+        startedAt: STARTED_AT,
+        version: '0.0.1',
+        processName: 'factoryd-test',
+        webUiStaticPath: tmp,
+        uiAuthToken: 'ui-secret-xyz',
+      });
+      const res = await app.inject({ method: 'GET', url: '/app/index.html' });
+      expect(res.statusCode).toBe(200);
+      await app.close();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('static serve still respects the loopback preHandler', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'factory5-ui-'));
+    try {
+      await writeFile(join(tmp, 'index.html'), '<!doctype html>');
+      const app = await buildIpcServer({
+        host: '127.0.0.1',
+        port: 0,
+        db,
+        doorbell,
+        startedAt: STARTED_AT,
+        version: '0.0.1',
+        processName: 'factoryd-test',
+        webUiStaticPath: tmp,
+      });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/app/index.html',
+        remoteAddress: '10.0.0.5',
+      });
+      expect(res.statusCode).toBe(403);
+      await app.close();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
   });
 });

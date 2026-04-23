@@ -135,6 +135,18 @@ export interface DaemonOptions {
    * when the request omits one (per ADR 0024 §2). Default 3600 (1 hour).
    */
   workerAskUserDefaultDeadlineSeconds?: number;
+  /**
+   * Bearer token required by `/api/v1/*` IPC routes (web UI JSON API).
+   * When omitted, those routes return 503 `UI_DISABLED`. Scoped distinct
+   * from {@link workerAuthToken} per ADR 0025 §2.
+   */
+  uiAuthToken?: string;
+  /**
+   * Absolute path to a built SPA bundle (typically `apps/factory-web/dist/`).
+   * When set, `/app/*` serves files from this directory via `@fastify/static`;
+   * when omitted, `/app/*` yields 404 (headless CLI-only mode). Per ADR 0025 §3.
+   */
+  webUiStaticPath?: string;
 }
 
 export interface DaemonHandle {
@@ -280,6 +292,8 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
         ...(registry !== undefined ? { deliverOutbound: (msg) => registry.send(msg) } : {}),
         ...(opts.workerAuthToken !== undefined ? { workerAuthToken: opts.workerAuthToken } : {}),
         ...(workerAskUserHandler !== undefined ? { workerAskUser: workerAskUserHandler } : {}),
+        ...(opts.uiAuthToken !== undefined ? { uiAuthToken: opts.uiAuthToken } : {}),
+        ...(opts.webUiStaticPath !== undefined ? { webUiStaticPath: opts.webUiStaticPath } : {}),
       });
       subsystems.push({ name: 'ipc', stop: ipc.stop });
     }

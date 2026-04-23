@@ -16,6 +16,9 @@
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import process, { argv, execPath, exit, stdout } from 'node:process';
 
 import { loadDaemonEndpoint } from '@factory5/brain';
@@ -82,11 +85,29 @@ function spawnDetached(): number {
   return child.pid;
 }
 
+/**
+ * Resolve the Phase 9 web UI's built bundle location (ADR 0025 §3). In dev
+ * (`tsx apps/factoryd/src/main.ts`) and prod (`node apps/factoryd/dist/main.js`)
+ * the relative layout is identical: `../../factory-web/dist` off the current
+ * script directory lands at `apps/factory-web/dist`.
+ *
+ * Returns `undefined` when the SPA hasn't been built yet — the daemon still
+ * boots (CLI-only mode); the operator sees a friendly note in the startup log
+ * pointing them to `pnpm --filter factory-web build`.
+ */
+function resolveWebUiStaticPath(): string | undefined {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidate = resolve(here, '..', '..', 'factory-web', 'dist');
+  return existsSync(candidate) ? candidate : undefined;
+}
+
 async function runForeground(): Promise<void> {
   initLogger({ processName: 'factoryd' });
   const log = createLogger('factoryd.main');
 
   let handle: Awaited<ReturnType<typeof startDaemon>>;
+  let uiAuthToken: string;
+  let webUiStaticPath: string | undefined;
   try {
     const endpoint = await loadDaemonEndpoint();
     // Per-startup bearer token for `/worker/ask-user` (ADR 0024 §3). Workers
@@ -95,10 +116,18 @@ async function runForeground(): Promise<void> {
     // can't outlive the daemon process. 24 random bytes → 48 hex chars.
     const workerAuthToken = randomBytes(24).toString('hex');
     process.env['FACTORY5_WORKER_AUTH_TOKEN'] = workerAuthToken;
+    // Per-startup bearer for `/api/v1/*` (ADR 0025 §2). Scoped separately
+    // from the worker token so leaks don't grant cross-privilege; rotated
+    // each restart. Distributed to the operator via the stdout URL below.
+    uiAuthToken = randomBytes(24).toString('hex');
+    process.env['FACTORY5_UI_TOKEN'] = uiAuthToken;
+    webUiStaticPath = resolveWebUiStaticPath();
     handle = await startDaemon({
       host: endpoint.host,
       port: endpoint.port,
       workerAuthToken,
+      uiAuthToken,
+      ...(webUiStaticPath !== undefined ? { webUiStaticPath } : {}),
     });
   } catch (err) {
     if (err instanceof PidFileLockedError) {
@@ -113,6 +142,16 @@ async function runForeground(): Promise<void> {
     exit(1);
   }
   log.info({ port: handle.port, pid: handle.pid }, 'factoryd started');
+  // ADR 0025 §2: operator-visible URL for the web UI. Static bundle present →
+  // the factoryd-hosted URL works directly; bundle missing → the token is
+  // usable against an Astro dev server that proxies /api/v1.
+  if (webUiStaticPath !== undefined) {
+    stdout.write(`ui: http://127.0.0.1:${String(handle.port)}/app/?t=${uiAuthToken}\n`);
+  } else {
+    stdout.write(
+      `ui: FACTORY5_UI_TOKEN=${uiAuthToken} (SPA bundle missing — run 'pnpm --filter factory-web build', or use 'pnpm --filter factory-web dev' at http://localhost:4321/app/?t=${uiAuthToken})\n`,
+    );
+  }
 
   let shuttingDown = false;
   const shutdown = (signal: string): void => {

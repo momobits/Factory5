@@ -15,7 +15,7 @@
 
 - [x] 9.2 — `apps/factory-web/` scaffold. New workspace app (not package) with its own `package.json`, `tsconfig.json`, dev script. Wire into pnpm-workspace via `apps/*` glob (no edit needed). Minimal "hello world" page served by the chosen framework's dev server. Include the bearer-token gate scaffolding even in dev.
 
-- [ ] 9.3 — Fastify static serve + bearer gate wiring. New daemon option + route namespace:
+- [x] 9.3 — Fastify static serve + bearer gate wiring. New daemon option + route namespace:
   - `DaemonOptions.webUiStaticPath?` (absolute path to the built SPA dir)
   - `DaemonOptions.uiAuthToken?` (bearer)
   - Fastify `/app/*` serves static, `/api/v1/*` is bearer-gated

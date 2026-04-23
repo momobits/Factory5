@@ -8,20 +8,29 @@
  *   POST /directives/notify  doorbell — brain claim loop wakes up
  *   POST /reload-config      broadcast config-reload to subsystems
  *   POST /worker/ask-user    (gated) worker→brain askUser proxy (ADR 0024)
+ *   GET  /app/*              (loopback-only) static SPA bundle (ADR 0025)
+ *   GET  /api/v1/status      (gated) UI JSON API status smoke (ADR 0025)
  *
  * Every handler logs a correlationId. Non-localhost connections are refused
  * both at the bind layer (we listen on `127.0.0.1`) and at a preHandler
  * (defense-in-depth if the daemon is ever reconfigured to bind broader).
  *
- * The `/worker/*` namespace is bearer-token-gated. Brain generates a per-
- * startup token and passes it to its worker subprocesses via env; only those
- * workers can hit the route. Existing routes stay loopback-only without the
- * extra gate.
+ * Two bearer-gated namespaces, scoped separately per ADR 0025 §2:
+ *   - `/worker/*` — token minted per startup; brain passes it to worker
+ *     subprocesses via env. Only workers can hit these routes.
+ *   - `/api/v1/*` — separate `FACTORY5_UI_TOKEN` for the browser SPA.
+ *     Scoped distinct from the worker token so a leaked dashboard token
+ *     does not grant worker-impersonation privileges.
+ *
+ * `/app/*` serves the static SPA bundle via `@fastify/static` when a
+ * `webUiStaticPath` is supplied. The shell itself is not bearer-gated
+ * (same HTML/JS for every operator); the data API it calls is.
  */
 
 import type { AddressInfo } from 'node:net';
 import process from 'node:process';
 
+import fastifyStatic from '@fastify/static';
 import type { ChannelId, OutboundMessage } from '@factory5/core';
 import { newId } from '@factory5/core';
 import {
@@ -117,6 +126,22 @@ export interface IpcServerOptions {
    * subprocesses via env.
    */
   workerAuthToken?: string;
+  /**
+   * Bearer token required by `/api/v1/*` routes (the web UI's JSON API).
+   * When omitted, those routes return 503 `UI_DISABLED` — the daemon is not
+   * configured to serve the web UI. Distinct from {@link workerAuthToken}
+   * per ADR 0025 §2: scope separation means a compromised UI token cannot
+   * impersonate workers. Token is rotated per daemon startup; distributed
+   * to the operator via the daemon-logged `/app/?t=<token>` URL.
+   */
+  uiAuthToken?: string;
+  /**
+   * Absolute path to a built SPA bundle (e.g. `apps/factory-web/dist/`).
+   * When set, the daemon mounts `@fastify/static` under `/app/` pointing at
+   * this directory. When omitted, `/app/*` returns 404. Production factoryd
+   * resolves this from its install layout; tests typically leave it unset.
+   */
+  webUiStaticPath?: string;
 }
 
 export interface IpcServerHandle {
@@ -304,11 +329,44 @@ function registerRoutes(
     );
   });
 
+  // ----- GET /api/v1/status (ADR 0025) -----
+  // UI-bearer-gated smoke endpoint — returns the same shape as /status so
+  // the SPA can confirm its token and the daemon are both reachable before
+  // wiring the richer /api/v1/* endpoints (9.4–9.7). Handler-level bearer
+  // check mirrors /worker/ask-user — no preHandler plumbing needed yet.
+  app.get('/api/v1/status', async (request, reply) => {
+    if (opts.uiAuthToken === undefined) {
+      throw new IpcRequestError(
+        503,
+        'UI_DISABLED',
+        'daemon is not configured with a UI auth token',
+      );
+    }
+    if (!checkBearer(request, opts.uiAuthToken)) {
+      throw new IpcRequestError(401, 'UI_AUTH_REQUIRED', 'missing or invalid bearer token');
+    }
+    const channels = (opts.channels?.list() ?? []).map((c) => ({
+      id: c.id,
+      status: c.status,
+      ...(c.lastError !== undefined ? { lastError: c.lastError } : {}),
+    }));
+    const resp: StatusResponse = statusResponseSchema.parse({
+      version: opts.version,
+      process: opts.processName,
+      pid: process.pid,
+      uptimeMs: Date.now() - startedAtMs,
+      startedAt: opts.startedAt,
+      channels,
+    });
+    ipcLog.debug({ reqId: request.id, channels: channels.length }, 'ipc: /api/v1/status');
+    reply.send(resp);
+  });
+
   // ----- POST /worker/ask-user (ADR 0024) -----
   // Bearer-gated; bearer check fires before schema parse so malformed bodies
   // from unauthenticated callers can't probe the schema surface.
   app.post('/worker/ask-user', async (request, reply) => {
-    if (!checkWorkerBearer(request, opts.workerAuthToken)) {
+    if (!checkBearer(request, opts.workerAuthToken)) {
       throw new IpcRequestError(401, 'WORKER_AUTH_REQUIRED', 'missing or invalid bearer token');
     }
     if (opts.workerAskUser === undefined) {
@@ -347,12 +405,16 @@ function registerRoutes(
 }
 
 /**
- * Bearer-token check for `/worker/*` routes. Returns `true` when the request
- * carries `Authorization: Bearer <expected>` and `expected` is set, OR when
- * `expected` is undefined (test mode — accept any loopback request). Returns
- * `false` when the token is set but the header is missing or wrong.
+ * Bearer-token check for routes that require auth. Returns `true` when the
+ * request carries `Authorization: Bearer <expected>` and `expected` is set,
+ * OR when `expected` is undefined (test mode — accept any loopback request).
+ * Returns `false` when the token is set but the header is missing or wrong.
+ *
+ * Shared between `/worker/*` (ADR 0024) and `/api/v1/*` (ADR 0025). Each
+ * route namespace has its own `expected` token; this helper is the
+ * constant-time compare both reuse.
  */
-function checkWorkerBearer(request: FastifyRequest, expected: string | undefined): boolean {
+function checkBearer(request: FastifyRequest, expected: string | undefined): boolean {
   if (expected === undefined) return true;
   const header = request.headers['authorization'];
   if (typeof header !== 'string') return false;
@@ -373,8 +435,12 @@ function checkWorkerBearer(request: FastifyRequest, expected: string | undefined
 /**
  * Build a Fastify instance without starting it. Exposed for tests that want
  * to use `inject()` without opening a real socket.
+ *
+ * Async because `@fastify/static` registration is asynchronous when
+ * `webUiStaticPath` is supplied. Callers that skip the web UI still get a
+ * well-formed app; the await resolves in a single microtask.
  */
-export function buildIpcServer(opts: IpcServerOptions): FastifyInstance {
+export async function buildIpcServer(opts: IpcServerOptions): Promise<FastifyInstance> {
   const startedAtMs = Date.parse(opts.startedAt);
   const app = Fastify({
     logger: false,
@@ -400,6 +466,21 @@ export function buildIpcServer(opts: IpcServerOptions): FastifyInstance {
   setupErrorHandler(app, ipcLog);
   registerRoutes(app, opts, ipcLog, startedAtMs);
 
+  // Mount the SPA bundle under /app/ when configured. @fastify/static handles
+  // MIME types, etag, range requests, and index resolution — we just point
+  // it at the directory. When `webUiStaticPath` is unset the plugin is not
+  // registered and /app/* yields 404 (Fastify's default for an unhandled route).
+  if (opts.webUiStaticPath !== undefined) {
+    await app.register(fastifyStatic, {
+      root: opts.webUiStaticPath,
+      prefix: '/app/',
+      // Don't decorate reply with sendFile — we have no route that needs it,
+      // and skipping keeps the plugin idempotent across multiple registers.
+      decorateReply: false,
+    });
+    ipcLog.info({ path: opts.webUiStaticPath }, 'ipc: mounted /app/* static serve');
+  }
+
   return app;
 }
 
@@ -408,7 +489,7 @@ export function buildIpcServer(opts: IpcServerOptions): FastifyInstance {
  * port + a graceful `stop()`.
  */
 export async function startIpcServer(opts: IpcServerOptions): Promise<IpcServerHandle> {
-  const app = buildIpcServer(opts);
+  const app = await buildIpcServer(opts);
   await app.listen({ host: opts.host, port: opts.port });
   const address = app.server.address() as AddressInfo | null;
   const boundPort = address?.port ?? opts.port;
