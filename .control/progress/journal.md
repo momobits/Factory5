@@ -2,6 +2,17 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-04-23 (session `2026-04-23T21`) — Phase 9 closed (9.9 live validation + 9.10 phase close); Phase 10 kicked off
+
+- **Commit:** single close commit `chore(phase-9): close phase 9, kick off phase 10` on top of `3313030` (prior session-end docs-state). Tag `phase-9-web-ui-closed` applied on this commit.
+- **9.9 live validation:** factoryd restarted clean after a stale-dist diagnosis + rebuild (see "Non-trivial finding" below). Server-side smoke of 14 `/api/v1/*` route variants all 200 with p50 ≈ 2.5 ms against the operator's ~5 MB `factory.db` (25 directives, 13 pending questions, $69.6 across 141 calls in 5 projects, 10+ findings). Auth negatives both 401 (`UI_AUTH_REQUIRED`). Operator then opened `http://127.0.0.1:25295/app/?t=<48-hex>` in a browser and clicked through all five pages: overview / directives / questions / spend / findings — all rendered with real data. Charter criterion "every page renders with real data + <100 ms p50 latency" met with ~40× headroom. Observations captured in `docs/Phase9_Progress.md` §Live validation.
+- **9.10 phase close:** `docs/Phase9_Progress.md` authored (mirrors Phase 8 shape: scope table + ADR 0025 summary + 9.9 validation + non-trivial finding + tests at close + carry-forward + done-criteria checklist). `docs/PROGRESS.md` prepended with the Phase 9 close summary. `CompleteArchitecture.md` gained new §21 "Web UI" pointing at ADR 0025. `.control/phases/phase-9-web-ui/steps.md` 9.9 + 9.10 checkboxes flipped. Phase 10 scaffolded at `.control/phases/phase-10-assessor-tier3/{README.md,steps.md}` per the forward-queue pitch in Phase 9's README (Node / Go / Rust pluggable runtimes, ~2–3 sessions; ADR 0026 opens). STATE.md fully rewritten for Phase 10. `.control/progress/next.md` rewritten as the Phase 10 kickoff prompt.
+- **Non-trivial finding (captured in `docs/Phase9_Progress.md`):** stale `packages/daemon/dist/index.js` tripped 404 on `/api/v1/spend` and `/api/v1/findings` on first factoryd restart, despite all daemon tests passing. Root cause: vitest resolves `.ts` source directly; `pnpm factoryd` imports `@factory5/daemon` via its `main: "./dist/index.js"` entry and picks up stale dist. Recommended remediation (deferred to Phase 10+): flip `packages/{daemon,ipc,state}/package.json` `main` from `"./dist/index.js"` to `"./src/index.ts"`. tsx transpiles on demand; prod `pnpm build` still produces dist/ for downstream consumers.
+- **Tests: 605 green** (per STATE.md per-package sum — verified this close). `pnpm lint` + `pnpm format:check` clean. `pnpm build` clean (14 packages + 3 apps + factory-web dist).
+- **Spend: $0** — close work is pure docs + scaffolding; no LLM calls.
+- **Issues:** none opened, none closed. I009 (MEDIUM) + I012 (LOW) carry forward unchanged from Phase 8.
+- **Phase 10 next:** sub-step 10.1 — author ADR 0026 (pluggable-runtime contract). Four sub-decisions pinned in `next.md`: provisioner shape, verify-gate command mapping, failure-mode taxonomy, host-tool pre-flight.
+
 ## 2026-04-23 (session `2026-04-23T20`) — Phase 9 sub-steps 9.1 → 9.8 (ADR 025 + scaffold + four read-side routes + SPA pages)
 
 - **Commit range:** `f71840a` (9.1) → `5190f44` (9.8), eight substantive commits back-to-back. Docs-state commit lands after this entry.

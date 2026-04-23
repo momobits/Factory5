@@ -4,6 +4,21 @@ Chronological log of work on factory5 itself. Update this at the end of every wo
 
 ---
 
+## 2026-04-23 — Phase 9 closed (Web UI)
+
+- Phase tagged `phase-9-web-ui-closed`. All 10 sub-steps shipped in a single session arc (9.1 ADR 0025 → 9.8 SPA pages → 9.9 live operator-browser validation → 9.10 phase close). No mid-phase fix commits.
+- [ADR 0025](decisions/0025-web-ui-architecture.md) accepted: Astro MPA + Islands + `<ClientRouter />` over Vite+React / lit-vanilla; separate `FACTORY5_UI_TOKEN` (48-hex, minted per factoryd startup) distributed via `?t=` query → `sessionStorage`, scoped distinct from the worker token; `@fastify/static` under `/app/` in prod + Vite `/api/v1` proxy in dev; `/api/v1/*` URL-prefix versioning; detail pages use `?id=<ulid>` query params to stay fully static (no SSR adapter).
+- Read-side API surface landed complete: `/api/v1/status` (ADR 0025 parity with IPC `/status`), `/api/v1/directives` (list + `:id` detail with timeline rollup), `/api/v1/pending-questions` (list + `:id` detail, `status={open|answered|all}` + `directiveId` scope), `/api/v1/spend` (four rollups — per-project / per-directive / per-day / per-model — in one response), `/api/v1/findings` (list + severity/status/project/advisory filters). All bearer-gated; 401 `UI_AUTH_REQUIRED` on no-token or bad-token.
+- SPA pages: overview (summary cards), directives list + detail, questions list + detail, spend rollups with filter form, findings with severity/status/project/advisory filters. `<ClientRouter />` provides cross-page transition feel. `src/lib/api.ts` centralises the token capture + `loadInto<T>` pattern; `el()` + `fmtUsd()` utilities. Seven static pages served from `apps/factory-web/dist/`.
+- 9.9 live validation: operator at Chrome against the existing ~5 MB `factory.db` (25 directives, 13 pending questions, $69.6 across 141 calls in 5 projects). All five pages rendered with real data; `/api/v1/*` p50 ≈ 2.5 ms (~40× headroom under the 100 ms charter target). Server-side smoke of 14 route variants all 200; auth negatives both 401. See `docs/Phase9_Progress.md` for the detail.
+- **Non-trivial finding captured** (`docs/Phase9_Progress.md` §Non-trivial finding): stale `packages/daemon/dist/index.js` tripped a 404 on `/api/v1/spend` and `/api/v1/findings` on first factoryd restart, despite all tests passing (vitest resolves `.ts` source; `pnpm factoryd` imports `@factory5/daemon` via `main: "./dist/index.js"`). Fixed in-session by `pnpm --filter @factory5/ipc --filter @factory5/state --filter @factory5/daemon build`. Recommended remediation for 9b / Phase 10: flip `packages/{daemon,ipc,state}/package.json` `main` to `src/index.ts`.
+- Tests: **605** green across 14 packages (+41 aggregate from Phase 8 close 564; +13 state, +38 daemon per-sub-step). `pnpm lint` + `pnpm format:check` clean. Per-package sums exactly to 605 this time (Phase 8's close doc had a +10 miscount — noted for honesty in `docs/Phase9_Progress.md` §Tests at close).
+- New external deps: `astro ^5.0.0` + `@astrojs/check ^0.9.0` (in new `apps/factory-web/`); `@fastify/static ^7.0.0` (in `@factory5/daemon`). `pnpm-lock.yaml` grew ~3.6 KLOC from Astro's transitive deps (305 packages added at 9.2). **14 packages + 3 apps** (new: `apps/factory-web/` at 9.2).
+- Phase 10 kicks off: **Assessor tier-3** (Node / Go / Rust pluggable runtimes, ~2–3 sessions). Scaffolded in this close commit at `.control/phases/phase-10-assessor-tier3/`.
+- Carry-forward: issues I009 (MEDIUM, OPEN — Telegram/Discord `/build` inbound doesn't inherit `[budget.defaults]`) + I012 (LOW, OPEN — `maybeAnswerPendingQuestion` FIFO matcher) unchanged from Phase 8; the stale-dist dev-loop gotcha (recommended remediation in `docs/Phase9_Progress.md` §Carry-forward); the `factory ui-token` CLI command (ergonomic follow-up from ADR 0025 §2); and the Phase 6 operator follow-ups (PAT revoke etc., still out-of-band).
+
+---
+
 ## 2026-04-23 — Phase 8 closed (worker-subprocess `ask_user`)
 
 - Phase tagged `phase-8-worker-ask-user-closed`. All 8 sub-steps shipped (8.1 ADR 0024 → 8.8 phase close). Plus one mid-phase `fix(8.7)` for outbound drain spam.

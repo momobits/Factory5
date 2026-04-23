@@ -698,3 +698,11 @@ node apps/factoryd/dist/main.js --help
 - `prompts/agents/` ported from `factory2/agents/`
 
 After scaffold: `pnpm install && pnpm build` compiles cleanly on Windows + Linux. No LLM calls yet, no Discord yet, no actual builds yet. But every subsequent slice (CLI channel, brain triage, first worker, Discord adapter) drops cleanly into the structure without re-shaping anything. (The scaffold also included GitHub-event slots that were retired by ADR 0019 before ever being implemented — see that ADR for the design reversal.)
+
+---
+
+## 21. Web UI (Phase 9, added post-scaffold)
+
+factoryd's Fastify server (§3, port 25295) grew two surfaces in Phase 9 without any process split: a **static SPA bundle** under `/app/*` and a **read-only JSON API** under `/api/v1/*`. The SPA is an Astro app at `apps/factory-web/` (file-based routing, Islands-on-demand, `<ClientRouter />` for cross-page transition feel); its `dist/` is served via `@fastify/static` in production and proxied via Vite (port 4321) in dev. The API is bearer-gated by a new `FACTORY5_UI_TOKEN` minted per factoryd startup alongside the existing worker token (§3), distributed to the operator via the `ui: http://127.0.0.1:25295/app/?t=<48-hex>` line on stdout — the SPA strips the query param into `sessionStorage` on first load. The JSON API returns four aggregations in the read-side (directives, pending-questions, spend, findings) plus a status smoke, and echoes query filters back in the envelope so pages can render stable filter UIs.
+
+Authoritative design: [ADR 0025](docs/decisions/0025-web-ui-architecture.md) (framework + auth + bundling + routing). Phase 9 shipped read-only (9a) per the charter; the mutation surface (9b — answer a pending question from the browser, kick off a build) was deferred as a later phase.

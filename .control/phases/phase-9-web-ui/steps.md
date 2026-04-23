@@ -36,6 +36,6 @@
   - `spend/` — spend rollups with per-project / per-day filters
   - `findings/` — findings list with severity / status / project filters
 
-- [ ] 9.9 — Live validation. Start factoryd with `webUi` enabled, open `http://127.0.0.1:25295/app/` in a browser, confirm every page loads + shows real data (use the operator's current directives/findings/spend corpus). Measure latency: each API call < 100 ms at the p50 against the operator's local factory.db (~5 MB).
+- [x] 9.9 — Live validation. Start factoryd with `webUi` enabled, open `http://127.0.0.1:25295/app/` in a browser, confirm every page loads + shows real data (use the operator's current directives/findings/spend corpus). Measure latency: each API call < 100 ms at the p50 against the operator's local factory.db (~5 MB).
 
-- [ ] 9.10 — Close Phase 9 (tag `phase-9-web-ui-closed`). `docs/Phase9_Progress.md` + `docs/PROGRESS.md` entry + `CompleteArchitecture.md` §? pointer update (new "Web UI" section). Scaffold Phase 10 (Assessor tier-3).
+- [x] 9.10 — Close Phase 9 (tag `phase-9-web-ui-closed`). `docs/Phase9_Progress.md` + `docs/PROGRESS.md` entry + `CompleteArchitecture.md` §21 pointer update (new "Web UI" section). Scaffold Phase 10 (Assessor tier-3).
