@@ -10,11 +10,12 @@ import {
   sendResponseSchema,
   statusResponseSchema,
 } from '@factory5/ipc';
-import { newId, type Directive, type PendingQuestion } from '@factory5/core';
+import { newId, type Directive, type Finding, type PendingQuestion } from '@factory5/core';
 import {
   openDatabase,
   runMigrations,
   directives as directivesQ,
+  findingsRegistry,
   modelUsage,
   outbound,
   pendingQuestions,
@@ -1175,6 +1176,197 @@ describe('IPC server — /api/v1/spend (ADR 0025, sub-step 9.6)', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/spend?since=yesterday',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+});
+
+describe('IPC server — /api/v1/findings (ADR 0025, sub-step 9.7)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  const UI_TOKEN = 'ui-secret-xyz';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  function seedFinding(
+    projectId: string,
+    overrides: Partial<Finding> = {},
+    extra: { projectPath?: string; updatedAt?: string } = {},
+  ): Finding {
+    const f: Finding = {
+      id: overrides.id ?? `F${String(Math.floor(Math.random() * 900) + 100)}`,
+      source: 'verifier',
+      target: 'src/x.ts',
+      severity: 'MEDIUM',
+      status: 'OPEN',
+      description: 'test finding',
+      createdAt: new Date().toISOString(),
+      ...overrides,
+    };
+    findingsRegistry.upsert(db, {
+      projectId,
+      projectPath: extra.projectPath ?? `/tmp/projects/${projectId}`,
+      finding: f,
+      ...(extra.updatedAt !== undefined ? { updatedAt: extra.updatedAt } : {}),
+    });
+    return f;
+  }
+
+  it('GET /api/v1/findings returns 401 without bearer', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({ method: 'GET', url: '/api/v1/findings' });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('GET /api/v1/findings returns empty items + echoed default limit', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/findings',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: unknown[]; filter: { limit: number } };
+    expect(body.items).toEqual([]);
+    expect(body.filter.limit).toBe(100);
+    await app.close();
+  });
+
+  it('GET /api/v1/findings returns all seeded entries, newest first', async () => {
+    const projA = newId();
+    seedFinding(projA, { id: 'F101' }, { updatedAt: '2026-04-22T12:00:00.000Z' });
+    seedFinding(projA, { id: 'F102' }, { updatedAt: '2026-04-23T12:00:00.000Z' });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/findings',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      items: Array<{ finding: { id: string } }>;
+    };
+    expect(body.items).toHaveLength(2);
+    expect(body.items[0]?.finding.id).toBe('F102');
+    expect(body.items[1]?.finding.id).toBe('F101');
+    await app.close();
+  });
+
+  it('GET /api/v1/findings?severity=HIGH filters by severity', async () => {
+    const proj = newId();
+    seedFinding(proj, { id: 'F201', severity: 'LOW' });
+    seedFinding(proj, { id: 'F202', severity: 'HIGH' });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/findings?severity=HIGH',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      items: Array<{ finding: { id: string; severity: string } }>;
+      filter: { severity: string };
+    };
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]?.finding.id).toBe('F202');
+    expect(body.filter.severity).toBe('HIGH');
+    await app.close();
+  });
+
+  it('GET /api/v1/findings?status=VERIFIED filters by status', async () => {
+    const proj = newId();
+    seedFinding(proj, { id: 'F301', status: 'OPEN' });
+    seedFinding(proj, {
+      id: 'F302',
+      status: 'VERIFIED',
+      resolvedAt: new Date().toISOString(),
+    });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/findings?status=VERIFIED',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      items: Array<{ finding: { id: string; status: string } }>;
+    };
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]?.finding.id).toBe('F302');
+    await app.close();
+  });
+
+  it('GET /api/v1/findings?project=<id> scopes to that project', async () => {
+    const projA = newId();
+    const projB = newId();
+    seedFinding(projA, { id: 'F401' });
+    seedFinding(projB, { id: 'F402' });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/findings?project=${projA}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      items: Array<{ projectId: string; finding: { id: string } }>;
+    };
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]?.projectId).toBe(projA);
+    expect(body.items[0]?.finding.id).toBe('F401');
+    await app.close();
+  });
+
+  it('GET /api/v1/findings?advisory=true returns only advisory entries', async () => {
+    const proj = newId();
+    seedFinding(proj, { id: 'F501' }); // default: advisory undefined
+    seedFinding(proj, { id: 'F502', advisory: true });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/findings?advisory=true',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      items: Array<{ finding: { id: string; advisory?: boolean } }>;
+      filter: { advisory: boolean };
+    };
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]?.finding.id).toBe('F502');
+    expect(body.filter.advisory).toBe(true);
+    await app.close();
+  });
+
+  it('GET /api/v1/findings returns 400 on invalid severity', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/findings?severity=URGENT',
       headers: { authorization: `Bearer ${UI_TOKEN}` },
     });
     expect(res.statusCode).toBe(400);

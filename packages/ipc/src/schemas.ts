@@ -9,8 +9,11 @@ import {
   agentRoleSchema,
   channelIdSchema,
   directiveSchema,
+  findingSchema,
+  findingStatusSchema,
   modelCategorySchema,
   pendingQuestionSchema,
+  severitySchema,
   taskResultSchema,
   taskStatusSchema,
   ulidSchema,
@@ -299,6 +302,53 @@ export const apiV1SpendResponseSchema = z.object({
   }),
 });
 export type ApiV1SpendResponse = z.infer<typeof apiV1SpendResponseSchema>;
+
+// -----------------------------------------------------------------------------
+// GET /api/v1/findings  (web UI, ADR 0025 sub-step 9.7)
+// -----------------------------------------------------------------------------
+
+/**
+ * Query string for `GET /api/v1/findings`. All fields optional.
+ *
+ *   ?severity=…    filter by severity (LOW/MEDIUM/HIGH/CRITICAL)
+ *   ?status=…      filter by status (OPEN/FIXED/ACCEPTED/...)
+ *   ?project=…     exact project_id, or glob with * and ?
+ *   ?advisory=true|false   boolean filter; omit for both
+ *   ?limit=100     clamped to [1, 1000] server-side
+ *
+ * Matches `ListFilter` in `@factory5/state/findings-registry`.
+ */
+export const apiV1FindingsListQuerySchema = z.object({
+  severity: severitySchema.optional(),
+  status: findingStatusSchema.optional(),
+  project: z.string().min(1).optional(),
+  advisory: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(1000).optional(),
+});
+export type ApiV1FindingsListQuery = z.infer<typeof apiV1FindingsListQuerySchema>;
+
+const registryEntrySchema = z.object({
+  projectId: z.string(),
+  projectPath: z.string(),
+  finding: findingSchema,
+  originDirectiveId: ulidSchema.optional(),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const apiV1FindingsListResponseSchema = z.object({
+  items: z.array(registryEntrySchema),
+  filter: z.object({
+    severity: severitySchema.optional(),
+    status: findingStatusSchema.optional(),
+    project: z.string().optional(),
+    advisory: z.boolean().optional(),
+    limit: z.number().int().positive(),
+  }),
+});
+export type ApiV1FindingsListResponse = z.infer<typeof apiV1FindingsListResponseSchema>;
 
 // -----------------------------------------------------------------------------
 // Error envelope (returned with non-2xx responses)

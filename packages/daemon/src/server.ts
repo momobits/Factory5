@@ -37,6 +37,8 @@ import {
   apiV1DirectiveDetailResponseSchema,
   apiV1DirectivesListQuerySchema,
   apiV1DirectivesListResponseSchema,
+  apiV1FindingsListQuerySchema,
+  apiV1FindingsListResponseSchema,
   apiV1PendingQuestionDetailResponseSchema,
   apiV1PendingQuestionsListQuerySchema,
   apiV1PendingQuestionsListResponseSchema,
@@ -53,6 +55,7 @@ import {
   workerAskUserResponseSchema,
   type ApiV1DirectiveDetailResponse,
   type ApiV1DirectivesListResponse,
+  type ApiV1FindingsListResponse,
   type ApiV1PendingQuestionDetailResponse,
   type ApiV1PendingQuestionsListResponse,
   type ApiV1SpendResponse,
@@ -64,6 +67,7 @@ import type { Logger } from '@factory5/logger';
 import { createLogger } from '@factory5/logger';
 import {
   directives as directivesQ,
+  findingsRegistry,
   modelUsage,
   outbound,
   pendingQuestions,
@@ -529,6 +533,45 @@ function registerRoutes(
         filter,
       },
       'ipc: /api/v1/spend',
+    );
+    reply.send(resp);
+  });
+
+  // ----- GET /api/v1/findings (ADR 0025, sub-step 9.7) -----
+  // List registry entries with filters for severity / status / project /
+  // advisory; limit clamped [1, 1000] in the query helper. Most-recent
+  // first via `updated_at DESC`. 9.7 is read-only — mutation surfaces
+  // land in 9b.
+  app.get('/api/v1/findings', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const query = apiV1FindingsListQuerySchema.parse(request.query);
+    const listFilter: Parameters<typeof findingsRegistry.list>[1] = {};
+    if (query.severity !== undefined) listFilter.severity = query.severity;
+    if (query.status !== undefined) listFilter.status = query.status;
+    if (query.project !== undefined) listFilter.project = query.project;
+    if (query.advisory !== undefined) listFilter.advisory = query.advisory;
+    if (query.limit !== undefined) listFilter.limit = query.limit;
+    const items = findingsRegistry.list(opts.db, listFilter);
+    const resp: ApiV1FindingsListResponse = apiV1FindingsListResponseSchema.parse({
+      items,
+      filter: {
+        ...(query.severity !== undefined ? { severity: query.severity } : {}),
+        ...(query.status !== undefined ? { status: query.status } : {}),
+        ...(query.project !== undefined ? { project: query.project } : {}),
+        ...(query.advisory !== undefined ? { advisory: query.advisory } : {}),
+        limit: query.limit ?? 100,
+      },
+    });
+    ipcLog.debug(
+      {
+        reqId: request.id,
+        count: items.length,
+        severity: query.severity,
+        status: query.status,
+        project: query.project,
+        advisory: query.advisory,
+      },
+      'ipc: /api/v1/findings',
     );
     reply.send(resp);
   });

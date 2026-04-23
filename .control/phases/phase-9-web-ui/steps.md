@@ -27,7 +27,7 @@
 
 - [x] 9.6 — `/api/v1/spend`. Surface the existing `factory spend` aggregations (per-project / per-directive / per-day / per-model). Reuse `@factory5/state` `spend` query helpers; no new query logic in the daemon.
 
-- [ ] 9.7 — `/api/v1/findings`. List + filter by severity / status / project. Uses existing findings-registry helpers.
+- [x] 9.7 — `/api/v1/findings`. List + filter by severity / status / project. Uses existing findings-registry helpers.
 
 - [ ] 9.8 — SPA pages:
   - `overview.html` — at-a-glance dashboard (directive counts by status, pending question count, today's spend, open findings)
