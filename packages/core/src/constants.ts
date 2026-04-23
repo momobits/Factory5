@@ -49,7 +49,23 @@ export const FINDING_STATUSES = ['OPEN', 'FIXED', 'VERIFIED', 'WONTFIX'] as cons
 export const PLAN_STATUSES = ['draft', 'active', 'complete', 'abandoned'] as const;
 
 /** Task lifecycle status. */
-export const TASK_STATUSES = ['pending', 'running', 'complete', 'failed', 'blocked'] as const;
+export const TASK_STATUSES = [
+  'pending',
+  'running',
+  'complete',
+  'failed',
+  'blocked',
+  // ADR 0024 §4 — task is paused inside a worker subprocess waiting for the
+  // operator to answer an `ask_user` question. Distinct from `blocked`
+  // (which is a directive-wide halt); this is a per-task pause that flips
+  // back to `running` once the answer arrives.
+  'waiting_for_human',
+  // ADR 0024 §4 — task halted by an external event (brain restart while
+  // it was waiting on a human, signal, etc.). Distinct from `failed` (which
+  // implies the task itself produced bad output); `aborted` is "not the
+  // task's fault, but it didn't finish either."
+  'aborted',
+] as const;
 
 /** Agent roles in the build pipeline. */
 export const AGENT_ROLES = [

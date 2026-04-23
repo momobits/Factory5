@@ -374,6 +374,22 @@ export class DiscordChannel implements ChannelPlugin {
       },
       'discord: answered pending question from thread reply',
     );
+    // ADR 0024 §4 — if the linked task is already terminal (orphaned by a
+    // brain restart, or aborted for other reasons), the answer is preserved
+    // for forensic value but no consumer is alive to use it. Surface as warn
+    // so operators understand why the build didn't resume.
+    const orphan = pendingQuestions.detectOrphanedAnswer(this.db, row.id);
+    if (orphan !== undefined) {
+      this.log?.warn(
+        {
+          questionId: row.id,
+          taskId: orphan.taskId,
+          taskStatus: orphan.taskStatus,
+          threadId,
+        },
+        'discord: answer recorded for question whose task is terminal — no consumer remains',
+      );
+    }
     // Fire-and-forget ack — failures here don't invalidate the answer.
     void message.reply(`(answered question ${row.id})`).catch((err: unknown) => {
       this.log?.warn({ err, questionId: row.id }, 'discord: answer ack failed');

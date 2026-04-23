@@ -627,6 +627,22 @@ export class TelegramChannel implements ChannelPlugin {
       { questionId: row.id, directiveId: row.directiveId, chatId: message.chat.id },
       'telegram: answered pending question from reply',
     );
+    // ADR 0024 §4 — see equivalent check in discord.ts. If the linked task
+    // is already terminal (orphaned by brain restart, etc.), preserve the
+    // answer for forensic value but log loudly so the operator knows the
+    // build didn't resume.
+    const orphan = pendingQuestions.detectOrphanedAnswer(this.db, row.id);
+    if (orphan !== undefined) {
+      this.log.warn(
+        {
+          questionId: row.id,
+          taskId: orphan.taskId,
+          taskStatus: orphan.taskStatus,
+          chatId: message.chat.id,
+        },
+        'telegram: answer recorded for question whose task is terminal — no consumer remains',
+      );
+    }
     // Fire-and-forget ack.
     void this.api
       .sendMessage({

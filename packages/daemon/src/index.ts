@@ -204,6 +204,15 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
           'daemon: inspected running directives at startup, none orphaned',
         );
       }
+
+      // ADR 0024 §4 — separately reap any tasks left `'waiting_for_human'`
+      // by a previous brain process. Their worker subprocesses died with
+      // the previous brain, so they're unambiguously orphaned regardless
+      // of any directive-level reconcile result.
+      const recovered = recoverFromHumanWaits(db, createLogger('daemon.recover'));
+      if (recovered > 0) {
+        log.warn({ recovered }, 'daemon: aborted orphaned waiting-for-human tasks at startup');
+      }
     }
 
     let channelRegistry: ChannelRegistry | undefined;
@@ -428,22 +437,87 @@ function buildWorkerAskUserHandler(opts: {
     const deadlineSeconds = req.deadlineSeconds ?? opts.defaultDeadlineSeconds;
     const deadlineAt = new Date(Date.now() + deadlineSeconds * 1000).toISOString();
 
-    const result = await askUser({
-      db: opts.db,
-      directiveId: req.directiveId,
-      taskId: req.taskId,
-      question: req.question,
-      ...(req.options !== undefined ? { options: req.options } : {}),
-      deadlineAt,
-    });
+    // ADR 0024 §4: mark the task `'waiting_for_human'` BEFORE the poll loop
+    // starts (via askUser's onQuestionResolved hook), so brain-startup
+    // orphan-cleanup can detect the row if we're killed mid-wait. Flip
+    // back to `'running'` when askUser returns (answered or timed out);
+    // markRunningAfterAnswer is a no-op if the orphan-cleanup race already
+    // moved the task to `'aborted'`.
+    let markedWaiting = false;
+    try {
+      const result = await askUser({
+        db: opts.db,
+        directiveId: req.directiveId,
+        taskId: req.taskId,
+        question: req.question,
+        ...(req.options !== undefined ? { options: req.options } : {}),
+        deadlineAt,
+        onQuestionResolved: (questionId) => {
+          tasksInflight.markWaitingForHuman(
+            opts.db,
+            req.taskId,
+            questionId,
+            new Date().toISOString(),
+          );
+          markedWaiting = true;
+        },
+      });
 
-    return {
-      questionId: result.questionId,
-      ...(result.answer !== undefined ? { answer: result.answer } : {}),
-      timedOut: result.timedOut,
-      aborted: result.aborted,
-    };
+      if (markedWaiting) {
+        tasksInflight.markRunningAfterAnswer(opts.db, req.taskId, new Date().toISOString());
+      }
+
+      return {
+        questionId: result.questionId,
+        ...(result.answer !== undefined ? { answer: result.answer } : {}),
+        timedOut: result.timedOut,
+        aborted: result.aborted,
+      };
+    } catch (err) {
+      // Best-effort cleanup if we set the wait state but never flipped back.
+      // Orphan-recovery on next brain startup is the backstop if this also
+      // fails (e.g. db closed mid-throw).
+      if (markedWaiting) {
+        try {
+          tasksInflight.markRunningAfterAnswer(opts.db, req.taskId, new Date().toISOString());
+        } catch {
+          /* ignore — orphan recovery handles it */
+        }
+      }
+      throw err;
+    }
   };
+}
+
+/**
+ * Brain-startup orphan-cleanup pass (ADR 0024 §4). Any task left in
+ * `'waiting_for_human'` from a previous daemon process is by definition
+ * orphaned — its worker subprocess died with the previous brain. Mark
+ * each one `'aborted'` with reason `'brain_restart_during_human_wait'`
+ * so the operator can tell why the directive halted, and so any
+ * answer that arrives later for the linked question is correctly
+ * recognized as "answered after task ended" by the channel collector.
+ *
+ * Called once during `startDaemon`, before the brain supervisor starts
+ * spawning new workers. Returns the count of recovered tasks for
+ * logging.
+ */
+function recoverFromHumanWaits(db: Database, log: ReturnType<typeof createLogger>): number {
+  const orphans = tasksInflight.findOrphanedHumanWaits(db);
+  if (orphans.length === 0) return 0;
+  const when = new Date().toISOString();
+  for (const o of orphans) {
+    tasksInflight.markAborted(db, o.id, 'brain_restart_during_human_wait', when);
+    log.warn(
+      {
+        taskId: o.id,
+        directiveId: o.directiveId,
+        questionId: o.waitingQuestionId,
+      },
+      'daemon: aborted orphaned human-wait task at startup',
+    );
+  }
+  return orphans.length;
 }
 
 /**

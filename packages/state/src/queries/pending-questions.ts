@@ -2,9 +2,10 @@
  * Typed CRUD for the `pending_questions` table — `ask_user` calls awaiting reply.
  */
 
-import { pendingQuestionSchema, type PendingQuestion } from '@factory5/core';
+import { pendingQuestionSchema, type PendingQuestion, type TaskStatus } from '@factory5/core';
 
 import type { Database } from '../db.js';
+import { getById as getTaskById, isTerminalStatus } from './tasks-inflight.js';
 
 interface Row {
   id: string;
@@ -84,4 +85,32 @@ export function answer(db: Database, id: string, answer: string, when: string): 
     answer,
     id,
   );
+}
+
+/**
+ * After writing an answer, check whether the question's linked task is in
+ * a terminal state — meaning no worker subprocess is alive to consume the
+ * answer. Returns the task id + status when orphaned, undefined when the
+ * answer will reach a live consumer (or when there's no linked task at
+ * all, e.g. brain-originated questions).
+ *
+ * Used by channel collectors (Discord / Telegram / CLI) to surface the
+ * "answered after task ended" condition (ADR 0024 §4). The answer row
+ * stays for forensic value either way; this helper just tells the
+ * collector whether to log a warning.
+ */
+export function detectOrphanedAnswer(
+  db: Database,
+  questionId: string,
+): { taskId: string; taskStatus: TaskStatus } | undefined {
+  const q = getById(db, questionId);
+  if (q?.taskId === undefined) return undefined;
+  const task = getTaskById(db, q.taskId);
+  if (task === undefined) {
+    // No matching task row at all — treat as orphaned so the collector
+    // surfaces it. Consistent with ADR 0024's "log + no-op" intent.
+    return { taskId: q.taskId, taskStatus: 'aborted' };
+  }
+  if (!isTerminalStatus(task.status)) return undefined;
+  return { taskId: q.taskId, taskStatus: task.status };
 }

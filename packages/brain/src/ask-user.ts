@@ -69,6 +69,18 @@ export interface AskUserOptions {
    * it returns becomes the outbound message text.
    */
   renderOutbound?: (ctx: AskUserRenderContext) => string;
+  /**
+   * Optional synchronous callback fired once the helper has resolved the
+   * `pending_questions.id` it will poll on — whether a new row was created
+   * or an existing open row was rehydrated. Lets callers wire side effects
+   * keyed off the question id (e.g. ADR 0024 §4 marking the linked
+   * `tasks_inflight` row `'waiting_for_human'` so brain-startup orphan
+   * recovery can find it).
+   *
+   * Fires before polling begins. Throwing from this callback aborts the
+   * helper.
+   */
+  onQuestionResolved?: (questionId: string) => void;
 }
 
 export interface AskUserRenderContext {
@@ -174,6 +186,8 @@ export async function askUser(opts: AskUserOptions): Promise<AskUserResult> {
       { directiveId: directive.id, questionId: answered.id },
       'askUser: rehydrated previously-answered question',
     );
+    // Skip onQuestionResolved on the answered-already path — there's no
+    // poll-loop to protect, so callers don't need to stage wait state.
     return {
       questionId: answered.id,
       answer: answered.answer,
@@ -234,6 +248,10 @@ export async function askUser(opts: AskUserOptions): Promise<AskUserResult> {
       'askUser: new question enqueued',
     );
   }
+
+  // Fire the resolution callback before polling so callers can stage state
+  // that depends on the questionId (ADR 0024 §4 — mark the task waiting).
+  opts.onQuestionResolved?.(questionId);
 
   return pollForAnswer(opts, questionId, rehydrated);
 }
