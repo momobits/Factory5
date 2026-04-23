@@ -1,74 +1,108 @@
 # Next session — paste this to start
 
-Phase 7 closed (tag `phase-7-closed`). Pre-Phase-8 onboarding
-addendum also closed (tag `addendum-onboarding-closed`). 471 tests
-across 13 packages; no open blockers.
+Phase 8 (worker-subprocess `askUser`) has 5 of 8 sub-steps closed. The
+end-to-end pipeline is wired and unit-tested; the remaining work is
+regression-test coverage (8.6), an operator-in-the-loop live build
+to validate the real path (8.7), and the phase close (8.8).
 
-What's new since Phase 7 close:
+What landed this session (commits `0754a69` → `37c0605`):
 
-- Repo-local factory instances via cwd-walk — primary now at
-  `<repo>/.factory/`, migrated from `%LOCALAPPDATA%\factory5\`.
-- `factory init` is template-copy-first (walks to
-  `config.example.toml` at repo root; `--force` keeps flag-driven
-  generation for CI).
-- `[daemon]` config block lets two factoryds run on different ports
-  so you can have parallel instances.
-- See ADR 0023 for the storage-layout decision + `docs/ONBOARDING.md`
-  for the full clone-to-first-build walkthrough.
+- **8.1** Charter + ADR 0024 (MCP route over direct-stdio JSON-RPC,
+  paused-budget wait with per-question 1h soft deadline,
+  `taskId`-mandatory correlation, brain-restart orphan recovery,
+  scaffolder/builder/fixer/investigator whitelist).
+- **8.2** `POST /worker/ask-user` Bearer-gated route on the daemon
+  Fastify server. Schemas in `@factory5/ipc`; handler in
+  `@factory5/daemon` proxies into existing brain `askUser()`.
+- **8.3** New `@factory5/worker-mcp` package (MCP SDK over stdio).
+  `--mcp-config` plumbed through `claude-cli`. Worker writes per-task
+  config to `os.tmpdir()` and unlinks after.
+- **8.4** `mcp__factory5-ask-user__ask_user` added to four agent
+  whitelists. New `skills/ask-user.md` body teaches when to ask vs
+  not.
+- **8.5** Migration 007 widens `tasks_inflight` (`+'waiting_for_human'`
+  - `'aborted'` + `waiting_question_id` + `aborted_reason`).
+    `recoverFromHumanWaits()` runs at daemon startup. Channel
+    collectors warn on terminal-task late answers via
+    `detectOrphanedAnswer`.
 
-Read `CLAUDE.md`, then `.control/progress/STATE.md`, then
-`docs/Phase7_Progress.md` for the full Phase 7 close (done criteria,
-carry-forward, ADRs 0020/0021/0022) and `docs/PROGRESS.md`'s latest
-2026-04-22 entry for the addendum.
+535 tests across 14 packages green (was 471 at Phase 7 close, +64).
+Build / lint / format clean. New external dep
+`@modelcontextprotocol/sdk ^1.0.0`.
 
 ## Decisions awaiting your input
 
-**Phase 8 charter.** Three live options (no HALT, pick based on what's
-most painful in the current surface):
+**8.7 live validation timing.** This sub-step needs you available to
+answer a Telegram question during a real `factory build`. Spend
+estimate: $2-3 against a synthetic-ambiguity spec. Two ways to
+schedule:
 
-1. **Web UI** — browser-based operator dashboard served by `factoryd`
-   (Fastify is already the IPC server, so the delta is templates +
-   static assets + one or two new routes). Wraps `factory spend`,
-   directive queue, outbound message history, and pending-question
-   answer UI. Probably the largest operator-visible upgrade. Budget:
-   3–5 sessions.
-2. **Assessor tier-3** — language-aware project environments beyond
-   the current Python venv (Node `package.json` scripts, Go modules,
-   Rust cargo). Unblocks "factory builds in $language" beyond the
-   current Python bias. Budget: 2–3 sessions.
-3. **Worker-subprocess `ask_user`** — surface the brain's existing
-   `askUser` tool to tool-using workers so a mid-build agent can
-   escalate interactively rather than marking blocked. Cleanest fix
-   for "agent gets confused and silently thrashes" cases that
-   budget enforcement in 7a only bounds rather than resolves.
-   Budget: 2–3 sessions.
+1. **Same session as 8.6** — do tests first, then drive the live
+   run when you're ready. Say "continue through 8.7" after 8.6
+   lands.
+2. **Defer to a separate session** — close 8.6 cleanly, then
+   schedule 8.7 when you've got 30 minutes uninterrupted with
+   Telegram in front of you.
 
-**How to pick:** tell me which one lands next, or describe a fourth
-problem you'd rather solve. I'll open
-`.control/phases/phase-8-<name>/README.md` + `steps.md` from the
-chosen charter.
+## Pickup
 
-Once picked:
+Read `CLAUDE.md`, then `.control/progress/STATE.md`, then
+`.control/phases/phase-8-worker-ask-user/README.md` + `steps.md`
+(8.6 / 8.7 / 8.8 still open). Read
+`docs/decisions/0024-worker-subprocess-ask-user.md` — the pin for
+8.6's regression-test scenarios. Skim
+`docs/decisions/0015-mid-flight-user-engagement.md` for the
+Phase-4 context Phase 8 reverses.
 
-1. Author `.control/phases/phase-8-<name>/README.md` with goal,
-   sub-phase schedule, done criteria, rollback plan.
-2. Expand `steps.md` placeholders — first sub-phase in detail, rest
-   as outlines.
-3. Begin the first sub-step.
+Run `/session-start` for the full drift check.
+
+## Next concrete work — sub-step 8.6 (regression test suite, ~½ session)
+
+Author the four scenarios from ADR 0024 §6:
+
+1. **Happy path** — Fastify `inject()` calls `POST /worker/ask-user`;
+   a separate test fiber writes the answer to `pending_questions`
+   mid-poll. Assert: response carries the answer, task transitions
+   `running` → `waiting_for_human` → `running`, no late-answer
+   warn fires.
+2. **Brain-restart mid-wait** — seed `tasks_inflight` with
+   `status='waiting_for_human', waiting_question_id=<qId>`. Run
+   `recoverFromHumanWaits(db)`. Assert: row → `aborted` with
+   reason `'brain_restart_during_human_wait'`. Then write the
+   answer and verify `detectOrphanedAnswer` flags it.
+3. **Two-workers correlation** — two `inject()` calls with same
+   `directiveId`, distinct `taskId`s + distinct questions. Two
+   parallel writers each answer one. Assert each call returns its
+   own answer with no crossover.
+4. **Late-answer no-op** — task already `aborted`. Channel collector
+   writes the answer. Assert: row updated, `detectOrphanedAnswer`
+   flags the orphan, no other side effects (no resume trigger,
+   because there's no consumer structurally).
+
+Test patterns to mirror:
+
+- `packages/daemon/src/server.test.ts` for Fastify `inject()`
+  scenarios.
+- `packages/state/src/queries/tasks-inflight.test.ts` for DB-driven
+  state assertions; extend with a `setTimeout`-backed writer fiber
+  for the answer-arrives-mid-poll race.
+
+Likely landing in `packages/daemon/src/worker-ask-user-regression.test.ts`
+(new file) since the integration surface is the daemon route.
 
 Report back a 5-line status in this shape:
 
 ```
-Phase 7 — CLOSED (tag phase-7-closed; 471 tests; 23 ADRs) + addendum-onboarding CLOSED (tag addendum-onboarding-closed)
-Last action: pre-Phase-8 addendum + Control-discipline invariant landed (commits 74ad146 → 7ce70e7 → session-end; 471 tests green)
-Git: branch=main, last=<sha> <subject>, uncommitted=<yes/no>, tag=addendum-onboarding-closed (most recent)
+Phase 8 — 5 of 8 sub-steps closed (8.1–8.5; 535 tests; ADR 0024 accepted)
+Last action: session-end committed (<sha>) after 5-commit session
+Git: branch=main, last=<sha> <subject>, uncommitted=<yes/no>, tag=addendum-onboarding-closed (Phase 8 not yet tagged)
 Open blockers: 0
-Proposed next action: Phase 8 charter — operator to pick between Web UI / Assessor tier-3 / worker-subprocess askUser
+Proposed next action: sub-step 8.6 (regression test suite — happy path / brain-restart / correlation / late-answer)
 Ready to proceed?
 ```
 
 **Operator follow-up from Phase 6 close (still out-of-band whenever
-convenient, none blocks Phase 8):** revoke the `env:GITHUB_TOKEN` PAT
-at https://github.com/settings/tokens, delete the throwaway repo
-(`gh repo delete momobits/factory5-6b-smoke --yes`), clear the env var
-(`reg delete "HKCU\Environment" /v GITHUB_TOKEN /f`).
+convenient, none blocks Phase 8):** revoke PAT at
+https://github.com/settings/tokens; `gh repo delete
+momobits/factory5-6b-smoke --yes`; `reg delete "HKCU\Environment"
+/v GITHUB_TOKEN /f`.
