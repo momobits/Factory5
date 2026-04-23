@@ -56,8 +56,28 @@ export function enqueue(db: Database, msg: OutboundMessage): void {
   );
 }
 
-/** Pending (undelivered) messages, oldest first. */
-export function listPending(db: Database, limit = 50): OutboundMessage[] {
+/**
+ * Pending (undelivered) messages, oldest first.
+ *
+ * `maxAttempts` — when set, excludes rows whose `attempts` counter has
+ * reached or exceeded the cap. The outbound worker passes its own cap
+ * here so the drain loop doesn't keep re-surfacing abandoned rows each
+ * poll (which would otherwise pin them as warn-level log noise forever
+ * — once per row, per 1 s, across every daemon run). Operators who want
+ * to inspect cap-reached rows should query the table directly rather
+ * than polling this helper.
+ */
+export function listPending(db: Database, limit = 50, maxAttempts?: number): OutboundMessage[] {
+  if (maxAttempts !== undefined) {
+    const rows = db
+      .prepare(
+        `SELECT * FROM outbound_messages
+         WHERE delivered_at IS NULL AND attempts < ?
+         ORDER BY created_at ASC LIMIT ?`,
+      )
+      .all(maxAttempts, limit) as Row[];
+    return rows.map(rowToMessage);
+  }
   const rows = db
     .prepare(
       `SELECT * FROM outbound_messages

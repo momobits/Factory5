@@ -73,17 +73,14 @@ export function startOutboundWorker(opts: OutboundWorkerOptions): OutboundWorker
   opts.log.info({ pollIntervalMs, batchSize, maxAttempts }, 'outbound: worker started');
 
   const drainOnce = async (): Promise<void> => {
-    const pending = outbound.listPending(opts.db, batchSize);
+    // Filter at the SQL layer: rows whose attempts have already reached the
+    // cap are invisible to the drain loop. Without this they'd be re-fetched
+    // every poll and log a warn per row per second forever — see the
+    // sub-step 8.7 fix. Cap-reached rows stay in the DB for forensic value.
+    const pending = outbound.listPending(opts.db, batchSize, maxAttempts);
     if (pending.length === 0) return;
     for (const msg of pending) {
       if (stopped) return;
-      if (msg.attempts >= maxAttempts) {
-        opts.log.warn(
-          { messageId: msg.id, attempts: msg.attempts, target: msg.targetChannel },
-          'outbound: skipping (attempt cap reached)',
-        );
-        continue;
-      }
       try {
         const result = await opts.deliver(msg);
         if (result.delivered) {
@@ -95,20 +92,50 @@ export function startOutboundWorker(opts: OutboundWorkerOptions): OutboundWorker
         } else {
           const errMsg = result.error ?? 'channel returned delivered=false';
           outbound.recordFailure(opts.db, msg.id, errMsg);
-          opts.log.debug(
-            { messageId: msg.id, target: msg.targetChannel, error: errMsg },
-            'outbound: deferred (no live listener)',
-          );
+          logDeferredOrAbandoned(msg, errMsg);
         }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         outbound.recordFailure(opts.db, msg.id, errMsg);
-        opts.log.warn(
-          { err, messageId: msg.id, target: msg.targetChannel },
-          'outbound: delivery threw',
-        );
+        logDeferredOrAbandoned(msg, errMsg, err);
       }
     }
+  };
+
+  /**
+   * Emit one warn on the transition to cap-reached (so operators know the
+   * row has been abandoned), otherwise stay at debug. Without this split
+   * every failed delivery would warn, burying signal in noise.
+   */
+  const logDeferredOrAbandoned = (
+    msg: { id: string; targetChannel: string; attempts: number },
+    errMsg: string,
+    err?: unknown,
+  ): void => {
+    const newAttempts = msg.attempts + 1;
+    if (newAttempts >= maxAttempts) {
+      opts.log.warn(
+        {
+          messageId: msg.id,
+          attempts: newAttempts,
+          target: msg.targetChannel,
+          lastError: errMsg,
+          ...(err !== undefined ? { err } : {}),
+        },
+        'outbound: abandoning (attempt cap reached)',
+      );
+      return;
+    }
+    opts.log.debug(
+      {
+        messageId: msg.id,
+        target: msg.targetChannel,
+        error: errMsg,
+        attempts: newAttempts,
+        ...(err !== undefined ? { err } : {}),
+      },
+      'outbound: deferred (no live listener)',
+    );
   };
 
   const loop = async (): Promise<void> => {
