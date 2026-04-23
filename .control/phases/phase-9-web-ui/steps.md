@@ -6,7 +6,7 @@
 
 ## Phase 9 — Web UI
 
-- [ ] 9.1 — **ADR 025** web-UI architecture. Decisions to pin:
+- [x] 9.1 — **ADR 025** web-UI architecture. Decisions to pin:
   - **Framework**: Astro (static-first; matches the read-only surface 9a ships) vs Vite+React (more familiar; heavier dev-loop) vs lit-html or vanilla (smallest bundle). Consider bundle size vs operator's own dev-environment expectations.
   - **Auth**: reuse `FACTORY5_WORKER_AUTH_TOKEN` (minted at factoryd startup per 8.2) vs mint a separate `FACTORY5_UI_TOKEN` with different scope vs no-auth-on-loopback (the CLI doesn't authenticate; bearer gate already localhost-bound). Recommendation lean: separate token rotated per startup, printed to the operator on first load (paste-into-browser UX).
   - **Bundle serving**: Fastify static plugin (`@fastify/static`) vs Astro dev middleware vs build-time prebundled. Prod ships prebundled; dev loop likely needs middleware.
