@@ -2,106 +2,123 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-23T13:00:00Z — Phase 8 closed (tag `phase-8-worker-ask-user-closed`); Phase 9 (Web UI) kicks off.
+**Last updated:** 2026-04-23T21:00:00Z (session `2026-04-23T20`) — Phase 9 at 8/10 after ADR 025 + full `apps/factory-web` scaffold + 4 read-side API routes + 7 SPA pages; read-side complete, only live validation + phase close remain.
 **Current phase:** 9 — Web UI — **🟢 active**
 **Current sub-phase:** n/a — single-charter phase (no sub-letter split planned)
-**Current step:** 9.1 — Author ADR 025 (web-UI architecture: framework pick, auth, bundling, dev-loop, routing)
-**Status:** Phase 8 closed cleanly. Worker-subprocess `ask_user` end-to-end validated live 2026-04-23 via Telegram (directive `01KPX1Z4RE3535H8X55E169PHR`, $2.579, 7 LLM calls). ADR 0024 accepted. 564 tests across 14 packages. 4 issues surfaced during Phase 8 (I009–I012): two resolved (I010 WONTFIX, I011 RESOLVED), two OPEN (I009 medium, I012 low) — both filed as post-close follow-ups, neither blocks Phase 9. Phase 9 scaffolded: ten sub-steps from ADR-025 architecture pick to phase close + Phase 10 scaffold.
+**Current step:** 9.9 — Live validation (operator-in-loop: start factoryd, open logged URL in browser, click through every page, verify data + latency)
+**Status:** Eight sub-steps committed this session (9.1 ADR → 9.8 SPA pages). Read-side `/api/v1/*` surface (directives, questions, spend, findings) + static `/app/*` bundle + bearer-gated auth are all wired and tested at the HTTP layer. 605 tests green (+41 from Phase 8 close baseline of 564). Working tree clean. 9.9 needs an operator at a browser — agent-executable smoke-testing via curl is possible but the charter criterion is "every page renders with real data + < 100 ms p50 latency" which needs human observation. 9.10 closes the phase.
 
 ---
 
 ## Project spec
 
-**Canonical:** `CompleteArchitecture.md` at root — snapshot at scaffold, canonical design. §11 updated in Phase 8 close with inline pointer to ADR 0024 (worker-subprocess `ask_user` via MCP route).
-**Current reference:** `docs/ARCHITECTURE.md` (evolves), `docs/CONTRACTS.md` (typed data shapes), `docs/SKILLS.md`, `docs/AGENTS.md`.
-**Phase history:** `docs/PROGRESS.md` (chronological session log), `docs/Phase5_Progress.md`, `docs/Phase6_Progress.md`, `docs/Phase7_Progress.md`, `docs/Phase8_Progress.md` (NEW this close).
+**Canonical:** `CompleteArchitecture.md` at root — snapshot at scaffold, canonical design. Phase 9 does not touch §11; a new §Web UI pointer lands with the 9.10 close commit.
+**Current reference:** `docs/ARCHITECTURE.md` (evolves), `docs/CONTRACTS.md` (typed data shapes; to be updated if Phase 9 response schemas promote), `docs/SKILLS.md`, `docs/AGENTS.md`.
+**Phase history:** `docs/PROGRESS.md` (chronological), `docs/Phase8_Progress.md` (last closed). `docs/Phase9_Progress.md` authored at 9.10.
 **Role:** the `docs/` tree is authoritative. `.control/architecture/overview.md` is a pointer file only.
 
 ---
 
 ## Next action
 
-**Sub-step 9.1 — ADR 025 (web-UI architecture).** Pin the framework (Astro vs Vite+React vs lit-html/vanilla), auth shape (reuse `FACTORY5_WORKER_AUTH_TOKEN` vs mint a separate `FACTORY5_UI_TOKEN`), bundle serving (Fastify static plugin vs Astro dev middleware vs prebundled), and routing shape (SPA shell vs MPA). Output: `docs/decisions/0025-web-ui-architecture.md` + INDEX row.
+**Sub-step 9.9 — Live validation.** Needs an operator at a browser. Concrete steps:
 
-After 9.1: the sub-step outlines in `steps.md` expand as each one opens. 9.2 scaffolds `apps/factory-web/`, 9.3 wires the Fastify static + bearer gate, 9.4–9.7 are the read-side `/api/v1/*` endpoints, 9.8 is the SPA pages, 9.9 is live validation, 9.10 is phase close.
+1. Ensure no stale factoryd is running (`factory daemon status`; stop if live).
+2. Start factoryd foreground: `pnpm factoryd --foreground` in one terminal.
+3. Grab the `ui: http://127.0.0.1:25295/app/?t=<48-hex>` line from stdout.
+4. Open the URL in Chrome or Firefox.
+5. Confirm:
+   - `/app/` overview shows summary cards populated from real factory.db.
+   - `/app/directives/` list renders rows; clicking an id opens `/app/directives/detail?id=<ulid>` with timeline (tasks + open questions + spend rollup).
+   - `/app/questions/` list defaults to `status=open`; switching to `all` returns answered rows too; deep-link to detail works.
+   - `/app/spend/` shows all four rollups (project / directive / day / model) against the operator's ~$63 / 116-call corpus; `since` / `until` filters restrict.
+   - `/app/findings/` surfaces the findings_registry rows; severity / status / project filters narrow.
+6. Measure latency: each `/api/v1/*` call should hit sub-100ms p50 on the ~5MB factory.db (DevTools Network panel).
+7. Paste observations into `docs/Phase9_Progress.md` during 9.10 close.
+
+After 9.9: **9.10 phase close** — tag `phase-9-web-ui-closed`, author `docs/Phase9_Progress.md`, `docs/PROGRESS.md` entry, `CompleteArchitecture.md` §Web UI pointer, scaffold Phase 10 (Assessor tier-3).
 
 ---
 
 ## Git state
 
-- **Branch:** main (ahead of `origin/main` by ~72 commits — push at operator discretion)
-- **Last commit:** phase-close commit (`chore(phase-8): close phase 8, kick off phase 9`) placed on top of `761034a` (`feat(8.7): live validation of worker ask_user via Telegram`).
-- **Uncommitted changes:** none. Working tree clean at close.
-- **Last phase tag:** `phase-8-worker-ask-user-closed` (applied in this close commit).
+- **Branch:** main (ahead of `origin/main` by ~80 commits — push at operator discretion)
+- **Last commit:** `5190f44 feat(9.8): SPA pages consuming /api/v1/* — overview, directives, questions, spend, findings`
+- **Uncommitted changes:** none. Working tree clean at session end (docs commit lands next).
+- **Last phase tag:** `phase-8-worker-ask-user-closed` (Phase 9 tag waits on 9.10).
 
-Earlier tags intact: `phase-7-closed`, `addendum-onboarding-closed`, `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`.
+Earlier tags intact: `addendum-onboarding-closed`, `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-7-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`.
 
 ---
 
 ## Open blockers
 
-- **None.** Issues I009 (Telegram budget defaults) and I012 (Telegram reply-matcher FIFO) are MEDIUM/LOW and don't block Phase 9. Both surfaced during 8.7 live run; filed under `docs/issues/`.
+- **None for Phase 9 itself.** 9.9 is operator-bound, not blocked.
+- **Carry-forward from Phase 8 (unchanged, non-blocking):**
+  - Issue **I009** (MEDIUM, OPEN) — Telegram/Discord inbound don't inherit `[budget.defaults]`.
+  - Issue **I012** (LOW, OPEN) — `maybeAnswerPendingQuestion` matcher is FIFO across open questions on a directive.
 
 ---
 
 ## In-flight work
 
-- None at phase-close. Phase 9 opens fresh at 9.1.
+- None. All 8 closed sub-steps are committed; working tree is clean post-docs-commit.
 
 ---
 
 ## Test / eval status
 
-- **Last test run:** Phase 8 close, 2026-04-23T13:00Z — **564 tests** across 14 packages, all green. +93 over Phase 7 close baseline of 471.
-- **Per-package counts at close:** core 14, **logger 13**, **ipc 14** (+9 from 8.2), **providers 39** (+2 from 8.3), **state 121** (+29: 24 from 8.5 + 5 from the `fix(8.7)` outbound-filter), assessor 42, **wiki 47** (+8 from the 8.7 `project-resolver.ts`), channels 62 (+2 from the 8.7 Telegram resolver integration), events 3, worker 24, **brain 64** (+5 from 8.4), **daemon 41** (+13: 9 from 8.2 + 4 from 8.6), cli 55, **worker-mcp 15** (NEW in 8.3).
-- **Eval score** (agent phases only): Phase 8.7 live run — directive `01KPX1Z4RE3535H8X55E169PHR`, $2.579 over 7 calls, Telegram-initiated, builder MCP `ask_user` → Telegram round-trip validated, directive ended `blocked` (verifier's hallucinated findings, operator replied `abort`). Primary ADR 0024 mechanism validated end-to-end; the "complete + within budget" literal charter nuance documented in `docs/Phase8_Progress.md`.
-- **Regression tests added in Phase 8:**
-  - `packages/ipc/src/schemas.test.ts` (+9 — 8.2 worker-askUser schema)
-  - `packages/daemon/src/server.test.ts` (+9 — 8.2 route happy path / 503 / 401 / 400 / pass-through)
-  - `packages/worker-mcp/src/*.test.ts` (+15 — 8.3 NEW package)
-  - `packages/providers/src/claude-cli.test.ts` (+2 — 8.3 `--mcp-config` plumbing)
-  - `packages/brain/src/agents/registry.test.ts` (+5 — 8.4 whitelist)
-  - `packages/state/src/migrations/007-task-waiting-for-human.test.ts` (+9 — 8.5 schema)
-  - `packages/state/src/queries/tasks-inflight.test.ts` (+15 — 8.5 lifecycle queries)
-  - `packages/daemon/src/worker-ask-user-regression.test.ts` (+4 — 8.6 four ADR 0024 §6 scenarios)
-  - `packages/state/src/queries/outbound.test.ts` (+5 — `fix(8.7)` outbound filter)
-  - `packages/wiki/src/project-resolver.test.ts` (+8 — 8.7 shared helper)
-  - `packages/channels/src/telegram.test.ts` (+2 — 8.7 resolver integration)
+- **Last test run:** Phase 9 session end, 2026-04-23T20:55Z — **605 tests** across 14 packages, all green. +41 over Phase 8 close baseline of 564.
+- **Per-package counts:** core 14, **logger 13**, **ipc 14**, **providers 39**, **state 134** (+13: 6 for `directivesQ.listPaged` @ 9.4, 7 for `pendingQuestions.listPaged` @ 9.5), assessor 42, **wiki 47**, channels 62, events 3, worker 24, **brain 64**, **daemon 79** (+38: 9 for `/api/v1/status` + 4 for `/app/*` @ 9.3; 9 for directives routes @ 9.4; 7 for pending-questions routes @ 9.5; 5 for spend @ 9.6; 8 for findings @ 9.7), cli 55, **worker-mcp 15**.
+- **New test files this session:** `packages/state/src/queries/pending-questions.test.ts` (+7 tests — first dedicated unit tests for that module).
+- **Eval score** (agent phases only): no agent runs this session. Phase 8.7 live run remains the most recent: directive `01KPX1Z4RE3535H8X55E169PHR`, $2.579 / 7 LLM calls.
+- **Regression tests added in Phase 9:**
+  - `packages/state/src/queries/directives.test.ts` (+6 — 9.4 `listPaged` limit/offset/status filter / clamp)
+  - `packages/state/src/queries/pending-questions.test.ts` (+7 — 9.5 `listPaged` status=open/answered/all / directiveId / limit clamp)
+  - `packages/daemon/src/server.test.ts` (+38 — 9.3 static + /api/v1/status auth; 9.4 directives list + detail; 9.5 pending-questions list + detail; 9.6 spend; 9.7 findings)
+  - `packages/daemon/src/server.test.ts` + `worker-ask-user-regression.test.ts` (edits — 9.3 async-ify of `buildIpcServer` to accommodate `@fastify/static` registration)
 
 ---
 
 ## Recent decisions (last 3 ADRs)
 
-- **ADR 0024** (2026-04-23) — Worker-subprocess `askUser`: MCP route, paused-budget wait, taskId-mandatory correlation, `waiting_for_human` lifecycle, whitelist. Supersedes ADR 0015's Phase-4 deferral. Validated live in 8.7.
-- **ADR 0023** (2026-04-22) — Repo-local factory instances via cwd-walk discovery; `.factory/` replaces `.factory5/`. Partially supersedes ADR 0004's storage-location claims.
-- **ADR 0022** (2026-04-22) — Telegram long-polling lives inside `TelegramChannel`, not as a separate `EventSource`.
+- **ADR 0025** (2026-04-23) — Web UI architecture: Astro MPA + Islands + `<ClientRouter />`, separate `FACTORY5_UI_TOKEN` bearer distributed via `?t=` query → sessionStorage, `@fastify/static` under `/app/` + Vite dev proxy in dev, `/api/v1/*` URL-prefix versioning. Four sub-decisions in one ADR per the multi-part shape established by ADR 0020.
+- **ADR 0024** (2026-04-23) — Worker-subprocess `askUser`: MCP route, paused-budget wait, taskId-mandatory correlation, `waiting_for_human` lifecycle, whitelist.
+- **ADR 0023** (2026-04-22) — Repo-local factory instances via cwd-walk discovery; `.factory/` replaces `.factory5/`.
 
-All 24 ADRs live under `docs/decisions/`. ADR 025 will be written at 9.1.
+All 25 ADRs live under `docs/decisions/`. Phase 9 adds only ADR 025; 9.10 may cite it without adding another.
 
 ---
 
 ## Recently completed (last 5 phase closes / major steps)
 
-- **Phase 8 closed** — 2026-04-23 — tag `phase-8-worker-ask-user-closed`. Worker-subprocess `ask_user` end-to-end via MCP. 8 sub-steps + one mid-phase `fix(8.7)`. ADR 0024 accepted. 564 tests (+93 from Phase 7 close). 4 new issues (I009–I012, 2 resolved this phase). See `docs/Phase8_Progress.md`.
-- **Addendum-onboarding closed** — 2026-04-22 — tag `addendum-onboarding-closed`. Fresh-clone operator journey: deduped `CLAUDE.md`, `docs/ONBOARDING.md`, reshaped `factory init`, `[daemon]` config + `loadDaemonEndpoint()`.
-- **Phase 7 closed** — 2026-04-21 — tag `phase-7-closed`. 7a budget enforcement + 7b spend dashboard + 7c Telegram channel. 471 tests. Multiple ADRs (0020, 0022).
-- **Phase 6 closed** — 2026-04-21 — tag `phase-6-closed`. 6c verifier advisory (ADR 0018) + 6a findings registry; 6b dropped (ADR 0019).
-- **Phase 5 closed pre-Control** — 2026-04-19 — green-verify end-to-end; 255 tests; I001–I007 all resolved.
+- **Phase 9 sub-step 9.8 — SPA pages** — 2026-04-23 — `5190f44`. Seven Astro pages (overview, directives list+detail, questions list+detail, spend, findings) wired to `/api/v1/*`. Static output; detail pages use `?id=<ulid>` query param rather than dynamic routes. `<ClientRouter />` for cross-page transition feel.
+- **Phase 9 sub-step 9.7 — /api/v1/findings** — 2026-04-23 — `6a29f2f`. List with severity/status/project/advisory filters, limit clamped to [1, 1000]. +8 daemon tests.
+- **Phase 9 sub-step 9.6 — /api/v1/spend** — 2026-04-23 — `a5ad4d0`. Four rollups (project/directive/day/model) in one envelope. +5 daemon tests.
+- **Phase 9 sub-step 9.5 — /api/v1/pending-questions** — 2026-04-23 — `917f4a8`. List + detail with `status={open|answered|all}` filter + `directiveId` scope. +14 tests (7 state + 7 daemon).
+- **Phase 9 sub-step 9.4 — /api/v1/directives** — 2026-04-23 — `9c2d10a`. List with status filter + `:id` detail with timeline (tasks, open questions, spend rollup). New `directivesQ.listPaged` in state. +15 tests (6 state + 9 daemon).
+- **Phase 9 sub-step 9.3 — Fastify static + /api/v1/status bearer gate** — 2026-04-23 — `930b7a1`. `@fastify/static` under `/app/` + `FACTORY5_UI_TOKEN` minted on factoryd boot + URL printed to stdout. Extracted `requireUiAuth` helper. +13 daemon tests.
+
+Earlier: 9.2 `b0cbf53` (Astro scaffold), 9.1 `f71840a` (ADR 0025). Phase 8 closed `9bc9136` → tag `phase-8-worker-ask-user-closed`.
 
 ---
 
 ## Attempts that didn't work (current step only)
 
-- n/a — Phase 9 hasn't started. 9.1 opens fresh.
+- **Dynamic Astro routes (`[id].astro`) require an adapter.** Initial draft at 9.8 put the detail pages at `src/pages/directives/[id].astro` with `prerender: false`. `astro build` failed with `NoAdapterInstalled`. Switched to query-param pattern (`/app/directives/detail?id=<ulid>`) — fully static, no adapter needed, still reads the id client-side. All link builders updated (list → detail and cross-links between directive ↔ question detail).
+- **`<ViewTransitions />` deprecated in Astro 5.** `astro check` raised 2 hints; swapped for `<ClientRouter />` (same behaviour, new export name).
+- **FK constraint surprises in pending-questions.test.ts.** Initial `makeQuestion` minted a fresh `directiveId` via `newId()` without inserting a directive; `pendingQuestions.create` then tripped `FOREIGN KEY constraint failed`. Fixed by having `makeQuestion` seed a directive first when `overrides.directiveId` isn't supplied. Same hazard hit the server-side directiveId-filter test; fixed there by seeding the shared directive explicitly.
+- **Cache-busting `@factory5/ipc` exports.** Tests that consumed new schemas (`apiV1DirectivesListQuerySchema` etc.) failed with `Cannot read properties of undefined (reading 'parse')` until `@factory5/ipc` was rebuilt. Reminder: workspace packages resolve via `dist/` — rebuild upstream before running dependent tests. `pnpm --filter @factory5/ipc --filter @factory5/state build` was the mechanical fix applied before every daemon test run this session.
 
 ---
 
 ## Environment snapshot
 
 - **Language / runtime:** TypeScript strict mode on Node 20+ (ADR 0001). pnpm workspaces. ESM (NodeNext) with explicit `.js` import extensions.
-- **Key pinned deps:** Pino, Zod, Commander, Fastify, better-sqlite3, discord.js, chokidar, simple-git, vitest, ulid, **`@modelcontextprotocol/sdk ^1.0.0`** (new in 8.3).
-- **Model in use:** Claude Opus 4.7 for scaffolding sessions; live builds use category routing per ADR 0004 (quick=Haiku 4.5, planning=Sonnet 4.6, deep/reasoning=Opus 4.7).
-- **Other:** Windows + Linux cross-platform mandatory. **14 packages + 2 apps**. **564 tests**. `CHANNEL_IDS` narrowed to `['cli','discord','telegram']` per ADR 0019. Budget enforcement per ADR 0020. Project identity via `.factory/project.json` per ADR 0021. Cross-session spend dashboard via `factory spend` per 7b.3. Telegram channel via plugin-owned long-poll per ADR 0022. Instance data dir via cwd-walk per ADR 0023. **Worker-subprocess `ask_user`** wired end-to-end per ADR 0024 (Phase 8 shipped).
+- **Key pinned deps (new this session):** `astro ^5.0.0`, `@astrojs/check ^0.9.0` (in `apps/factory-web`); `@fastify/static ^7.0.0` (in `@factory5/daemon`). 305 transitive dep packages added by the initial Astro install at 9.2.
+- **Other pinned deps (unchanged from Phase 8):** Pino, Zod, Commander, Fastify v4, better-sqlite3, discord.js, chokidar, simple-git, vitest, ulid, `@modelcontextprotocol/sdk ^1.0.0`.
+- **Model in use:** Claude Opus 4.7 for all session work (no agent runs — pure TS/HTML/SQL + tests).
+- **Other:** Windows + Linux cross-platform mandatory. **14 packages + 4 apps** (new: `apps/factory-web` at 9.2). **605 tests**. `CHANNEL_IDS` narrowed to `['cli','discord','telegram']` per ADR 0019. Budget enforcement per ADR 0020. Project identity via `.factory/project.json` per ADR 0021. Cross-session spend via `factory spend` per 7b.3. Telegram channel via plugin-owned long-poll per ADR 0022. Instance data dir via cwd-walk per ADR 0023. Worker `ask_user` per ADR 0024. **Web UI per ADR 0025** (this phase).
 
 ---
 
@@ -111,23 +128,28 @@ If resuming after `/session-end` or a cold start:
 
 1. Read `CLAUDE.md` (root) — standing brief incl. Control-framework section.
 2. Read this STATE.md.
-3. Read `.control/phases/phase-9-web-ui/README.md` + `steps.md` — Phase 9 charter; 9.1 opens next.
-4. Read `docs/Phase8_Progress.md` for the immediate-prior phase retrospective.
-5. Skim `docs/decisions/INDEX.md` for the 24 existing ADRs (ADR 025 lands at 9.1).
-6. Run `/session-start` for the full drift check.
-7. **Next concrete work:** sub-step 9.1 — author ADR 025 on web-UI architecture. Framework pick (Astro leaning), auth shape, bundle serving, routing model. Ship as the single spec for the whole Phase 9 arc before scaffolding `apps/factory-web/` at 9.2.
+3. Read `.control/phases/phase-9-web-ui/README.md` + `steps.md` — 9.9 + 9.10 are the only unchecked items.
+4. Skim `docs/decisions/0025-web-ui-architecture.md` for the auth / bundle / routing contract the SPA pages implement against.
+5. Run `/session-start` for the full drift check.
+6. **Next concrete work:** 9.9 live validation — follow the 7-step operator checklist in the "Next action" section above. Expected outcome: every page loads, sub-100ms p50 latency against the operator's existing factory.db, observations captured for `docs/Phase9_Progress.md`.
 
-**Budget for Phase 9:** 3–5 sessions. 9.1 is lightweight (just the ADR). 9.2 scaffolds the app (small, mostly config). 9.3–9.7 are five small Fastify routes (each well-scoped, ~1 session chunk each but bundleable). 9.8 is the SPA pages (likely 1–2 sessions depending on framework pick). 9.9 live validation + 9.10 phase close.
+**Budget for remaining Phase 9:** 0.5–1 session. 9.9 is ~30 min operator time; 9.10 is ~1h of doc authoring + tagging + Phase 10 scaffold.
 
-**Carry-forward from Phase 8 (non-blocking):**
+**Carry-forward from Phase 8 (still non-blocking):**
 
-- Issue **I009** (MEDIUM, OPEN) — Telegram/Discord inbound don't inherit `[budget.defaults]`.
-- Issue **I012** (LOW, OPEN) — `maybeAnswerPendingQuestion` matcher is FIFO across open questions on a directive.
-- Resource-hygiene note — `askUser` poll loops kept running in the daemon's HTTP handler after worker subprocess exited (cosmetic; worth honouring `request.aborted` in a future hardening pass).
-- Filesystem scoping — workers have unrestricted `Read`/`Glob`/`Grep` against the host filesystem (pre-existing; surfaced via verifier reading our `docs/issues/` during 8.7).
+- Issue **I009** (MEDIUM, OPEN) — Telegram/Discord `/build` inbound doesn't inherit `[budget.defaults]`. Phase 10 cleanup candidate.
+- Issue **I012** (LOW, OPEN) — `maybeAnswerPendingQuestion` FIFO matcher can't target a specific open question. Phase 9b (mutation UI) could surface a "choose question" interaction that closes this functionally.
+- Resource-hygiene note — `askUser` handler's poll loop keeps running after the worker subprocess exits. Cosmetic.
+- Filesystem scoping — workers have unrestricted `Read`/`Glob`/`Grep` against the host filesystem. Pre-existing.
 
 **Operator follow-up from Phase 6 close (unchanged, out-of-band):**
 
 1. Revoke PAT at <https://github.com/settings/tokens>.
 2. Delete throwaway repo: `gh repo delete momobits/factory5-6b-smoke --yes`.
 3. Clear env var: `reg delete "HKCU\Environment" /v GITHUB_TOKEN /f`.
+
+**Phase 9 ergonomic follow-ups deferred (not blockers, nice-to-haves):**
+
+- `factory ui-token` CLI command — ADR 0025 §2 described it but 9.3 scope was daemon-wiring only. Would land as a small IPC route on factoryd + a `packages/cli/src/commands/ui-token.ts`. Operator who closes the terminal loses the URL today; mitigation is to restart factoryd and copy the new one.
+- Refactor inline bearer checks to a Fastify preHandler scoped to `/api/v1/*`. ADR 0025 §3 described a "shared preHandler"; 9.3 chose inline handler-level checks to mirror `/worker/ask-user`. Effect is identical; refactor is aesthetic.
+- SSE for live overview updates — explicitly deferred by ADR 0025 §Alternatives. Polling works on localhost; layer on top of the existing bearer when the UX pressure materialises.
