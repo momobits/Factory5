@@ -24,6 +24,10 @@
  * usage record the brain persists into `model_usage`.
  */
 
+import { writeFile, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import type { AgentRole, Finding, Task, TaskResult } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import type {
@@ -39,6 +43,7 @@ import {
   readWiki,
   type FindingRegistryBinding,
 } from '@factory5/wiki';
+import { buildMcpConfig, getServerScriptPath } from '@factory5/worker-mcp';
 import { simpleGit } from 'simple-git';
 
 import { parseFindings } from './parse-findings.js';
@@ -74,8 +79,26 @@ export interface WorkerOptions {
    * directive for cross-project traceability.
    */
   findingRegistry?: FindingRegistryBinding;
+  /**
+   * Optional MCP `ask_user` configuration (per ADR 0024 §1, sub-step 8.3).
+   * When supplied for a tool-using agent, the worker writes a temporary
+   * mcp-config JSON, points claude-cli at it via `--mcp-config`, and the
+   * `mcp__factory5-ask-user__ask_user` tool becomes available to the
+   * in-stream agent. Skipped silently for read-only agents (which take
+   * the brain-checkpointed `escalateBlocked` path instead).
+   */
+  askUserConfig?: WorkerAskUserConfig;
   /** Optional cancellation signal — propagates into the provider call. */
   signal?: AbortSignal;
+}
+
+export interface WorkerAskUserConfig {
+  /** Daemon's IPC base URL (e.g. `http://127.0.0.1:25295`). */
+  brainRpcUrl: string;
+  /** Per-startup bearer token from `FACTORY5_WORKER_AUTH_TOKEN`. */
+  brainRpcToken: string;
+  /** ULID of the parent directive — required so brain-side proxy can correlate. */
+  directiveId: string;
 }
 
 export interface WorkerOutcome {
@@ -186,6 +209,26 @@ async function persistFindings(
   return findingIds;
 }
 
+/**
+ * Write the per-task mcp-config JSON to a tmp file and return its path.
+ * Tmp directory rather than the worktree because the worktree is git-tracked
+ * and we don't want a transient config file showing up in the agent's
+ * `git status` output (let alone an accidental commit). Tmp files are
+ * cleaned up by the runTooling caller on stream completion.
+ */
+async function writeMcpConfig(taskId: string, cfg: WorkerAskUserConfig): Promise<string> {
+  const path = join(tmpdir(), `factory5-mcp-${taskId}.json`);
+  const config = buildMcpConfig({
+    scriptPath: getServerScriptPath(),
+    brainRpcUrl: cfg.brainRpcUrl,
+    brainRpcToken: cfg.brainRpcToken,
+    taskId,
+    directiveId: cfg.directiveId,
+  });
+  await writeFile(path, JSON.stringify(config, null, 2), 'utf8');
+  return path;
+}
+
 async function runReadOnly(opts: WorkerOptions, fullUserPrompt: string): Promise<WorkerOutcome> {
   const resolution = await opts.registry.resolve(opts.task.category);
   log.info(
@@ -294,6 +337,23 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
     'worker: starting (tool-using)',
   );
 
+  // ADR 0024 §1 (sub-step 8.3): if the brain wired an askUserConfig, write a
+  // per-task mcp-config to a tmp file and pass it to claude via --mcp-config.
+  // The MCP server's env block carries the bearer token + correlation ids
+  // back to the brain RPC. Skipped silently when the brain hasn't wired
+  // askUser support (workers still function, agents just lack ask_user).
+  let mcpConfigPath: string | undefined;
+  if (opts.askUserConfig !== undefined) {
+    try {
+      mcpConfigPath = await writeMcpConfig(opts.task.id, opts.askUserConfig);
+    } catch (err) {
+      log.warn(
+        { err, taskId: opts.task.id },
+        'worker: mcp-config write failed — agent will run without ask_user',
+      );
+    }
+  }
+
   const started = Date.now();
   let responseText = '';
   let finalUsage: ProviderUsage | undefined;
@@ -308,6 +368,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
       cwd: worktree.path,
       allowedTools: allowed,
       permissionMode: 'bypassPermissions',
+      ...(mcpConfigPath !== undefined ? { mcpConfigPath } : {}),
       ...(opts.task.maxTurns !== undefined ? { maxTurns: opts.task.maxTurns } : {}),
       ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
     });
@@ -321,6 +382,14 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
       log.warn({ taskId: opts.task.id }, 'worker: aborted by caller');
     } else {
       log.error({ err, taskId: opts.task.id }, 'worker: provider stream failed');
+    }
+  } finally {
+    if (mcpConfigPath !== undefined) {
+      try {
+        await unlink(mcpConfigPath);
+      } catch {
+        // Best-effort — leftover tmp files are not load-bearing.
+      }
     }
   }
 

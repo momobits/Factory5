@@ -1,0 +1,37 @@
+{
+  "name": "@factory5/worker-mcp",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Worker-side MCP server exposing ask_user (ADR 0024) — spawned by claude-cli via --mcp-config",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "import": "./dist/server.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/server.ts --format esm --dts --sourcemap --clean",
+    "dev": "tsup src/index.ts src/server.ts --format esm --dts --sourcemap --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "tsup": "^8.2.0",
+    "vitest": "^2.0.0"
+  }
+}

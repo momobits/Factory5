@@ -238,6 +238,12 @@ export function buildClaudeArgs(
   if (req.allowedTools !== undefined && req.allowedTools.length > 0) {
     args.push('--allowedTools', req.allowedTools.join(','));
   }
+  if (req.mcpConfigPath !== undefined && req.mcpConfigPath.length > 0) {
+    // Honored only by `stream-json` mode in practice — Claude only spins up
+    // MCP servers when it's running tools. We pass the flag in `call()` mode
+    // too so the surface is consistent; it's a no-op there.
+    args.push('--mcp-config', req.mcpConfigPath);
+  }
   if (req.permissionMode !== undefined) {
     if (req.permissionMode === 'bypassPermissions') {
       // Most reliable cross-version flag for unattended operation inside a

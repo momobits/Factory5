@@ -123,6 +123,22 @@ describe('buildClaudeArgs', () => {
     expect(args).not.toContain('--allowedTools');
     expect(args).not.toContain('--permission-mode');
     expect(args).not.toContain('--dangerously-skip-permissions');
+    expect(args).not.toContain('--mcp-config');
+  });
+
+  it('adds --mcp-config <path> when ProviderRequest.mcpConfigPath is set', () => {
+    const args = buildClaudeArgs(
+      baseReq({ mcpConfigPath: '/abs/worktree/.factory5-mcp.json' }),
+      [],
+      'stream-json',
+    );
+    expect(args).toContain('--mcp-config');
+    expect(args[args.indexOf('--mcp-config') + 1]).toBe('/abs/worktree/.factory5-mcp.json');
+  });
+
+  it('omits --mcp-config when mcpConfigPath is the empty string', () => {
+    const args = buildClaudeArgs(baseReq({ mcpConfigPath: '' }), [], 'stream-json');
+    expect(args).not.toContain('--mcp-config');
   });
 });
 

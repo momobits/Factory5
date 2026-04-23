@@ -61,6 +61,18 @@ export interface ProviderRequest {
    * paths ignore it. When omitted, the provider's own default is used.
    */
   maxTurns?: number;
+  /**
+   * Path to an MCP config JSON file to pass via claude-cli's `--mcp-config`
+   * flag. When set, claude spawns the listed MCP servers and exposes their
+   * tools to the agent under `mcp__<server>__<tool>` names. The
+   * corresponding tool name(s) must also appear in {@link allowedTools}
+   * (or the agent won't be allowed to call them). Honored only by
+   * subprocess-style providers; HTTP providers ignore it.
+   *
+   * See ADR 0024 — `@factory5/worker-mcp` produces the file the worker
+   * passes here so the in-stream agent can call `ask_user`.
+   */
+  mcpConfigPath?: string;
 }
 
 export interface ProviderUsage {

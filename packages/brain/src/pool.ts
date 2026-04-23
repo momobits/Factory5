@@ -15,6 +15,7 @@
  */
 
 import { cpus } from 'node:os';
+import { env } from 'node:process';
 
 import type { DirectiveLimits, Plan, Task } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
@@ -26,9 +27,15 @@ import {
   type UsageMode,
 } from '@factory5/state';
 import { writePlan } from '@factory5/wiki';
-import { isToolUsingAgent, runWorker, type WorkerOutcome } from '@factory5/worker';
+import {
+  isToolUsingAgent,
+  runWorker,
+  type WorkerAskUserConfig,
+  type WorkerOutcome,
+} from '@factory5/worker';
 
 import { assertBudget, BudgetExceededError } from './budget.js';
+import { loadDaemonEndpoint } from './daemon-endpoint.js';
 import { buildAgentSystemPrompt } from './prompts.js';
 import { recordUsage } from './usage.js';
 
@@ -166,6 +173,15 @@ async function executeTask(
   const directive = directivesQ.getById(db, directiveId);
   const projectId = directive?.projectId;
 
+  // Per ADR 0024 sub-step 8.3: when the daemon is running with a worker
+  // auth token (set by factoryd's main.ts at startup), build an
+  // askUserConfig so the in-stream agent gets `mcp__factory5-ask-user__ask_user`.
+  // Skipped silently when the token is absent — covers tests and
+  // standalone scripts that drive the brain without the daemon shell.
+  const askUserConfig = isToolUsingAgent(task.agent)
+    ? await buildAskUserConfig(directiveId)
+    : undefined;
+
   let outcome: WorkerOutcome;
   try {
     outcome = await runWorker({
@@ -186,6 +202,7 @@ async function executeTask(
         ...(projectId !== undefined ? { projectId } : {}),
         originDirectiveId: directiveId,
       },
+      ...(askUserConfig !== undefined ? { askUserConfig } : {}),
       ...(signal !== undefined ? { signal } : {}),
     });
   } finally {
@@ -475,4 +492,23 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
         filesChanged: [],
       },
   );
+}
+
+/**
+ * Build the per-task askUserConfig (ADR 0024 sub-step 8.3) from the daemon's
+ * runtime state. Returns `undefined` when the bearer token isn't present in
+ * env — that's the signal that we're running standalone (tests, ad-hoc
+ * scripts) rather than inside `factoryd`'s shell, so the worker should run
+ * without the `ask_user` MCP tool. Endpoint resolution mirrors how the CLI
+ * resolves it; values stay in sync with the daemon's bind address.
+ */
+async function buildAskUserConfig(directiveId: string): Promise<WorkerAskUserConfig | undefined> {
+  const token = env['FACTORY5_WORKER_AUTH_TOKEN'];
+  if (token === undefined || token.length === 0) return undefined;
+  const endpoint = await loadDaemonEndpoint();
+  return {
+    brainRpcUrl: `http://${endpoint.host}:${String(endpoint.port)}`,
+    brainRpcToken: token,
+    directiveId,
+  };
 }
