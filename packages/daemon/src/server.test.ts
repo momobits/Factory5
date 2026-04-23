@@ -1,6 +1,7 @@
 import { initLogger } from '@factory5/logger';
 import {
   directiveNotifyResponseSchema,
+  IpcRequestError,
   reloadConfigResponseSchema,
   sendResponseSchema,
   statusResponseSchema,
@@ -266,6 +267,224 @@ describe('IPC server', () => {
     expect(res.statusCode).toBe(400);
     const body = res.json() as { error: { code: string } };
     expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+});
+
+describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  function makeApp(overrides: {
+    workerAskUser?: (req: unknown) => Promise<unknown>;
+    workerAuthToken?: string;
+  }) {
+    return buildIpcServer({
+      host: '127.0.0.1',
+      port: 0,
+      db,
+      doorbell,
+      startedAt: STARTED_AT,
+      version: '0.0.1',
+      processName: 'factoryd-test',
+      ...(overrides.workerAskUser !== undefined
+        ? {
+            workerAskUser: overrides.workerAskUser as Parameters<
+              typeof buildIpcServer
+            >[0]['workerAskUser'],
+          }
+        : {}),
+      ...(overrides.workerAuthToken !== undefined
+        ? { workerAuthToken: overrides.workerAuthToken }
+        : {}),
+    });
+  }
+
+  function validRequestBody(): {
+    taskId: string;
+    directiveId: string;
+    question: string;
+  } {
+    return {
+      taskId: newId(),
+      directiveId: newId(),
+      question: 'jwt or session?',
+    };
+  }
+
+  it('happy path: handler is invoked, response is returned', async () => {
+    const questionId = newId();
+    const handler = async (): Promise<{
+      questionId: string;
+      answer: string;
+      timedOut: boolean;
+      aborted: boolean;
+    }> => ({ questionId, answer: 'jwt', timedOut: false, aborted: false });
+    const app = makeApp({ workerAskUser: handler });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/worker/ask-user',
+      payload: validRequestBody(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { questionId: string; answer: string };
+    expect(body.questionId).toBe(questionId);
+    expect(body.answer).toBe('jwt');
+    await app.close();
+  });
+
+  it('happy path: timed-out response (no answer)', async () => {
+    const questionId = newId();
+    const handler = async (): Promise<{
+      questionId: string;
+      timedOut: boolean;
+      aborted: boolean;
+    }> => ({ questionId, timedOut: true, aborted: false });
+    const app = makeApp({ workerAskUser: handler });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/worker/ask-user',
+      payload: validRequestBody(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      questionId: string;
+      answer?: string;
+      timedOut: boolean;
+    };
+    expect(body.questionId).toBe(questionId);
+    expect(body.timedOut).toBe(true);
+    expect(body.answer).toBeUndefined();
+    await app.close();
+  });
+
+  it('returns 503 WORKER_ASK_USER_DISABLED when handler is not configured', async () => {
+    const app = makeApp({});
+    const res = await app.inject({
+      method: 'POST',
+      url: '/worker/ask-user',
+      payload: validRequestBody(),
+    });
+    expect(res.statusCode).toBe(503);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('WORKER_ASK_USER_DISABLED');
+    await app.close();
+  });
+
+  it('returns 401 WORKER_AUTH_REQUIRED when token is set and bearer is missing', async () => {
+    const handler = async (): Promise<{
+      questionId: string;
+      answer: string;
+      timedOut: boolean;
+      aborted: boolean;
+    }> => ({ questionId: newId(), answer: 'jwt', timedOut: false, aborted: false });
+    const app = makeApp({ workerAskUser: handler, workerAuthToken: 'secret-token-xyz' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/worker/ask-user',
+      payload: validRequestBody(),
+    });
+    expect(res.statusCode).toBe(401);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('WORKER_AUTH_REQUIRED');
+    await app.close();
+  });
+
+  it('returns 401 when bearer token is wrong', async () => {
+    const handler = async (): Promise<{
+      questionId: string;
+      answer: string;
+      timedOut: boolean;
+      aborted: boolean;
+    }> => ({ questionId: newId(), answer: 'jwt', timedOut: false, aborted: false });
+    const app = makeApp({ workerAskUser: handler, workerAuthToken: 'secret-token-xyz' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/worker/ask-user',
+      headers: { authorization: 'Bearer wrong-token-here' },
+      payload: validRequestBody(),
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('accepts the request when bearer token matches', async () => {
+    const handler = async (): Promise<{
+      questionId: string;
+      answer: string;
+      timedOut: boolean;
+      aborted: boolean;
+    }> => ({ questionId: newId(), answer: 'jwt', timedOut: false, aborted: false });
+    const app = makeApp({ workerAskUser: handler, workerAuthToken: 'secret-token-xyz' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/worker/ask-user',
+      headers: { authorization: 'Bearer secret-token-xyz' },
+      payload: validRequestBody(),
+    });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('returns 400 SCHEMA_VALIDATION_FAILED when taskId is missing', async () => {
+    const handler = async (): Promise<{
+      questionId: string;
+      answer: string;
+      timedOut: boolean;
+      aborted: boolean;
+    }> => ({ questionId: newId(), answer: 'x', timedOut: false, aborted: false });
+    const app = makeApp({ workerAskUser: handler });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/worker/ask-user',
+      payload: { directiveId: newId(), question: 'pick one' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('returns 401 before parsing body — unauthenticated callers cannot probe schema', async () => {
+    const handler = async (): Promise<{
+      questionId: string;
+      answer: string;
+      timedOut: boolean;
+      aborted: boolean;
+    }> => ({ questionId: newId(), answer: 'x', timedOut: false, aborted: false });
+    const app = makeApp({ workerAskUser: handler, workerAuthToken: 'secret-token-xyz' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/worker/ask-user',
+      payload: { utterly: 'malformed' },
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('propagates IpcRequestError from the handler as a typed envelope', async () => {
+    const handler = async (): Promise<never> => {
+      throw new IpcRequestError(404, 'TASK_NOT_FOUND', 'no such task');
+    };
+    const app = makeApp({ workerAskUser: handler });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/worker/ask-user',
+      payload: validRequestBody(),
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('TASK_NOT_FOUND');
+    expect(body.error.message).toBe('no such task');
     await app.close();
   });
 });

@@ -23,7 +23,7 @@ import { createLogger } from '@factory5/logger';
 import { closeDatabase, openDatabase, runMigrations, type Database } from '@factory5/state';
 
 import type { Directive, Event } from '@factory5/core';
-import { channelConfigFor, loadConfig } from '@factory5/brain';
+import { askUser, channelConfigFor, loadConfig } from '@factory5/brain';
 import {
   createChannelRegistry,
   createCliRpcChannel,
@@ -33,11 +33,17 @@ import {
   type ChannelRegistry,
 } from '@factory5/channels';
 import { createFsWatcher, type EventSource, type FsWatcher } from '@factory5/events';
+import {
+  IpcRequestError,
+  type WorkerAskUserRequest,
+  type WorkerAskUserResponse,
+} from '@factory5/ipc';
 import type { ProviderRegistry } from '@factory5/providers';
 import {
   directives as directivesQ,
   events as eventsQ,
   projects as projectsQ,
+  tasksInflight,
 } from '@factory5/state';
 
 import { startBrainSupervisor } from './brain-supervisor.js';
@@ -116,6 +122,18 @@ export interface DaemonOptions {
    * their own DB state and don't want the reconciler touching it pass this.
    */
   noReconcile?: boolean;
+  /**
+   * Bearer token required by `/worker/*` IPC routes. When set, the daemon
+   * builds a worker-askUser handler (per ADR 0024) and gates it on this
+   * token. When omitted, the route returns 503 `WORKER_ASK_USER_DISABLED`.
+   * Production daemons set this; tests usually leave it unset.
+   */
+  workerAuthToken?: string;
+  /**
+   * Default per-question soft deadline in seconds for `/worker/ask-user`
+   * when the request omits one (per ADR 0024 §2). Default 3600 (1 hour).
+   */
+  workerAskUserDefaultDeadlineSeconds?: number;
 }
 
 export interface DaemonHandle {
@@ -223,6 +241,14 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
 
     if (opts.noIpc !== true) {
       const registry = channelRegistry;
+      const workerAskUserDefaultDeadlineSeconds = opts.workerAskUserDefaultDeadlineSeconds ?? 3600;
+      const workerAskUserHandler =
+        opts.workerAuthToken !== undefined
+          ? buildWorkerAskUserHandler({
+              db,
+              defaultDeadlineSeconds: workerAskUserDefaultDeadlineSeconds,
+            })
+          : undefined;
       ipc = await startIpcServer({
         host,
         port: requestedPort,
@@ -233,6 +259,8 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
         processName,
         ...(registry !== undefined ? { channels: registry } : {}),
         ...(registry !== undefined ? { deliverOutbound: (msg) => registry.send(msg) } : {}),
+        ...(opts.workerAuthToken !== undefined ? { workerAuthToken: opts.workerAuthToken } : {}),
+        ...(workerAskUserHandler !== undefined ? { workerAskUser: workerAskUserHandler } : {}),
       });
       subsystems.push({ name: 'ipc', stop: ipc.stop });
     }
@@ -371,6 +399,51 @@ function hasStringField(block: unknown, field: string): boolean {
   if (typeof block !== 'object' || block === null) return false;
   const value = (block as Record<string, unknown>)[field];
   return typeof value === 'string' && value.length > 0;
+}
+
+/**
+ * Build the `POST /worker/ask-user` handler (ADR 0024 §2–§3). Closes over
+ * the daemon's `db` so each request reaches the brain's existing `askUser()`
+ * helper. Validates that `taskId` actually belongs to a `tasks_inflight` row
+ * for the requested directive (defense-in-depth — a spoofed taskId from a
+ * compromised worker can't poison sibling questions).
+ */
+function buildWorkerAskUserHandler(opts: {
+  db: Database;
+  defaultDeadlineSeconds: number;
+}): (req: WorkerAskUserRequest) => Promise<WorkerAskUserResponse> {
+  return async (req) => {
+    // Validate (taskId, directiveId) pair exists in tasks_inflight.
+    const tasks = tasksInflight.listByDirective(opts.db, req.directiveId);
+    const taskMatch = tasks.find((t) => t.id === req.taskId);
+    if (taskMatch === undefined) {
+      throw new IpcRequestError(
+        404,
+        'WORKER_TASK_NOT_FOUND',
+        `taskId ${req.taskId} not found for directive ${req.directiveId}`,
+      );
+    }
+
+    // Compute deadlineAt. Per-request override wins; falls back to daemon default.
+    const deadlineSeconds = req.deadlineSeconds ?? opts.defaultDeadlineSeconds;
+    const deadlineAt = new Date(Date.now() + deadlineSeconds * 1000).toISOString();
+
+    const result = await askUser({
+      db: opts.db,
+      directiveId: req.directiveId,
+      taskId: req.taskId,
+      question: req.question,
+      ...(req.options !== undefined ? { options: req.options } : {}),
+      deadlineAt,
+    });
+
+    return {
+      questionId: result.questionId,
+      ...(result.answer !== undefined ? { answer: result.answer } : {}),
+      timedOut: result.timedOut,
+      aborted: result.aborted,
+    };
+  };
 }
 
 /**

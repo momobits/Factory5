@@ -15,6 +15,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import process, { argv, execPath, exit, stdout } from 'node:process';
 
 import { loadDaemonEndpoint } from '@factory5/brain';
@@ -88,7 +89,17 @@ async function runForeground(): Promise<void> {
   let handle: Awaited<ReturnType<typeof startDaemon>>;
   try {
     const endpoint = await loadDaemonEndpoint();
-    handle = await startDaemon({ host: endpoint.host, port: endpoint.port });
+    // Per-startup bearer token for `/worker/ask-user` (ADR 0024 §3). Workers
+    // spawned by the brain receive this via env so only they can hit the
+    // worker-namespaced IPC routes; rotates each restart so a leaked token
+    // can't outlive the daemon process. 24 random bytes → 48 hex chars.
+    const workerAuthToken = randomBytes(24).toString('hex');
+    process.env['FACTORY5_WORKER_AUTH_TOKEN'] = workerAuthToken;
+    handle = await startDaemon({
+      host: endpoint.host,
+      port: endpoint.port,
+      workerAuthToken,
+    });
   } catch (err) {
     if (err instanceof PidFileLockedError) {
       stdout.write(`factoryd: ${err.message}\n`);

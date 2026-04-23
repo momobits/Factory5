@@ -15,12 +15,13 @@
   - **Out of scope for ADR 0024**: replacing brain-level `askUser` (Phase 4 stays as the canonical primitive — Phase 8 is additive); changing channel answer collection (already polyglot across Discord / Telegram / CLI).
   - Output: `docs/decisions/0024-worker-subprocess-ask-user.md` + INDEX row.
 
-- [ ] 8.2 — Brain RPC endpoint. New HTTP server in `@factory5/brain` (or extend existing IPC bridge — TBD by 8.1) exposing `POST /worker/ask-user`:
-  - Request: `{taskId, directiveId, question, options?, deadlineAt?}` (Zod schema in `@factory5/ipc`).
-  - Server-side: validate taskId belongs to directive; lookup directive; call `askUser({db, directiveId, taskId, question, options, deadlineAt})`; await; return `{answer, timedOut, aborted}`.
-  - Localhost-only IP guard (mirror daemon pattern).
-  - Worker-only auth: brain spawns workers with `BRAIN_RPC_TOKEN` env var; route requires `Authorization: Bearer <token>` matching brain's in-memory token.
-  - Tests in `packages/brain/` for the route handler; tests in `packages/ipc/` for the schema.
+- [x] 8.2 — Brain RPC endpoint. Extended existing daemon Fastify server (per ADR 0012 brain runs in `factoryd` process; daemon already imports from `@factory5/brain`, so a new daemon route is the lowest-coupling shape rather than spinning up a second server). `POST /worker/ask-user`:
+  - Request schema `workerAskUserRequestSchema` + response schema `workerAskUserResponseSchema` in `packages/ipc/src/schemas.ts` (taskId mandatory per ADR 0024 §3; deadlineSeconds optional, daemon defaults 3600s). 9 schema tests.
+  - Route handler in `packages/daemon/src/server.ts` with bearer-token gate (constant-time compare), `503 WORKER_ASK_USER_DISABLED` when handler not configured, `401 WORKER_AUTH_REQUIRED` before schema parse so unauthenticated callers can't probe schema. Bearer check uses pure XOR fold on equal-length strings; length-mismatch shortcut OK because token length is a public per-startup constant. 9 route tests (happy path, timed-out path, 503 disabled, 401 missing/wrong, 200 correct, 400 missing taskId, 401-before-schema, 404 IpcRequestError pass-through).
+  - `buildWorkerAskUserHandler` in `packages/daemon/src/index.ts` validates `(taskId, directiveId)` lives in `tasks_inflight` (defense-in-depth), computes `deadlineAt = now + deadlineSeconds`, calls existing `askUser({db, directiveId, taskId, question, options, deadlineAt})`. New `DaemonOptions.workerAuthToken` enables the route + builds the handler; `workerAskUserDefaultDeadlineSeconds` defaults 3600.
+  - `apps/factoryd/src/main.ts` generates a per-startup 24-byte hex token via `crypto.randomBytes`, also exports it as `FACTORY5_WORKER_AUTH_TOKEN` env var (workers spawned by brain inherit it).
+  - Tests: 14 ipc + 37 daemon (was 5 + 28 = 33; +18 net). Build/lint/format clean. 489 total workspace tests (was 471, +18).
+  - **Carried forward to 8.3:** worker-side spawn must read `FACTORY5_WORKER_AUTH_TOKEN` from env and pass it as `Authorization: Bearer <token>` on every `/worker/ask-user` request. The MCP server (8.3) wraps this; `BRAIN_RPC_URL` derives from `loadDaemonEndpoint()`.
 
 - [ ] 8.3 — Worker-side tool plumbing. **Implementation depends on 8.1's route choice.**
   - **If MCP**: scaffold `packages/worker-mcp/` with a small MCP server exposing `ask_user(question, options?)` tool. Worker spawns it (or hosts in-process via stdio) and passes `--mcp-config` to `claude -p`. MCP handler reads `BRAIN_RPC_URL` + `BRAIN_RPC_TOKEN` from env, hits `POST /worker/ask-user`, returns answer text as the tool result.

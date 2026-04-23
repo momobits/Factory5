@@ -7,10 +7,16 @@
  *   POST /send               enqueue outbound message
  *   POST /directives/notify  doorbell — brain claim loop wakes up
  *   POST /reload-config      broadcast config-reload to subsystems
+ *   POST /worker/ask-user    (gated) worker→brain askUser proxy (ADR 0024)
  *
  * Every handler logs a correlationId. Non-localhost connections are refused
  * both at the bind layer (we listen on `127.0.0.1`) and at a preHandler
  * (defense-in-depth if the daemon is ever reconfigured to bind broader).
+ *
+ * The `/worker/*` namespace is bearer-token-gated. Brain generates a per-
+ * startup token and passes it to its worker subprocesses via env; only those
+ * workers can hit the route. Existing routes stay loopback-only without the
+ * extra gate.
  */
 
 import type { AddressInfo } from 'node:net';
@@ -26,7 +32,11 @@ import {
   sendRequestSchema,
   sendResponseSchema,
   statusResponseSchema,
+  workerAskUserRequestSchema,
+  workerAskUserResponseSchema,
   type StatusResponse,
+  type WorkerAskUserRequest,
+  type WorkerAskUserResponse,
 } from '@factory5/ipc';
 import type { Logger } from '@factory5/logger';
 import { createLogger } from '@factory5/logger';
@@ -55,6 +65,22 @@ export interface ChannelRegistryView {
   }>;
 }
 
+/**
+ * Handler signature for the `/worker/ask-user` route. Receives the validated
+ * request body, returns the response body. The handler owns:
+ *
+ *  - Validating that `taskId` belongs to a real `tasks_inflight` row whose
+ *    `directive_id` matches the request (defense-in-depth per ADR 0024 §3).
+ *  - Calling brain's `askUser()` (which polls `pending_questions` until the
+ *    answer arrives, the deadline passes, or an abort signal fires).
+ *  - Returning `{questionId, answer?, timedOut, aborted}` exactly.
+ *
+ * Throwing {@link IpcRequestError} bubbles up to the registered error
+ * handler with a typed envelope (e.g. 404 unknown task / directive, 409
+ * task already in a terminal state). Other errors are logged as 500.
+ */
+export type WorkerAskUserHandler = (req: WorkerAskUserRequest) => Promise<WorkerAskUserResponse>;
+
 export interface IpcServerOptions {
   host: string;
   port: number;
@@ -78,6 +104,19 @@ export interface IpcServerOptions {
    * returns `delivered: false`. Step 4 wires a real channel delivery path.
    */
   deliverOutbound?: OutboundDeliverer;
+  /**
+   * Handler for `POST /worker/ask-user`. When omitted, the route returns 503
+   * `WORKER_ASK_USER_DISABLED` — the daemon hasn't been started with worker-
+   * askUser support, or it's been deliberately turned off. See ADR 0024.
+   */
+  workerAskUser?: WorkerAskUserHandler;
+  /**
+   * Bearer token required by `/worker/*` routes. When omitted, those routes
+   * accept any loopback request (intended for tests; production daemons
+   * always set this). Token is rotated per brain startup; passed to worker
+   * subprocesses via env.
+   */
+  workerAuthToken?: string;
 }
 
 export interface IpcServerHandle {
@@ -264,6 +303,71 @@ function registerRoutes(
       }),
     );
   });
+
+  // ----- POST /worker/ask-user (ADR 0024) -----
+  // Bearer-gated; bearer check fires before schema parse so malformed bodies
+  // from unauthenticated callers can't probe the schema surface.
+  app.post('/worker/ask-user', async (request, reply) => {
+    if (!checkWorkerBearer(request, opts.workerAuthToken)) {
+      throw new IpcRequestError(401, 'WORKER_AUTH_REQUIRED', 'missing or invalid bearer token');
+    }
+    if (opts.workerAskUser === undefined) {
+      throw new IpcRequestError(
+        503,
+        'WORKER_ASK_USER_DISABLED',
+        'daemon is not configured with a worker askUser handler',
+      );
+    }
+    const body = workerAskUserRequestSchema.parse(request.body);
+    ipcLog.info(
+      {
+        reqId: request.id,
+        taskId: body.taskId,
+        directiveId: body.directiveId,
+        questionLen: body.question.length,
+        deadlineSeconds: body.deadlineSeconds,
+      },
+      'ipc: /worker/ask-user — handling',
+    );
+    const result = await opts.workerAskUser(body);
+    const resp = workerAskUserResponseSchema.parse(result);
+    ipcLog.info(
+      {
+        reqId: request.id,
+        taskId: body.taskId,
+        questionId: resp.questionId,
+        answered: resp.answer !== undefined,
+        timedOut: resp.timedOut,
+        aborted: resp.aborted,
+      },
+      'ipc: /worker/ask-user — done',
+    );
+    reply.send(resp);
+  });
+}
+
+/**
+ * Bearer-token check for `/worker/*` routes. Returns `true` when the request
+ * carries `Authorization: Bearer <expected>` and `expected` is set, OR when
+ * `expected` is undefined (test mode — accept any loopback request). Returns
+ * `false` when the token is set but the header is missing or wrong.
+ */
+function checkWorkerBearer(request: FastifyRequest, expected: string | undefined): boolean {
+  if (expected === undefined) return true;
+  const header = request.headers['authorization'];
+  if (typeof header !== 'string') return false;
+  const prefix = 'Bearer ';
+  if (!header.startsWith(prefix)) return false;
+  const provided = header.slice(prefix.length);
+  // Constant-time compare avoids timing-leak distinguishing wrong-length from
+  // wrong-content. Length-mismatch shortcut is fine because token length is a
+  // public constant per startup.
+  if (provided.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < provided.length; i++) {
+    diff |= provided.charCodeAt(i) ^ expected.charCodeAt(i);
+  }
+  return diff === 0;
 }
 
 /**

@@ -75,6 +75,43 @@ export const reloadConfigResponseSchema = z.object({
 export type ReloadConfigResponse = z.infer<typeof reloadConfigResponseSchema>;
 
 // -----------------------------------------------------------------------------
+// POST /worker/ask-user  (worker subprocess → daemon → brain)
+// -----------------------------------------------------------------------------
+
+/**
+ * Mid-stream escalation from a worker subprocess. The MCP `ask_user` tool
+ * (sub-step 8.3) hits this route; the daemon proxies into the brain's
+ * existing `askUser()` helper, which polls `pending_questions` until the
+ * operator answers or the deadline passes.
+ *
+ * `taskId` is **mandatory** for worker callers (per ADR 0024 §3) — sibling
+ * workers in the same directive must each receive their own answer, so
+ * crossover is prevented by tying the question to a specific task.
+ */
+export const workerAskUserRequestSchema = z.object({
+  taskId: ulidSchema,
+  directiveId: ulidSchema,
+  question: z.string().min(1),
+  options: z.array(z.string().min(1)).optional(),
+  /**
+   * Optional per-question soft deadline in seconds. When omitted the daemon
+   * uses its configured default (1 hour per ADR 0024 §2). When the deadline
+   * passes the response is returned with `timedOut: true` and no answer; the
+   * agent decides whether to fall back to a guess.
+   */
+  deadlineSeconds: z.number().int().positive().optional(),
+});
+export type WorkerAskUserRequest = z.infer<typeof workerAskUserRequestSchema>;
+
+export const workerAskUserResponseSchema = z.object({
+  questionId: ulidSchema,
+  answer: z.string().optional(),
+  timedOut: z.boolean(),
+  aborted: z.boolean(),
+});
+export type WorkerAskUserResponse = z.infer<typeof workerAskUserResponseSchema>;
+
+// -----------------------------------------------------------------------------
 // Error envelope (returned with non-2xx responses)
 // -----------------------------------------------------------------------------
 
