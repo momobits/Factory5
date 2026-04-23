@@ -25,7 +25,7 @@
 
 - [x] 9.5 — `/api/v1/pending-questions`. The Phase 8 forcing function for Phase 9 UX — surface open questions prominently so operators can see at a glance "what is factory waiting for me on?" Exposes `/api/v1/pending-questions/:id` too for deep-linking from outbound channel messages.
 
-- [ ] 9.6 — `/api/v1/spend`. Surface the existing `factory spend` aggregations (per-project / per-directive / per-day / per-model). Reuse `@factory5/state` `spend` query helpers; no new query logic in the daemon.
+- [x] 9.6 — `/api/v1/spend`. Surface the existing `factory spend` aggregations (per-project / per-directive / per-day / per-model). Reuse `@factory5/state` `spend` query helpers; no new query logic in the daemon.
 
 - [ ] 9.7 — `/api/v1/findings`. List + filter by severity / status / project. Uses existing findings-registry helpers.
 

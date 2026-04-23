@@ -40,6 +40,8 @@ import {
   apiV1PendingQuestionDetailResponseSchema,
   apiV1PendingQuestionsListQuerySchema,
   apiV1PendingQuestionsListResponseSchema,
+  apiV1SpendQuerySchema,
+  apiV1SpendResponseSchema,
   directiveNotifyRequestSchema,
   IpcRequestError,
   ipcErrorSchema,
@@ -53,6 +55,7 @@ import {
   type ApiV1DirectivesListResponse,
   type ApiV1PendingQuestionDetailResponse,
   type ApiV1PendingQuestionsListResponse,
+  type ApiV1SpendResponse,
   type StatusResponse,
   type WorkerAskUserRequest,
   type WorkerAskUserResponse,
@@ -64,6 +67,7 @@ import {
   modelUsage,
   outbound,
   pendingQuestions,
+  spend,
   tasksInflight,
   type Database,
 } from '@factory5/state';
@@ -485,6 +489,46 @@ function registerRoutes(
     ipcLog.debug(
       { reqId: request.id, questionId: id, answered: question.answeredAt !== undefined },
       'ipc: /api/v1/pending-questions/:id',
+    );
+    reply.send(resp);
+  });
+
+  // ----- GET /api/v1/spend (ADR 0025, sub-step 9.6) -----
+  // All four rollups (per-project / per-directive / per-day / per-model) in
+  // a single response so the Spend page renders with one round-trip. The
+  // shared SpendFilter (since / until / projectId) applies uniformly.
+  app.get('/api/v1/spend', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const query = apiV1SpendQuerySchema.parse(request.query);
+    const filter: {
+      since?: string;
+      until?: string;
+      projectId?: string;
+    } = {};
+    if (query.since !== undefined) filter.since = query.since;
+    if (query.until !== undefined) filter.until = query.until;
+    if (query.projectId !== undefined) filter.projectId = query.projectId;
+    const perProject = spend.perProject(opts.db, filter);
+    const perDirective = spend.perDirective(opts.db, filter);
+    const perDay = spend.perDay(opts.db, filter);
+    const perModel = spend.perModel(opts.db, filter);
+    const resp: ApiV1SpendResponse = apiV1SpendResponseSchema.parse({
+      perProject,
+      perDirective,
+      perDay,
+      perModel,
+      filter,
+    });
+    ipcLog.debug(
+      {
+        reqId: request.id,
+        projects: perProject.length,
+        directives: perDirective.length,
+        days: perDay.length,
+        models: perModel.length,
+        filter,
+      },
+      'ipc: /api/v1/spend',
     );
     reply.send(resp);
   });

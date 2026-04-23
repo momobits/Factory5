@@ -15,6 +15,7 @@ import {
   openDatabase,
   runMigrations,
   directives as directivesQ,
+  modelUsage,
   outbound,
   pendingQuestions,
   type Database,
@@ -1030,6 +1031,155 @@ describe('IPC server — /api/v1/pending-questions (ADR 0025, sub-step 9.5)', ()
     const body = res.json() as { question: { id: string; question: string } };
     expect(body.question.id).toBe(seeded.id);
     expect(body.question.question).toBe(seeded.question);
+    await app.close();
+  });
+});
+
+describe('IPC server — /api/v1/spend (ADR 0025, sub-step 9.6)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  const UI_TOKEN = 'ui-secret-xyz';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  function seedSpend(): { directiveId: string } {
+    const d = testDirective();
+    directivesQ.insert(db, d);
+    modelUsage.record(db, {
+      id: newId(),
+      directiveId: d.id,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      category: 'planning',
+      mode: 'call',
+      inputTokens: 100,
+      outputTokens: 50,
+      costUsd: 0.02,
+      durationMs: 1200,
+      calledAt: '2026-04-23T12:00:00.000Z',
+    });
+    modelUsage.record(db, {
+      id: newId(),
+      directiveId: d.id,
+      provider: 'anthropic',
+      model: 'claude-opus-4-7',
+      category: 'deep',
+      mode: 'stream',
+      inputTokens: 500,
+      outputTokens: 200,
+      costUsd: 0.15,
+      durationMs: 5000,
+      calledAt: '2026-04-23T12:05:00.000Z',
+    });
+    return { directiveId: d.id };
+  }
+
+  it('GET /api/v1/spend returns 401 without bearer', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({ method: 'GET', url: '/api/v1/spend' });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('GET /api/v1/spend returns all four rollups + echoed filter on empty db', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/spend',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      perProject: unknown[];
+      perDirective: unknown[];
+      perDay: unknown[];
+      perModel: unknown[];
+      filter: Record<string, unknown>;
+    };
+    expect(body.perProject).toEqual([]);
+    expect(body.perDirective).toEqual([]);
+    expect(body.perDay).toEqual([]);
+    expect(body.perModel).toEqual([]);
+    expect(body.filter).toEqual({});
+    await app.close();
+  });
+
+  it('GET /api/v1/spend rolls up seeded usage', async () => {
+    const { directiveId } = seedSpend();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/spend',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      perProject: Array<{ totalUsd: number; callCount: number }>;
+      perDirective: Array<{ directiveId: string; totalUsd: number; callCount: number }>;
+      perDay: Array<{ date: string; totalUsd: number; callCount: number }>;
+      perModel: Array<{ provider: string; model: string; totalUsd: number }>;
+    };
+    expect(body.perDirective).toHaveLength(1);
+    expect(body.perDirective[0]?.directiveId).toBe(directiveId);
+    expect(body.perDirective[0]?.callCount).toBe(2);
+    expect(body.perDirective[0]?.totalUsd).toBeCloseTo(0.17, 2);
+    expect(body.perDay).toHaveLength(1);
+    expect(body.perDay[0]?.date).toBe('2026-04-23');
+    expect(body.perModel).toHaveLength(2);
+    expect(body.perModel.some((m) => m.model === 'claude-sonnet-4-6')).toBe(true);
+    expect(body.perModel.some((m) => m.model === 'claude-opus-4-7')).toBe(true);
+    await app.close();
+  });
+
+  it('GET /api/v1/spend applies since/until filter', async () => {
+    seedSpend();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      // Window that excludes both seeded rows (they're at 12:00 + 12:05 UTC).
+      url: '/api/v1/spend?since=2026-04-24T00:00:00Z&until=2026-04-25T00:00:00Z',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      perDirective: unknown[];
+      filter: { since?: string; until?: string };
+    };
+    expect(body.perDirective).toEqual([]);
+    expect(body.filter.since).toBe('2026-04-24T00:00:00Z');
+    expect(body.filter.until).toBe('2026-04-25T00:00:00Z');
+    await app.close();
+  });
+
+  it('GET /api/v1/spend returns 400 on invalid since (non-ISO)', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/spend?since=yesterday',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
     await app.close();
   });
 });

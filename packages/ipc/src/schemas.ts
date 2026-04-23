@@ -237,6 +237,70 @@ export type ApiV1PendingQuestionDetailResponse = z.infer<
 >;
 
 // -----------------------------------------------------------------------------
+// GET /api/v1/spend  (web UI, ADR 0025 sub-step 9.6)
+// -----------------------------------------------------------------------------
+
+/**
+ * Query string for `GET /api/v1/spend`. All fields optional; omit to get
+ * all-time aggregates. Matches `SpendFilter` in `@factory5/state`.
+ *
+ *   ?since=…       ISO8601 inclusive lower bound on `called_at`
+ *   ?until=…       ISO8601 exclusive upper bound on `called_at`
+ *   ?projectId=…   restrict to a single project (ULID)
+ */
+export const apiV1SpendQuerySchema = z.object({
+  since: z.string().datetime({ offset: true }).optional(),
+  until: z.string().datetime({ offset: true }).optional(),
+  projectId: ulidSchema.optional(),
+});
+export type ApiV1SpendQuery = z.infer<typeof apiV1SpendQuerySchema>;
+
+const perProjectSpendSchema = z.object({
+  projectId: z.string().nullable(),
+  projectName: z.string().nullable(),
+  display: z.string(),
+  totalUsd: z.number().nonnegative(),
+  callCount: z.number().int().nonnegative(),
+  directiveCount: z.number().int().nonnegative(),
+});
+
+const perDirectiveSpendSchema = z.object({
+  directiveId: ulidSchema,
+  projectId: z.string().nullable(),
+  projectName: z.string().nullable(),
+  totalUsd: z.number().nonnegative(),
+  callCount: z.number().int().nonnegative(),
+  firstCalledAt: z.string().datetime({ offset: true }),
+  lastCalledAt: z.string().datetime({ offset: true }),
+});
+
+const perDaySpendSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  totalUsd: z.number().nonnegative(),
+  callCount: z.number().int().nonnegative(),
+});
+
+const perModelSpendSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  totalUsd: z.number().nonnegative(),
+  callCount: z.number().int().nonnegative(),
+});
+
+export const apiV1SpendResponseSchema = z.object({
+  perProject: z.array(perProjectSpendSchema),
+  perDirective: z.array(perDirectiveSpendSchema),
+  perDay: z.array(perDaySpendSchema),
+  perModel: z.array(perModelSpendSchema),
+  filter: z.object({
+    since: z.string().datetime({ offset: true }).optional(),
+    until: z.string().datetime({ offset: true }).optional(),
+    projectId: ulidSchema.optional(),
+  }),
+});
+export type ApiV1SpendResponse = z.infer<typeof apiV1SpendResponseSchema>;
+
+// -----------------------------------------------------------------------------
 // Error envelope (returned with non-2xx responses)
 // -----------------------------------------------------------------------------
 
