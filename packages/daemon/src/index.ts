@@ -416,10 +416,20 @@ function hasStringField(block: unknown, field: string): boolean {
  * helper. Validates that `taskId` actually belongs to a `tasks_inflight` row
  * for the requested directive (defense-in-depth — a spoofed taskId from a
  * compromised worker can't poison sibling questions).
+ *
+ * Exported so the regression suite (sub-step 8.6) can compose the handler
+ * with a known DB state and a fast `pollIntervalMs` — production callers
+ * leave `pollIntervalMs` undefined, inheriting `askUser`'s default of 1 s.
  */
-function buildWorkerAskUserHandler(opts: {
+export function buildWorkerAskUserHandler(opts: {
   db: Database;
   defaultDeadlineSeconds: number;
+  /**
+   * Override for the poll cadence against `pending_questions`. Tests pass
+   * a small value (e.g. 10 ms) so answer-arrives-mid-wait races complete
+   * in sub-second time; production leaves this undefined.
+   */
+  pollIntervalMs?: number;
 }): (req: WorkerAskUserRequest) => Promise<WorkerAskUserResponse> {
   return async (req) => {
     // Validate (taskId, directiveId) pair exists in tasks_inflight.
@@ -452,6 +462,7 @@ function buildWorkerAskUserHandler(opts: {
         question: req.question,
         ...(req.options !== undefined ? { options: req.options } : {}),
         deadlineAt,
+        ...(opts.pollIntervalMs !== undefined ? { pollIntervalMs: opts.pollIntervalMs } : {}),
         onQuestionResolved: (questionId) => {
           tasksInflight.markWaitingForHuman(
             opts.db,
@@ -499,10 +510,11 @@ function buildWorkerAskUserHandler(opts: {
  * recognized as "answered after task ended" by the channel collector.
  *
  * Called once during `startDaemon`, before the brain supervisor starts
- * spawning new workers. Returns the count of recovered tasks for
- * logging.
+ * spawning new workers. Exported so the regression suite (sub-step 8.6)
+ * can drive this recovery without spinning up a full daemon. Returns the
+ * count of recovered tasks for logging.
  */
-function recoverFromHumanWaits(db: Database, log: ReturnType<typeof createLogger>): number {
+export function recoverFromHumanWaits(db: Database, log: ReturnType<typeof createLogger>): number {
   const orphans = tasksInflight.findOrphanedHumanWaits(db);
   if (orphans.length === 0) return 0;
   const when = new Date().toISOString();
