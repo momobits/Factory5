@@ -78,6 +78,63 @@ export function openForDirective(db: Database, directiveId: string): PendingQues
   return rows.map(rowToQuestion);
 }
 
+export type QuestionListStatus = 'open' | 'answered' | 'all';
+
+export interface ListPagedFilter {
+  /** Page size. Clamped to [1, 100]. Default 20. */
+  limit?: number;
+  /** Rows to skip. Clamped to >= 0. Default 0. */
+  offset?: number;
+  /** `open` (default) shows only unanswered; `answered` flips it; `all` both. */
+  status?: QuestionListStatus;
+  /** Optional directive scope. */
+  directiveId?: string;
+}
+
+export interface ListPagedResult {
+  items: PendingQuestion[];
+  /** Total matching rows ignoring pagination. */
+  total: number;
+}
+
+/**
+ * Paged list of pending questions, newest first. Backs the web UI's
+ * `/api/v1/pending-questions` endpoint (ADR 0025, sub-step 9.5). Brain
+ * and channel callers continue to use {@link openForDirective} /
+ * {@link getById}; this helper exists so the UI doesn't hit full table
+ * scans on growing Q&A history.
+ */
+export function listPaged(db: Database, filter: ListPagedFilter = {}): ListPagedResult {
+  const limit = Math.max(1, Math.min(100, filter.limit ?? 20));
+  const offset = Math.max(0, filter.offset ?? 0);
+  const status = filter.status ?? 'open';
+
+  const wheres: string[] = [];
+  const params: unknown[] = [];
+  if (status === 'open') {
+    wheres.push('answered_at IS NULL');
+  } else if (status === 'answered') {
+    wheres.push('answered_at IS NOT NULL');
+  }
+  if (filter.directiveId !== undefined) {
+    wheres.push('directive_id = ?');
+    params.push(filter.directiveId);
+  }
+  const whereClause = wheres.length > 0 ? `WHERE ${wheres.join(' AND ')}` : '';
+
+  const countRow = db
+    .prepare(`SELECT COUNT(*) AS count FROM pending_questions ${whereClause}`)
+    .get(...params) as { count: number };
+  const rows = db
+    .prepare(
+      `SELECT * FROM pending_questions ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...params, limit, offset) as Row[];
+  return { items: rows.map(rowToQuestion), total: countRow.count };
+}
+
 /** Record an answer. */
 export function answer(db: Database, id: string, answer: string, when: string): void {
   db.prepare('UPDATE pending_questions SET answered_at = ?, answer = ? WHERE id = ?').run(

@@ -37,6 +37,9 @@ import {
   apiV1DirectiveDetailResponseSchema,
   apiV1DirectivesListQuerySchema,
   apiV1DirectivesListResponseSchema,
+  apiV1PendingQuestionDetailResponseSchema,
+  apiV1PendingQuestionsListQuerySchema,
+  apiV1PendingQuestionsListResponseSchema,
   directiveNotifyRequestSchema,
   IpcRequestError,
   ipcErrorSchema,
@@ -48,6 +51,8 @@ import {
   workerAskUserResponseSchema,
   type ApiV1DirectiveDetailResponse,
   type ApiV1DirectivesListResponse,
+  type ApiV1PendingQuestionDetailResponse,
+  type ApiV1PendingQuestionsListResponse,
   type StatusResponse,
   type WorkerAskUserRequest,
   type WorkerAskUserResponse,
@@ -423,6 +428,63 @@ function registerRoutes(
         callCount,
       },
       'ipc: /api/v1/directives/:id',
+    );
+    reply.send(resp);
+  });
+
+  // ----- GET /api/v1/pending-questions (ADR 0025, sub-step 9.5) -----
+  // Surfaces the Phase 8 pending-questions table for the web UI. Default
+  // scope is `status=open` (what operators want to see first — "what is
+  // factory waiting on?"). `answered` and `all` are available for history.
+  app.get('/api/v1/pending-questions', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const query = apiV1PendingQuestionsListQuerySchema.parse(request.query);
+    const limit = query.limit ?? 20;
+    const offset = query.offset ?? 0;
+    const status = query.status ?? 'open';
+    const result = pendingQuestions.listPaged(opts.db, {
+      limit,
+      offset,
+      status,
+      ...(query.directiveId !== undefined ? { directiveId: query.directiveId } : {}),
+    });
+    const resp: ApiV1PendingQuestionsListResponse = apiV1PendingQuestionsListResponseSchema.parse({
+      items: result.items,
+      total: result.total,
+      limit,
+      offset,
+      status,
+    });
+    ipcLog.debug(
+      {
+        reqId: request.id,
+        limit,
+        offset,
+        status,
+        directiveId: query.directiveId,
+        total: result.total,
+      },
+      'ipc: /api/v1/pending-questions',
+    );
+    reply.send(resp);
+  });
+
+  // ----- GET /api/v1/pending-questions/:id (ADR 0025, sub-step 9.5) -----
+  // Detail endpoint for deep-linking from outbound channel messages
+  // (Telegram / Discord can render "Question: <link>" that lands here).
+  app.get<{ Params: { id: string } }>('/api/v1/pending-questions/:id', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const { id } = request.params;
+    const question = pendingQuestions.getById(opts.db, id);
+    if (question === undefined) {
+      throw new IpcRequestError(404, 'QUESTION_NOT_FOUND', `question ${id} not found`);
+    }
+    const resp: ApiV1PendingQuestionDetailResponse = apiV1PendingQuestionDetailResponseSchema.parse(
+      { question },
+    );
+    ipcLog.debug(
+      { reqId: request.id, questionId: id, answered: question.answeredAt !== undefined },
+      'ipc: /api/v1/pending-questions/:id',
     );
     reply.send(resp);
   });

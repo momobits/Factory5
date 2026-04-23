@@ -10,12 +10,13 @@ import {
   sendResponseSchema,
   statusResponseSchema,
 } from '@factory5/ipc';
-import { newId, type Directive } from '@factory5/core';
+import { newId, type Directive, type PendingQuestion } from '@factory5/core';
 import {
   openDatabase,
   runMigrations,
   directives as directivesQ,
   outbound,
+  pendingQuestions,
   type Database,
 } from '@factory5/state';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -855,6 +856,180 @@ describe('IPC server — /api/v1/directives (ADR 0025, sub-step 9.4)', () => {
       url: `/api/v1/directives/${directive.id}`,
     });
     expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+});
+
+describe('IPC server — /api/v1/pending-questions (ADR 0025, sub-step 9.5)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  const UI_TOKEN = 'ui-secret-xyz';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  function seedQuestions(
+    count: number,
+    overrides: Partial<PendingQuestion> = {},
+  ): PendingQuestion[] {
+    const out: PendingQuestion[] = [];
+    for (let i = 0; i < count; i++) {
+      // Each question needs a real directive row (FK). Either the caller
+      // supplied a shared directiveId (assumed already-inserted) or we mint
+      // one per question.
+      let directiveId = overrides.directiveId;
+      if (directiveId === undefined) {
+        const d = testDirective();
+        directivesQ.insert(db, d);
+        directiveId = d.id;
+      }
+      const q: PendingQuestion = {
+        id: newId(),
+        directiveId,
+        question: `question ${i}`,
+        channel: 'cli',
+        channelRef: 'session-1',
+        createdAt: new Date(2026, 3, 23, 12, 0, i).toISOString(),
+        ...overrides,
+        directiveId,
+      };
+      pendingQuestions.create(db, q);
+      out.push(q);
+    }
+    return out;
+  }
+
+  it('GET /api/v1/pending-questions returns 401 without bearer', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({ method: 'GET', url: '/api/v1/pending-questions' });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('GET /api/v1/pending-questions defaults to status=open', async () => {
+    const seeded = seedQuestions(3);
+    const first = seeded[0];
+    if (first === undefined) throw new Error('seed failed');
+    pendingQuestions.answer(db, first.id, 'yes', new Date().toISOString());
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/pending-questions',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      items: Array<{ id: string }>;
+      total: number;
+      status: string;
+    };
+    expect(body.status).toBe('open');
+    expect(body.total).toBe(2);
+    expect(body.items.find((q) => q.id === first.id)).toBeUndefined();
+    await app.close();
+  });
+
+  it('GET /api/v1/pending-questions?status=answered filters to answered', async () => {
+    const seeded = seedQuestions(2);
+    const first = seeded[0];
+    if (first === undefined) throw new Error('seed failed');
+    pendingQuestions.answer(db, first.id, 'x', new Date().toISOString());
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/pending-questions?status=answered',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: Array<{ id: string }>; total: number };
+    expect(body.total).toBe(1);
+    expect(body.items[0]?.id).toBe(first.id);
+    await app.close();
+  });
+
+  it('GET /api/v1/pending-questions?status=all returns both', async () => {
+    const seeded = seedQuestions(3);
+    const first = seeded[0];
+    if (first === undefined) throw new Error('seed failed');
+    pendingQuestions.answer(db, first.id, 'x', new Date().toISOString());
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/pending-questions?status=all',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { total: number };
+    expect(body.total).toBe(3);
+    await app.close();
+  });
+
+  it('GET /api/v1/pending-questions?directiveId= scopes to that directive', async () => {
+    // Seed a shared directive first so the FK holds for the targeted questions.
+    const sharedDirective = testDirective();
+    directivesQ.insert(db, sharedDirective);
+    seedQuestions(2, { directiveId: sharedDirective.id });
+    seedQuestions(3); // other directives, minted per-question
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/pending-questions?directiveId=${sharedDirective.id}&status=all`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      items: Array<{ directiveId: string }>;
+      total: number;
+    };
+    expect(body.total).toBe(2);
+    expect(body.items.every((q) => q.directiveId === sharedDirective.id)).toBe(true);
+    await app.close();
+  });
+
+  it('GET /api/v1/pending-questions/:id returns 404 for unknown id', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/pending-questions/${newId()}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('QUESTION_NOT_FOUND');
+    await app.close();
+  });
+
+  it('GET /api/v1/pending-questions/:id returns the question envelope', async () => {
+    const [seeded] = seedQuestions(1);
+    if (seeded === undefined) throw new Error('seed failed');
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/pending-questions/${seeded.id}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { question: { id: string; question: string } };
+    expect(body.question.id).toBe(seeded.id);
+    expect(body.question.question).toBe(seeded.question);
     await app.close();
   });
 });

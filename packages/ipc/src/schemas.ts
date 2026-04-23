@@ -195,6 +195,48 @@ export const apiV1DirectiveDetailResponseSchema = z.object({
 export type ApiV1DirectiveDetailResponse = z.infer<typeof apiV1DirectiveDetailResponseSchema>;
 
 // -----------------------------------------------------------------------------
+// GET /api/v1/pending-questions  (web UI, ADR 0025 sub-step 9.5)
+// -----------------------------------------------------------------------------
+
+/**
+ * Query string for `GET /api/v1/pending-questions`. All fields optional.
+ *
+ *   ?limit=20       page size, clamped server-side to [1, 100]
+ *   ?offset=0       rows to skip (>= 0)
+ *   ?status=open    default; alternatives: `answered`, `all`
+ *   ?directiveId=…  optional directive scope
+ */
+export const apiV1PendingQuestionsListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().nonnegative().optional(),
+  status: z.enum(['open', 'answered', 'all']).optional(),
+  directiveId: ulidSchema.optional(),
+});
+export type ApiV1PendingQuestionsListQuery = z.infer<typeof apiV1PendingQuestionsListQuerySchema>;
+
+export const apiV1PendingQuestionsListResponseSchema = z.object({
+  items: z.array(pendingQuestionSchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+  status: z.enum(['open', 'answered', 'all']),
+});
+export type ApiV1PendingQuestionsListResponse = z.infer<
+  typeof apiV1PendingQuestionsListResponseSchema
+>;
+
+// -----------------------------------------------------------------------------
+// GET /api/v1/pending-questions/:id  (web UI, ADR 0025 sub-step 9.5)
+// -----------------------------------------------------------------------------
+
+export const apiV1PendingQuestionDetailResponseSchema = z.object({
+  question: pendingQuestionSchema,
+});
+export type ApiV1PendingQuestionDetailResponse = z.infer<
+  typeof apiV1PendingQuestionDetailResponseSchema
+>;
+
+// -----------------------------------------------------------------------------
 // Error envelope (returned with non-2xx responses)
 // -----------------------------------------------------------------------------
 
