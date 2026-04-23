@@ -2,7 +2,7 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-23T21:30:00Z (session `2026-04-23T21`) — Phase 9 (Web UI) closed. Phase 10 (Assessor tier-3) active, opens at step 10.1.
+**Last updated:** 2026-04-23T21:35:00Z (session `2026-04-23T21`, session-end) — Phase 9 (Web UI) closed on commit `e360436`. Phase 10 (Assessor tier-3) active, opens at step 10.1.
 **Current phase:** 10 — Assessor tier-3 — **🟢 active**
 **Current sub-phase:** n/a — single-charter phase (may re-split into 10a Node / 10b Go / 10c Rust if any single runtime balloons)
 **Current step:** 10.1 — ADR 0026 (pluggable-runtime contract: provisioner shape + verify-gate command mapping + failure-mode taxonomy + host-tool pre-flight)
@@ -39,9 +39,9 @@ After 10.1: 10.2 Node/TypeScript runtime (provisioner + verify gate + integratio
 ## Git state
 
 - **Branch:** main (ahead of `origin/main` by ~81 commits — push at operator discretion)
-- **Last commit:** `<to-be-filled-by-phase-close-commit>` (will be the `chore(phase-9): close phase 9, kick off phase 10` commit).
-- **Uncommitted changes:** none. Working tree clean post-close.
-- **Last phase tag:** `phase-9-web-ui-closed` (applied on the close commit).
+- **Last commit:** `e360436 chore(phase-9): close phase 9, kick off phase 10`. Session-end docs-state commit lands after this STATE.md update.
+- **Uncommitted changes:** none at phase-close; session-end docs commit pending.
+- **Last phase tag:** `phase-9-web-ui-closed` (applied on commit `e360436`).
 
 Earlier tags intact: `phase-8-worker-ask-user-closed`, `addendum-onboarding-closed`, `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-7-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`, `protocol-initialised`.
 

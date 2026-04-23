@@ -95,7 +95,7 @@ Report back on wake-up with a status block in this shape:
 ```
 Phase 10 — 0/9 closed; 10.1 ADR 0026 next
 Last action: Phase 9 closed 2026-04-23 — tag phase-9-web-ui-closed
-Git: branch=main, last=<close-sha> chore(phase-9): close phase 9, kick off phase 10, uncommitted=no, tag=phase-9-web-ui-closed
+Git: branch=main, last=<latest-sha> (session-end docs(state) on top of e360436), uncommitted=no, tag=phase-9-web-ui-closed
 Open blockers: 0 (I009 + I012 are non-blocking carry-forward)
 Proposed next action: 10.1 — author ADR 0026 (pluggable-runtime contract)
 Ready to proceed?
