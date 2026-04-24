@@ -54,7 +54,7 @@
 - [ ] 10.5 — **Live validation — Go end-to-end.** Small Go CLI spec;
       full `factory build` loop.
 
-- [ ] 10.6 — **Rust runtime.** `packages/assessor/src/runtimes/rust.ts`.
+- [x] 10.6 — **Rust runtime.** `packages/assessor/src/runtimes/rust.ts`.
       Gate: `cargo test`. Integration test. Shape is mechanical once
       Node + Go prove the abstraction.
 

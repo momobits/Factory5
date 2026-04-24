@@ -25,3 +25,4 @@ export {
   parseGoTestSummary,
   countListedGoTests,
 } from './runtimes/go.js';
+export { rustRuntime, buildRustRuntime, parseCargoTestSummary } from './runtimes/rust.js';

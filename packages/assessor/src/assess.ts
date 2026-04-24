@@ -24,6 +24,7 @@ import { resolveOnPath } from './run.js';
 import { goRuntime } from './runtimes/go.js';
 import { nodeRuntime } from './runtimes/node.js';
 import { pythonRuntime } from './runtimes/python.js';
+import { rustRuntime } from './runtimes/rust.js';
 import type {
   AssessOptions,
   AssessResult,
@@ -40,7 +41,7 @@ const RUNTIMES: Partial<Record<Runtime, RuntimeAssessor>> = {
   python: pythonRuntime,
   node: nodeRuntime,
   go: goRuntime,
-  // 'rust' lands in 10.6.
+  rust: rustRuntime,
 };
 
 /**
