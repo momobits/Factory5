@@ -7,7 +7,7 @@
 
 ## Phase 10 — Assessor tier-3
 
-- [ ] 10.1 — **ADR 0026** pluggable-runtime contract. Decisions to pin:
+- [x] 10.1 — **ADR 0026** pluggable-runtime contract. Decisions to pin:
   - **Provisioner shape** — does the provisioner fully own the project's
     env (install deps, set up typecheck tooling) or is the project
     expected to be runnable out-of-the-box (the assessor just runs the
