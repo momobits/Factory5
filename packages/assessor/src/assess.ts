@@ -21,6 +21,7 @@ import {
   checkReadme,
 } from './artifacts.js';
 import { resolveOnPath } from './run.js';
+import { goRuntime } from './runtimes/go.js';
 import { nodeRuntime } from './runtimes/node.js';
 import { pythonRuntime } from './runtimes/python.js';
 import type {
@@ -38,7 +39,8 @@ const log = createLogger('assessor');
 const RUNTIMES: Partial<Record<Runtime, RuntimeAssessor>> = {
   python: pythonRuntime,
   node: nodeRuntime,
-  // 'go' and 'rust' land in 10.4 / 10.6 respectively.
+  go: goRuntime,
+  // 'rust' lands in 10.6.
 };
 
 /**

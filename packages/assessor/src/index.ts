@@ -19,3 +19,9 @@ export * from './runners/imports.js';
 export * from './artifacts.js';
 export { pythonRuntime } from './runtimes/python.js';
 export { nodeRuntime, buildNodeRuntime, parseNodeTestSummary } from './runtimes/node.js';
+export {
+  goRuntime,
+  buildGoRuntime,
+  parseGoTestSummary,
+  countListedGoTests,
+} from './runtimes/go.js';

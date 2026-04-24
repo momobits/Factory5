@@ -46,7 +46,7 @@
       assessor's gate passes, spend stays under the autonomy mode's
       ceiling.
 
-- [ ] 10.4 — **Go runtime.** `packages/assessor/src/runtimes/go.ts`.
+- [x] 10.4 — **Go runtime.** `packages/assessor/src/runtimes/go.ts`.
       Gate: `go build ./... && go test ./...`. Integration test.
       Provisioner is the lightest of the three — no per-project env
       management since `go.mod` is enough.
