@@ -561,8 +561,18 @@ describe('provisionAssessorEnv wires ensureAssessorVenv', () => {
 // ---------------------------------------------------------------------------
 
 describe('computeGateResults + provisioning', () => {
-  const passingTests = { passed: 1, failed: 0, errors: 0, available: true };
-  const imports = { ok: true };
+  // Post ADR-0026: `computeGateResults` takes a `RuntimeGateResult` slice
+  // rather than splitting tests/imports/provisioning into separate args.
+  // The runtime is now responsible for computing `buildOk` (and mapping
+  // install-failure → buildOk=false internally); `computeGateResults`
+  // just composes the three gate booleans from that slice + artifacts.
+  const passingRuntime = {
+    buildOk: true,
+    testsAvailable: true,
+    testsPassed: 1,
+    testsFailed: 0,
+    testsErrors: 0,
+  };
   const modules = { existing: 1, missing: [] as string[] };
   const artifacts = {
     readme: true,
@@ -572,36 +582,23 @@ describe('computeGateResults + provisioning', () => {
     gitClean: true,
   };
 
-  it('gate.build is true when install succeeded', () => {
-    const result = computeGateResults(passingTests, imports, modules, artifacts, {
-      pythonPath: '/usr/bin/python3.11',
-      pythonVersion: '3.11.9',
-      installOk: true,
-      venvSource: 'factory-managed',
-    });
+  it('gate.build is true when the runtime reports buildOk + tests pass', () => {
+    const result = computeGateResults(passingRuntime, modules, artifacts);
     expect(result.build).toBe(true);
     expect(result.verify).toBe(true);
   });
 
-  it('gate.build is false when install failed even if imports happen to pass', () => {
-    const result = computeGateResults(passingTests, imports, modules, artifacts, {
-      pythonPath: '/usr/bin/python3.11',
-      pythonVersion: '3.11.9',
-      installOk: false,
-      installSummary: 'ERROR: Could not install',
-      venvSource: 'factory-managed',
-    });
+  it('gate.build is false when the runtime reports buildOk=false (e.g. install failed)', () => {
+    const result = computeGateResults({ ...passingRuntime, buildOk: false }, modules, artifacts);
     expect(result.build).toBe(false);
     expect(result.verify).toBe(false);
   });
 
-  it('gate.build is true when provisioning is absent (no-tests path)', () => {
+  it('gate.build is true when tests are unavailable (no-tests path still builds)', () => {
     const result = computeGateResults(
-      { passed: 0, failed: 0, errors: 0, available: false },
-      imports,
+      { buildOk: true, testsAvailable: false, testsPassed: 0, testsFailed: 0, testsErrors: 0 },
       modules,
       artifacts,
-      undefined,
     );
     expect(result.build).toBe(true);
     // verify remains false because integration is false (no tests available)

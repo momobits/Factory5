@@ -3,13 +3,11 @@
  * {@link AssessResult}. No LLM, no inference — only real subprocesses and
  * real file reads.
  *
- * Designed so the brain's verifier agent reads this and decides: ship, iterate,
- * or escalate.
- *
- * ADR 0017: when tests are requested, provision the assessor env once
- * (pickPython + `pip install -e .[test]`) and share the chosen interpreter
- * with both pytest and the imports check so the two runners agree on gate
- * outcomes.
+ * ADR 0026 (Phase 10): language-pluggable. `AssessOptions.runtime` selects
+ * a registered {@link RuntimeAssessor}; the runtime's `hostTools` are
+ * pre-flighted via `resolveOnPath`; then its `runGate` produces the
+ * runtime-specific slice of the result. Artifact / module / git checks
+ * stay runtime-neutral in this file.
  */
 
 import { createLogger } from '@factory5/logger';
@@ -22,20 +20,51 @@ import {
   checkModules,
   checkReadme,
 } from './artifacts.js';
-import { checkPythonImports } from './runners/imports.js';
-import { provisionAssessorEnv, runPytest, type AssessorEnv } from './runners/pytest.js';
-import type { AssessOptions, AssessResult } from './types.js';
+import { resolveOnPath } from './run.js';
+import { nodeRuntime } from './runtimes/node.js';
+import { pythonRuntime } from './runtimes/python.js';
+import type {
+  AssessOptions,
+  AssessResult,
+  FailureMode,
+  ProvisioningRecord,
+  Runtime,
+  RuntimeAssessor,
+  RuntimeGateResult,
+} from './types.js';
 
 const log = createLogger('assessor');
 
+const RUNTIMES: Partial<Record<Runtime, RuntimeAssessor>> = {
+  python: pythonRuntime,
+  node: nodeRuntime,
+  // 'go' and 'rust' land in 10.4 / 10.6 respectively.
+};
+
 /**
- * Pure computation of the three gate booleans. Exported for unit-testing the
- * gate semantics (especially the ADR 0017 install-failure → gate.build=false
- * rule) without spinning up a real Python subprocess.
+ * Registered runtime for a given language. Exported so tests can assert the
+ * dispatch table and (if needed) swap runtimes in unit tests.
+ */
+export function getRuntime(runtime: Runtime): RuntimeAssessor | undefined {
+  return RUNTIMES[runtime];
+}
+
+/**
+ * Pure computation of the three gate booleans. `assess()` composes every
+ * runtime's `RuntimeGateResult` with the artifact checks before calling this.
+ * Kept separate so the gate semantics stay unit-testable without spawning
+ * subprocesses.
+ *
+ * Gate semantics:
+ *   - `build` — source built + (env-owning runtimes) install succeeded + modules present
+ *   - `integration` — tests ran and all passed (requires at least one test)
+ *   - `verify` — build && integration && every artifact check is green && git clean
  */
 export function computeGateResults(
-  tests: { passed: number; failed: number; errors: number; available: boolean },
-  imports: { ok: boolean },
+  runtimeResult: Pick<
+    RuntimeGateResult,
+    'buildOk' | 'testsAvailable' | 'testsPassed' | 'testsFailed' | 'testsErrors'
+  >,
   modules: { existing: number; missing: string[] },
   artifacts: {
     readme: boolean;
@@ -44,16 +73,13 @@ export function computeGateResults(
     architecture: boolean;
     gitClean: boolean;
   },
-  provisioning: AssessResult['provisioning'],
 ): AssessResult['gateResults'] {
-  // gate.build requires that deps installed cleanly when we have a
-  // provisioning record. Install failure means the built project's
-  // dependency layer is broken regardless of whether the (stdlib-only)
-  // imports happen to succeed.
-  const installOk = provisioning === undefined || provisioning.installOk;
-  const build = modules.missing.length === 0 && imports.ok && installOk;
+  const build = modules.missing.length === 0 && runtimeResult.buildOk;
   const integration =
-    tests.available && tests.failed === 0 && tests.errors === 0 && tests.passed > 0;
+    runtimeResult.testsAvailable &&
+    runtimeResult.testsFailed === 0 &&
+    runtimeResult.testsErrors === 0 &&
+    runtimeResult.testsPassed > 0;
   const verify =
     build &&
     integration &&
@@ -65,14 +91,71 @@ export function computeGateResults(
   return { build, integration, verify };
 }
 
+/**
+ * Probe each of the runtime's declared `hostTools` via `resolveOnPath`. Returns
+ * the first missing tool, or `undefined` when every tool resolves. Python's
+ * empty `hostTools` list makes this a no-op for that runtime.
+ */
+async function preflightHostTools(
+  runtime: RuntimeAssessor,
+): Promise<{ bin: string; installHint: string } | undefined> {
+  for (const tool of runtime.hostTools) {
+    const resolved = await resolveOnPath(tool.bin);
+    if (resolved === undefined) {
+      return { bin: tool.bin, installHint: tool.installHint };
+    }
+  }
+  return undefined;
+}
+
+function hostMissingResult(
+  runtime: Runtime,
+  modules: { existing: number; missing: string[] },
+  artifacts: {
+    readme: boolean;
+    license: boolean;
+    gitignore: boolean;
+    architecture: boolean;
+    gitClean: boolean;
+  },
+): AssessResult {
+  return {
+    runtime,
+    failureMode: 'ENV_HOST_MISSING_TOOL',
+    modulesExisting: modules.existing,
+    modulesMissing: modules.missing,
+    testsPassed: 0,
+    testsFailed: 0,
+    testsErrors: 0,
+    testFramework: 'none',
+    importsOk: false,
+    importErrors: [],
+    hasReadme: artifacts.readme,
+    hasLicense: artifacts.license,
+    hasGitignore: artifacts.gitignore,
+    hasArchitecture: artifacts.architecture,
+    gitClean: artifacts.gitClean,
+    gateResults: { build: false, integration: false, verify: false },
+  };
+}
+
 export async function assess(opts: AssessOptions): Promise<AssessResult> {
   const { projectPath } = opts;
   const expected = opts.expectedModules ?? [];
   const framework = opts.testFramework ?? 'auto';
+  const runtimeName: Runtime = opts.runtime ?? 'python';
 
-  log.info({ projectPath, expectedModules: expected.length, framework }, 'assess: starting');
+  log.info(
+    { projectPath, expectedModules: expected.length, framework, runtime: runtimeName },
+    'assess: starting',
+  );
 
-  // File-system only checks — run in parallel, cheap.
+  const runtime = getRuntime(runtimeName);
+  if (runtime === undefined) {
+    throw new Error(`assess: runtime '${runtimeName}' is not registered`);
+  }
+
+  // File-system only checks — run in parallel, cheap, runtime-agnostic.
   const [modules, readme, license, gitignore, architecture, gitClean] = await Promise.all([
     checkModules(projectPath, expected),
     checkReadme(projectPath),
@@ -81,97 +164,106 @@ export async function assess(opts: AssessOptions): Promise<AssessResult> {
     checkArchitectureDoc(projectPath),
     checkGitClean(projectPath),
   ]);
+  const artifacts = { readme, license, gitignore, architecture, gitClean };
 
-  // ADR 0017: pick interpreter and run install ONCE, share across pytest +
-  // imports runners. When `testFramework: 'none'` we skip provisioning (no
-  // pip install on runs that won't invoke pytest).
-  let env: AssessorEnv | undefined;
-  if (framework !== 'none') {
-    const provisionOpts: { pythonBin?: string } = {};
-    if (opts.pythonBin !== undefined) provisionOpts.pythonBin = opts.pythonBin;
-    env = await provisionAssessorEnv(projectPath, provisionOpts);
+  // Host-tool pre-flight (ADR 0026 §4). Short-circuits with
+  // ENV_HOST_MISSING_TOOL before any project-subprocess spawn attempt.
+  const missing = await preflightHostTools(runtime);
+  if (missing !== undefined) {
+    log.warn(
+      { projectPath, runtime: runtimeName, missingTool: missing.bin, hint: missing.installHint },
+      'assess: host tool missing; short-circuiting with ENV_HOST_MISSING_TOOL',
+    );
+    return hostMissingResult(runtimeName, modules, artifacts);
   }
 
-  // Imports check uses the shared interpreter post-install, so
-  // third-party-dep imports actually resolve.
-  const importsOpts: {
-    pythonBin?: string;
-    timeoutMs?: number;
-    interpreter?: AssessorEnv['choice'];
-  } = {};
-  if (env !== undefined) importsOpts.interpreter = env.choice;
-  if (opts.pythonBin !== undefined) importsOpts.pythonBin = opts.pythonBin;
-  if (opts.runnerTimeoutMs !== undefined) importsOpts.timeoutMs = opts.runnerTimeoutMs;
-  const imports = await checkPythonImports(projectPath, expected, importsOpts);
-
-  let tests:
-    | { available: boolean; passed: number; failed: number; errors: number; framework: string }
-    | undefined;
-  let provisioning: AssessResult['provisioning'];
+  // `testFramework: 'none'` skips the runtime entirely — artifact-only pass.
+  let runtimeResult: RuntimeGateResult;
   if (framework === 'none') {
-    tests = { available: false, passed: 0, failed: 0, errors: 0, framework: 'none' };
-  } else {
-    const pytestOpts: {
-      pythonBin?: string;
-      timeoutMs?: number;
-      env?: AssessorEnv;
-    } = {};
-    if (env !== undefined) pytestOpts.env = env;
-    if (opts.pythonBin !== undefined) pytestOpts.pythonBin = opts.pythonBin;
-    if (opts.runnerTimeoutMs !== undefined) pytestOpts.timeoutMs = opts.runnerTimeoutMs;
-    const r = await runPytest(projectPath, pytestOpts);
-    tests = {
-      available: r.available,
-      passed: r.passed,
-      failed: r.failed,
-      errors: r.errors,
-      framework: r.available ? 'pytest' : 'none',
+    runtimeResult = {
+      testFramework: 'none',
+      testsAvailable: false,
+      testsPassed: 0,
+      testsFailed: 0,
+      testsErrors: 0,
+      buildOk: true,
+      importErrors: [],
+      importsOk: true,
     };
-    if (r.provisioning !== undefined) provisioning = r.provisioning;
+  } else {
+    const gateOpts: {
+      expectedModules?: readonly string[];
+      runnerTimeoutMs?: number;
+      pythonBin?: string;
+    } = { expectedModules: expected };
+    if (opts.runnerTimeoutMs !== undefined) gateOpts.runnerTimeoutMs = opts.runnerTimeoutMs;
+    if (opts.pythonBin !== undefined) gateOpts.pythonBin = opts.pythonBin;
+    runtimeResult = await runtime.runGate(projectPath, gateOpts);
   }
 
-  const importErrors = imports.details
-    .filter((d) => !d.ok)
-    .map((d) => `${d.module}: ${d.error ?? 'unknown error'}`);
+  const gateResults = computeGateResults(runtimeResult, modules, artifacts);
+
+  // Failure-mode precedence: the runtime decides its own cause (ENV_SETUP /
+  // BUILD / TEST); `assess()` only supplies ENV_HOST_MISSING_TOOL, which was
+  // handled above. Artifact-only failures do not set failureMode — they flip
+  // `gate.verify` but the primary build+test slice is fine.
+  let failureMode: FailureMode | undefined = runtimeResult.failureMode;
+  if (failureMode === undefined && !gateResults.build && modules.missing.length > 0) {
+    // Modules missing on disk is a build-side failure even when the runtime's
+    // own signal came back clean (e.g. a pure-diagnostic `testFramework: 'none'`).
+    failureMode = 'BUILD_FAILURE';
+  }
+
+  const provisioning: ProvisioningRecord | undefined = runtimeResult.provisioning;
 
   const result: AssessResult = {
+    runtime: runtimeName,
+    ...(failureMode !== undefined ? { failureMode } : {}),
     modulesExisting: modules.existing,
     modulesMissing: modules.missing,
-    testsPassed: tests.passed,
-    testsFailed: tests.failed,
-    testsErrors: tests.errors,
-    testFramework: tests.framework,
-    importsOk: imports.ok,
-    importErrors,
+    testsPassed: runtimeResult.testsPassed,
+    testsFailed: runtimeResult.testsFailed,
+    testsErrors: runtimeResult.testsErrors,
+    testFramework: runtimeResult.testFramework,
+    importsOk: runtimeResult.importsOk,
+    importErrors: [...runtimeResult.importErrors],
     hasReadme: readme,
     hasLicense: license,
     hasGitignore: gitignore,
     hasArchitecture: architecture,
     gitClean,
-    gateResults: computeGateResults(
-      tests,
-      imports,
-      modules,
-      { readme, license, gitignore, architecture, gitClean },
-      provisioning,
-    ),
+    gateResults,
     ...(provisioning !== undefined ? { provisioning } : {}),
   };
 
   log.info(
     {
       projectPath,
+      runtime: runtimeName,
       gate: result.gateResults,
       testsPassed: result.testsPassed,
       testsFailed: result.testsFailed,
       importErrors: result.importErrors.slice(0, 5),
-      ...(result.provisioning !== undefined
+      ...(failureMode !== undefined ? { failureMode } : {}),
+      ...(provisioning !== undefined
         ? {
             provisioning: {
-              pythonPath: result.provisioning.pythonPath,
-              pythonVersion: result.provisioning.pythonVersion,
-              installOk: result.provisioning.installOk,
-              venvSource: result.provisioning.venvSource,
+              toolPath: provisioning.toolPath,
+              toolVersion: provisioning.toolVersion,
+              ...(provisioning.installOk !== undefined
+                ? { installOk: provisioning.installOk }
+                : {}),
+              ...(provisioning.envSource !== undefined
+                ? { envSource: provisioning.envSource }
+                : {}),
+              ...(provisioning.preflight !== undefined
+                ? {
+                    preflight: {
+                      command: provisioning.preflight.command,
+                      ok: provisioning.preflight.ok,
+                    },
+                  }
+                : {}),
             },
           }
         : {}),

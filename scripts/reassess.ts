@@ -51,9 +51,23 @@ async function main(projectPath: string, planPath: string): Promise<void> {
   stdout.write(`hasArchitecture:  ${String(result.hasArchitecture)}\n`);
   if (result.provisioning !== undefined) {
     stdout.write(`provisioning:\n`);
-    stdout.write(`  pythonPath:    ${result.provisioning.pythonPath}\n`);
-    stdout.write(`  pythonVersion: ${result.provisioning.pythonVersion}\n`);
-    stdout.write(`  installOk:     ${String(result.provisioning.installOk)}\n`);
+    stdout.write(`  runtime:     ${result.provisioning.runtime}\n`);
+    stdout.write(`  toolPath:    ${result.provisioning.toolPath}\n`);
+    stdout.write(`  toolVersion: ${result.provisioning.toolVersion}\n`);
+    if (result.provisioning.installOk !== undefined) {
+      stdout.write(`  installOk:   ${String(result.provisioning.installOk)}\n`);
+    }
+    if (result.provisioning.envSource !== undefined) {
+      stdout.write(`  envSource:   ${result.provisioning.envSource}\n`);
+    }
+    if (result.provisioning.preflight !== undefined) {
+      stdout.write(
+        `  preflight:   ${result.provisioning.preflight.command} (ok=${String(result.provisioning.preflight.ok)})\n`,
+      );
+    }
+  }
+  if (result.failureMode !== undefined) {
+    stdout.write(`failureMode:      ${result.failureMode}\n`);
   }
   stdout.write('\n');
   exit(result.gateResults.verify ? 0 : 2);

@@ -31,7 +31,7 @@
     resolves by installing the tool.)
   - Output: `docs/decisions/0026-*.md` + INDEX row.
 
-- [ ] 10.2 — **Node / TypeScript runtime.** New
+- [x] 10.2 — **Node / TypeScript runtime.** New
       `packages/assessor/src/runtimes/node.ts` implementing the
       `ProjectEnvProvisioner` interface per ADR 0026. Verify gate wires
       `pnpm install → pnpm typecheck || tsc --noEmit → pnpm test`. One
