@@ -1,102 +1,126 @@
 # Next session — paste this to start
 
-Phase 9 (Web UI) closed 2026-04-23 — tag `phase-9-web-ui-closed`.
-Phase 10 (Assessor tier-3) is queued; 10.1 opens next.
+Phase 10 is 4/9 closed after a code-heavy session (2026-04-24T13): ADR 0026
+accepted, Node + Go + Rust runtimes shipped, 37 new tests. Next work is
+operator-triggered live validation.
 
 ## Pickup
 
-Read `CLAUDE.md`, then `.control/progress/STATE.md` (current phase / step
-/ carry-forwards), then the Phase 10 charter at
+Read `CLAUDE.md`, then `.control/progress/STATE.md` (current phase / step /
+carry-forwards), then the Phase 10 charter at
 `.control/phases/phase-10-assessor-tier3/README.md` and its sub-step
-outline at `.control/phases/phase-10-assessor-tier3/steps.md`.
+outline at `.control/phases/phase-10-assessor-tier3/steps.md` (10.1 / 10.2 /
+10.4 / 10.6 checkboxes already flipped).
 
-For background on the provisioner abstraction ADR 0026 extends, skim
-`docs/decisions/0017-assessor-project-env-provisioning.md` (tier-1 / tier-2,
-Python-only today). Also skim `packages/assessor/src/` to see how the
-current Python runtime is wired — ADR 0026 builds on that shape, doesn't
-replace it.
+Read the four new files that ADR 0026 produced in code:
+
+- `packages/assessor/src/types.ts` — the `Runtime` / `FailureMode` /
+  `ProvisioningRecord` / `RuntimeAssessor` contract
+- `packages/assessor/src/runtimes/python.ts` — thin adapter over the
+  pre-ADR-0026 pytest stack (behaviourally unchanged)
+- `packages/assessor/src/runtimes/node.ts` — full implementation; mirror
+  it when reading Go / Rust since they follow the same pattern
+- `packages/assessor/test/node-e2e.test.ts` — the one real-subprocess
+  integration test (runs real `pnpm install` against a seeded tmpdir)
+
+Skim [ADR 0026](../../docs/decisions/0026-pluggable-runtime-contract.md)
+for the four sub-decisions (provisioner shape, verify-gate command
+mapping, failure-mode taxonomy, host-tool pre-flight).
 
 Run `/session-start` for the full drift check.
 
-## Next concrete work — sub-step 10.1 (ADR 0026)
+## Next concrete work — 10.3 (Node live validation)
 
-Author `docs/decisions/0026-pluggable-runtime-contract.md` covering:
+This is the load-bearing test of the whole ADR-0026 design. Everything
+built so far was seam-injected or single-fixture — real `factory build`
+against a scaffolded Node project exercises scaffolder → builder → verifier
+→ assessor.node.runGate → gate composition → findings surfacing end-to-end.
 
-1. **Provisioner shape.** Does the provisioner fully own the project's
-   env (install deps + configure typecheck tools) or does it expect the
-   project runnable out-of-the-box (the assessor just runs the gate
-   commands)? Python (ADR 0017, tier-2) owns the venv. Node / Go / Rust
-   likely benefit from _not_ owning — `package.json` / `go.mod` /
-   `Cargo.toml` are the env. Pin a decision + the rationale.
-2. **Verify-gate command mapping.** Which commands count as the "did
-   this project build + pass tests" signal per runtime? Draft:
-   - Node: `pnpm install → pnpm typecheck || tsc --noEmit → pnpm test`.
-   - Go: `go build ./... && go test ./...`.
-   - Rust: `cargo test`.
-   - Edge cases to name: projects with no `typecheck` script,
-     workspace monorepos, optional doc-test gates.
-3. **Failure-mode taxonomy.** How does the assessor distinguish compile
-   failure vs. test failure vs. env-setup failure vs. missing tool?
-   Today's finding taxonomy (severity + tag) has to encode this
-   uniformly across runtimes so the Phase 9 findings UI stays
-   runtime-agnostic. Propose tags: `BUILD_FAILURE`, `TEST_FAILURE`,
-   `ENV_SETUP_FAILURE`, `ENV_HOST_MISSING_TOOL`.
-4. **Host-tool pre-flight.** What does the failure look like when
-   `node` / `pnpm` / `go` / `cargo` is missing from PATH? Probably
-   `ENV_HOST_MISSING_TOOL` finding + WONTFIX default + operator-facing
-   error; blocking until resolved. Consistent across all three
-   runtimes.
+**Proposed spec:** "Build a TypeScript CLI that parses a JSON log file and
+prints totals." Small enough that a green run is cheap, rich enough that
+the three gate commands (pnpm install, tsc --noEmit, vitest) all engage.
 
-Update `docs/decisions/INDEX.md` with the new ADR row. Commit as
-`feat(10.1): ADR 0026 — pluggable-runtime contract` (or `docs(10.1)`
-— the ADR is docs-only at this step, though it sets up 10.2+ code).
+**Pre-flight before kicking off the build:**
 
-## Then 10.2 — Node/TypeScript runtime
+1. Make sure factoryd is running cleanly. If it was running before 10.2
+   landed, restart it so the new `@factory5/assessor` dist is loaded.
+2. Set a modest directive budget ceiling — $5 per-directive should be
+   plenty for a ~200 LOC TS CLI. Use the `--budget` / `limits.maxUsd` flag
+   or operator-config default per ADR 0020.
+3. Use autonomy mode (per ADR 0005) so the build runs end-to-end without
+   human gates.
+4. Ensure the scaffolder propagates `spec.language: 'node'` through to
+   `plan.json` — that's what `assess()`'s dispatch keys on. If the
+   scaffolder hasn't learned `'node'` yet, surface as a finding and fold
+   the fix into 10.8's init-picker work.
 
-Concrete work starts in earnest. New
-`packages/assessor/src/runtimes/node.ts` implementing the
-`ProjectEnvProvisioner` interface per ADR 0026. Verify gate wires the
-commands ADR 0026 pinned. One integration test under
-`packages/assessor/test/node-e2e.test.ts` that seeds a minimal TS
-project, runs the assessor end-to-end, asserts the finding shape.
-Cross-platform — no skipping on Windows or Linux.
+**Success signal:** directive closes `complete` with a green assessor gate
+(build + integration + verify all true); `AssessResult.failureMode`
+absent on final evaluation; `AssessResult.provisioning.preflight.ok`
+true; spend under the ceiling; factory's build log shows the three
+pipeline commands executed cleanly.
 
-Follow with 10.3 live validation: `factory build` against a real spec
-("build a TypeScript CLI that parses a JSON log file and prints
-totals" or similar), confirm the build completes, the assessor's
-gate passes, spend stays under the autonomy-mode ceiling.
+**Failure signals worth distinguishing:**
 
-## Carry-forward from Phase 9
+- `failureMode: 'ENV_HOST_MISSING_TOOL'` → host lacks `node` or `pnpm` on PATH
+- `failureMode: 'ENV_SETUP_FAILURE'` → pnpm install failed (probably a
+  broken `package.json` the scaffolder emitted)
+- `failureMode: 'BUILD_FAILURE'` → typecheck failed (scaffolder generated
+  code with type errors; verifier should iterate)
+- `failureMode: 'TEST_FAILURE'` → tests exist and failed (the right kind
+  of signal — builder has a clear iteration target)
+
+## Then in order
+
+**10.5 (Go live validation)** and **10.7 (Rust live validation)** follow
+the same shape but need the host tools installed first:
+
+- **Go:** `https://go.dev/dl/` → `go` on PATH
+- **Rust:** `https://rustup.rs/` → `cargo` on PATH
+
+Run `command -v go && command -v cargo` before either to confirm.
+
+**10.8 (`factory init` language picker)** — pure code. Today the wizard
+assumes Python. Add a prompt; thread selection into `spec.language` so
+the assessor's dispatch picks the right runtime on first build. Python
+stays the default for backwards compat with `factory5-workspace/`'s
+existing Python corpus. Can land alongside 10.3 if 10.5 / 10.7 are
+blocked on tool installs.
+
+**10.9 (phase close)** — tag `phase-10-assessor-tier3-closed`, write
+`docs/Phase10_Progress.md`, prepend `docs/PROGRESS.md`, extend
+`CompleteArchitecture.md` with the pluggable-runtime story (likely a
+new §22 or a small edit to §6 storage + §9 runtime). Scaffold Phase 11
+(Web UI 9b — mutation surface: answer questions / kick off builds from
+the browser).
+
+## Carry-forward from Phase 9 (unchanged, still non-blocking)
 
 - **Issue I009** (MEDIUM, OPEN) — Telegram/Discord `/build` inbound
-  doesn't inherit `[budget.defaults]`. Non-blocking.
-- **Issue I012** (LOW, OPEN) — `maybeAnswerPendingQuestion` FIFO
-  matcher can't target a specific open question. Non-blocking.
-- **Stale-dist dev-loop gotcha** (`docs/Phase9_Progress.md`
-  §Non-trivial finding) — recommendation: flip
-  `packages/{daemon,ipc,state}/package.json` `main` from
-  `"./dist/index.js"` to `"./src/index.ts"`. `tsx` transpiles on
-  demand; prod `pnpm build` still produces `dist/` for downstream
-  consumers. One-line per package. Highest-ROI Phase 10 cleanup item.
-- **`factory ui-token` CLI command** (ADR 0025 §2) — small IPC route
-  on factoryd + `packages/cli/src/commands/ui-token.ts`. Operator who
-  closes the terminal loses the URL today; mitigation is restart
-  factoryd.
-- **Fastify preHandler scoped to `/api/v1/*`** — ADR 0025 §3 described
-  a shared preHandler; 9.3 chose inline handler-level checks. Purely
-  stylistic refactor; effect is identical.
-- **Phase 6 operator follow-up** (still unchanged, still non-blocking):
-  revoke PAT at <https://github.com/settings/tokens>;
-  `gh repo delete momobits/factory5-6b-smoke --yes`;
+  doesn't inherit `[budget.defaults]`.
+- **Issue I012** (LOW, OPEN) — `maybeAnswerPendingQuestion` FIFO matcher
+  can't target a specific open question.
+- **Stale-dist dev-loop gotcha** (`docs/Phase9_Progress.md` §Non-trivial
+  finding) — flip `packages/{daemon,ipc,state}/package.json` `main`
+  from `"./dist/index.js"` to `"./src/index.ts"`. Highest-ROI Phase 10
+  cleanup item. Easy single-commit chore any session that touches those
+  manifests. Now overdue; worth pairing with the 10.8 commit.
+- **`factory ui-token` CLI command** (ADR 0025 §2) — operator closes
+  terminal → loses dashboard URL; mitigation is restart factoryd.
+- **Fastify preHandler scoped to `/api/v1/*`** — ADR 0025 §3 described a
+  shared preHandler; 9.3 used inline handler-level checks. Stylistic
+  refactor; effect identical.
+- **Phase 6 operator follow-up:** revoke PAT at
+  <https://github.com/settings/tokens>; `gh repo delete momobits/factory5-6b-smoke --yes`;
   `reg delete "HKCU\Environment" /v GITHUB_TOKEN /f`.
 
 Report back on wake-up with a status block in this shape:
 
 ```
-Phase 10 — 0/9 closed; 10.1 ADR 0026 next
-Last action: Phase 9 closed 2026-04-23 — tag phase-9-web-ui-closed
-Git: branch=main, last=<latest-sha> (session-end docs(state) on top of e360436), uncommitted=no, tag=phase-9-web-ui-closed
-Open blockers: 0 (I009 + I012 are non-blocking carry-forward)
-Proposed next action: 10.1 — author ADR 0026 (pluggable-runtime contract)
+Phase 10 — 4/9 closed; 10.3 Node live validation next
+Last action: feat(10.6) 0563a85 + session-end docs(state) on top
+Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-9-web-ui-closed
+Open blockers: 0 (I009 + I012 non-blocking; 10.5/10.7 need Go/cargo install first)
+Proposed next action: 10.3 — real `factory build` against a small TypeScript CLI spec
 Ready to proceed?
 ```
