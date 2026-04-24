@@ -112,6 +112,23 @@ export function registerResumeCommand(program: Command): void {
         // pre-ADR-0021 behaviour for legacy directives that lack one).
         const inheritedProjectId = prior.projectId ?? projectRow?.id;
 
+        // Carry the assessor runtime (ADR 0026) across resume so the brain's
+        // assess() call keeps dispatching to the same language runtime as the
+        // original build. Legacy directives without `language` resolve to
+        // python via assess()'s default.
+        const priorPayload =
+          typeof prior.payload === 'object' && prior.payload !== null
+            ? (prior.payload as Record<string, unknown>)
+            : undefined;
+        const priorLanguage = priorPayload?.['language'];
+        const carriedLanguage =
+          priorLanguage === 'python' ||
+          priorLanguage === 'node' ||
+          priorLanguage === 'go' ||
+          priorLanguage === 'rust'
+            ? priorLanguage
+            : undefined;
+
         const directive = directiveSchema.parse({
           id: newId(),
           source: 'cli',
@@ -123,6 +140,7 @@ export function registerResumeCommand(program: Command): void {
             projectPath,
             workspace: options.workspace ?? projectRow?.workspacePath ?? projectPath,
             resumeFrom: prior.id,
+            ...(carriedLanguage !== undefined ? { language: carriedLanguage } : {}),
           },
           autonomy: options.autonomy as Directive['autonomy'],
           createdAt: new Date().toISOString(),

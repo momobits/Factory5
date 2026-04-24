@@ -41,6 +41,18 @@ function parseAutonomy(raw: string): AutonomyMode {
   throw new Error(`--autonomy must be chat | assisted | autonomous, got: ${raw}`);
 }
 
+/**
+ * Mirror of `@factory5/assessor`'s `Runtime` union. Inlined to avoid an
+ * extra workspace dep for one type; the brain does the real dispatch
+ * against assessor's canonical type at `loop.ts` via `extractRuntime`.
+ */
+type BuildLanguage = 'python' | 'node' | 'go' | 'rust';
+
+function parseLanguage(raw: string): BuildLanguage {
+  if (raw === 'python' || raw === 'node' || raw === 'go' || raw === 'rust') return raw;
+  throw new Error(`--language must be python | node | go | rust, got: ${raw}`);
+}
+
 function parsePositiveFloat(flag: string, raw: string): number {
   const n = Number.parseFloat(raw);
   if (!Number.isFinite(n) || n <= 0) {
@@ -62,6 +74,10 @@ export function registerBuildCommand(program: Command): void {
     .command('build <project>')
     .description('build a project from its CLAUDE.md spec (delegates to factoryd if running)')
     .option('--autonomy <mode>', 'chat | assisted | autonomous', 'assisted')
+    .option(
+      '--language <lang>',
+      'python | node | go | rust — selects assessor runtime (ADR 0026). Default python.',
+    )
     .option('--workspace <path>', 'root directory under which projects live', defaultWorkspace())
     .option('--concurrency <n>', 'max parallel worker tasks (default: min(4, cpuCount))', (v) =>
       parsePositiveInt('--concurrency', v),
@@ -83,6 +99,7 @@ export function registerBuildCommand(program: Command): void {
         project: string,
         options: {
           autonomy: string;
+          language?: string;
           workspace: string;
           concurrency?: number;
           maxUsd?: number;
@@ -96,6 +113,8 @@ export function registerBuildCommand(program: Command): void {
             process.env['FACTORY5_LOG_LEVEL'] = 'debug';
           }
           const autonomy = parseAutonomy(options.autonomy);
+          const language =
+            options.language !== undefined ? parseLanguage(options.language) : undefined;
           const workspace = options.workspace;
           const projectPath = await resolveProjectPath(project, workspace);
 
@@ -134,7 +153,12 @@ export function registerBuildCommand(program: Command): void {
             principal: 'cli-user',
             channelRef: `build-${String(process.pid)}`,
             intent: 'build' satisfies Intent,
-            payload: { project, projectPath, workspace },
+            payload: {
+              project,
+              projectPath,
+              workspace,
+              ...(language !== undefined ? { language } : {}),
+            },
             autonomy,
             createdAt: nowIso,
             status: 'pending' as const,
@@ -146,8 +170,9 @@ export function registerBuildCommand(program: Command): void {
           const limitsLine = hasLimits
             ? `  limits:   ${maxUsd !== undefined ? `max_usd=$${maxUsd.toFixed(2)} ` : ''}${maxSteps !== undefined ? `max_steps=${String(maxSteps)}` : ''}\n`
             : '';
+          const languageLine = language !== undefined ? `  language: ${language}\n` : '';
           stdout.write(
-            `factory build ${project}\n  directive: ${directive.id}\n  path: ${projectPath}\n  autonomy: ${autonomy}\n${limitsLine}\n`,
+            `factory build ${project}\n  directive: ${directive.id}\n  path: ${projectPath}\n  autonomy: ${autonomy}\n${languageLine}${limitsLine}\n`,
           );
 
           const daemonAvailable = options.inline !== true && isDaemonRunning();
@@ -269,8 +294,10 @@ async function runInline(
   );
   if (result.assessment !== undefined) {
     const g = result.assessment.gateResults;
+    const a = result.assessment;
+    const failureLine = a.failureMode !== undefined ? ` failureMode=${a.failureMode}` : '';
     stdout.write(
-      `assessor:  build=${String(g.build)} integration=${String(g.integration)} verify=${String(g.verify)} (pytest: ${String(result.assessment.testsPassed)} passed / ${String(result.assessment.testsFailed)} failed)\n`,
+      `assessor:  runtime=${a.runtime} build=${String(g.build)} integration=${String(g.integration)} verify=${String(g.verify)} (${a.testFramework}: ${String(a.testsPassed)} passed / ${String(a.testsFailed)} failed)${failureLine}\n`,
     );
   }
   stdout.write(`status:    ${result.terminalStatus}\n`);

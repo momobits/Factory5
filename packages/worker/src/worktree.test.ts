@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,6 +12,7 @@ import {
   branchNameFor,
   cleanupWorktree,
   ensureProjectRepo,
+  prePurgeDepDirs,
   verifyHeadAdvanced,
 } from './worktree.js';
 
@@ -33,6 +34,30 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(projectPath, { recursive: true, force: true }).catch(() => undefined);
+});
+
+describe('prePurgeDepDirs (I013)', () => {
+  it('removes node_modules when present', async () => {
+    const nm = join(projectPath, 'node_modules', 'pkg');
+    await mkdir(nm, { recursive: true });
+    await writeFile(join(nm, 'index.js'), 'x', 'utf8');
+    await prePurgeDepDirs(projectPath);
+    expect(await exists(join(projectPath, 'node_modules'))).toBe(false);
+  });
+
+  it('also removes .venv and __pycache__ when present', async () => {
+    await mkdir(join(projectPath, '.venv', 'lib'), { recursive: true });
+    await writeFile(join(projectPath, '.venv', 'lib', 'pyvenv.cfg'), 'x', 'utf8');
+    await mkdir(join(projectPath, '__pycache__'), { recursive: true });
+    await writeFile(join(projectPath, '__pycache__', 'm.cpython.pyc'), 'x', 'utf8');
+    await prePurgeDepDirs(projectPath);
+    expect(await exists(join(projectPath, '.venv'))).toBe(false);
+    expect(await exists(join(projectPath, '__pycache__'))).toBe(false);
+  });
+
+  it('is a no-op when none of the dep dirs exist', async () => {
+    await expect(prePurgeDepDirs(projectPath)).resolves.toBeUndefined();
+  });
 });
 
 describe('branchNameFor', () => {
@@ -108,6 +133,31 @@ describe('allocateWorktree + cleanupWorktree', () => {
     const git = simpleGit(projectPath);
     const branches = await git.branch();
     expect(branches.all).not.toContain(handle.branch);
+  });
+
+  it('cleanup success removes the worktree even when worker left node_modules behind (I013)', async () => {
+    // Regression: a Node-project worker that ran `pnpm install` inside its
+    // worktree leaves a heavy `node_modules/` tree there. On Windows
+    // `git worktree remove --force` then fails with "Directory not empty"
+    // because git's --force does not override OS-level deletion refusals.
+    // The cleanup path must rimraf node_modules first.
+    const taskId = 'NODEMODS123456789ABCDEFGHJ';
+    const handle = await allocateWorktree({ projectPath, taskId });
+    await writeFile(join(handle.path, 'package.json'), '{"name":"t"}', 'utf8');
+    // Simulate a `pnpm install` outcome: a node_modules tree with at least one
+    // nested file. `node_modules` is gitignored by default in
+    // `ensureProjectRepo`'s gitignore additions only for `.factory/`, so we
+    // also commit a .gitignore to keep node_modules untracked here.
+    await writeFile(join(handle.path, '.gitignore'), 'node_modules/\n', 'utf8');
+    const nm = join(handle.path, 'node_modules', 'fake-pkg');
+    await mkdir(nm, { recursive: true });
+    await writeFile(join(nm, 'index.js'), 'module.exports = 1;\n', 'utf8');
+
+    await cleanupWorktree({ projectPath, handle, outcome: 'success' });
+
+    expect(await exists(handle.path)).toBe(false);
+    expect(await exists(join(projectPath, 'package.json'))).toBe(true);
+    expect(await exists(join(projectPath, 'node_modules'))).toBe(false);
   });
 
   it('cleanup failure preserves the worktree in place', async () => {

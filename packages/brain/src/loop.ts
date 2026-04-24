@@ -16,7 +16,7 @@
 import type { AutonomyMode, Directive, DirectiveLimits, Plan } from '@factory5/core';
 import { newId } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
-import { assess, type AssessResult } from '@factory5/assessor';
+import { assess, type AssessResult, type Runtime } from '@factory5/assessor';
 import type { ProviderRegistry } from '@factory5/providers';
 import {
   directives as directivesQ,
@@ -335,10 +335,12 @@ async function runInline(
 
       // -------- ASSESS --------
       const expectedModules = collectExpectedModules(plan);
+      const runtime = extractRuntime(directive);
       const assessment = await assess({
         projectPath,
         expectedModules,
         testFramework: 'auto',
+        ...(runtime !== undefined ? { runtime } : {}),
       });
       await appendBuildLog(
         projectPath,
@@ -469,6 +471,20 @@ function extractProjectPath(d: Directive): string {
   throw new Error(
     `directive ${d.id}: payload.projectPath (or payload.project) is required for build intent`,
   );
+}
+
+/**
+ * Pull the assessor runtime (ADR 0026) from the directive's payload. Returns
+ * `undefined` for directives that predate the language field — `assess()`
+ * then falls back to its `'python'` default, preserving tier-1/2 behaviour.
+ */
+function extractRuntime(d: Directive): Runtime | undefined {
+  if (typeof d.payload === 'object' && d.payload !== null) {
+    const p = d.payload as Record<string, unknown>;
+    const raw = p['language'];
+    if (raw === 'python' || raw === 'node' || raw === 'go' || raw === 'rust') return raw;
+  }
+  return undefined;
 }
 
 /**

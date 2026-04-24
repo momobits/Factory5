@@ -54,12 +54,34 @@ export interface TriageOptions {
 /**
  * Extract the first JSON object from an arbitrary string. Returns `undefined`
  * if no balanced object is found.
+ *
+ * Walks the string character by character and balances `{` / `}`, but skips
+ * over braces that appear inside JSON string literals (with `\\` escape
+ * handling). Without string-state tracking the brace counter goes wrong on
+ * any response whose content fields contain `{` or `}` — e.g. an architect
+ * wiki page with a `package.json` snippet inside a markdown code block.
  */
 export function extractJsonObject(s: string): string | undefined {
   let depth = 0;
   let start = -1;
+  let inString = false;
+  let escaped = false;
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
     if (ch === '{') {
       if (depth === 0) start = i;
       depth++;

@@ -22,7 +22,7 @@
  * dependency DAG acyclic.
  */
 
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { createLogger } from '@factory5/logger';
@@ -349,6 +349,14 @@ async function doMergeAndRemove(projectPath: string, handle: WorktreeHandle): Pr
     );
   }
 
+  // I013: `git worktree remove --force` fails with "Directory not empty" on
+  // Windows when the worker ran `pnpm install` / `pip install` inside the
+  // worktree, leaving `node_modules/` / `.venv/` behind. Git's `--force`
+  // doesn't override OS-level deletion refusals, so we rimraf the heavy
+  // ignored-dep dirs first. Best-effort — if the rm fails, fall through to
+  // the git command which will surface the real error.
+  await prePurgeDepDirs(handle.path);
+
   // Remove the worktree directory via the porcelain command so git's metadata is pruned.
   await git.raw(['worktree', 'remove', '--force', handle.path]);
   try {
@@ -358,6 +366,25 @@ async function doMergeAndRemove(projectPath: string, handle: WorktreeHandle): Pr
   }
 
   log.info({ taskId: handle.branch }, 'worktree: merged and removed');
+}
+
+/**
+ * Delete heavy ignored dep dirs inside a worktree before `git worktree remove`.
+ * See I013.
+ */
+export async function prePurgeDepDirs(worktreePath: string): Promise<void> {
+  const targets = ['node_modules', '.venv', '__pycache__'];
+  for (const name of targets) {
+    const p = join(worktreePath, name);
+    try {
+      await rm(p, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    } catch (err) {
+      log.warn(
+        { worktreePath, target: name, err: (err as Error).message },
+        'worktree: pre-purge of dep dir failed — continuing to git worktree remove',
+      );
+    }
+  }
 }
 
 /**

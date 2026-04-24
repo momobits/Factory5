@@ -40,7 +40,7 @@
       asserts the finding shape. Cross-platform; no skipping on Windows
       (operator's primary platform) or Linux.
 
-- [ ] 10.3 — **Live validation — Node end-to-end.** `factory build`
+- [x] 10.3 — **Live validation — Node end-to-end.** `factory build`
       against a real spec like "build a TypeScript CLI that parses a
       JSON log file and prints totals." Verify the build completes, the
       assessor's gate passes, spend stays under the autonomy mode's
