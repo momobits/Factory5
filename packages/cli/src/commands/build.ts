@@ -30,6 +30,7 @@ import {
   defaultWorkspace,
   loadOrCreateProjectMetadata,
   ProjectMetadataCorruptError,
+  type ProjectMetadata,
   resolveProjectPath,
 } from '@factory5/wiki';
 import type { Command } from 'commander';
@@ -51,6 +52,20 @@ type BuildLanguage = 'python' | 'node' | 'go' | 'rust';
 function parseLanguage(raw: string): BuildLanguage {
   if (raw === 'python' || raw === 'node' || raw === 'go' || raw === 'rust') return raw;
   throw new Error(`--language must be python | node | go | rust, got: ${raw}`);
+}
+
+/**
+ * Read the per-project language recorded by `factory init <project>` (Phase
+ * 10.8). Returns `undefined` if the metadata key is absent or not a
+ * recognised value — the caller then leaves the directive without a
+ * language and the assessor falls back to its `'python'` default.
+ *
+ * Exported for unit testing; runtime caller is the `factory build` action.
+ */
+export function languageFromProjectMeta(meta: ProjectMetadata): BuildLanguage | undefined {
+  const raw = meta.metadata['language'];
+  if (raw === 'python' || raw === 'node' || raw === 'go' || raw === 'rust') return raw;
+  return undefined;
 }
 
 function parsePositiveFloat(flag: string, raw: string): number {
@@ -113,7 +128,7 @@ export function registerBuildCommand(program: Command): void {
             process.env['FACTORY5_LOG_LEVEL'] = 'debug';
           }
           const autonomy = parseAutonomy(options.autonomy);
-          const language =
+          const flagLanguage =
             options.language !== undefined ? parseLanguage(options.language) : undefined;
           const workspace = options.workspace;
           const projectPath = await resolveProjectPath(project, workspace);
@@ -126,6 +141,12 @@ export function registerBuildCommand(program: Command): void {
           // handle, stable across path moves; downstream queries
           // (spend rollups, findings registry) join on it.
           const projectMeta = await loadOrCreateProjectMetadata(projectPath, project);
+
+          // Language resolution (Phase 10.8): explicit --language flag wins;
+          // otherwise read what `factory init` recorded in
+          // `project.json.metadata.language`. Both absent → leave undefined
+          // and the assessor defaults to python.
+          const language = flagLanguage ?? languageFromProjectMeta(projectMeta);
 
           const nowIso = new Date().toISOString();
           projectsQ.upsert(db, {

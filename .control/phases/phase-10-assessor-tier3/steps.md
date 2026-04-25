@@ -61,7 +61,7 @@
 - [ ] 10.7 — **Live validation — Rust end-to-end.** Small Rust CLI
       spec; full `factory build` loop.
 
-- [ ] 10.8 — **`factory init` language picker.** Today the wizard
+- [x] 10.8 — **`factory init` language picker.** Today the wizard
       assumes Python. Add a language prompt; propagate to `spec.language`
       so the assessor picks the right runtime on first `factory build`.
       Keep Python as the default for backwards compatibility with the

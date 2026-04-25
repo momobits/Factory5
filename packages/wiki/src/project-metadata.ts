@@ -71,6 +71,13 @@ export interface LoadOrCreateOptions {
   now?: () => Date;
   /** Override ULID generation; tests use this to assert against a known id. */
   generateId?: () => string;
+  /**
+   * Seed the `metadata` object when creating a brand-new file. Ignored when
+   * the file already exists (existing identity must not be silently rewritten).
+   * Use this from `factory init` to record per-project flags at creation time
+   * (e.g. `{ language: 'node' }` per ADR 0026).
+   */
+  initialMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -130,7 +137,7 @@ export async function loadOrCreateProjectMetadata(
     name: projectName,
     createdAt: now().toISOString(),
     factoryVersion: PROJECT_FILE_VERSION,
-    metadata: {},
+    metadata: opts.initialMetadata ?? {},
   };
   await mkdir(factoryDir, { recursive: true });
   await writeFileAtomic(filePath, `${JSON.stringify(meta, null, 2)}\n`);

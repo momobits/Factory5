@@ -46,6 +46,41 @@ describe('loadOrCreateProjectMetadata', () => {
     expect(onDisk.name).toBe('fresh');
   });
 
+  it('seeds metadata from initialMetadata on create (Phase 10.8 language picker)', async () => {
+    const projectPath = join(workRoot, 'seeded');
+    mkdirSync(projectPath, { recursive: true });
+
+    const meta = await loadOrCreateProjectMetadata(projectPath, 'seeded', {
+      initialMetadata: { language: 'node' },
+    });
+
+    expect(meta.metadata).toEqual({ language: 'node' });
+
+    const onDisk = JSON.parse(
+      readFileSync(join(projectPath, '.factory', 'project.json'), 'utf8'),
+    ) as { metadata: Record<string, unknown> };
+    expect(onDisk.metadata).toEqual({ language: 'node' });
+  });
+
+  it('ignores initialMetadata when the file already exists', async () => {
+    const projectPath = join(workRoot, 'preexisting');
+    mkdirSync(projectPath, { recursive: true });
+
+    const first = await loadOrCreateProjectMetadata(projectPath, 'preexisting', {
+      initialMetadata: { language: 'go' },
+    });
+    expect(first.metadata).toEqual({ language: 'go' });
+
+    // A second load must NOT overwrite the existing file's metadata, even if
+    // the caller passes a different initialMetadata. Existing identity is
+    // sticky per ADR 0021.
+    const second = await loadOrCreateProjectMetadata(projectPath, 'preexisting', {
+      initialMetadata: { language: 'rust' },
+    });
+    expect(second.id).toBe(first.id);
+    expect(second.metadata).toEqual({ language: 'go' });
+  });
+
   it('adopts the existing identity when project.json already exists', async () => {
     const projectPath = join(workRoot, 'existing');
     const factoryDir = join(projectPath, '.factory');

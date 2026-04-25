@@ -1,22 +1,25 @@
 /**
- * `factory init` — initialise a factory instance.
+ * `factory init` — initialise a factory instance, OR scaffold a new project.
  *
- * Three modes, selected by flags + existing state:
+ * Four modes, selected by argument + flags + existing state:
  *
- *   1. **Template-copy (default, no existing config).** Copies
- *      `config.example.toml` from the repo root into the instance's
- *      data dir as `config.toml` and exits with instructions. The dev
- *      edits the copy to fill in their own paths + bot tokens, then
- *      re-runs `factory init` (or `factory doctor`) to validate.
+ *   1. **Template-copy (default, no existing config, no project arg).**
+ *      Copies `config.example.toml` from the repo root into the instance's
+ *      data dir as `config.toml`. The dev edits the copy then re-runs
+ *      `factory init` (or `factory doctor`) to validate.
  *
- *   2. **Validate (existing config, no --force).** Zod-parses the
- *      existing `config.toml` and probes `claude-cli` / Discord /
- *      Telegram the same way `factory doctor --skip-call` does. Prints
- *      a green-light status if everything looks healthy.
+ *   2. **Validate (existing config, no --force, no project arg).** Zod-parses
+ *      the existing `config.toml` and probes `claude-cli` / Discord /
+ *      Telegram the same way `factory doctor --skip-call` does.
  *
- *   3. **Flag-driven generation (--force OR flags given, no existing
- *      config).** Current CI-friendly behaviour: build a config from
- *      `defaultConfig()` + CLI flags, save it to the data dir.
+ *   3. **Flag-driven generation (--force OR config flags given, no project
+ *      arg).** Build a config from `defaultConfig()` + CLI flags, save it.
+ *
+ *   4. **Project scaffold (project arg present)** — Phase 10.8 / ADR 0026.
+ *      `factory init <name> [--language python|node|go|rust]` creates
+ *      `<workspace>/<name>/` with a language-specific CLAUDE.md and a
+ *      `project.json` whose `metadata.language` drives the assessor runtime
+ *      on subsequent `factory build` calls. Default language: python.
  *
  * The instance's data dir is resolved by `configPath()` at call time,
  * which walks up from cwd looking for a `.factory/` dir (ADR 0023).
@@ -24,18 +27,19 @@
  * several instances.
  *
  * Flags (all optional):
- *   --workspace <path>        where projects get created
+ *   --workspace <path>        where projects get created (also used by mode 4)
  *   --claude-cli-path <path>  explicit claude CLI binary
  *   --autonomy <mode>         chat | assisted | autonomous
  *   --force                   overwrite an existing config.toml
+ *   --language <lang>         mode 4 only — python | node | go | rust
  *   --discord-*               Discord channel config
  *   --telegram-*              Telegram channel config
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { exit, stdout } from 'node:process';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { cwd as processCwd, exit, stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { AUTONOMY_MODES, type AutonomyMode } from '@factory5/core';
@@ -48,13 +52,21 @@ import {
   saveConfig,
 } from '@factory5/brain';
 import { ClaudeCliProvider } from '@factory5/providers';
+import { loadOrCreateProjectMetadata, readProjectMetadata } from '@factory5/wiki';
 import type { Command } from 'commander';
+
+/**
+ * Languages the project-creation mode supports. Mirror of
+ * `@factory5/assessor`'s `Runtime` union; inlined to avoid the workspace dep.
+ */
+type InitLanguage = 'python' | 'node' | 'go' | 'rust';
 
 interface InitOptions {
   workspace?: string;
   claudeCliPath?: string;
   autonomy: string;
   force?: boolean;
+  language?: string;
   discordToken?: string;
   discordApplicationId?: string;
   discordGuild?: string;
@@ -63,6 +75,11 @@ interface InitOptions {
   telegramAllowedChat?: string[];
   telegramTestChat?: string;
   telegramPollTimeoutSec?: string;
+}
+
+function parseInitLanguage(raw: string): InitLanguage {
+  if (raw === 'python' || raw === 'node' || raw === 'go' || raw === 'rust') return raw;
+  throw new Error(`--language must be python | node | go | rust, got: ${raw}`);
 }
 
 /** Parse a decimal integer flag string; throws with the flag name on failure. */
@@ -123,12 +140,18 @@ function locateTemplate(): string | undefined {
 
 export function registerInitCommand(program: Command): void {
   program
-    .command('init')
-    .description('initialise a factory instance (template-copy or --force flag-driven)')
+    .command('init [project]')
+    .description(
+      'initialise a factory instance (no arg) — or scaffold a new project (with arg + --language)',
+    )
     .option('--workspace <path>', 'projects root directory')
     .option('--claude-cli-path <path>', 'explicit claude binary path (skip autodetect)')
     .option('--autonomy <mode>', 'default autonomy mode (chat | assisted | autonomous)', 'assisted')
     .option('--force', 'overwrite an existing config.toml (use with flags for CI-friendly gen)')
+    .option(
+      '--language <lang>',
+      'project mode only — python | node | go | rust. Default python (back-compat).',
+    )
     .option('--discord-token <token>', 'Discord bot token (stored under [channels.discord])')
     .option('--discord-application-id <id>', 'Discord application id')
     .option('--discord-guild <id>', 'Scope the bot to a single guild id')
@@ -153,7 +176,15 @@ export function registerInitCommand(program: Command): void {
       '--telegram-poll-timeout-sec <seconds>',
       'Long-poll timeout passed to getUpdates (0–60s; default 30)',
     )
-    .action(async (opts: InitOptions) => {
+    .action(async (project: string | undefined, opts: InitOptions) => {
+      // Mode 4 (ADR 0026 / Phase 10.8): scaffold a new project with a
+      // language picker. Triggered by the positional argument; entirely
+      // independent of the instance-config modes below.
+      if (project !== undefined && project.length > 0) {
+        await runProjectInit(project, opts);
+        return;
+      }
+
       const path = configPath();
       const exists = await configExists();
       const genFlags = anyGenerationFlagGiven(opts);
@@ -350,5 +381,118 @@ async function runGenerate(opts: InitOptions): Promise<void> {
     stdout.write(
       '\n  Warning: `claude` CLI could not be reached. Install the Claude Code CLI or\n  re-run with --claude-cli-path pointing at your `claude` binary.\n',
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Mode 4 — project-init (Phase 10.8: language picker)
+// ---------------------------------------------------------------------------
+
+/**
+ * `factory init <project> [--language <lang>]` — scaffold a new project under
+ * the configured workspace with a language-appropriate CLAUDE.md spec and a
+ * `project.json` that records the language choice. Subsequent `factory build`
+ * runs read `project.json.metadata.language` to pick the assessor runtime
+ * (ADR 0026), so the operator does not need to repeat `--language` per build.
+ *
+ * Refuses to overwrite an existing project to avoid silent identity churn.
+ * Default language is `python` for back-compat with the existing
+ * `factory5-workspace/` corpus.
+ */
+async function runProjectInit(project: string, opts: InitOptions): Promise<void> {
+  const language: InitLanguage =
+    opts.language !== undefined ? parseInitLanguage(opts.language) : 'python';
+
+  // Resolve target dir — explicit absolute/relative path wins; otherwise
+  // <workspace>/<project>. Workspace comes from --workspace flag, instance
+  // config, or the default `~/factory5-workspace` (matches `factory build`).
+  const cfg = await loadConfig().catch(() => undefined);
+  const workspace =
+    opts.workspace ?? cfg?.general.workspace ?? join(homedir(), 'factory5-workspace');
+  const projectPath = isAbsolute(project)
+    ? project
+    : project.startsWith('./') || project.startsWith('../')
+      ? resolve(processCwd(), project)
+      : join(workspace, project);
+
+  // Refuse to clobber an existing project. ADR 0021's identity guarantee
+  // means re-tagging would orphan spend / findings / build history.
+  const existingMeta = await readProjectMetadata(projectPath).catch(() => undefined);
+  if (existingMeta !== undefined) {
+    stdout.write(
+      `factory init: ${projectPath} already has a project identity (${existingMeta.id}). ` +
+        `Refusing to overwrite — delete .factory/project.json to claim a new identity, or pick a different name.\n`,
+    );
+    exit(2);
+  }
+  if (existsSync(join(projectPath, 'CLAUDE.md'))) {
+    stdout.write(
+      `factory init: ${projectPath}/CLAUDE.md already exists. Refusing to overwrite — pick a different name or remove it manually.\n`,
+    );
+    exit(2);
+  }
+
+  mkdirSync(projectPath, { recursive: true });
+  const claudeMdPath = join(projectPath, 'CLAUDE.md');
+  writeFileSync(claudeMdPath, scaffoldClaudeMd(project, language), 'utf8');
+
+  await loadOrCreateProjectMetadata(projectPath, project, {
+    initialMetadata: { language },
+  });
+
+  stdout.write(`factory init: scaffolded ${project} (${language})\n`);
+  stdout.write(`  path:     ${projectPath}\n`);
+  stdout.write(`  spec:     ${claudeMdPath}\n`);
+  stdout.write(`  language: ${language} (recorded in .factory/project.json)\n`);
+  stdout.write('\nNext steps:\n');
+  stdout.write(`  1. Edit ${claudeMdPath} to describe what you want built\n`);
+  stdout.write(
+    `  2. Run \`factory build ${project}\` — the assessor runtime is already wired to ${language}\n`,
+  );
+}
+
+/**
+ * Per-language CLAUDE.md scaffold. Minimal but valid spec the operator can
+ * fill in — names the language explicitly so downstream agents do not need
+ * to infer it.
+ *
+ * Exported for unit testing; the runtime caller is `runProjectInit`.
+ */
+export function scaffoldClaudeMd(project: string, language: InitLanguage): string {
+  const header = `# ${project}\n\n## Project Overview\n\nDescribe what this project does in 2-3 sentences.\n`;
+  switch (language) {
+    case 'python':
+      return (
+        header +
+        '\n## Tech Stack\n\n- Python 3.11+\n- pytest for tests\n- Add runtime dependencies as needed\n\n' +
+        '## Key Modules\n\n1. `src/<module>.py` — describe each module here\n\n' +
+        '## Coding Standards\n\n- Type hints on all functions\n- Docstrings on public functions\n\n' +
+        '## Testing\n\n- pytest, tests under `tests/`\n'
+      );
+    case 'node':
+      return (
+        header +
+        '\n## Tech Stack\n\n- TypeScript 5.x, strict mode, ESM (NodeNext)\n- Node 20+\n- pnpm for package management\n- vitest for tests\n\n' +
+        '## Key Modules\n\n1. `src/index.ts` — entry point\n2. `src/<module>.ts` — describe each module\n\n' +
+        '## Coding Standards\n\n- `"strict": true` in tsconfig\n- No `any`; use `unknown` and narrow\n- Public exports carry a one-line TSDoc\n\n' +
+        '## Testing\n\n- vitest; `*.test.ts` next to source\n\n' +
+        '## package.json scripts\n\nThe assessor invokes `pnpm install → pnpm typecheck (or tsc --noEmit) → pnpm test`, so expose `typecheck` and `test` scripts.\n'
+      );
+    case 'go':
+      return (
+        header +
+        '\n## Tech Stack\n\n- Go 1.21+\n- standard library first; add modules sparingly\n\n' +
+        '## Key Modules\n\n1. `main.go` — entry point\n2. `internal/<pkg>/` — describe each package\n\n' +
+        '## Coding Standards\n\n- `go fmt` clean\n- Errors wrapped with context\n\n' +
+        '## Testing\n\n- `go test ./...`; tests in `_test.go` files alongside source\n'
+      );
+    case 'rust':
+      return (
+        header +
+        '\n## Tech Stack\n\n- Rust stable (1.70+)\n- Cargo\n\n' +
+        '## Key Modules\n\n1. `src/main.rs` (binary) or `src/lib.rs` (library)\n2. `src/<module>.rs` — describe each module\n\n' +
+        '## Coding Standards\n\n- `cargo fmt` clean, `cargo clippy` clean\n- No `unwrap()` outside tests; use `?` and proper error types\n\n' +
+        '## Testing\n\n- `cargo test`; unit tests in `#[cfg(test)] mod tests`, integration tests under `tests/`\n'
+      );
   }
 }
