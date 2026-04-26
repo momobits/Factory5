@@ -60,7 +60,7 @@
     the worker log).
   - Cross-platform: both tests pass on Windows + Linux.
 
-- [ ] 12.4 — **Live validation.** Operator runs `factory build` on a
+- [x] 12.4 — **Live validation.** Operator runs `factory build` on a
       Phase 10 fixture (Node, Go, or Rust — the cheapest one) under
       the new gate. Verify:
   - Build runs to completion (gate doesn't break legitimate work).
