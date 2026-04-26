@@ -7,7 +7,7 @@
 
 ## Phase 11 — Web UI 9b
 
-- [ ] 11.1 — **ADR 0027** mutation route shape. Decisions to pin:
+- [x] 11.1 — **ADR 0027** mutation route shape. Decisions to pin:
   - **HTTP verbs + URL shape** — `POST /api/v1/pending-questions/:id/answer`
     vs. `PUT /api/v1/pending-questions/:id` with `{ answer }`? Same
     question for `/api/v1/builds` (POST a directive vs. POST against

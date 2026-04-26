@@ -38,6 +38,7 @@ Decisions are append-only. To overturn a decision, write a new ADR with `Superse
 | [0024](0024-worker-subprocess-ask-user.md)               | Worker-subprocess `askUser`: MCP route, paused-budget wait, taskId-mandatory correlation                        | Accepted           | 2026-04-23 |
 | [0025](0025-web-ui-architecture.md)                      | Web UI architecture: Astro MPA + ViewTransitions, `FACTORY5_UI_TOKEN` bearer, `/app` + `/api/v1/*`              | Accepted           | 2026-04-23 |
 | [0026](0026-pluggable-runtime-contract.md)               | Pluggable assessor runtimes: env-owning/env-assuming provisioner + failure-mode taxonomy + host-tool pre-flight | Accepted           | 2026-04-24 |
+| [0027](0027-web-ui-mutation-surface.md)                  | Web UI mutation surface: route shape + idempotency + error envelope + per-project budget defaults               | Accepted           | 2026-04-26 |
 
 ## Adding a new ADR
 
