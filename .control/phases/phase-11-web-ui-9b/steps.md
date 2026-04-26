@@ -29,7 +29,7 @@
     new top-level field (preserves ADR 0021 sticky identity).
   - Output: `docs/decisions/0027-*.md` + INDEX row.
 
-- [ ] 11.2 — **Answer-a-pending-question route.**
+- [x] 11.2 — **Answer-a-pending-question route.**
       `POST /api/v1/pending-questions/:id/answer` with `{ answer: string }`.
       Calls into the same path the channel handlers use
       (`maybeAnswerPendingQuestion` or its successor). Returns the

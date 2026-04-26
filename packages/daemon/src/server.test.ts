@@ -19,7 +19,9 @@ import {
   modelUsage,
   outbound,
   pendingQuestions,
+  tasksInflight,
   type Database,
+  type InflightTask,
 } from '@factory5/state';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1372,6 +1374,237 @@ describe('IPC server — /api/v1/findings (ADR 0025, sub-step 9.7)', () => {
     expect(res.statusCode).toBe(400);
     const body = res.json() as { error: { code: string } };
     expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+});
+
+describe('IPC server — POST /api/v1/pending-questions/:id/answer (ADR 0027, sub-step 11.2)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  const UI_TOKEN = 'ui-secret-xyz';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  function seedQuestionWithDirective(overrides: Partial<PendingQuestion> = {}): PendingQuestion {
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    const q: PendingQuestion = {
+      id: newId(),
+      directiveId: directive.id,
+      question: 'jwt or session?',
+      channel: 'cli',
+      channelRef: 'session-1',
+      createdAt: new Date().toISOString(),
+      ...overrides,
+    };
+    pendingQuestions.create(db, q);
+    return q;
+  }
+
+  it('returns 401 without bearer', async () => {
+    const seeded = seedQuestionWithDirective();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pending-questions/${seeded.id}/answer`,
+      payload: { answer: 'jwt' },
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns 503 UI_DISABLED when uiAuthToken is not configured', async () => {
+    const seeded = seedQuestionWithDirective();
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: undefined });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pending-questions/${seeded.id}/answer`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { answer: 'jwt' },
+    });
+    expect(res.statusCode).toBe(503);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('UI_DISABLED');
+    await app.close();
+  });
+
+  it('returns 404 QUESTION_NOT_FOUND for unknown id', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pending-questions/${newId()}/answer`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { answer: 'jwt' },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('QUESTION_NOT_FOUND');
+    await app.close();
+  });
+
+  it('returns 400 SCHEMA_VALIDATION_FAILED on empty answer', async () => {
+    const seeded = seedQuestionWithDirective();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pending-questions/${seeded.id}/answer`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { answer: '' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('returns 400 SCHEMA_VALIDATION_FAILED on missing answer field', async () => {
+    const seeded = seedQuestionWithDirective();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pending-questions/${seeded.id}/answer`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('happy path: writes the answer and returns the updated question', async () => {
+    const seeded = seedQuestionWithDirective();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pending-questions/${seeded.id}/answer`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { answer: 'jwt' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      question: { id: string; answer?: string; answeredAt?: string };
+    };
+    expect(body.question.id).toBe(seeded.id);
+    expect(body.question.answer).toBe('jwt');
+    expect(body.question.answeredAt).toBeDefined();
+    // SQLite write actually happened.
+    const persisted = pendingQuestions.getById(db, seeded.id);
+    expect(persisted?.answer).toBe('jwt');
+    expect(persisted?.answeredAt).toBeDefined();
+    await app.close();
+  });
+
+  it('idempotent re-POST with same answer is a 200 no-op', async () => {
+    const seeded = seedQuestionWithDirective();
+    const app = await buildIpcServer(baseOpts());
+    const first = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pending-questions/${seeded.id}/answer`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { answer: 'jwt' },
+    });
+    expect(first.statusCode).toBe(200);
+    const firstAnsweredAt = (first.json() as { question: { answeredAt: string } }).question
+      .answeredAt;
+
+    const second = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pending-questions/${seeded.id}/answer`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { answer: 'jwt' },
+    });
+    expect(second.statusCode).toBe(200);
+    const body = second.json() as { question: { answer: string; answeredAt: string } };
+    expect(body.question.answer).toBe('jwt');
+    // answeredAt is preserved from the first write — no re-stamp.
+    expect(body.question.answeredAt).toBe(firstAnsweredAt);
+    await app.close();
+  });
+
+  it('different answer on already-answered question returns 409', async () => {
+    const seeded = seedQuestionWithDirective();
+    const app = await buildIpcServer(baseOpts());
+    const first = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pending-questions/${seeded.id}/answer`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { answer: 'jwt' },
+    });
+    expect(first.statusCode).toBe(200);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pending-questions/${seeded.id}/answer`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { answer: 'sessions' },
+    });
+    expect(second.statusCode).toBe(409);
+    const body = second.json() as { error: { code: string } };
+    expect(body.error.code).toBe('QUESTION_ALREADY_ANSWERED_DIFFERENTLY');
+    // Original answer preserved.
+    const persisted = pendingQuestions.getById(db, seeded.id);
+    expect(persisted?.answer).toBe('jwt');
+    await app.close();
+  });
+
+  it('records answer even when the linked task is terminal (orphan-tolerant per ADR 0024 §4)', async () => {
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    const orphanedTask: InflightTask = {
+      id: newId(),
+      directiveId: directive.id,
+      planId: newId(),
+      title: 'orphaned builder',
+      agent: 'builder',
+      category: 'tools',
+      status: 'aborted',
+      attempts: 1,
+      abortedReason: 'brain_restart_during_human_wait',
+    };
+    tasksInflight.register(db, orphanedTask);
+    const question: PendingQuestion = {
+      id: newId(),
+      directiveId: directive.id,
+      taskId: orphanedTask.id,
+      question: 'continue with workaround?',
+      channel: 'cli',
+      channelRef: 'session-1',
+      createdAt: new Date().toISOString(),
+    };
+    pendingQuestions.create(db, question);
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/pending-questions/${question.id}/answer`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { answer: 'yes' },
+    });
+    expect(res.statusCode).toBe(200);
+    // Answer is recorded for forensic value even though no consumer remains.
+    const persisted = pendingQuestions.getById(db, question.id);
+    expect(persisted?.answer).toBe('yes');
+    expect(persisted?.answeredAt).toBeDefined();
     await app.close();
   });
 });

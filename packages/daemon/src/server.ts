@@ -34,6 +34,8 @@ import fastifyStatic from '@fastify/static';
 import type { ChannelId, OutboundMessage } from '@factory5/core';
 import { newId } from '@factory5/core';
 import {
+  apiV1AnswerPendingQuestionRequestSchema,
+  apiV1AnswerPendingQuestionResponseSchema,
   apiV1DirectiveDetailResponseSchema,
   apiV1DirectivesListQuerySchema,
   apiV1DirectivesListResponseSchema,
@@ -53,6 +55,7 @@ import {
   statusResponseSchema,
   workerAskUserRequestSchema,
   workerAskUserResponseSchema,
+  type ApiV1AnswerPendingQuestionResponse,
   type ApiV1DirectiveDetailResponse,
   type ApiV1DirectivesListResponse,
   type ApiV1FindingsListResponse,
@@ -496,6 +499,83 @@ function registerRoutes(
     );
     reply.send(resp);
   });
+
+  // ----- POST /api/v1/pending-questions/:id/answer (ADR 0027, sub-step 11.2) -----
+  // Mutation surface — same answer-write path the channel collectors take, exposed
+  // as one more inbound channel. Idempotency rules per ADR 0027 §2: re-POST with
+  // same answer is a 200 no-op; different answer is a 409 with the original
+  // preserved (never silently overwrites). Bearer-gated like the read routes.
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/pending-questions/:id/answer',
+    async (request, reply) => {
+      requireUiAuth(request, opts.uiAuthToken);
+      const { id } = request.params;
+      const body = apiV1AnswerPendingQuestionRequestSchema.parse(request.body);
+
+      const existing = pendingQuestions.getById(opts.db, id);
+      if (existing === undefined) {
+        throw new IpcRequestError(404, 'QUESTION_NOT_FOUND', `question ${id} not found`);
+      }
+
+      if (existing.answer !== undefined) {
+        // Already answered — same payload is idempotent; different conflicts.
+        if (existing.answer === body.answer) {
+          const resp: ApiV1AnswerPendingQuestionResponse =
+            apiV1AnswerPendingQuestionResponseSchema.parse({ question: existing });
+          ipcLog.debug(
+            { reqId: request.id, questionId: id },
+            'ipc: /api/v1/pending-questions/:id/answer — idempotent re-POST',
+          );
+          reply.send(resp);
+          return;
+        }
+        throw new IpcRequestError(
+          409,
+          'QUESTION_ALREADY_ANSWERED_DIFFERENTLY',
+          `question ${id} is already answered; the recorded answer is preserved`,
+        );
+      }
+
+      // First answer for this question.
+      const answeredAt = new Date().toISOString();
+      pendingQuestions.answer(opts.db, id, body.answer, answeredAt);
+
+      // ADR 0024 §4 — if the linked task is already terminal, the answer is
+      // recorded (forensic value preserved) but no consumer remains to resume.
+      // Loud log mirrors the Discord / Telegram channel-collector behaviour.
+      const orphan = pendingQuestions.detectOrphanedAnswer(opts.db, id);
+      if (orphan !== undefined) {
+        ipcLog.warn(
+          {
+            reqId: request.id,
+            questionId: id,
+            taskId: orphan.taskId,
+            taskStatus: orphan.taskStatus,
+          },
+          'ipc: /api/v1/pending-questions/:id/answer — answer recorded for question whose task is terminal',
+        );
+      }
+
+      const updated = pendingQuestions.getById(opts.db, id);
+      if (updated === undefined) {
+        // Row existed at the top of the handler; can't disappear mid-request.
+        throw new IpcRequestError(500, 'INTERNAL', 'failed to read back the answered question');
+      }
+      const resp: ApiV1AnswerPendingQuestionResponse =
+        apiV1AnswerPendingQuestionResponseSchema.parse({ question: updated });
+      ipcLog.info(
+        {
+          reqId: request.id,
+          questionId: id,
+          directiveId: existing.directiveId,
+          taskId: existing.taskId,
+          orphaned: orphan !== undefined,
+        },
+        'ipc: /api/v1/pending-questions/:id/answer — answered',
+      );
+      reply.send(resp);
+    },
+  );
 
   // ----- GET /api/v1/spend (ADR 0025, sub-step 9.6) -----
   // All four rollups (per-project / per-directive / per-day / per-model) in

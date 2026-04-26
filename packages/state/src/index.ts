@@ -17,6 +17,7 @@ export * as outbound from './queries/outbound.js';
 export * as sessions from './queries/sessions.js';
 export * as pendingQuestions from './queries/pending-questions.js';
 export * as tasksInflight from './queries/tasks-inflight.js';
+export type { InflightTask } from './queries/tasks-inflight.js';
 export * as projects from './queries/projects.js';
 export * as learnings from './queries/learnings.js';
 export * as modelUsage from './queries/model-usage.js';

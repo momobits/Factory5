@@ -240,6 +240,34 @@ export type ApiV1PendingQuestionDetailResponse = z.infer<
 >;
 
 // -----------------------------------------------------------------------------
+// POST /api/v1/pending-questions/:id/answer  (web UI, ADR 0027 sub-step 11.2)
+// -----------------------------------------------------------------------------
+
+/**
+ * Request body for answering a pending question via the web UI mutation
+ * surface (ADR 0027 §1). Same path the Discord / Telegram channel
+ * collectors take; the web UI is just one more inbound channel.
+ *
+ * Idempotency rules per ADR 0027 §2:
+ *   - Re-POST with the same `answer` string → 200 no-op (idempotent).
+ *   - Re-POST with a different `answer` → 409 `QUESTION_ALREADY_ANSWERED_DIFFERENTLY`;
+ *     the original answer is preserved (never silently overwritten).
+ */
+export const apiV1AnswerPendingQuestionRequestSchema = z.object({
+  answer: z.string().min(1),
+});
+export type ApiV1AnswerPendingQuestionRequest = z.infer<
+  typeof apiV1AnswerPendingQuestionRequestSchema
+>;
+
+export const apiV1AnswerPendingQuestionResponseSchema = z.object({
+  question: pendingQuestionSchema,
+});
+export type ApiV1AnswerPendingQuestionResponse = z.infer<
+  typeof apiV1AnswerPendingQuestionResponseSchema
+>;
+
+// -----------------------------------------------------------------------------
 // GET /api/v1/spend  (web UI, ADR 0025 sub-step 9.6)
 // -----------------------------------------------------------------------------
 
