@@ -171,7 +171,7 @@ describe('goRuntime.runGate', () => {
     expect(r.provisioning?.toolVersion).toContain('go1.22.1');
 
     const pipeline = calls.filter((c) => c.args[0] !== 'version').map((c) => c.args.join(' '));
-    expect(pipeline).toEqual(['build ./...', 'test -list .* ./...', 'test ./...']);
+    expect(pipeline).toEqual(['build ./...', 'test -list .* ./...', 'test -v -count=1 ./...']);
   });
 
   it('BUILD_FAILURE: go build exits non-zero', async () => {

@@ -12,8 +12,12 @@
  *      flips `testsAvailable: false` so `gate.integration` stays false on
  *      zero-test projects (ADR 0026 §2 edge case: `go test ./...` exits 0
  *      with no tests, which would otherwise falsely pass the gate).
- *   5. Test — `go test ./...`. Summary parsed from `--- PASS:` / `--- FAIL:`
- *      lines per the stock Go testing output shape.
+ *   5. Test — `go test -v -count=1 ./...`. Summary parsed from `--- PASS:` /
+ *      `--- FAIL:` lines per the stock Go testing output shape. `-v` is
+ *      required because the default `go test` only prints package-level
+ *      `ok <pkg>` summaries; `-count=1` bypasses Go's test cache so the
+ *      assessor sees fresh ground truth on every run (caches defeat the
+ *      "real subprocess" guarantee the assessor exists to provide).
  */
 
 import { platform as processPlatform } from 'node:process';
@@ -233,9 +237,13 @@ export function buildGoRuntime(depsOverride: GoRuntimeDeps = {}): RuntimeAssesso
         };
       }
 
-      // --- Test: go test ./... ---------------------------------------
+      // --- Test: go test -v -count=1 ./... ---------------------------
+      // -v emits per-test `--- PASS:` / `--- FAIL:` lines (the default
+      // output is package-level only, `ok <pkg>`, which the parser cannot
+      // attribute to test counts). -count=1 disables the test result cache
+      // so the assessor always observes fresh subprocess output.
       const testStarted = Date.now();
-      const testRes = await deps.runSubprocess(goBin, ['test', './...'], {
+      const testRes = await deps.runSubprocess(goBin, ['test', '-v', '-count=1', './...'], {
         cwd: projectPath,
         timeoutMs: runnerTimeout,
       });

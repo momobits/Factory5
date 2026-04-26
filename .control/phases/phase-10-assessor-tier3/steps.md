@@ -51,7 +51,7 @@
       Provisioner is the lightest of the three — no per-project env
       management since `go.mod` is enough.
 
-- [ ] 10.5 — **Live validation — Go end-to-end.** Small Go CLI spec;
+- [x] 10.5 — **Live validation — Go end-to-end.** Small Go CLI spec;
       full `factory build` loop.
 
 - [x] 10.6 — **Rust runtime.** `packages/assessor/src/runtimes/rust.ts`.

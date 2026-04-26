@@ -19,6 +19,7 @@ Internal issue tracker for factory5 itself. Mirrors the finding-lifecycle patter
 | [I009](I009-telegram-inbound-budget-defaults.md)                | MEDIUM   | channels/telegram | Telegram/Discord inbound doesn't inherit `[budget.defaults]` — builds run uncapped | 2026-04-23 |
 | [I012](I012-telegram-reply-matcher-fifo-not-targeted.md)        | LOW      | channels/telegram | Telegram Reply-feature answer matcher is FIFO — can't target a specific question   | 2026-04-23 |
 | [I013](I013-worker-worktree-cleanup-blocked-by-node-modules.md) | MEDIUM   | worker/worktree   | Worker's `pnpm install` leaves `node_modules/` that blocks worktree cleanup (Win)  | 2026-04-24 |
+| [I014](I014-architect-resume-no-autocommit.md)                  | MEDIUM   | brain/architect   | Architect re-running on existing project leaves wiki edits uncommitted             | 2026-04-26 |
 
 ## Resolved (last 20)
 
