@@ -1852,4 +1852,297 @@ describe('IPC server — POST /api/v1/builds (ADR 0027, sub-step 11.3)', () => {
     expect(project?.status).toBe('active');
     await app.close();
   });
+
+  it('budget tier: directive picks up metadata.budgetDefaults when body.limits is absent', async () => {
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    const meta = {
+      id: '01KQ0P14MZZPJRPA5RW929TTSJ',
+      name: 'sample',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      factoryVersion: '0.x',
+      metadata: { budgetDefaults: { maxUsd: 3.25, maxSteps: 75 } },
+    };
+    await writeFile(join(factoryDir, 'project.json'), JSON.stringify(meta, null, 2));
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { limits?: { maxUsd?: number; maxSteps?: number } };
+    };
+    expect(body.directive.limits).toEqual({ maxUsd: 3.25, maxSteps: 75 });
+    await app.close();
+  });
+
+  it('budget tier: body.limits per-field overrides project-tier defaults', async () => {
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    const meta = {
+      id: '01KQ0P14MZZPJRPA5RW929TTSJ',
+      name: 'sample',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      factoryVersion: '0.x',
+      metadata: { budgetDefaults: { maxUsd: 3.25, maxSteps: 75 } },
+    };
+    await writeFile(join(factoryDir, 'project.json'), JSON.stringify(meta, null, 2));
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir, limits: { maxUsd: 9 } },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { limits?: { maxUsd?: number; maxSteps?: number } };
+    };
+    expect(body.directive.limits).toEqual({ maxUsd: 9, maxSteps: 75 });
+    await app.close();
+  });
+});
+
+describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.4)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+  let projectDir: string;
+
+  beforeEach(async () => {
+    db = freshDb();
+    doorbell = new Doorbell();
+    projectDir = await mkdtemp(join(tmpdir(), 'factory5-budget-route-'));
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  const UI_TOKEN = 'ui-secret-xyz';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  /**
+   * Seed a project on disk + a matching registry row. Returns the seeded
+   * project's ULID so tests can target it via `:id`.
+   */
+  async function seedProject(seedMetadata: Record<string, unknown> = {}): Promise<string> {
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    const id = newId();
+    const meta = {
+      id,
+      name: 'sample',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      factoryVersion: '0.x',
+      metadata: seedMetadata,
+    };
+    await writeFile(join(factoryDir, 'project.json'), JSON.stringify(meta, null, 2));
+    projectsQ.upsert(db, {
+      id,
+      name: 'sample',
+      workspacePath: projectDir,
+      status: 'active',
+      createdAt: meta.createdAt,
+      lastTouchedAt: meta.createdAt,
+    });
+    return id;
+  }
+
+  it('returns 401 without bearer', async () => {
+    const id = await seedProject();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      payload: { maxUsd: 5 },
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns 503 UI_DISABLED when uiAuthToken is not configured', async () => {
+    const id = await seedProject();
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: undefined });
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { maxUsd: 5 },
+    });
+    expect(res.statusCode).toBe(503);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('UI_DISABLED');
+    await app.close();
+  });
+
+  it('returns 400 SCHEMA_VALIDATION_FAILED on a negative value', async () => {
+    const id = await seedProject();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { maxUsd: -1 },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('returns 404 PROJECT_NOT_FOUND when the ULID is not in the registry', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${newId()}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { maxUsd: 5 },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('PROJECT_NOT_FOUND');
+    await app.close();
+  });
+
+  it('returns 404 PROJECT_PATH_UNREADABLE when project.json no longer exists', async () => {
+    const id = newId();
+    projectsQ.upsert(db, {
+      id,
+      name: 'orphan',
+      workspacePath: projectDir,
+      status: 'active',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      lastTouchedAt: '2026-04-25T00:00:00.000Z',
+    });
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { maxUsd: 5 },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('PROJECT_PATH_UNREADABLE');
+    await app.close();
+  });
+
+  it('returns 422 PROJECT_METADATA_CORRUPT on a present-but-unparseable project.json', async () => {
+    const id = newId();
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    await writeFile(join(factoryDir, 'project.json'), '{ corrupt');
+    projectsQ.upsert(db, {
+      id,
+      name: 'broken',
+      workspacePath: projectDir,
+      status: 'active',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      lastTouchedAt: '2026-04-25T00:00:00.000Z',
+    });
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { maxUsd: 5 },
+    });
+    expect(res.statusCode).toBe(422);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('PROJECT_METADATA_CORRUPT');
+    await app.close();
+  });
+
+  it('happy path: round-trip — sets values, reads back via project.json', async () => {
+    const id = await seedProject();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { maxUsd: 4.5, maxSteps: 150 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      projectId: string;
+      budgetDefaults: { maxUsd?: number; maxSteps?: number };
+    };
+    expect(body.projectId).toBe(id);
+    expect(body.budgetDefaults).toEqual({ maxUsd: 4.5, maxSteps: 150 });
+
+    const { readFile } = await import('node:fs/promises');
+    const onDisk = JSON.parse(
+      await readFile(join(projectDir, '.factory', 'project.json'), 'utf8'),
+    ) as { metadata: { budgetDefaults: unknown } };
+    expect(onDisk.metadata.budgetDefaults).toEqual({ maxUsd: 4.5, maxSteps: 150 });
+    await app.close();
+  });
+
+  it('PUT with partial body replaces the document — omitted field is removed', async () => {
+    const id = await seedProject({ budgetDefaults: { maxUsd: 5, maxSteps: 100 } });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { maxUsd: 9 },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { budgetDefaults: { maxUsd?: number; maxSteps?: number } };
+    expect(body.budgetDefaults).toEqual({ maxUsd: 9 });
+    expect(body.budgetDefaults.maxSteps).toBeUndefined();
+    await app.close();
+  });
+
+  it('PUT empty body clears all defaults', async () => {
+    const id = await seedProject({ budgetDefaults: { maxUsd: 5, maxSteps: 100 } });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { budgetDefaults: Record<string, unknown> };
+    expect(body.budgetDefaults).toEqual({});
+    await app.close();
+  });
+
+  it('preserves unrelated metadata.* fields (language) across the budget write', async () => {
+    const id = await seedProject({ language: 'go' });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { maxUsd: 2 },
+    });
+    expect(res.statusCode).toBe(200);
+    const { readFile } = await import('node:fs/promises');
+    const onDisk = JSON.parse(
+      await readFile(join(projectDir, '.factory', 'project.json'), 'utf8'),
+    ) as { metadata: { language?: string; budgetDefaults?: unknown } };
+    expect(onDisk.metadata.language).toBe('go');
+    expect(onDisk.metadata.budgetDefaults).toEqual({ maxUsd: 2 });
+    await app.close();
+  });
 });

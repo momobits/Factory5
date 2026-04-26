@@ -62,6 +62,23 @@ export const directiveLimitsSchema = z.object({
   maxSteps: z.number().int().positive().optional(),
 });
 
+/**
+ * Per-project budget defaults (ADR 0027 §4). Mirrors {@link directiveLimitsSchema}
+ * shape but lives at `<project>/.factory/project.json` `metadata.budgetDefaults`
+ * — see {@link wiki.budgetDefaultsFromProjectMeta} for the read helper.
+ *
+ * Resolution order on directive creation (CLI + Web UI):
+ *   `--max-usd flag` → project `metadata.budgetDefaults` → config `[budget.defaults]` → unlimited.
+ *
+ * The Web UI write path is `PUT /api/v1/projects/:id/budget` with full-document
+ * replacement semantics (ADR 0027 §1): the request body is the new state.
+ */
+export const projectBudgetDefaultsSchema = z.object({
+  maxUsd: z.number().positive().optional(),
+  maxSteps: z.number().int().positive().optional(),
+});
+export type ProjectBudgetDefaults = z.infer<typeof projectBudgetDefaultsSchema>;
+
 export const directiveSchema = z.object({
   id: ulidSchema,
   source: channelIdSchema,

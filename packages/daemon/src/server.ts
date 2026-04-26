@@ -51,6 +51,8 @@ import {
   apiV1PendingQuestionsListResponseSchema,
   apiV1SpendQuerySchema,
   apiV1SpendResponseSchema,
+  apiV1UpdateProjectBudgetRequestSchema,
+  apiV1UpdateProjectBudgetResponseSchema,
   directiveNotifyRequestSchema,
   IpcRequestError,
   ipcErrorSchema,
@@ -68,6 +70,7 @@ import {
   type ApiV1PendingQuestionDetailResponse,
   type ApiV1PendingQuestionsListResponse,
   type ApiV1SpendResponse,
+  type ApiV1UpdateProjectBudgetResponse,
   type StatusResponse,
   type WorkerAskUserRequest,
   type WorkerAskUserResponse,
@@ -86,10 +89,13 @@ import {
   type Database,
 } from '@factory5/state';
 import {
+  budgetDefaultsFromProjectMeta,
   defaultWorkspace,
   languageFromProjectMeta,
   loadOrCreateProjectMetadata,
   ProjectMetadataCorruptError,
+  ProjectMetadataNotFoundError,
+  updateProjectMetadata,
 } from '@factory5/wiki';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
@@ -713,8 +719,17 @@ function registerRoutes(
       lastTouchedAt: nowIso,
     });
 
-    const limits = body.limits;
-    const hasLimits = limits !== undefined && Object.keys(limits).length > 0;
+    // Budget resolution per ADR 0027 §4 — body wins over project-tier
+    // metadata.budgetDefaults; the daemon doesn't have config-tier access
+    // so the third tier is CLI-only. Per-field independent so the body
+    // can override one ceiling without flushing the project's other.
+    const projectDefaults = budgetDefaultsFromProjectMeta(projectMeta);
+    const limits: { maxUsd?: number; maxSteps?: number } = {};
+    const maxUsd = body.limits?.maxUsd ?? projectDefaults?.maxUsd;
+    const maxSteps = body.limits?.maxSteps ?? projectDefaults?.maxSteps;
+    if (maxUsd !== undefined) limits.maxUsd = maxUsd;
+    if (maxSteps !== undefined) limits.maxSteps = maxSteps;
+    const hasLimits = Object.keys(limits).length > 0;
     const directive = directiveSchema.parse({
       id: newId(),
       source: 'cli',
@@ -749,6 +764,54 @@ function registerRoutes(
         hasLimits,
       },
       'ipc: /api/v1/builds — directive created',
+    );
+    reply.send(resp);
+  });
+
+  // ----- PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.4) -----
+  // Mutation surface — sets per-project `metadata.budgetDefaults` (mirrors
+  // ADR 0020's `directiveLimitsSchema`). Full RFC-9110 PUT semantics: body
+  // is the new state of the budgetDefaults document; absent fields are
+  // removed. Bearer-gated like the other UI routes.
+  app.put<{ Params: { id: string } }>('/api/v1/projects/:id/budget', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const { id } = request.params;
+    const body = apiV1UpdateProjectBudgetRequestSchema.parse(request.body);
+
+    const project = projectsQ.getById(opts.db, id);
+    if (project === undefined) {
+      throw new IpcRequestError(404, 'PROJECT_NOT_FOUND', `project ${id} not found`);
+    }
+
+    let updated;
+    try {
+      updated = await updateProjectMetadata(project.workspacePath, (meta) => ({
+        ...meta,
+        metadata: { ...meta.metadata, budgetDefaults: body },
+      }));
+    } catch (err) {
+      if (err instanceof ProjectMetadataNotFoundError) {
+        throw new IpcRequestError(404, 'PROJECT_PATH_UNREADABLE', err.message);
+      }
+      if (err instanceof ProjectMetadataCorruptError) {
+        throw new IpcRequestError(422, 'PROJECT_METADATA_CORRUPT', err.message);
+      }
+      throw err;
+    }
+
+    const persistedDefaults = budgetDefaultsFromProjectMeta(updated) ?? {};
+    const resp: ApiV1UpdateProjectBudgetResponse = apiV1UpdateProjectBudgetResponseSchema.parse({
+      projectId: project.id,
+      budgetDefaults: persistedDefaults,
+    });
+    ipcLog.info(
+      {
+        reqId: request.id,
+        projectId: project.id,
+        maxUsd: persistedDefaults.maxUsd,
+        maxSteps: persistedDefaults.maxSteps,
+      },
+      'ipc: /api/v1/projects/:id/budget — defaults updated',
     );
     reply.send(resp);
   });

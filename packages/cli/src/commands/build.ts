@@ -27,6 +27,7 @@ import {
   type Database,
 } from '@factory5/state';
 import {
+  budgetDefaultsFromProjectMeta,
   defaultWorkspace,
   languageFromProjectMeta,
   loadOrCreateProjectMetadata,
@@ -138,12 +139,17 @@ export function registerBuildCommand(program: Command): void {
             lastTouchedAt: nowIso,
           });
 
-          // Resolve budget ceilings: explicit CLI flag wins over
-          // `~/.factory5/config.toml` [budget.defaults] (ADR 0020, step 7a.6).
+          // Resolve budget ceilings (ADR 0027 §4): explicit CLI flag wins
+          // over per-project `metadata.budgetDefaults` (Web UI–writable),
+          // which wins over `~/.factory5/config.toml [budget.defaults]`
+          // (ADR 0020). Per-field independent so `--max-usd 5` can apply
+          // even when `metadata.budgetDefaults.maxSteps` is set.
           const cfg = await loadConfig().catch(() => undefined);
+          const projectDefaults = budgetDefaultsFromProjectMeta(projectMeta);
           const limits: { maxUsd?: number; maxSteps?: number } = {};
-          const maxUsd = options.maxUsd ?? cfg?.budget.defaults.maxUsd;
-          const maxSteps = options.maxSteps ?? cfg?.budget.defaults.maxSteps;
+          const maxUsd = options.maxUsd ?? projectDefaults?.maxUsd ?? cfg?.budget.defaults.maxUsd;
+          const maxSteps =
+            options.maxSteps ?? projectDefaults?.maxSteps ?? cfg?.budget.defaults.maxSteps;
           if (maxUsd !== undefined) limits.maxUsd = maxUsd;
           if (maxSteps !== undefined) limits.maxSteps = maxSteps;
           const hasLimits = Object.keys(limits).length > 0;

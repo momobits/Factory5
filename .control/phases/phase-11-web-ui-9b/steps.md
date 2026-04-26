@@ -45,7 +45,7 @@
       from project.json `metadata.language` (10.8 parity), 400 for
       unknown project, 401 for missing token.
 
-- [ ] 11.4 — **Project budget defaults route.**
+- [x] 11.4 — **Project budget defaults route.**
       `PUT /api/v1/projects/:id/budget` with `{ maxUsd?, maxSteps? }`.
       Writes into `<project>/.factory/project.json`
       `metadata.budgetDefaults`. `factory build`'s budget resolution

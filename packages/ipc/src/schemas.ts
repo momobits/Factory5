@@ -15,6 +15,7 @@ import {
   findingStatusSchema,
   modelCategorySchema,
   pendingQuestionSchema,
+  projectBudgetDefaultsSchema,
   severitySchema,
   taskResultSchema,
   taskStatusSchema,
@@ -304,6 +305,33 @@ export const apiV1CreateBuildResponseSchema = z.object({
   directive: directiveSchema,
 });
 export type ApiV1CreateBuildResponse = z.infer<typeof apiV1CreateBuildResponseSchema>;
+
+// -----------------------------------------------------------------------------
+// PUT /api/v1/projects/:id/budget  (web UI, ADR 0027 sub-step 11.4)
+// -----------------------------------------------------------------------------
+
+/**
+ * Request body for setting per-project budget defaults via the web UI
+ * mutation surface (ADR 0027 §1, §4). Body is the new state of the
+ * `metadata.budgetDefaults` document under
+ * `<project>/.factory/project.json` — full RFC-9110 PUT semantics.
+ *
+ *   - Both fields present → set both.
+ *   - Only one field present → set that field, remove the other.
+ *   - Empty body `{}` → clear both fields entirely.
+ *
+ * No PATCH-style partial-merge — see ADR 0027 §1's rejection of `{maxUsd: null}`.
+ */
+export const apiV1UpdateProjectBudgetRequestSchema = projectBudgetDefaultsSchema;
+export type ApiV1UpdateProjectBudgetRequest = z.infer<typeof apiV1UpdateProjectBudgetRequestSchema>;
+
+export const apiV1UpdateProjectBudgetResponseSchema = z.object({
+  projectId: ulidSchema,
+  budgetDefaults: projectBudgetDefaultsSchema,
+});
+export type ApiV1UpdateProjectBudgetResponse = z.infer<
+  typeof apiV1UpdateProjectBudgetResponseSchema
+>;
 
 // -----------------------------------------------------------------------------
 // GET /api/v1/spend  (web UI, ADR 0025 sub-step 9.6)

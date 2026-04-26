@@ -19,7 +19,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { newId } from '@factory5/core';
+import { newId, projectBudgetDefaultsSchema, type ProjectBudgetDefaults } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 
 const log = createLogger('wiki.project-metadata');
@@ -167,6 +167,78 @@ export function languageFromProjectMeta(meta: ProjectMetadata): ProjectLanguage 
   const raw = meta.metadata['language'];
   if (raw === 'python' || raw === 'node' || raw === 'go' || raw === 'rust') return raw;
   return undefined;
+}
+
+/**
+ * Read the per-project budget defaults written by the Web UI's
+ * `PUT /api/v1/projects/:id/budget` route (ADR 0027 §4). Returns
+ * `undefined` when the `budgetDefaults` key is absent or doesn't parse
+ * against {@link projectBudgetDefaultsSchema} — callers fall through
+ * to the next budget-resolution tier (instance config, then unlimited).
+ *
+ * Mirrors {@link languageFromProjectMeta}'s shape; both helpers share
+ * the silent-fallback-on-malformed contract so a stray edit to
+ * project.json doesn't crash a build.
+ */
+export function budgetDefaultsFromProjectMeta(
+  meta: ProjectMetadata,
+): ProjectBudgetDefaults | undefined {
+  const raw = meta.metadata['budgetDefaults'];
+  const parsed = projectBudgetDefaultsSchema.safeParse(raw);
+  return parsed.success ? parsed.data : undefined;
+}
+
+/**
+ * Thrown by {@link updateProjectMetadata} when the project directory has
+ * no `.factory/project.json` to update. The Web UI's budget route
+ * (ADR 0027 §3) maps this to `404 PROJECT_PATH_UNREADABLE` — the project
+ * is in the registry but the workspace path no longer carries the
+ * identity file (moved or deleted out-of-band).
+ */
+export class ProjectMetadataNotFoundError extends Error {
+  readonly projectPath: string;
+  readonly filePath: string;
+  constructor(projectPath: string) {
+    const filePath = join(projectPath, '.factory', 'project.json');
+    super(`project.json not found at ${filePath} — project may have been moved or deleted`);
+    this.name = 'ProjectMetadataNotFoundError';
+    this.projectPath = projectPath;
+    this.filePath = filePath;
+  }
+}
+
+/**
+ * Read-modify-write cycle on `<projectPath>/.factory/project.json`.
+ * Reads via {@link readProjectMetadata} (throws
+ * {@link ProjectMetadataCorruptError} on a present-but-invalid file,
+ * {@link ProjectMetadataNotFoundError} when absent), applies `mutate`,
+ * writes back atomically. Returns the mutated metadata.
+ *
+ * Used by the Web UI's `PUT /api/v1/projects/:id/budget` (ADR 0027) to
+ * land per-project `metadata.budgetDefaults` updates. Other future
+ * `metadata.*` writers should reuse this helper rather than open-coding
+ * the read-modify-write — keeps the atomic-write pattern in one place.
+ *
+ * The mutator is given the parsed metadata and should return a new
+ * {@link ProjectMetadata} (deep copy if it wants to preserve referential
+ * stability for the input — the helper does not enforce immutability).
+ */
+export async function updateProjectMetadata(
+  projectPath: string,
+  mutate: (meta: ProjectMetadata) => ProjectMetadata,
+): Promise<ProjectMetadata> {
+  const existing = await readProjectMetadata(projectPath);
+  if (existing === undefined) {
+    throw new ProjectMetadataNotFoundError(projectPath);
+  }
+  const updated = mutate(existing);
+  const filePath = join(projectPath, '.factory', 'project.json');
+  await writeFileAtomic(filePath, `${JSON.stringify(updated, null, 2)}\n`);
+  log.info(
+    { filePath, projectId: updated.id, projectName: updated.name },
+    'project.json: metadata updated',
+  );
+  return updated;
 }
 
 /**

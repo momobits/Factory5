@@ -7,8 +7,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   PROJECT_FILE_VERSION,
   ProjectMetadataCorruptError,
+  ProjectMetadataNotFoundError,
+  budgetDefaultsFromProjectMeta,
   loadOrCreateProjectMetadata,
   readProjectMetadata,
+  updateProjectMetadata,
+  type ProjectMetadata,
 } from './project-metadata.js';
 
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
@@ -247,6 +251,123 @@ describe('readProjectMetadata', () => {
     mkdirSync(factoryDir, { recursive: true });
     writeFileSync(join(factoryDir, 'project.json'), 'not json', 'utf8');
     await expect(readProjectMetadata(projectPath)).rejects.toBeInstanceOf(
+      ProjectMetadataCorruptError,
+    );
+  });
+});
+
+describe('budgetDefaultsFromProjectMeta (ADR 0027 §4 read helper)', () => {
+  const baseMeta = (metadata: Record<string, unknown>): ProjectMetadata => ({
+    id: '01KQ0P14MZZPJRPA5RW929TTSJ',
+    name: 'sample',
+    createdAt: '2026-04-25T00:00:00.000Z',
+    factoryVersion: '0.x',
+    metadata,
+  });
+
+  it('returns the parsed defaults when both fields are set', () => {
+    expect(
+      budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { maxUsd: 5, maxSteps: 100 } })),
+    ).toEqual({
+      maxUsd: 5,
+      maxSteps: 100,
+    });
+  });
+
+  it('returns just the present field on partial defaults', () => {
+    expect(budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { maxUsd: 2.5 } }))).toEqual({
+      maxUsd: 2.5,
+    });
+    expect(budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { maxSteps: 50 } }))).toEqual({
+      maxSteps: 50,
+    });
+  });
+
+  it('returns an empty object when budgetDefaults is {} (cleared)', () => {
+    expect(budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: {} }))).toEqual({});
+  });
+
+  it('returns undefined when the budgetDefaults key is absent', () => {
+    expect(budgetDefaultsFromProjectMeta(baseMeta({}))).toBeUndefined();
+  });
+
+  it('returns undefined on malformed entries (negative, non-numeric, wrong shape)', () => {
+    expect(
+      budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { maxUsd: -1 } })),
+    ).toBeUndefined();
+    expect(
+      budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { maxUsd: 'free' } })),
+    ).toBeUndefined();
+    expect(
+      budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: 'unlimited' })),
+    ).toBeUndefined();
+    expect(budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: null }))).toBeUndefined();
+  });
+});
+
+describe('updateProjectMetadata (ADR 0027 §1 write helper)', () => {
+  let workRoot: string;
+
+  beforeEach(() => {
+    workRoot = mkdtempSync(join(tmpdir(), 'factory5-pm-update-'));
+  });
+
+  afterEach(() => {
+    try {
+      rmSync(workRoot, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+  });
+
+  it('reads, mutates, writes — returns the mutated metadata', async () => {
+    const projectPath = join(workRoot, 'with-id');
+    mkdirSync(projectPath, { recursive: true });
+    const original = await loadOrCreateProjectMetadata(projectPath, 'with-id');
+
+    const updated = await updateProjectMetadata(projectPath, (meta) => ({
+      ...meta,
+      metadata: { ...meta.metadata, budgetDefaults: { maxUsd: 7.5, maxSteps: 200 } },
+    }));
+
+    expect(updated.id).toBe(original.id);
+    expect(budgetDefaultsFromProjectMeta(updated)).toEqual({ maxUsd: 7.5, maxSteps: 200 });
+
+    // Round-trip through readProjectMetadata.
+    const reread = await readProjectMetadata(projectPath);
+    expect(budgetDefaultsFromProjectMeta(reread!)).toEqual({ maxUsd: 7.5, maxSteps: 200 });
+  });
+
+  it('preserves unrelated metadata fields across the write', async () => {
+    const projectPath = join(workRoot, 'mixed');
+    mkdirSync(projectPath, { recursive: true });
+    await loadOrCreateProjectMetadata(projectPath, 'mixed', {
+      initialMetadata: { language: 'rust' },
+    });
+
+    const updated = await updateProjectMetadata(projectPath, (meta) => ({
+      ...meta,
+      metadata: { ...meta.metadata, budgetDefaults: { maxUsd: 1 } },
+    }));
+
+    expect(updated.metadata['language']).toBe('rust');
+    expect(updated.metadata['budgetDefaults']).toEqual({ maxUsd: 1 });
+  });
+
+  it('throws ProjectMetadataNotFoundError when project.json is absent', async () => {
+    const projectPath = join(workRoot, 'no-meta');
+    mkdirSync(projectPath, { recursive: true });
+    await expect(updateProjectMetadata(projectPath, (m) => m)).rejects.toBeInstanceOf(
+      ProjectMetadataNotFoundError,
+    );
+  });
+
+  it('throws ProjectMetadataCorruptError when project.json is unparseable', async () => {
+    const projectPath = join(workRoot, 'corrupt-too');
+    const factoryDir = join(projectPath, '.factory');
+    mkdirSync(factoryDir, { recursive: true });
+    writeFileSync(join(factoryDir, 'project.json'), '{ corrupt', 'utf8');
+    await expect(updateProjectMetadata(projectPath, (m) => m)).rejects.toBeInstanceOf(
       ProjectMetadataCorruptError,
     );
   });
