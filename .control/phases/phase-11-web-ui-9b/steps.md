@@ -82,15 +82,48 @@
       (list) + `GET /api/v1/projects/:id` (detail with extracted
       `budgetDefaults` + `language`). +10 daemon tests; total 121.
 
-- [ ] 11.6 — **Live validation.** Operator at the browser exercises
-      each route against the running factoryd:
-  - Answer a real pending question → verify the matching worker
-    unblocks and continues (or the directive transitions out of
-    `waiting_for_human`).
-  - Kick off a build for an existing project (probably one of the
-    Phase 10 fixtures) → verify it lands + runs end-to-end.
-  - Update a project's budget defaults → start a new build → verify
-    the directive's `limits` reflect the new values.
+- [x] 11.6 — **Live validation.** Operator-driven browser smoke against
+      a real factoryd on 2026-04-26. All three flows verified end-to-end.
+      Project: `log-totals-cli` (Phase 10 fixture).
+  - **Smoke #2 — build form** (POST /api/v1/builds): form created
+    directive `01KQ5CRRVDT16YRP0TMDEP8PHX` with `hasLimits: false` (no
+    project-tier defaults at the time). Brain claimed via doorbell
+    within 1ms. Full assisted-mode arc: triage (Haiku, $0.016) →
+    architect (Opus 4.7, $0.527) → askUser #1 → planner (Sonnet, $0.284)
+    → askUser #2 → pool (scaffolder + 3 builders + verifier, all
+    `exitCode: 0`) → assessor → terminal status `blocked` with 2 blocking
+    + 4 advisory findings. Total $4.25 — heavy run, but a complete
+    end-to-end signal.
+  - **Smoke #1 — answer form** (POST /api/v1/pending-questions/:id/answer):
+    both askUser questions raised by Smoke #2's flow
+    (`01KQ5CZR40BAQVK33JB57EQR09` + `01KQ5ECARE6R0SQ3MASXK5R6ES`) were
+    answered via the SPA textarea. Each answer fired `ipc:
+    /api/v1/pending-questions/:id/answer — answered`; brain's askUser
+    poll caught the answer within ~600ms each time and the directive
+    resumed cleanly. The same-question `outbound: abandoning (cli)`
+    warnings are expected noise — no live cli session was listening;
+    ADR 0024 §4 + ADR 0027 §1 deliberately keep the form path
+    independent of channel delivery, and the smoke proves it.
+  - **Smoke #3 — budget form** (PUT /api/v1/projects/:id/budget): four
+    PUT calls exercised set (`maxUsd: 50 maxSteps: 50`), idempotent
+    re-save, and two empty-body clear-all-defaults paths. Each write
+    landed on disk via `wiki.project-metadata: metadata updated`.
+    **Propagation check**: after re-setting the defaults and creating
+    Build #2 via the form with **no body limits**, `ipc: /api/v1/builds —
+    directive created` logged `hasLimits: true` and the new directive
+    `01KQ5G9DFN41H2ATVV8MZ9WY5A` ran with `maxUsd: 50 maxSteps: 50` —
+    sourced from the project tier alone. The `hasLimits: false` (Build #1)
+    vs `hasLimits: true` (Build #2) contrast across an unchanged form
+    is the load-bearing observation that proves ADR 0027 §4 budget
+    resolution: project-tier wins over instance-config-tier when no flag
+    is supplied. (Operator chose `50` deliberately for Max USD, not the
+    `0.50` from the recipe — confirmed not a parsing bug.)
+  - No SPA-side regressions observed: nav with new Projects + Build
+    entries renders; the form primitives (`.btn-primary`, `.alert--*`,
+    monospace-textarea, tabular-nums numeric inputs) display correctly
+    in both light and dark color-scheme; the modified questions detail
+    page renders the form when open and suppresses it cleanly after
+    answering.
 
 - [ ] 11.7 — **Phase close.** Tag `phase-11-web-ui-9b-closed`.
       `docs/Phase11_Progress.md` + `docs/PROGRESS.md` entry +
