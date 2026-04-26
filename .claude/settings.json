@@ -3,26 +3,49 @@
     "PreCompact": [
       {
         "matcher": "",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/pre-compact-dump.sh" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/pre-compact-dump.sh"
+          }
+        ]
       }
     ],
     "SessionStart": [
       {
         "matcher": "",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/session-start-load.sh" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/session-start-load.sh"
+          }
+        ]
       }
     ],
     "SessionEnd": [
       {
         "matcher": "",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/session-end-commit.sh" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/session-end-commit.sh"
+          }
+        ]
       }
     ],
     "Stop": [
       {
         "matcher": "",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/stop-snapshot.sh" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/stop-snapshot.sh"
+          }
+        ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true
   }
 }
