@@ -130,10 +130,24 @@ touch.
 - **I014** (MEDIUM, OPEN, **new this phase**) — architect-on-resume
   leaves wiki edits uncommitted; manual workaround
   (`git add docs/ && git commit`) cleared the issue in 10.5.
-- **Stale-dist dev-loop gotcha** — flip
-  `packages/{daemon,ipc,state}/package.json` `main` from
-  `"./dist/index.js"` to `"./src/index.ts"`. Highest-ROI cleanup item;
-  now overdue from two phases.
+- **Stale-dist dev-loop gotcha** — Phase 9's recommended one-line
+  flip (`packages/{daemon,ipc,state}/package.json` `main` → `src/index.ts`)
+  is **incompatible with the prod runtime path**. Confirmed empirically
+  2026-04-26: tsx + vitest resolve the TS source fine, but
+  `node apps/factoryd/dist/main.js` then fails with
+  `Cannot find module .../src/brain-supervisor.js` because raw node
+  can't transpile `.js` extensions on `.ts` source files. Two real
+  fixes: (a) **conditional exports** (`exports.development → src`,
+  `exports.default → dist`) + force tsx/vitest to resolve under
+  `development` via `--conditions` or `NODE_OPTIONS`; (b) **bundle
+  workspace deps in `apps/*/tsup.config.ts`** via
+  `skipNodeModulesBundle: true` + `noExternal: [/^@factory5\//]`,
+  but app package.jsons then need to declare every transitive npm
+  dep (commander / pino / fastify / zod / …) since pnpm doesn't hoist
+  transitive deps to where bundled output looks. Both deserve their
+  own substep, not the offhand one-liner Phase 9 suggested. Until
+  designed properly, the workaround is `pnpm build` after editing
+  workspace deps before running `pnpm factoryd`.
 - **`factory ui-token` CLI command** (ADR 0025 §2) — operator closes
   terminal → loses dashboard URL; mitigation is restart factoryd.
 - **Phase 6 operator follow-up:** revoke PAT at
