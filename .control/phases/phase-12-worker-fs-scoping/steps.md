@@ -7,7 +7,7 @@
 
 ## Phase 12 — Worker filesystem-scoping
 
-- [ ] 12.1 — **ADR** for the worker-sandbox contract. Decisions to pin:
+- [x] 12.1 — **ADR** for the worker-sandbox contract. Decisions to pin:
   - **Gate site** — MCP middleware (worker-side, intercepts every
     `Read` / `Glob` / `Grep` call before reaching host fs) vs.
     provider-CLI native config (cheaper if `claude-cli` supports it
