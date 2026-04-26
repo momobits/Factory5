@@ -1,0 +1,37 @@
+{
+  "name": "@factory5/worker-sandbox",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Worker filesystem-scoping gate (ADR 0028): path-prefix algebra + Claude Code PreToolUse hook + per-spawn settings.local.json writer",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./hook-runtime": {
+      "import": "./dist/hook-runtime.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/hook-runtime.ts --format esm --dts --sourcemap --clean",
+    "dev": "tsup src/index.ts src/hook-runtime.ts --format esm --dts --sourcemap --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factory5/logger": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "tsup": "^8.2.0",
+    "vitest": "^2.0.0"
+  }
+}

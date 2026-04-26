@@ -518,6 +518,9 @@ importers:
       '@factory5/worker-mcp':
         specifier: workspace:*
         version: link:../worker-mcp
+      '@factory5/worker-sandbox':
+        specifier: workspace:*
+        version: link:../worker-sandbox
       simple-git:
         specifier: ^3.25.0
         version: 3.36.0
@@ -540,6 +543,25 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0
         version: 1.29.0(zod@3.25.76)
+    devDependencies:
+      '@types/node':
+        specifier: ^20.14.0
+        version: 20.19.39
+      tsup:
+        specifier: ^8.2.0
+        version: 8.5.1(postcss@8.5.10)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@20.19.39)
+
+  packages/worker-sandbox:
+    dependencies:
+      '@factory5/logger':
+        specifier: workspace:*
+        version: link:../logger
     devDependencies:
       '@types/node':
         specifier: ^20.14.0

@@ -39,7 +39,7 @@
     write-vs-read distinction explicit in the contract.
   - Output: `docs/decisions/0028-*.md` + INDEX row.
 
-- [ ] 12.2 — **Implementation.** Land the gate at the site 12.1's ADR
+- [x] 12.2 — **Implementation.** Land the gate at the site 12.1's ADR
       picks. Likely a thin MCP middleware layer in `@factory5/worker`
       (or a new package if the gate logic warrants its own home).
       Existing call sites in `runWorker.ts` updated to pass the

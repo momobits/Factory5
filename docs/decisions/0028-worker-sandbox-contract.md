@@ -28,11 +28,11 @@ Five parts, one ADR. The gate is composed of three Claude Code-native primitives
 
 **Primitive composition** (three layers; each catches a different class):
 
-| Layer                 | Primitive                                                          | What it gates                                                                                                                                                                                                  | Cost                                                                                |
-| --------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Static deny           | `permissions.deny` array in `<worktree>/.claude/settings.local.json` | Coarse blocks on obvious danger zones: `Read(~/.ssh/**)`, `Read(//etc/**)`, `Read(C:/Windows/**)`, `Edit(~/**)`, etc.                                                                                          | Configuration only; no code                                                         |
-| Affirmative allowlist | `PreToolUse` hook (small Node script, JSON-over-stdin)             | Per-call path-prefix algebra: `tool_input.file_path` (resolved → absolute) checked against `workspaceRoots ∪ readOnlyRoots` for reads; `workspaceRoots` only for writes. Cross-platform normalisation. | One script in `@factory5/worker-sandbox` (new package)                              |
-| Mode                  | `--permission-mode acceptEdits` (replaces `--dangerously-skip-permissions`) | Auto-accepts edits within cwd + `additionalDirectories`; in headless mode, anything outside auto-denies. Eliminates the host-wide bypass that `--dangerously-skip-permissions` carried.                  | Spawn-arg change in `packages/providers/src/claude-cli.ts`                          |
+| Layer                 | Primitive                                                                   | What it gates                                                                                                                                                                                          | Cost                                                       |
+| --------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| Static deny           | `permissions.deny` array in `<worktree>/.claude/settings.local.json`        | Coarse blocks on obvious danger zones: `Read(~/.ssh/**)`, `Read(//etc/**)`, `Read(C:/Windows/**)`, `Edit(~/**)`, etc.                                                                                  | Configuration only; no code                                |
+| Affirmative allowlist | `PreToolUse` hook (small Node script, JSON-over-stdin)                      | Per-call path-prefix algebra: `tool_input.file_path` (resolved → absolute) checked against `workspaceRoots ∪ readOnlyRoots` for reads; `workspaceRoots` only for writes. Cross-platform normalisation. | One script in `@factory5/worker-sandbox` (new package)     |
+| Mode                  | `--permission-mode acceptEdits` (replaces `--dangerously-skip-permissions`) | Auto-accepts edits within cwd + `additionalDirectories`; in headless mode, anything outside auto-denies. Eliminates the host-wide bypass that `--dangerously-skip-permissions` carried.                | Spawn-arg change in `packages/providers/src/claude-cli.ts` |
 
 The settings file is written into the worktree at `allocateWorktree` time (per-spawn artifact, removed when the worktree is removed). The PreToolUse hook script is shipped with `@factory5/worker-sandbox` — a new, small package whose only job is hosting the path-prefix algebra and the hook script. A new optional field on the `ProviderRequest` shape — `sandbox: { workspaceRoots, readOnlyRoots, allowSymlinks }` — flows from `runWorker.ts` through `provider.stream()` and lands as the env vars the hook script reads when Claude Code invokes it.
 
@@ -78,15 +78,15 @@ For Phase 12 the worker hands the hook these defaults:
 
 **Cross-platform pinned cases:**
 
-| Case            | Linux/macOS              | Windows                                                       |
-| --------------- | ------------------------ | ------------------------------------------------------------- |
-| Prefix match    | Byte-equal               | Case-insensitive (lowercased both sides)                      |
-| Path separator  | `/`                      | `\` and `/` both accepted; normalised to `/` for compare      |
-| Drive letter    | n/a                      | `C:/` and `c:/` both prefix-equal                             |
-| `..` traversal  | `path.resolve` collapses | Same                                                          |
-| UNC             | n/a                      | `\\server\share\…`; allowlist entry must share server+share   |
-| Symlink         | `lstat`-checked, denied  | Reparse points (junctions, mklink) — `lstat`-checked, denied |
-| Trailing slash  | `/foo` and `/foo/` equal | Same                                                          |
+| Case           | Linux/macOS              | Windows                                                      |
+| -------------- | ------------------------ | ------------------------------------------------------------ |
+| Prefix match   | Byte-equal               | Case-insensitive (lowercased both sides)                     |
+| Path separator | `/`                      | `\` and `/` both accepted; normalised to `/` for compare     |
+| Drive letter   | n/a                      | `C:/` and `c:/` both prefix-equal                            |
+| `..` traversal | `path.resolve` collapses | Same                                                         |
+| UNC            | n/a                      | `\\server\share\…`; allowlist entry must share server+share  |
+| Symlink        | `lstat`-checked, denied  | Reparse points (junctions, mklink) — `lstat`-checked, denied |
+| Trailing slash | `/foo` and `/foo/` equal | Same                                                         |
 
 Helpers (`pathInsideAny`, `normaliseForCompare`) live in `@factory5/worker-sandbox/src/path-prefix.ts`; unit-test surface covers all rows of the table on Windows + Linux as part of 12.3.
 
@@ -131,12 +131,12 @@ The contract documents the gap. Operator-visible surface: a `worker.sandbox.bash
 
 The contract draws the asymmetry by tool family, not by path-pattern shape:
 
-| Tool family                                | Allowed roots                                              | Why                                                                                                                                                              |
-| ------------------------------------------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Write`, `Edit`                            | `workspaceRoots` only — the worktree                      | Writes outside the worktree compromise the per-task isolation that ADR 0008 set up; project state should only mutate via post-task merge, not direct write       |
-| `Read`, `Glob`, `Grep`                     | `workspaceRoots ∪ readOnlyRoots`                          | Workers legitimately read prior plans, prior findings, `project.json`, repo templates without needing copies                                                     |
-| `Bash`                                     | cwd-pinned to worktree; static deny rules per §4           | See §4                                                                                                                                                           |
-| MCP tools (`mcp__factory5-ask-user__ask_user`) | unaffected                                                 | MCP tools route through worker-mcp, not the fs gate                                                                                                              |
+| Tool family                                    | Allowed roots                                    | Why                                                                                                                                                        |
+| ---------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Write`, `Edit`                                | `workspaceRoots` only — the worktree             | Writes outside the worktree compromise the per-task isolation that ADR 0008 set up; project state should only mutate via post-task merge, not direct write |
+| `Read`, `Glob`, `Grep`                         | `workspaceRoots ∪ readOnlyRoots`                 | Workers legitimately read prior plans, prior findings, `project.json`, repo templates without needing copies                                               |
+| `Bash`                                         | cwd-pinned to worktree; static deny rules per §4 | See §4                                                                                                                                                     |
+| MCP tools (`mcp__factory5-ask-user__ask_user`) | unaffected                                       | MCP tools route through worker-mcp, not the fs gate                                                                                                        |
 
 Concrete defaults at worker spawn (per-task):
 
@@ -218,7 +218,6 @@ Passing `readOnlyRoots` through `runWorker` rather than computing it inside `@fa
 Sub-step mapping (mirrors `.control/phases/phase-12-worker-fs-scoping/steps.md`):
 
 - **12.2 — Implementation.**
-
   1. New package `packages/worker-sandbox/` with `package.json`, `tsconfig.json`, `README.md`. Public exports:
      - `WorkerSandboxConfig` interface (the §2 shape).
      - `pathInsideAny(absolutePath, roots, opts)` — the prefix-check primitive (case-insensitive on Windows, trailing-slash insensitive, symlink-aware).
@@ -244,7 +243,6 @@ Sub-step mapping (mirrors `.control/phases/phase-12-worker-fs-scoping/steps.md`)
   - `out-of-scope-cross-platform.test.ts` — Linux: `Read('/etc/passwd')` denied. Windows: `Read('C:/Windows/System32/drivers/etc/hosts')` denied. Both produce a hook-deny + worker-log line.
 
 - **12.4 — Live validation.** Operator runs `factory build` on a Phase 10 fixture (`log-totals-cli` is the cheapest — runs in ~$3 per Phase 11.6 datapoint) under the new gate. Verify:
-
   - Build runs to completion (gate doesn't break legitimate work).
   - Worker logs show no out-of-scope reads being attempted (or, if any, they short-circuit cleanly).
   - `node_modules/` (or equivalent) creates inside the worktree only (paying down I013).

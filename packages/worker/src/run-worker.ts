@@ -24,9 +24,10 @@
  * usage record the brain persists into `model_usage`.
  */
 
-import { writeFile, unlink } from 'node:fs/promises';
+import { rm, writeFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { env, execPath } from 'node:process';
 
 import type { AgentRole, Finding, Task, TaskResult } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
@@ -39,17 +40,25 @@ import type {
 import {
   addFinding,
   appendBuildLog,
+  findRepoTemplatesDir,
   listFindings,
   readWiki,
   type FindingRegistryBinding,
 } from '@factory5/wiki';
 import { buildMcpConfig, getServerScriptPath } from '@factory5/worker-mcp';
+import {
+  evaluateToolCall,
+  writeWorktreeSandbox,
+  type WorkerSandboxConfig,
+  type WrittenSandbox,
+} from '@factory5/worker-sandbox';
 import { simpleGit } from 'simple-git';
 
 import { parseFindings } from './parse-findings.js';
 import { allocateWorktree, cleanupWorktree, type WorktreeHandle } from './worktree.js';
 
 const log = createLogger('worker');
+const sandboxLog = createLogger('worker.sandbox');
 
 export interface WorkerOptions {
   task: Task;
@@ -229,6 +238,79 @@ async function writeMcpConfig(taskId: string, cfg: WorkerAskUserConfig): Promise
   return path;
 }
 
+/**
+ * Prepare the per-spawn worker filesystem-scoping sandbox per ADR 0028.
+ *
+ * Writes `<worktree>/.claude/settings.local.json` (Claude Code's
+ * highest-precedence non-managed settings file) plus a sibling
+ * `factory5-sandbox-config.json` carrying the parsed
+ * {@link WorkerSandboxConfig}. The settings file declares
+ * `permissions.deny` for obvious danger zones (`~/.ssh`, `/etc`,
+ * `C:/Windows`, …) plus a `PreToolUse` hook that runs the
+ * affirmative path-prefix algebra on every `Read`/`Write`/`Edit`/
+ * `Glob`/`Grep` call.
+ *
+ * Returns the {@link WrittenSandbox} handle so the caller can `rm -rf`
+ * `<worktree>/.claude/` at end-of-stream — the worktree is git-tracked
+ * and `mergeAndRemove` runs `git add -A` before merging back, so the
+ * per-spawn config must not bleed into the merged commit.
+ *
+ * Returns `undefined` when `FACTORY5_DISABLE_WORKER_SANDBOX=1` is set
+ * in the environment — the operator-visible escape hatch for emergency
+ * rollback / 12.4 A/B testing (ADR 0028 — Reversibility).
+ */
+async function prepareSandbox(
+  projectPath: string,
+  worktreePath: string,
+  taskId: string,
+): Promise<WrittenSandbox | undefined> {
+  if (env['FACTORY5_DISABLE_WORKER_SANDBOX'] === '1') {
+    sandboxLog.warn(
+      { taskId, projectPath },
+      'worker.sandbox: disabled by FACTORY5_DISABLE_WORKER_SANDBOX=1 — worker has host-wide fs access',
+    );
+    return undefined;
+  }
+  const readOnlyRoots: string[] = [join(projectPath, '.factory')];
+  const templatesDir = await findRepoTemplatesDir();
+  if (templatesDir !== undefined) {
+    readOnlyRoots.push(templatesDir);
+  }
+  const config: WorkerSandboxConfig = {
+    workspaceRoots: [worktreePath],
+    readOnlyRoots,
+    allowSymlinks: false,
+  };
+
+  // Smoke-check the algebra before we hand it to claude-cli. Cheaper
+  // than catching a mid-stream tool-use failure post-spawn.
+  const smoke = evaluateToolCall({
+    toolName: 'Read',
+    toolInput: { file_path: join(worktreePath, '__sandbox_smoke__.txt') },
+    cwd: worktreePath,
+    config,
+  });
+  if (smoke.decision !== 'allow') {
+    throw new Error(
+      `worker-sandbox smoke check failed (rejected an in-scope path): ${smoke.reason}`,
+    );
+  }
+
+  const written = await writeWorktreeSandbox(worktreePath, config, {
+    nodeBinary: execPath,
+  });
+  sandboxLog.info(
+    {
+      taskId,
+      worktreePath,
+      readOnlyRoots,
+      settingsPath: written.settingsPath,
+    },
+    'worker.sandbox: gate up — Read/Write/Edit/Glob/Grep scoped to worktree + readOnlyRoots',
+  );
+  return written;
+}
+
 async function runReadOnly(opts: WorkerOptions, fullUserPrompt: string): Promise<WorkerOutcome> {
   const resolution = await opts.registry.resolve(opts.task.category);
   log.info(
@@ -354,6 +436,31 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
     }
   }
 
+  // ADR 0028: stand up the worker filesystem-scoping sandbox before the
+  // provider spawn. Failure here is fatal — set FACTORY5_DISABLE_WORKER_SANDBOX=1
+  // to bypass for emergency rollback. The sandbox handle is cleaned up
+  // in the finally below so the per-spawn `.claude/` directory does not
+  // bleed into the worktree's `git add -A` at merge time.
+  let sandbox: WrittenSandbox | undefined;
+  try {
+    sandbox = await prepareSandbox(opts.projectPath, worktree.path, opts.task.id);
+  } catch (err) {
+    const message = (err as Error).message;
+    log.error(
+      { err, taskId: opts.task.id, worktreePath: worktree.path },
+      'worker: sandbox setup failed — set FACTORY5_DISABLE_WORKER_SANDBOX=1 to bypass',
+    );
+    const result: TaskResult = {
+      exitCode: 1,
+      filesChanged: [],
+      findingsRaised: [],
+      signalsEmitted: [],
+      error: `sandbox setup failed: ${message}`,
+      durationMs: 0,
+    };
+    return { result, worktree };
+  }
+
   const started = Date.now();
   let responseText = '';
   let finalUsage: ProviderUsage | undefined;
@@ -367,7 +474,13 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
       temperature: 0.1,
       cwd: worktree.path,
       allowedTools: allowed,
-      permissionMode: 'bypassPermissions',
+      // With the sandbox up, switch from the Phase-2 `bypassPermissions`
+      // (which translates to `--dangerously-skip-permissions` and grants
+      // host-wide fs access) to `acceptEdits` — auto-accepts edits in
+      // cwd ∪ additionalDirectories; the PreToolUse hook + permissions.deny
+      // rules in <worktree>/.claude/settings.local.json then enforce the
+      // path-prefix algebra. ADR 0028 §1.
+      permissionMode: sandbox !== undefined ? 'acceptEdits' : 'bypassPermissions',
       ...(mcpConfigPath !== undefined ? { mcpConfigPath } : {}),
       ...(opts.task.maxTurns !== undefined ? { maxTurns: opts.task.maxTurns } : {}),
       ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
@@ -389,6 +502,16 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
         await unlink(mcpConfigPath);
       } catch {
         // Best-effort — leftover tmp files are not load-bearing.
+      }
+    }
+    if (sandbox !== undefined) {
+      try {
+        await rm(sandbox.claudeDir, { recursive: true, force: true });
+      } catch (err) {
+        sandboxLog.warn(
+          { err, taskId: opts.task.id, claudeDir: sandbox.claudeDir },
+          'worker.sandbox: cleanup failed — settings file may bleed into worktree merge',
+        );
       }
     }
   }

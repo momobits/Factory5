@@ -29,6 +29,7 @@
     "@factory5/state": "workspace:*",
     "@factory5/wiki": "workspace:*",
     "@factory5/worker-mcp": "workspace:*",
+    "@factory5/worker-sandbox": "workspace:*",
     "simple-git": "^3.25.0"
   },
   "devDependencies": {
