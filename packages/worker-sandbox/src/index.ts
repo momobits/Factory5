@@ -23,6 +23,8 @@ export {
   type WrittenSandbox,
 } from './settings.js';
 
+export { parseSandboxConfig, runHook, type RunHookInput, type RunHookOutput } from './hook.js';
+
 export {
   GATED_TOOL_NAMES,
   type EvaluationResult,

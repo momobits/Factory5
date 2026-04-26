@@ -1,23 +1,22 @@
 /**
  * `PreToolUse` hook runtime — invoked by Claude Code as a subprocess on
  * every gated tool call. Reads JSON from stdin (Claude Code's hook
- * input), reads the per-spawn sandbox config from `argv[2]`, runs
- * `evaluateToolCall`, and writes the decision JSON to stdout.
- *
- * Stderr carries a structured one-line audit record per call (denies +
- * allows). Claude Code surfaces hook stderr through the stream events;
- * the worker captures and replays through the `worker.sandbox` logger.
+ * input), reads the per-spawn sandbox config from `argv[2]`, runs the
+ * pure `runHook` to produce decision + audit bytes, and writes them to
+ * stdout / stderr.
  *
  * Exit code:
  *   - `0` for any decision (allow OR deny — both are normal hook outcomes)
  *   - `1` only on internal hook errors (config-file missing, malformed
  *     stdin, etc.); Claude Code interprets non-zero as fail-closed.
+ *
+ * Side-effect-free runtime lives in `./hook.ts` so every contract branch
+ * is unit-tested in-process.
  */
 
 import { readFile } from 'node:fs/promises';
 
-import { evaluateToolCall } from './evaluate-tool-call.js';
-import type { HookInput, HookOutput, WorkerSandboxConfig } from './types.js';
+import { parseSandboxConfig, runHook } from './hook.js';
 
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -27,91 +26,48 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function emitOutput(decision: 'allow' | 'deny', reason: string): void {
-  const out: HookOutput = {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: decision,
-      permissionDecisionReason: reason,
-    },
-  };
-  process.stdout.write(`${JSON.stringify(out)}\n`);
-}
-
-function emitAuditLine(record: Record<string, unknown>): void {
-  const line = `factory5.worker.sandbox ${JSON.stringify({ ...record, ts: new Date().toISOString() })}\n`;
-  process.stderr.write(line);
-}
-
-function fail(reason: string): never {
-  // Defensive: write a deny decision AND exit non-zero. Claude Code's
-  // fail-closed behaviour means a non-zero exit denies the call; the deny
-  // JSON is belt-and-braces for hook implementations that read stdout
-  // even on non-zero exit.
-  emitOutput('deny', reason);
-  emitAuditLine({ event: 'sandbox.gate.error', reason });
+function failClosed(reason: string): never {
+  // Defensive: emit a deny decision JSON to stdout AND a non-zero exit
+  // so any hook-implementation that reads stdout-on-non-zero still sees
+  // the deny. Claude Code's fail-closed convention does the rest.
+  process.stdout.write(
+    `${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: reason,
+      },
+    })}\n`,
+  );
+  process.stderr.write(
+    `factory5.worker.sandbox ${JSON.stringify({ event: 'sandbox.gate.error', reason, ts: new Date().toISOString() })}\n`,
+  );
   process.exit(1);
 }
 
 async function main(): Promise<void> {
   const configPath = process.argv[2];
   if (configPath === undefined || configPath.length === 0) {
-    fail('worker-sandbox hook: missing config path argument (argv[2])');
+    failClosed('worker-sandbox hook: missing config path argument (argv[2])');
   }
 
-  let config: WorkerSandboxConfig;
+  let config;
   try {
     const raw = await readFile(configPath, 'utf8');
-    const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      !Array.isArray((parsed as { workspaceRoots?: unknown }).workspaceRoots) ||
-      !Array.isArray((parsed as { readOnlyRoots?: unknown }).readOnlyRoots) ||
-      typeof (parsed as { allowSymlinks?: unknown }).allowSymlinks !== 'boolean'
-    ) {
-      fail(`worker-sandbox hook: config at ${configPath} is malformed`);
-    }
-    config = parsed as WorkerSandboxConfig;
+    config = parseSandboxConfig(JSON.parse(raw));
   } catch (err) {
-    fail(`worker-sandbox hook: could not read config at ${configPath}: ${(err as Error).message}`);
+    failClosed(
+      `worker-sandbox hook: could not read config at ${configPath}: ${(err as Error).message}`,
+    );
   }
 
   const stdinText = await readStdin();
-  let input: HookInput;
-  try {
-    const parsed: unknown = JSON.parse(stdinText);
-    if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      typeof (parsed as { tool_name?: unknown }).tool_name !== 'string' ||
-      typeof (parsed as { cwd?: unknown }).cwd !== 'string'
-    ) {
-      fail('worker-sandbox hook: stdin is not a valid PreToolUse event');
-    }
-    input = parsed as HookInput;
-  } catch (err) {
-    fail(`worker-sandbox hook: could not parse stdin: ${(err as Error).message}`);
-  }
-
-  const result = evaluateToolCall({
-    toolName: input.tool_name,
-    toolInput: input.tool_input ?? {},
-    cwd: input.cwd,
-    config,
-  });
-
-  emitOutput(result.decision, result.reason);
-
-  emitAuditLine({
-    event: 'sandbox.gate',
-    tool: input.tool_name,
-    decision: result.decision,
-    ...(result.resolvedPath !== undefined ? { path: result.resolvedPath } : {}),
-    ...(result.decision === 'deny' ? { reason: result.reason } : {}),
-  });
+  const result = runHook({ stdinText, config });
+  process.stdout.write(result.stdout);
+  process.stderr.write(result.stderr);
+  process.exit(result.exitCode);
 }
 
 main().catch((err: unknown) => {
-  fail(`worker-sandbox hook: unhandled error: ${(err as Error).message}`);
+  failClosed(`worker-sandbox hook: unhandled error: ${(err as Error).message}`);
 });

@@ -47,7 +47,7 @@
       provider CLI. No behavioural change to provider-side code; the
       gate sits between the LLM's tool call and the fs call.
 
-- [ ] 12.3 — **Regression tests.** Two minimum:
+- [x] 12.3 — **Regression tests.** Two minimum:
   - **F001 replay** — re-run the verifier scenario from Phase 6c
     against a project where `node_modules/` lives in the parent
     factory5 checkout. Pre-fix: verifier hallucinates because it

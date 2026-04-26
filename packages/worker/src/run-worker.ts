@@ -259,7 +259,7 @@ async function writeMcpConfig(taskId: string, cfg: WorkerAskUserConfig): Promise
  * in the environment — the operator-visible escape hatch for emergency
  * rollback / 12.4 A/B testing (ADR 0028 — Reversibility).
  */
-async function prepareSandbox(
+export async function prepareSandbox(
   projectPath: string,
   worktreePath: string,
   taskId: string,
