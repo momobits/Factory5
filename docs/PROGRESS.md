@@ -4,6 +4,29 @@ Chronological log of work on factory5 itself. Update this at the end of every wo
 
 ---
 
+## 2026-04-26 — Phase 10 closed (Assessor tier-3 — Node / Go / Rust)
+
+- Phase tagged `phase-10-assessor-tier3-closed`. All 9 sub-steps shipped across three sessions (10.1 ADR 0026 → 10.2/10.4/10.6 per-runtime code → 10.3/10.5/10.7 live validations → 10.8 init project scaffold → 10.9 phase close).
+- [ADR 0026](decisions/0026-pluggable-runtime-contract.md) accepted: two-shape provisioner contract (env-owning for Python, env-assuming for Node / Go / Rust), per-runtime verify-gate command mapping, four-tag failure-mode taxonomy (`BUILD_FAILURE` / `TEST_FAILURE` / `ENV_SETUP_FAILURE` / `ENV_HOST_MISSING_TOOL`) on `AssessResult.failureMode`, host-tool pre-flight via `resolveOnPath` with actionable install hints.
+- **Three live validation runs all gated `verify=true`** against real specs:
+  - Node: `log-totals` NDJSON CLI — 14 vitest passed, $3.57.
+  - Go: `go-line-counter` — 34 go-test passed, $5.40 (across two attempts; first surfaced the parser bug).
+  - Rust: `rust-csv-summary` — 7 cargo-test passed, $1.98 (clean first try).
+- **Four bugs caught + fixed in-phase** (only the live runs could surface them; Phase 10.2 / 10.4 / 10.6 were seam-only):
+  - `--language` flag threading gap — every pre-fix build defaulted to `'python'`. Threaded through `factory build` → `directive.payload.language` → `loop.ts` `extractRuntime` → `assess({runtime})`. Carried across `factory resume`.
+  - **I013** (RESOLVED) — `git worktree remove --force` failed with "Directory not empty" on Windows when workers left `node_modules/` inside their worktree. Added `prePurgeDepDirs` to rimraf `node_modules` / `.venv` / `__pycache__` first.
+  - `extractJsonObject` brace-counter walked through string contents — architect responses with `{` inside markdown content failed to parse. Added string-state tracking with `\\` escape handling.
+  - Go runtime parser missed PASS / FAIL counts because `go test ./...` default output is package-level only. Fixed by `-v -count=1` (`-v` for per-test attribution, `-count=1` to bypass Go's test cache so the assessor always observes fresh subprocess output).
+- 10.8: `factory init <project> [--language python|node|go|rust]` scaffolds a new project under the workspace with a language-aware CLAUDE.md and writes `.factory/project.json` with `metadata.language`. `factory build` reads that as a fallback when no `--language` flag is given (so init-then-build flows don't repeat themselves).
+- **New issue carried forward**: **I014** (MEDIUM, OPEN, `brain/architect`) — when the architect re-runs on an existing project (typical for `factory resume`), its modifications to tracked `docs/knowledge/*.md` files stay uncommitted in main and dirty `gitClean`. Surfaced in the 10.5 Go resume; manual workaround via `git add docs/ && git commit`. Targeted fix: stage + commit at the end of `runArchitect` if a git repo exists.
+- Helper added: **`scripts/one-shot-assess.mjs`** invokes `assess()` directly against a project path. Used to verify gate state after manual cleanup without re-running the full brain pipeline (~$0 vs. ~$3 for a full rebuild).
+- Tests: **666** green across 14 packages (605 → +61: assessor +37, brain +10, cli +8, worker +4, wiki +2). `pnpm lint` + `pnpm format:check` clean. `pnpm build` clean across 14 packages + 3 apps.
+- `CompleteArchitecture.md` extended with §22 (Pluggable runtimes) capturing the ADR 0026 model. No new external deps in this phase.
+- Phase 11 kicks off: **Web UI 9b — mutation surface** (~2 sessions). Scaffolded in this close commit at `.control/phases/phase-11-web-ui-9b/`. Picks up the deferred 9b work from Phase 9 charter (answer pending questions from the browser, kick off builds via UI, configure per-project budget defaults).
+- Carry-forward (unchanged): I009 (MEDIUM), I012 (LOW), the stale-dist dev-loop gotcha (now overdue), the `factory ui-token` CLI command, Phase 6 operator follow-ups (PAT revoke etc.).
+
+---
+
 ## 2026-04-23 — Phase 9 closed (Web UI)
 
 - Phase tagged `phase-9-web-ui-closed`. All 10 sub-steps shipped in a single session arc (9.1 ADR 0025 → 9.8 SPA pages → 9.9 live operator-browser validation → 9.10 phase close). No mid-phase fix commits.

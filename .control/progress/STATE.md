@@ -2,106 +2,106 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-24T13:16:12Z (session `2026-04-24T13`, session-end) — Phase 10 sub-steps 10.1 + 10.2 + 10.4 + 10.6 closed. Three tier-3 runtimes (Node / Go / Rust) code-complete; live validations (10.3 / 10.5 / 10.7) + 10.8 init picker + 10.9 phase close remain.
-**Current phase:** 10 — Assessor tier-3 — **🟢 active**
+**Last updated:** 2026-04-26 — Phase 10 closed (`phase-10-assessor-tier3-closed`). All three new runtimes (Node / Go / Rust) gated `verify=true` against real specs in autonomous-mode live runs. Phase 11 kicked off in this same close commit.
+**Current phase:** 11 — Web UI 9b (mutation surface) — **🟢 active**
 **Current sub-phase:** n/a — single-charter phase
-**Current step:** 10.3 — Node live validation next (or 10.8 init picker if operator prefers an additive code step before spending on live builds)
-**Status:** 4/9 sub-steps closed this session. 642 tests green across 14 packages (605 → +37: +15 Node seam + 1 real Node e2e + 12 Go seam + 9 Rust seam). ADR 0026 accepted. All three new runtimes (`runtimes/{node,go,rust}.ts`) follow the pluggable contract; Node has a real-subprocess e2e under `test/node-e2e.test.ts` (~7 s warm against a tmpdir TS fixture). `lint` + `format:check` clean, `build` clean. Working tree clean (session-end docs commit pending on top).
+**Current step:** 11.1 — ADR 0027 (mutation route shape, idempotency, error envelope)
+**Status:** Working tree clean. 666 tests green across 14 packages. `pnpm lint` + `pnpm format:check` clean. `pnpm build` clean across 14 packages + 3 apps.
 
 ---
 
 ## Project spec
 
-**Canonical:** `CompleteArchitecture.md` at root. Phase 10's close commit will extend §6/§9 or add §22 once tier-3 live validations complete.
+**Canonical:** `CompleteArchitecture.md` at root. §22 "Pluggable runtimes" added at Phase 10 close.
 **Current reference:** `docs/ARCHITECTURE.md` (evolves), `docs/CONTRACTS.md`, `docs/SKILLS.md`, `docs/AGENTS.md`.
-**Phase history:** `docs/PROGRESS.md` (chronological). `docs/Phase10_Progress.md` opens at phase close (9.10 pattern — deferred until 10.9).
+**Phase history:** `docs/PROGRESS.md` (chronological). `docs/Phase10_Progress.md` written at Phase 10 close (one charter doc per phase pattern).
 **Role:** the `docs/` tree is authoritative. `.control/architecture/overview.md` is a pointer.
 
 ---
 
 ## Next action
 
-**Sub-step 10.3 — Node live validation** is the load-bearing next step. Four sub-decisions from ADR 0026 are implemented in code but have only been exercised against seam-injected subprocesses + one tmpdir e2e; a real `factory build` against a scaffolded Node spec validates the whole loop (scaffolder → builder → assessor.node.runGate → verifier → gate composition).
+**Sub-step 11.1 — ADR 0027 (mutation route shape).** Pin the mutation surface contract before any route lands. Decisions to nail down: HTTP verbs + URL shape, idempotency rules (especially for build-creation; per-question answer is naturally idempotent), error envelope shape (status + code + human + maybe field-level errors), `metadata.budgetDefaults` shape mirroring `directiveLimitsSchema`. Output: `docs/decisions/0027-*.md` + INDEX row.
 
-Suggested spec: **"Build a TypeScript CLI that parses a JSON log file and prints totals"** — ~200 LOC, one small integration test, exercises `pnpm install → pnpm typecheck → pnpm test` end-to-end. Autonomy mode with a modest per-directive budget ceiling (say $5 cap) so a loop that won't terminate bails automatically.
-
-After 10.3: pick either 10.5 / 10.7 (needs `go` / `cargo` on the host — currently absent) or 10.8 (`factory init` language picker, pure code, no host-tool dependency). 10.8 is the right next-after-10.3 step if the live Go/Rust runs can't be scheduled immediately.
-
-Phase close (10.9) is gated on all three live validations — 10.3 / 10.5 / 10.7 all have to be green before the tag `phase-10-assessor-tier3-closed` goes on.
+After 11.1: 11.2 (answer route), 11.3 (build route), 11.4 (budget route), 11.5 (SPA forms), 11.6 (live validation), 11.7 (phase close).
 
 ---
 
 ## Git state
 
-- **Branch:** main (ahead of `origin/main` by ~85 commits — push at operator discretion)
-- **Last commit:** `0563a85 feat(10.6): Rust assessor runtime (ADR 0026)`. Session-end docs-state commit lands after this STATE.md update.
-- **Uncommitted changes:** none at last tool-invocation; session-end docs commit pending.
-- **Last phase tag:** `phase-9-web-ui-closed` (no new phase tag this session — Phase 10 still open).
+- **Branch:** main (ahead of `origin/main` — push at operator discretion)
+- **Last commit:** Phase 10 close commit (this commit). Recent log: `8be8dc0 feat(10.7)` → `62ee979 feat(10.5)` → `503da4d feat(10.8)` → `50bab61 feat(10.3)` → `9c8106f docs(state)` → `0563a85 feat(10.6)` → `10f2132 feat(10.4)` → `34763dc feat(10.2)` → `d493ff9 docs(10.1)`.
+- **Uncommitted changes:** none expected after the close commit lands.
+- **Last phase tag:** `phase-10-assessor-tier3-closed` (set in this commit).
 
-Earlier tags intact: `phase-8-worker-ask-user-closed`, `addendum-onboarding-closed`, `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-7-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`, `protocol-initialised`.
+Earlier tags intact: `phase-9-web-ui-closed`, `phase-8-worker-ask-user-closed`, `addendum-onboarding-closed`, `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-7-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`, `protocol-initialised`.
 
 ---
 
 ## Open blockers
 
-- **None for Phase 10 itself.** The three live validations (10.3 / 10.5 / 10.7) are operator-triggered, not blockers.
-- **Host-tool gap for 10.5 / 10.7:** neither `go` nor `cargo` is on this dev machine (verified at 10.4 / 10.6 close via `command -v`). Install Go 1.21+ from <https://go.dev/dl/> and Rust via <https://rustup.rs/> before attempting 10.5 / 10.7. The assessor will surface `ENV_HOST_MISSING_TOOL` with these exact install hints if invoked before then.
-- **Carry-forward** (unchanged, non-blocking):
-  - Issue **I009** (MEDIUM, OPEN) — Telegram/Discord inbound don't inherit `[budget.defaults]`.
-  - Issue **I012** (LOW, OPEN) — `maybeAnswerPendingQuestion` FIFO matcher can't target a specific open question.
-  - **Stale-dist dev-loop gotcha** — flip `packages/{daemon,ipc,state}/package.json` `main` from `"./dist/index.js"` to `"./src/index.ts"`. Highest-ROI Phase 10 cleanup item; fits nicely as a one-line chore per package any session that touches those manifests.
-  - **`factory ui-token` CLI command** (ADR 0025 §2) — operator closes terminal → loses dashboard URL.
+- **None for Phase 11.** All carry-forwards below are non-blocking.
+- **Carry-forward** (unchanged):
+  - **I009** (MEDIUM, OPEN, `channels/telegram`) — Telegram/Discord inbound `/build` doesn't inherit `[budget.defaults]`.
+  - **I012** (LOW, OPEN, `channels/telegram`) — `maybeAnswerPendingQuestion` FIFO matcher can't target a specific open question.
+  - **I014** (MEDIUM, OPEN, `brain/architect`) — new in Phase 10. Architect re-running on existing project leaves wiki edits uncommitted, dirty-tripping `gate.verify`. Targeted fix: stage + commit at end of `runArchitect` if a git repo exists.
+  - **Stale-dist dev-loop gotcha** — flip `packages/{daemon,ipc,state}/package.json` `main` from `"./dist/index.js"` to `"./src/index.ts"`. Now overdue from Phase 9 / 10 carry-forward.
+  - **`factory ui-token` CLI command** (ADR 0025 §2 carry-forward) — operator closes terminal → loses dashboard URL.
+  - **Phase 6 operator follow-ups** (PAT revoke, `gh repo delete`, env var cleanup) — out-of-band.
 
 ---
 
 ## In-flight work
 
-- None. All four sub-steps committed clean; working tree clean modulo session-end docs.
+- None. Phase 10 closed clean; Phase 11 opens with 11.1 next.
 
 ---
 
 ## Test / eval status
 
-- **Last test run:** 10.6 close, 2026-04-24T13:14Z (local) — **642 tests** across 14 packages, all green on Windows. `pnpm lint` + `pnpm format:check` clean. `pnpm build` clean across 14 packages + 3 apps + factory-web's static output.
-- **Per-package counts (end of session):** core 14, logger 13, ipc 14, providers 39, state 134, assessor 79 (Python 42 + Node 15 + Node e2e 1 + Go 12 + Rust 9), wiki 47, channels 62, events 3, worker 24, brain 64, daemon 79, cli 55, worker-mcp 15. Sum = 642 (verified).
-- **Eval score** (agent phases only): no agent runs this session. Phase 8.7 live run remains the most recent: directive `01KPX1Z4RE3535H8X55E169PHR`, $2.579 / 7 LLM calls. 10.3 live validation will produce the first post-Phase-8 agent-run datapoint.
-- **Real-subprocess coverage in assessor test suite:** Node e2e runs `pnpm install` + `pnpm typecheck` + `pnpm test` against a seeded tmpdir TS fixture per run. Observed ~7 s warm, up to ~15 s cold. Go and Rust e2es are out of scope for 10.4 / 10.6 (host-tool-missing) and roll into 10.5 / 10.7 live validation.
+- **Last test run:** Phase 10 close, 2026-04-26 — **666 tests** across 14 packages, all green on Windows. `pnpm lint` + `pnpm format:check` clean. `pnpm build` clean across 14 packages + 3 apps.
+- **Per-package counts (end of Phase 10):** core 14, logger 13, ipc 14, providers 39, state 134, assessor 79 (Python 42 + Node 15 + Node e2e 1 + Go 12 + Rust 9), wiki 49, channels 62, events 3, worker 28, brain 74, daemon 79, cli 63, worker-mcp 15. Sum = 666 (verified).
+- **Live run datapoints (Phase 10 — three real `factory build`s):**
+  - Node: directive `01KQ0P14MZZPJRPA5RW929TTSJ`, $3.57, 14 vitest passed.
+  - Go: directive `01KQ4H8Y66HVWJJXAYTS1BJE2Q` (resume of `01KQ4GCTJ8EFVJ2VBVJ6ETP46H`), $5.40 across both attempts, 34 go-test passed.
+  - Rust: directive `01KQ4JEQWAV3E36DV7RQ6SFH8S`, $1.98, 7 cargo-test passed.
+- **Real-subprocess coverage in assessor test suite:** Node e2e runs `pnpm install` + `pnpm typecheck` + `pnpm test` against a seeded tmpdir TS fixture per run. Observed ~7 s warm, up to ~15 s cold. Go and Rust e2es remain out of scope for the seam test suite (covered by 10.5 / 10.7 live validation).
 
 ---
 
 ## Recent decisions (last 3 ADRs)
 
-- **ADR 0026** (2026-04-24) — Pluggable assessor runtimes: two-shape provisioner contract (env-owning for Python, env-assuming for Node / Go / Rust), per-runtime verify-gate command mapping, four-tag failure-mode taxonomy (`BUILD_FAILURE` / `TEST_FAILURE` / `ENV_SETUP_FAILURE` / `ENV_HOST_MISSING_TOOL`) on a new optional `AssessResult.failureMode`, host-tool pre-flight via `resolveOnPath` with actionable install hints. Four sub-decisions in one ADR per the multi-part pattern established by ADR 0020 / 0024 / 0025.
+- **ADR 0026** (2026-04-24) — Pluggable assessor runtimes: two-shape provisioner contract, per-runtime verify-gate command mapping, four-tag failure-mode taxonomy, host-tool pre-flight via `resolveOnPath`. Three runtimes (Node / Go / Rust) implement the contract; all three live-validated by Phase 10 close.
 - **ADR 0025** (2026-04-23) — Web UI architecture: Astro MPA + Islands + `<ClientRouter />`, separate `FACTORY5_UI_TOKEN`, `@fastify/static` under `/app/`, `/api/v1/*` URL-prefix versioning.
 - **ADR 0024** (2026-04-23) — Worker-subprocess `askUser`: MCP route, paused-budget wait, taskId-mandatory correlation, `waiting_for_human` lifecycle.
 
-All 26 ADRs live under `docs/decisions/`. No new ADR expected before 10.9 phase close.
+All 26 ADRs live under `docs/decisions/`. Phase 11 will add ADR 0027 (mutation route shape) at 11.1.
 
 ---
 
 ## Recently completed (last 5 phase closes / major steps)
 
-- **Phase 10 sub-step 10.6 — Rust runtime** — 2026-04-24 — `0563a85 feat(10.6): Rust assessor runtime (ADR 0026)`. Env-assuming provisioner, single `cargo test` for build+test, `test result:` aggregator across unit/integration/doc targets. 9 seam tests.
-- **Phase 10 sub-step 10.4 — Go runtime** — 2026-04-24 — `10f2132 feat(10.4): Go assessor runtime (ADR 0026)`. `go build ./...` + `go test -list` no-test detection + `go test ./...` with `--- PASS/FAIL` line counting incl. subtests. 12 seam tests.
-- **Phase 10 sub-step 10.2 — Node/TypeScript runtime** — 2026-04-24 — `34763dc feat(10.2): Node/TypeScript assessor runtime (ADR 0026)`. `pnpm install → typecheck || tsc --noEmit → test` with vitest/jest/node:test summary parsing, full type refactor of `AssessResult` (runtime / failureMode / neutral provisioning), Python runtime moved to `runtimes/python.ts` as an adapter. 15 seam + 1 real-subprocess e2e.
-- **Phase 10 sub-step 10.1 — ADR 0026** — 2026-04-24 — `d493ff9 docs(10.1): ADR 0026 — pluggable-runtime contract`. Four sub-decisions pinned before any tier-3 code; implementation outline at bottom of ADR doubled as the 10.2 type sketch.
-- **Phase 9 closed** — 2026-04-23 — `e360436 chore(phase-9): close phase 9, kick off phase 10` → tag `phase-9-web-ui-closed`.
+- **Phase 10 closed** — 2026-04-26 — `phase-10-assessor-tier3-closed`. Three new runtimes Node / Go / Rust shipped + live-validated; ADR 0026 accepted; 4 in-phase bugs caught + fixed (`--language` threading, I013 worktree cleanup, `extractJsonObject` string state, Go runtime `-v -count=1`); I014 filed; 666 tests (605 → +61).
+- **Phase 10 sub-step 10.7 — Rust live validation** — 2026-04-26 — `8be8dc0 feat(10.7)`. cargo-test 7 passed, $1.98, clean first try.
+- **Phase 10 sub-step 10.5 — Go live validation** — 2026-04-26 — `62ee979 feat(10.5)`. go-test 34 passed; runtime parser `-v -count=1` fix + I014 filed.
+- **Phase 10 sub-step 10.8 — `factory init` language picker** — 2026-04-25 — `503da4d feat(10.8)`. Project scaffold mode + `metadata.language` + build fallback.
+- **Phase 10 sub-step 10.3 — Node live validation** — 2026-04-25 — `50bab61 feat(10.3)`. vitest 14 passed; `--language` threading + I013 fix + `extractJsonObject` fix landed in this commit.
 
 ---
 
 ## Attempts that didn't work (current step only)
 
-- None this session. One in-flight regression was caught immediately: the Go summary parser's PASS/FAIL regex was anchored with `^` and didn't match indented subtest lines (`    --- PASS: Parent/sub`). Switched to `line.trimStart()` before matching; test case was already in place so the fix landed clean in one iteration.
+- None — Phase 11 hasn't opened yet.
 
 ---
 
 ## Environment snapshot
 
 - **Language / runtime:** TypeScript strict mode on Node 20+ (ADR 0001). pnpm workspaces. ESM (NodeNext) with explicit `.js` import extensions.
-- **Key pinned deps (unchanged):** `astro ^5.0.0`, `@astrojs/check ^0.9.0` (in `apps/factory-web/`); `@fastify/static ^7.0.0` (in `@factory5/daemon`); Pino, Zod, Commander, Fastify v4, better-sqlite3, discord.js, chokidar, simple-git, vitest, ulid, `@modelcontextprotocol/sdk ^1.0.0`. No new deps this session.
+- **Key pinned deps (unchanged from Phase 9 close):** `astro ^5.0.0`, `@astrojs/check ^0.9.0` (in `apps/factory-web/`); `@fastify/static ^7.0.0` (in `@factory5/daemon`); Pino, Zod, Commander, Fastify v4, better-sqlite3, discord.js, chokidar, simple-git, vitest, ulid, `@modelcontextprotocol/sdk ^1.0.0`. **No new external deps in Phase 10.**
 - **Model in use:** Claude Opus 4.7 for session work.
-- **Other:** Windows + Linux cross-platform mandatory. **14 packages + 3 apps**. **642 tests**. `CHANNEL_IDS` narrowed to `['cli','discord','telegram']` (ADR 0019). Budget enforcement per ADR 0020. Project identity via `.factory/project.json` (ADR 0021). Cross-session spend via `factory spend` (7b.3). Telegram channel via plugin-owned long-poll (ADR 0022). Instance data dir via cwd-walk (ADR 0023). Worker `ask_user` per ADR 0024. Web UI per ADR 0025. Pluggable runtime per ADR 0026.
-- **Host toolchain this session:** pnpm 9.12.0, Node v22.22.2. Go + cargo NOT present — 10.5 / 10.7 blocked on install.
+- **Other:** Windows + Linux cross-platform mandatory. **14 packages + 3 apps**. **666 tests**. `CHANNEL_IDS` narrowed to `['cli','discord','telegram']` (ADR 0019). Budget enforcement per ADR 0020. Project identity via `.factory/project.json` (ADR 0021). Cross-session spend via `factory spend` (7b.3). Telegram channel via plugin-owned long-poll (ADR 0022). Instance data dir via cwd-walk (ADR 0023). Worker `ask_user` per ADR 0024. Web UI per ADR 0025. Pluggable runtime per ADR 0026.
+- **Host toolchain at Phase 10 close:** pnpm 9.12.0, Node v22.22.2, Go 1.26.2, Rust/Cargo 1.95.0. All four host tools the assessor's runtimes need are installed and on PATH; `resolveOnPath` finds each.
 
 ---
 
@@ -111,18 +111,16 @@ If resuming after `/session-end` or a cold start:
 
 1. Read `CLAUDE.md` (root) — standing brief incl. Control-framework section.
 2. Read this STATE.md.
-3. Read `.control/phases/phase-10-assessor-tier3/README.md` + `steps.md` (checkboxes flipped for 10.1 / 10.2 / 10.4 / 10.6).
-4. Skim [ADR 0026](../../docs/decisions/0026-pluggable-runtime-contract.md) — the contract the three new runtimes implement. The Implementation outline at the bottom of the ADR is the type sketch that landed verbatim in `packages/assessor/src/types.ts`.
-5. Skim `packages/assessor/src/runtimes/` (four files + four `.test.ts`s) to see the three concrete runtimes + Python adapter.
+3. Read `.control/phases/phase-11-web-ui-9b/README.md` + `steps.md` (the new charter).
+4. Skim [docs/Phase10_Progress.md](../../docs/Phase10_Progress.md) for the just-closed phase context (the bugs that surfaced there are useful priors for the I014 fix that will likely land mid-Phase-11).
+5. Skim [ADR 0026](../../docs/decisions/0026-pluggable-runtime-contract.md) if you'll touch anything assessor-related; otherwise it's not on Phase 11's path.
 6. Run `/session-start` for the full drift check.
 
-**Budget for remainder of Phase 10:** 1–2 more sessions. 10.3 is code-less but spends live LLM budget. 10.5 / 10.7 need host-tool installs. 10.8 is small. 10.9 is docs + tagging.
+**Budget for Phase 11:** 1–2 sessions per the README. Mostly code (no live LLM spend other than the 11.6 validation run, which can be cheap because the operator just exercises mutations end-to-end against an already-known project).
 
 **Carry-forward** (still non-blocking):
 
-- Issues I009 (MEDIUM) + I012 (LOW).
+- I009 (MEDIUM) + I012 (LOW) + **I014 (MEDIUM, new this phase)**.
 - Stale-dist dev-loop gotcha — flip `packages/{daemon,ipc,state}/package.json` `main` to `src/index.ts`. Easy single-commit win.
 - `factory ui-token` CLI command (ADR 0025 §2).
-- Phase 6 operator follow-up (PAT revoke; `gh repo delete momobits/factory5-6b-smoke --yes`; `reg delete "HKCU\Environment" /v GITHUB_TOKEN /f`).
-- Phase 8 resource-hygiene note — `askUser` handler's poll loop keeps running after the worker subprocess exits. Cosmetic.
-- Phase 8 filesystem scoping note — workers have unrestricted `Read`/`Glob`/`Grep`.
+- Phase 6 operator follow-up.

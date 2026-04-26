@@ -67,7 +67,7 @@
       Keep Python as the default for backwards compatibility with the
       existing `factory5-workspace/` corpus of Python projects.
 
-- [ ] 10.9 — **Phase close.** Tag `phase-10-assessor-tier3-closed`.
+- [x] 10.9 — **Phase close.** Tag `phase-10-assessor-tier3-closed`.
       `docs/Phase10_Progress.md` + `docs/PROGRESS.md` entry +
       `CompleteArchitecture.md` update (§22 "Pluggable runtimes" or
       an edit to §6 / §9). Scaffold Phase 11 (Web UI 9b — mutation
