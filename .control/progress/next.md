@@ -1,135 +1,151 @@
 # Next session — paste this to start
 
-Phase 11 closed 2026-04-26 (tag `phase-11-web-ui-9b-closed`). All 7
-sub-steps shipped: ADR 0027 + three backend mutation routes + SPA write
-affordances + GET /api/v1/projects + operator-driven live browser smoke.
-The Web UI is now a complete operating surface — operators can answer
-pending questions, kick off builds, and configure per-project budget
-defaults from the browser without dropping back to the CLI.
+Phase 12 closed 2026-04-26 (tag `phase-12-worker-fs-scoping-closed`).
+All 5 sub-steps shipped: ADR 0028 + new 15th workspace package
+`@factory5/worker-sandbox` + worker wiring + 96 new regression tests +
+operator-driven live validation. Three forcing functions paid down with
+one mechanism: F001 (Phase 6c verifier hallucination), Phase 8's
+deferred fs-scoping, Phase 10's I013 worktree-cleanup pain.
 
-Workspace: 717 tests across 14 packages green. lint + format clean.
-Builds clean across 14 packages + 3 apps.
+Live validation datapoint (12.4): `factory build log-totals-cli`,
+directive `01KQ5PNR3GYMCW48NBWVZQE75W`, 5/5 tasks succeeded, 4
+`worker.sandbox: gate up` lines, **zero deny lines**, $3.07 spend.
+One builder advanced base from `aa3a1263 → 0d4dcbc3` with 1 file
+changed under the gate — write-side gate is permissive within scope.
+
+Workspace: 813 tests green across 15 packages. lint + format clean.
+Builds clean across 15 packages + 3 apps.
 
 ## Pickup
 
 Read `CLAUDE.md`, then `.control/progress/STATE.md` (current phase /
-step / carry-forwards), then the Phase 12 charter at
-`.control/phases/phase-12-worker-fs-scoping/{README.md,steps.md}`. The
-`README.md` lays out the three forcing functions that converge on this
-phase: F001 (verifier hallucination, Phase 6c), Phase 8's deferred
-filesystem-scoping carry-forward, and Phase 10's I013 worktree-cleanup
-pain. Phase 12 pays down all three with one mechanism.
+step / carry-forwards), then the Phase 13 charter at
+`.control/phases/phase-13-operator-experience/{README.md,steps.md}`.
+The `README.md` lays out the four-fix sweep: file-sink logger bug
+(13.1), `factory ui-token` CLI (13.2), I009 fix (13.3), I014 fix
+(13.4). All four are TS work, $0 spend baseline (optional cheap
+smoke after 13.3).
 
 Run `/session-start` for the full drift check.
 
-## Next concrete work — 12.1 (ADR for the worker-sandbox contract)
+## Next concrete work — 13.1 (File-sink logger bug)
 
-Five decisions to pin in `docs/decisions/0028-*.md` before any code
-lands:
+Discovered during 12.4 operator investigation: the daemon writes
+pretty-printed log lines to stdout (visible in the foreground
+factoryd terminal) but the file sink at
+`<dataDir>/logs/factoryd-<YYYY-MM-DD>.log` does not materialise on
+disk. `mkdirSync(logsDir, { recursive: true })` runs during
+`initLogger` (no exception bubbles up — daemon starts cleanly), but
+the directory + file never appear. `find` across `~/.factory`,
+`~/.factory5`, repo `.factory/`, and AppData all turn up empty.
 
-1. **Gate site.** MCP middleware (worker-side, intercepts every
-   `Read` / `Glob` / `Grep` call before reaching host fs) vs.
-   provider-CLI native config (cheaper if `claude-cli` supports it
-   natively) vs. OS sandbox (heaviest). Survey what `claude-cli`
-   exposes today; the cheapest cross-platform gate wins. Likely
-   landing: MCP middleware.
-2. **Path-prefix algebra.** How the allowlist is expressed —
-   `{ workspaceRoots: string[]; readOnlyRoots: string[]; allowSymlinks: boolean }`
-   is the candidate shape. `Read('foo')` resolves relative to cwd,
-   absolute path checked against `workspaceRoots ∪ readOnlyRoots`.
-   Edge cases: trailing slashes, drive letters on Windows
-   (case-insensitive prefix match), `..` traversal (resolve to
-   absolute first), UNC paths.
-3. **Out-of-scope behaviour.** Silent skip vs. hard error vs.
-   advisory log. Recommend hard error so workers fail loudly when
-   they reach for something they shouldn't.
-4. **Bash story.** `Bash` is shell-shaped, not fs-shaped; MCP-layer
-   gating can't cover `cat /etc/passwd` directly. Either accept the
-   gap as a Phase 12 limitation, gate `Bash` by working-directory
-   pinning + a thin command-prefix allowlist (heuristic, leaky), or
-   defer Bash sandboxing to a follow-up phase via OS-level isolation.
-5. **Worktree-only writes.** Per the charter: writes scoped to
-   `<projectPath>/.factory/worktrees/task-<id>/`. Reads broader
-   (worktree + project `.factory/` + repo templates). Make the
-   write-vs-read distinction explicit in the contract.
+Three sub-actions:
 
-Output: `docs/decisions/0028-*.md` + INDEX row. The ADR is design-only
-($0 spend); 12.2 implementation kicks off the next sub-step.
+1. **File a major issue under `docs/issues/`.** Per CLAUDE.md issue
+   lifecycle: major issues need a regression test before they go to
+   RESOLVED. Title something like `I0XX-file-sink-logger-silent-fail.md`
+   with frontmatter (status: OPEN, severity: MAJOR, component:
+   `@factory5/logger`). Reference `packages/logger/src/logger.ts`
+   `initLogger` + the `pino.destination({ dest, sync: false, mkdir: true })`
+   call site. Update `docs/issues/INDEX.md`.
+
+2. **Reproduce + diagnose.** Trace
+   `pino.destination({ sync: false, mkdir: true })` behaviour:
+   - Is the lazy file open silently swallowing errors via an
+     unlistened-to `'error'` event on the destination stream?
+   - Is `mkdirSync` running but with a wrong `dir` value at module-init
+     vs spawn-time cwd resolution?
+   - Does `multistream` suppress per-stream errors so the broken file
+     destination is silently skipped?
+
+   Build a minimal in-isolation repro (small `.test.ts` that calls
+   `initLogger`, writes a line, asserts the file exists). Iterate
+   until the failure is deterministic.
+
+3. **Fix at the right layer + add a regression test.** Likely options:
+   - Attach an `'error'` listener to the destination stream that
+     re-throws / surfaces via `multistream`.
+   - Switch the file sink to `sync: true` / a direct
+     `fs.createWriteStream` if pino's lazy-open semantics aren't
+     compatible with our `mkdirSync` ordering.
+   - Move the `mkdirSync` to be inside the destination construction
+     guard so it always runs immediately before the open.
+
+   The regression test in `packages/logger/src/logger.test.ts` (or
+   a new file): `initLogger`, write a known line, read the file from
+   disk, assert the JSON line is there. Cross-platform-safe (use
+   `tmpdir()` + `mkdtemp` per the existing test patterns).
+
+Output: an issue file, a regression test, a fix in `@factory5/logger`,
+a passing test. INDEX row moves to RESOLVED at the close.
 
 ## Then in order
 
-**12.2 — Implementation.** Land the gate at the site 12.1 picks.
-Likely a thin MCP middleware layer in `@factory5/worker` (or a new
-package if the gate logic warrants its own home). Existing call sites
-in `runWorker.ts` updated to pass `workspaceRoots` / `readOnlyRoots`
-config to the spawned provider CLI. No behavioural change to
-provider-side code; the gate sits between the LLM's tool call and the
-fs call.
+**13.2 — `factory ui-token` CLI command.** ADR 0025 §2 carry-forward;
+on the list since Phase 7. Operator just hit this during 12.4 (token
+rotates per startup, terminal scrollback is the only recovery, no
+CLI command to surface the live token). Add a small subcommand
+`packages/cli/src/commands/ui-token.ts` that hits a daemon route
+and prints the URL with token. Decide at 13.2 open whether to extend
+`/status` or add a dedicated `/ui-token` route.
 
-**12.3 — Regression tests.** Two minimum:
+**13.3 — I009 fix — extract `resolveDirectiveLimits`.** Phase 11.4
+landed the project-tier in CLI + daemon; Telegram + Discord inbound
+`/build` still skip two tiers. Extract one shared helper called from
+every directive-creation path. Decide between `@factory5/brain` and
+`@factory5/wiki` based on the existing import graph. Regression test:
+Telegram inbound `/build` against a project with stored
+`metadata.budgetDefaults` picks up the project-tier limits.
 
-- F001 replay — re-run the Phase 6c verifier scenario against a
-  project where `node_modules/` lives in the parent factory5 checkout.
-  Pre-fix: verifier hallucinates because it sees the parent's tree.
-  Post-fix: verifier's filesystem view is the worktree only.
-- Out-of-scope path — worker calls `Read` on `/etc/passwd` (Linux) or
-  `C:/Windows/System32/drivers/etc/hosts` (Windows). Pre-fix: succeeds.
-  Post-fix: 12.1's chosen out-of-scope behaviour fires (likely a hard
-  error visible in the worker log).
+**13.4 — I014 fix — architect commits wiki on resume.** When
+`runArchitect` re-runs on an existing project (typical for
+`factory resume`), tracked `docs/knowledge/*.md` edits stay
+uncommitted in main and dirty-trip `gate.verify`. Targeted fix:
+stage + commit at the end of `runArchitect` if `isGitRepo`. Use
+`simpleGit` (already a dep). Regression test: build a fixture, dirty
+`docs/knowledge/`, run a resume, assert tree clean post-architect.
 
-Cross-platform: both tests pass on Windows + Linux.
-
-**12.4 — Live validation.** Operator runs `factory build` on a Phase
-10 fixture under the new gate. Verify build runs to completion (gate
-doesn't break legitimate work), worker logs show no out-of-scope reads
-being attempted (or any short-circuit cleanly), and `node_modules/`
-creates inside the worktree only — paying down I013.
-
-**12.5 — Phase close.** Tag `phase-12-worker-fs-scoping-closed`.
-Author `docs/Phase12_Progress.md`, prepend `docs/PROGRESS.md`, extend
-`CompleteArchitecture.md` with the worker-sandbox model. Scaffold
-Phase 13 (likely Bash sandboxing if 12.1's ADR carved it out, or
-another carry-forward by demand signal).
+**13.5 — Phase close.** Tag `phase-13-operator-experience-closed`.
+Author `docs/Phase13_Progress.md`, prepend `docs/PROGRESS.md`. Likely
+no `CompleteArchitecture.md` change (sweep phase, no new
+architectural seam) — unless 13.1's logger fix changes the
+multistream contract. Scaffold Phase 14 by demand signal (Bash
+sandboxing if a real incident materialised, else continue paying
+down debt).
 
 ## Mid-phase opportunities
 
-If a session lands in `runArchitect`, brain inbound, or directive
-creation for any reason, two carry-forwards are one-commit wins:
+If a session lands in any of the four touched seams, two carry-forwards
+are one-commit wins:
 
-- **I009 fix** — extract `resolveDirectiveLimits(projectMeta, cfg,
-explicitFlags)` to `@factory5/brain` or `@factory5/wiki`; replace
-  the three open-coded resolvers (CLI, daemon, Telegram inbound). After
-  Phase 11.4 the Telegram path is two tiers behind the CLI/daemon
-  paths.
-- **I014 fix** — add a `git add docs/ && git commit` step at the end
-  of `runArchitect` if `isGitRepo(projectPath)` succeeds. Targets the
-  architect-on-resume dirty-tree footgun.
+- **PowerShell em-dash mojibake** — adjust log messages to use ASCII
+  `--` instead of UTF-8 `—`, OR document the
+  `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` fix in
+  the project README. Operator-side, but a one-line README addition
+  would help future operators.
+- **14 stale "open" pending_questions** — one-shot DB sweep:
+  `UPDATE pending_questions SET status = 'orphaned' WHERE created_at < <90-days-ago> AND answered_at IS NULL`. Maybe expose as
+  `factory questions cleanup --orphaned --since <date>`.
 
 ## Carry-forward (still non-blocking)
 
-- **I009** (MEDIUM, OPEN) — Telegram/Discord `/build` inbound doesn't
-  inherit budget defaults. After 11.4 it skips two tiers (project +
-  config), not one. Recorded as ADR 0027 §4 carry-forward.
-- **I012** (LOW, OPEN) — `maybeAnswerPendingQuestion` FIFO matcher.
-- **I014** (MEDIUM, OPEN) — architect-on-resume leaves wiki edits
-  uncommitted; manual workaround (`git add docs/ && git commit`)
-  cleared the issue in 10.5.
-- **Stale-dist dev-loop gotcha** — needs design (conditional exports
-  OR app-side bundling with full transitive npm deps); workaround is
-  `pnpm build` after editing workspace deps before running
-  `pnpm factoryd`.
-- **`factory ui-token` CLI command** (ADR 0025 §2) — operator closes
-  terminal → loses dashboard URL.
-- **Phase 6 operator follow-up:** revoke PAT, `gh repo delete`, env
-  var cleanup.
+- **File-sink logger bug** (MAJOR, OPEN) — handled in 13.1.
+- **`factory ui-token` CLI command** (MEDIUM, OPEN) — handled in 13.2.
+- **I009** (MEDIUM, OPEN) — handled in 13.3.
+- **I014** (MEDIUM, OPEN) — handled in 13.4.
+- **I012** (LOW, OPEN) — Telegram inbound FIFO matcher.
+- **14 stale "open" pending_questions** (LOW) — DB sweep.
+- **PowerShell em-dash mojibake** (LOW) — operator-side fix.
+- **Stale-dist dev-loop gotcha** — needs design.
+- **Phase 6 operator follow-up** — out-of-band.
 
 Report back on wake-up with a status block in this shape:
 
 ```
-Phase 12 — 0/5 closed; 12.1 ADR for worker-sandbox contract next
-Last action: docs(state) <SHA> (session end) on top of chore(phase-11) fa5ee25 (phase close)
-Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-11-web-ui-9b-closed
-Open blockers: 0 (I009 + I012 + I014 non-blocking)
-Proposed next action: 12.1 — survey claude-cli's native fs-scoping config + author ADR 0028
+Phase 13 — 0/5 closed; 13.1 file-sink logger bug next
+Last action: chore(phase-12) <SHA> (close + tag) on top of docs(12.4) 09b0876 (live validation)
+Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-12-worker-fs-scoping-closed
+Open blockers: 0 (file-sink-logger MAJOR + 3× MEDIUM carry-forwards all sweep targets, not blockers)
+Proposed next action: 13.1 — file the issue, write a regression test, fix the logger
 Ready to proceed?
 ```
