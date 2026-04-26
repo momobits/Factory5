@@ -1,141 +1,135 @@
 # Next session — paste this to start
 
-Phase 11 (Web UI 9b — mutation surface) is **4/7 closed** as of 2026-04-26. All
-three backend mutation routes shipped + tested:
+Phase 11 closed 2026-04-26 (tag `phase-11-web-ui-9b-closed`). All 7
+sub-steps shipped: ADR 0027 + three backend mutation routes + SPA write
+affordances + GET /api/v1/projects + operator-driven live browser smoke.
+The Web UI is now a complete operating surface — operators can answer
+pending questions, kick off builds, and configure per-project budget
+defaults from the browser without dropping back to the CLI.
 
-- 11.1 ADR 0027 — pinned the contract ([docs/decisions/0027-web-ui-mutation-surface.md](../../docs/decisions/0027-web-ui-mutation-surface.md))
-- 11.2 `POST /api/v1/pending-questions/:id/answer`
-- 11.3 `POST /api/v1/builds`
-- 11.4 `PUT /api/v1/projects/:id/budget` (+ project-tier budget resolution layered into both CLI and daemon code paths)
-
-Workspace: 707 tests across 14 packages green. lint + format clean. Builds
-clean across 14 packages + 3 apps.
+Workspace: 717 tests across 14 packages green. lint + format clean.
+Builds clean across 14 packages + 3 apps.
 
 ## Pickup
 
-Read `CLAUDE.md`, then `.control/progress/STATE.md` (current phase / step /
-carry-forwards), then the Phase 11 charter at
-`.control/phases/phase-11-web-ui-9b/{README.md,steps.md}`. The 11.5 entry in
-`steps.md` carries an inline "Note for next session" block — read it before
-opening 11.5.
-
-ADR 0027 ([docs/decisions/0027-web-ui-mutation-surface.md](../../docs/decisions/0027-web-ui-mutation-surface.md))
-is the load-bearing contract for the routes the SPA forms wire against.
+Read `CLAUDE.md`, then `.control/progress/STATE.md` (current phase /
+step / carry-forwards), then the Phase 12 charter at
+`.control/phases/phase-12-worker-fs-scoping/{README.md,steps.md}`. The
+`README.md` lays out the three forcing functions that converge on this
+phase: F001 (verifier hallucination, Phase 6c), Phase 8's deferred
+filesystem-scoping carry-forward, and Phase 10's I013 worktree-cleanup
+pain. Phase 12 pays down all three with one mechanism.
 
 Run `/session-start` for the full drift check.
 
-## Standing rule for 11.5 (and any future UI work in this repo)
+## Next concrete work — 12.1 (ADR for the worker-sandbox contract)
 
-**Invoke the `frontend-design` plugin / skill BEFORE hand-rolling Astro markup
-or form designs.** The operator's preference is to let `frontend-design` drive
-the design + Islands wiring; implement against its output. Don't pre-empt the
-skill by sketching the markup yourself.
+Five decisions to pin in `docs/decisions/0028-*.md` before any code
+lands:
 
-Memory:
-[`feedback_use_frontend_design_skill.md`](../../../C:/Users/Momo/.claude/projects/G--Projects-Large-Projects-factory-factory5/memory/feedback_use_frontend_design_skill.md).
+1. **Gate site.** MCP middleware (worker-side, intercepts every
+   `Read` / `Glob` / `Grep` call before reaching host fs) vs.
+   provider-CLI native config (cheaper if `claude-cli` supports it
+   natively) vs. OS sandbox (heaviest). Survey what `claude-cli`
+   exposes today; the cheapest cross-platform gate wins. Likely
+   landing: MCP middleware.
+2. **Path-prefix algebra.** How the allowlist is expressed —
+   `{ workspaceRoots: string[]; readOnlyRoots: string[]; allowSymlinks: boolean }`
+   is the candidate shape. `Read('foo')` resolves relative to cwd,
+   absolute path checked against `workspaceRoots ∪ readOnlyRoots`.
+   Edge cases: trailing slashes, drive letters on Windows
+   (case-insensitive prefix match), `..` traversal (resolve to
+   absolute first), UNC paths.
+3. **Out-of-scope behaviour.** Silent skip vs. hard error vs.
+   advisory log. Recommend hard error so workers fail loudly when
+   they reach for something they shouldn't.
+4. **Bash story.** `Bash` is shell-shaped, not fs-shaped; MCP-layer
+   gating can't cover `cat /etc/passwd` directly. Either accept the
+   gap as a Phase 12 limitation, gate `Bash` by working-directory
+   pinning + a thin command-prefix allowlist (heuristic, leaky), or
+   defer Bash sandboxing to a follow-up phase via OS-level isolation.
+5. **Worktree-only writes.** Per the charter: writes scoped to
+   `<projectPath>/.factory/worktrees/task-<id>/`. Reads broader
+   (worktree + project `.factory/` + repo templates). Make the
+   write-vs-read distinction explicit in the contract.
 
-## Next concrete work — 11.5 (SPA write affordances)
-
-Three forms to wire in `apps/factory-web/`:
-
-1. **Answer textarea + submit** on the pending-questions detail page →
-   `POST /api/v1/pending-questions/:id/answer` with `{ answer: string }`. On
-   200, refresh the page state. On 409 `QUESTION_ALREADY_ANSWERED_DIFFERENTLY`,
-   render the existing answer (don't bury the conflict). If the response
-   payload eventually grows a `taskOrphaned: boolean` advisory, surface it as
-   a banner.
-2. **Build form** (page or modal on the overview) — operator picks
-   `project + language + autonomy + budget` → `POST /api/v1/builds`. Disable
-   submit on first click (build is NOT idempotent per ADR 0027 §2). On 200,
-   navigate to the new directive's detail page. On 404 `PROJECT_NOT_FOUND`,
-   render "use `factory init` to create new projects" — the API doesn't
-   create from the UI.
-3. **Budget inputs** (`maxUsd`, `maxSteps`) on the project detail page →
-   `PUT /api/v1/projects/:id/budget`. Full-document semantics: send the whole
-   document each PUT (the form has both fields rendered with current values).
-   Empty body clears all defaults. The `:id` is the project ULID.
-
-All three through a centralised `src/lib/api.ts` module that wraps fetch with
-the bearer + `{error:{code,message,details?}}` unwrap. Error codes to switch
-on (per ADR 0027 §3 + the existing read-side codes):
-
-`UI_AUTH_REQUIRED` (401), `UI_DISABLED` (503), `NON_LOCALHOST` (403),
-`SCHEMA_VALIDATION_FAILED` (400), `BAD_REQUEST` (400), `INTERNAL` (500),
-`QUESTION_NOT_FOUND` (404), `QUESTION_ALREADY_ANSWERED_DIFFERENTLY` (409),
-`PROJECT_NOT_FOUND` (404), `PROJECT_PATH_UNREADABLE` (404),
-`PROJECT_METADATA_CORRUPT` (422), `DIRECTIVE_NOT_FOUND` (404).
-
-The budget route's `:id` needs a project ULID — Phase 11 will likely need a
-`GET /api/v1/projects` list endpoint so the SPA can map names → ULIDs. Small
-read-side addition; lands at 11.5 alongside the form work (out of strict
-scope for this ADR but a prerequisite).
-
-Per CLAUDE.md: UI changes need browser smoke before being reported as
-complete. `pnpm dev --filter factory-web` + browse `localhost:4321/app/?t=<token>`
-and exercise each form. Round-trip-against-real-factoryd validation belongs to
-11.6.
+Output: `docs/decisions/0028-*.md` + INDEX row. The ADR is design-only
+($0 spend); 12.2 implementation kicks off the next sub-step.
 
 ## Then in order
 
-**11.6 (Live validation)** — operator at the browser exercises each route
-end-to-end against a real factoryd. Three smokes:
+**12.2 — Implementation.** Land the gate at the site 12.1 picks.
+Likely a thin MCP middleware layer in `@factory5/worker` (or a new
+package if the gate logic warrants its own home). Existing call sites
+in `runWorker.ts` updated to pass `workspaceRoots` / `readOnlyRoots`
+config to the spawned provider CLI. No behavioural change to
+provider-side code; the gate sits between the LLM's tool call and the
+fs call.
 
-- answer a real pending question → worker unblocks (or directive transitions
-  out of `waiting_for_human`);
-- kick off a build for an existing project (a Phase 10 fixture works) →
-  directive lands + runs to completion;
-- update a project's budget defaults → start a new build → directive's
-  `limits` reflect the new values.
+**12.3 — Regression tests.** Two minimum:
 
-**11.7 (Phase close)** — tag `phase-11-web-ui-9b-closed`. Author
-`docs/Phase11_Progress.md`, prepend `docs/PROGRESS.md`, and update
-`CompleteArchitecture.md` (extend §21 or new §23 for the mutation surface).
-Scaffold Phase 12 (filesystem-scoping for worker subprocesses).
+- F001 replay — re-run the Phase 6c verifier scenario against a
+  project where `node_modules/` lives in the parent factory5 checkout.
+  Pre-fix: verifier hallucinates because it sees the parent's tree.
+  Post-fix: verifier's filesystem view is the worktree only.
+- Out-of-scope path — worker calls `Read` on `/etc/passwd` (Linux) or
+  `C:/Windows/System32/drivers/etc/hosts` (Windows). Pre-fix: succeeds.
+  Post-fix: 12.1's chosen out-of-scope behaviour fires (likely a hard
+  error visible in the worker log).
 
-## Mid-phase opportunity — I014 fix
+Cross-platform: both tests pass on Windows + Linux.
 
-Still open from Phase 10. If a session lands in `runArchitect` for any reason,
-the I014 fix is a one-commit win:
+**12.4 — Live validation.** Operator runs `factory build` on a Phase
+10 fixture under the new gate. Verify build runs to completion (gate
+doesn't break legitimate work), worker logs show no out-of-scope reads
+being attempted (or any short-circuit cleanly), and `node_modules/`
+creates inside the worktree only — paying down I013.
 
-```ts
-// at end of runArchitect, after writing pages
-if (await isGitRepo(opts.projectPath)) {
-  const git = simpleGit(opts.projectPath);
-  await git.add(['docs/']);
-  const status = await git.status();
-  if (status.staged.length > 0) {
-    await git.commit('factory: architect output');
-  }
-}
-```
+**12.5 — Phase close.** Tag `phase-12-worker-fs-scoping-closed`.
+Author `docs/Phase12_Progress.md`, prepend `docs/PROGRESS.md`, extend
+`CompleteArchitecture.md` with the worker-sandbox model. Scaffold
+Phase 13 (likely Bash sandboxing if 12.1's ADR carved it out, or
+another carry-forward by demand signal).
+
+## Mid-phase opportunities
+
+If a session lands in `runArchitect`, brain inbound, or directive
+creation for any reason, two carry-forwards are one-commit wins:
+
+- **I009 fix** — extract `resolveDirectiveLimits(projectMeta, cfg,
+explicitFlags)` to `@factory5/brain` or `@factory5/wiki`; replace
+  the three open-coded resolvers (CLI, daemon, Telegram inbound). After
+  Phase 11.4 the Telegram path is two tiers behind the CLI/daemon
+  paths.
+- **I014 fix** — add a `git add docs/ && git commit` step at the end
+  of `runArchitect` if `isGitRepo(projectPath)` succeeds. Targets the
+  architect-on-resume dirty-tree footgun.
 
 ## Carry-forward (still non-blocking)
 
-- **I009** (MEDIUM, OPEN) — Telegram/Discord `/build` inbound doesn't inherit
-  budget defaults. After 11.4 it skips two tiers (project + config), not
-  one. Right fix: extract a shared `resolveDirectiveLimits(projectMeta, cfg,
-explicitFlags)` helper in `@factory5/brain` or `@factory5/wiki` so every
-  directive-creation path runs the same three-tier resolution. Recorded as
-  ADR 0027 §4 carry-forward.
+- **I009** (MEDIUM, OPEN) — Telegram/Discord `/build` inbound doesn't
+  inherit budget defaults. After 11.4 it skips two tiers (project +
+  config), not one. Recorded as ADR 0027 §4 carry-forward.
 - **I012** (LOW, OPEN) — `maybeAnswerPendingQuestion` FIFO matcher.
 - **I014** (MEDIUM, OPEN) — architect-on-resume leaves wiki edits
-  uncommitted; manual workaround (`git add docs/ && git commit`) cleared the
-  issue in 10.5.
-- **Stale-dist dev-loop gotcha** — needs design (conditional exports OR
-  app-side bundling with full transitive npm deps); workaround is `pnpm build`
-  after editing workspace deps before running `pnpm factoryd`.
-- **`factory ui-token` CLI command** (ADR 0025 §2) — operator closes terminal
-  → loses dashboard URL.
-- **Phase 6 operator follow-up:** revoke PAT, `gh repo delete`, env var
-  cleanup.
+  uncommitted; manual workaround (`git add docs/ && git commit`)
+  cleared the issue in 10.5.
+- **Stale-dist dev-loop gotcha** — needs design (conditional exports
+  OR app-side bundling with full transitive npm deps); workaround is
+  `pnpm build` after editing workspace deps before running
+  `pnpm factoryd`.
+- **`factory ui-token` CLI command** (ADR 0025 §2) — operator closes
+  terminal → loses dashboard URL.
+- **Phase 6 operator follow-up:** revoke PAT, `gh repo delete`, env
+  var cleanup.
 
 Report back on wake-up with a status block in this shape:
 
 ```
-Phase 11 — 4/7 closed; 11.5 SPA write affordances next
-Last action: docs(state) <SHA> (session end) on top of feat(11.4) 3231c5c
-Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-10-assessor-tier3-closed
+Phase 12 — 0/5 closed; 12.1 ADR for worker-sandbox contract next
+Last action: chore(phase-11) <SHA> (phase close + Phase 12 scaffold)
+Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-11-web-ui-9b-closed
 Open blockers: 0 (I009 + I012 + I014 non-blocking)
-Proposed next action: 11.5 — SPA write affordances (invoke `frontend-design` skill first)
+Proposed next action: 12.1 — survey claude-cli's native fs-scoping config + author ADR 0028
 Ready to proceed?
 ```

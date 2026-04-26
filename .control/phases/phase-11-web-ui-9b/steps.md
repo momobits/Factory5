@@ -54,23 +54,20 @@
       flag. Tests cover: round-trip read/write, partial update
       (only maxUsd), removing a field via null.
 
-- [x] 11.5 — **SPA write affordances.** Three forms wired:
-      - `apps/factory-web/src/pages/questions/detail.astro` gets an
-        answer textarea + submit when `answeredAt === undefined`. POST
-        `/api/v1/pending-questions/:id/answer`. On 409, refetches and
-        renders the recorded answer in a conflict alert. Suggested
-        answers from `options` are clickable shortcuts that fill the
-        textarea.
-      - `apps/factory-web/src/pages/build.astro` (new) — project select
-        populated from `GET /api/v1/projects`, plus optional language /
-        autonomy / maxUsd / maxSteps. Submit disables on first click
-        (build is non-idempotent per ADR 0027 §2). On 200 navigates to
-        `/app/directives/detail?id=<directive.id>`.
-      - `apps/factory-web/src/pages/projects/{index,detail}.astro` (new)
-        — list table + detail with budget defaults form. PUT
-        `/api/v1/projects/:id/budget` for save; "Clear all defaults"
-        button does PUT `{}` behind a `window.confirm`. Pre-fills from
-        the `GET /:id` response's extracted `budgetDefaults`.
+- [x] 11.5 — **SPA write affordances.** Three forms wired: - `apps/factory-web/src/pages/questions/detail.astro` gets an
+      answer textarea + submit when `answeredAt === undefined`. POST
+      `/api/v1/pending-questions/:id/answer`. On 409, refetches and
+      renders the recorded answer in a conflict alert. Suggested
+      answers from `options` are clickable shortcuts that fill the
+      textarea. - `apps/factory-web/src/pages/build.astro` (new) — project select
+      populated from `GET /api/v1/projects`, plus optional language /
+      autonomy / maxUsd / maxSteps. Submit disables on first click
+      (build is non-idempotent per ADR 0027 §2). On 200 navigates to
+      `/app/directives/detail?id=<directive.id>`. - `apps/factory-web/src/pages/projects/{index,detail}.astro` (new)
+      — list table + detail with budget defaults form. PUT
+      `/api/v1/projects/:id/budget` for save; "Clear all defaults"
+      button does PUT `{}` behind a `window.confirm`. Pre-fills from
+      the `GET /:id` response's extracted `budgetDefaults`.
       Centralised `apiPost<TReq,TRes>` / `apiPut<TReq,TRes>` helpers
       added to `src/lib/api.ts` (JSON-encode + Content-Type, reuse
       existing `apiFetch` envelope unwrap). New shared CSS primitives
@@ -92,13 +89,13 @@
     architect (Opus 4.7, $0.527) → askUser #1 → planner (Sonnet, $0.284)
     → askUser #2 → pool (scaffolder + 3 builders + verifier, all
     `exitCode: 0`) → assessor → terminal status `blocked` with 2 blocking
-    + 4 advisory findings. Total $4.25 — heavy run, but a complete
-    end-to-end signal.
+    - 4 advisory findings. Total $4.25 — heavy run, but a complete
+      end-to-end signal.
   - **Smoke #1 — answer form** (POST /api/v1/pending-questions/:id/answer):
     both askUser questions raised by Smoke #2's flow
     (`01KQ5CZR40BAQVK33JB57EQR09` + `01KQ5ECARE6R0SQ3MASXK5R6ES`) were
     answered via the SPA textarea. Each answer fired `ipc:
-    /api/v1/pending-questions/:id/answer — answered`; brain's askUser
+/api/v1/pending-questions/:id/answer — answered`; brain's askUser
     poll caught the answer within ~600ms each time and the directive
     resumed cleanly. The same-question `outbound: abandoning (cli)`
     warnings are expected noise — no live cli session was listening;
@@ -110,7 +107,7 @@
     landed on disk via `wiki.project-metadata: metadata updated`.
     **Propagation check**: after re-setting the defaults and creating
     Build #2 via the form with **no body limits**, `ipc: /api/v1/builds —
-    directive created` logged `hasLimits: true` and the new directive
+directive created` logged `hasLimits: true` and the new directive
     `01KQ5G9DFN41H2ATVV8MZ9WY5A` ran with `maxUsd: 50 maxSteps: 50` —
     sourced from the project tier alone. The `hasLimits: false` (Build #1)
     vs `hasLimits: true` (Build #2) contrast across an unchanged form
