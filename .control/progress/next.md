@@ -159,7 +159,7 @@ Report back on wake-up with a status block in this shape:
 
 ```
 Phase 11 — 0/7 closed; 11.1 ADR 0027 next
-Last action: chore(phase-10) <sha> — Phase 10 closed
+Last action: docs(state) 0df2b51 (stale-dist clarification) on top of chore(phase-10) 1351b2f
 Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-10-assessor-tier3-closed
 Open blockers: 0 (I009 + I012 + I014 non-blocking)
 Proposed next action: 11.1 — ADR 0027 (mutation route shape, idempotency, error envelope)

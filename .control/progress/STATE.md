@@ -2,7 +2,7 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-26 — Phase 10 closed (`phase-10-assessor-tier3-closed`). All three new runtimes (Node / Go / Rust) gated `verify=true` against real specs in autonomous-mode live runs. Phase 11 kicked off in this same close commit.
+**Last updated:** 2026-04-26 (session `2026-04-26T09`, session-end) — Phase 10 closed earlier this session (`phase-10-assessor-tier3-closed`, commit `1351b2f`); a follow-up stale-dist investigation explored two fixes for the Phase-9-suggested one-line flip but both have non-trivial blockers, so the carry-forward language was clarified rather than landing a code change (commit `0df2b51`). Phase 11 (Web UI 9b — mutation surface) opens with 11.1 next.
 **Current phase:** 11 — Web UI 9b (mutation surface) — **🟢 active**
 **Current sub-phase:** n/a — single-charter phase
 **Current step:** 11.1 — ADR 0027 (mutation route shape, idempotency, error envelope)
@@ -30,9 +30,9 @@ After 11.1: 11.2 (answer route), 11.3 (build route), 11.4 (budget route), 11.5 (
 ## Git state
 
 - **Branch:** main (ahead of `origin/main` — push at operator discretion)
-- **Last commit:** Phase 10 close commit (this commit). Recent log: `8be8dc0 feat(10.7)` → `62ee979 feat(10.5)` → `503da4d feat(10.8)` → `50bab61 feat(10.3)` → `9c8106f docs(state)` → `0563a85 feat(10.6)` → `10f2132 feat(10.4)` → `34763dc feat(10.2)` → `d493ff9 docs(10.1)`.
-- **Uncommitted changes:** none expected after the close commit lands.
-- **Last phase tag:** `phase-10-assessor-tier3-closed` (set in this commit).
+- **Last commit:** `0df2b51 docs(state): clarify stale-dist gotcha needs design, not a one-liner`. Recent log: `0df2b51 docs(state)` → `1351b2f chore(phase-10) close` → `8be8dc0 feat(10.7)` → `62ee979 feat(10.5)` → `503da4d feat(10.8)` → `50bab61 feat(10.3)` → `9c8106f docs(state)` → `0563a85 feat(10.6)` → `10f2132 feat(10.4)` → `34763dc feat(10.2)`. Session-end docs commit lands on top of this STATE.md update.
+- **Uncommitted changes:** none (modulo `.claude/scheduled_tasks.lock` which is harness-local and gitignored from working-tree intent).
+- **Last phase tag:** `phase-10-assessor-tier3-closed` (set on `1351b2f`).
 
 Earlier tags intact: `phase-9-web-ui-closed`, `phase-8-worker-ask-user-closed`, `addendum-onboarding-closed`, `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-7-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`, `protocol-initialised`.
 
@@ -81,17 +81,19 @@ All 26 ADRs live under `docs/decisions/`. Phase 11 will add ADR 0027 (mutation r
 
 ## Recently completed (last 5 phase closes / major steps)
 
-- **Phase 10 closed** — 2026-04-26 — `phase-10-assessor-tier3-closed`. Three new runtimes Node / Go / Rust shipped + live-validated; ADR 0026 accepted; 4 in-phase bugs caught + fixed (`--language` threading, I013 worktree cleanup, `extractJsonObject` string state, Go runtime `-v -count=1`); I014 filed; 666 tests (605 → +61).
+- **Stale-dist investigation** — 2026-04-26 — `0df2b51 docs(state)`. Empirically tested both Phase-9-suggested fixes (simple `main` flip + tsup workspace-bundling); both surfaced non-trivial blockers (raw-node `.js`-on-`.ts` resolution; transitive npm dep visibility under bundled output). Reverted; clarified carry-forward language so the next session doesn't repeat the simple flip.
+- **Phase 10 closed** — 2026-04-26 — `1351b2f` + tag `phase-10-assessor-tier3-closed`. Three new runtimes Node / Go / Rust shipped + live-validated; ADR 0026 accepted; 4 in-phase bugs caught + fixed (`--language` threading, I013 worktree cleanup, `extractJsonObject` string state, Go runtime `-v -count=1`); I014 filed; 666 tests (605 → +61).
 - **Phase 10 sub-step 10.7 — Rust live validation** — 2026-04-26 — `8be8dc0 feat(10.7)`. cargo-test 7 passed, $1.98, clean first try.
 - **Phase 10 sub-step 10.5 — Go live validation** — 2026-04-26 — `62ee979 feat(10.5)`. go-test 34 passed; runtime parser `-v -count=1` fix + I014 filed.
 - **Phase 10 sub-step 10.8 — `factory init` language picker** — 2026-04-25 — `503da4d feat(10.8)`. Project scaffold mode + `metadata.language` + build fallback.
-- **Phase 10 sub-step 10.3 — Node live validation** — 2026-04-25 — `50bab61 feat(10.3)`. vitest 14 passed; `--language` threading + I013 fix + `extractJsonObject` fix landed in this commit.
 
 ---
 
 ## Attempts that didn't work (current step only)
 
-- None — Phase 11 hasn't opened yet.
+- **Stale-dist gotcha — simple `main` flip** (this session, 2026-04-26). Flipped `packages/{daemon,ipc,state}/package.json` `main` from `dist/index.js` to `src/index.ts`. dev-loop (tsx + vitest) worked, raw-node prod path (`node apps/factoryd/dist/main.js`) failed with `Cannot find module .../src/brain-supervisor.js` — raw node doesn't transpile `.js` extensions on `.ts` source.
+- **Stale-dist gotcha — workspace-dep bundling in apps/\* tsup** (this session, 2026-04-26). Added `tsup.config.ts` to `apps/{factory,factoryd}/` with `skipNodeModulesBundle: true` + `noExternal: [/^@factory5\//]`. Bundles built cleanly but raw-node failed on transitive npm deps not declared in app package.json (`commander` for factory, `zod` for factoryd) — pnpm doesn't hoist transitive deps to where bundled output expects them. Apps would need to declare every transitive npm dep explicitly. Reverted.
+- Cleared once Phase 11 opens (these are stale-dist, not 11.x).
 
 ---
 

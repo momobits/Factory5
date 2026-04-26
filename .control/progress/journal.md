@@ -2,6 +2,18 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-04-26 (session `2026-04-26T09`, end) — stale-dist gotcha investigation + session-end docs
+
+- **Commit:** `0df2b51 docs(state): clarify stale-dist gotcha needs design, not a one-liner` (single commit on top of `1351b2f` Phase 10 close). Session-end `docs(state)` lands on top.
+- **Investigation:** the Phase-9-suggested one-line fix for the stale-dist gotcha (flip `packages/{daemon,ipc,state}/package.json` `main` from `dist/index.js` to `src/index.ts`) turns out to be **incompatible with the prod runtime path**. Raw `node apps/factoryd/dist/main.js` fails with `Cannot find module .../src/brain-supervisor.js` because raw node can't transpile `.js` extensions on `.ts` source files (tsx + vitest hook the loader and rewrite; raw node doesn't).
+- **Investigation #2:** explored bundling workspace deps in `apps/*/tsup.config.ts` via `skipNodeModulesBundle: true` + `noExternal: [/^@factory5\//]`. Bundles built cleanly but the raw-node runtime then failed on transitive npm deps not declared in the app's own package.json (`Cannot find package 'commander'` from apps/factory; `'zod'` from apps/factoryd). pnpm doesn't hoist transitive deps to where bundled output expects them; apps would need to enumerate every transitive npm dep explicitly. Reverted.
+- **Decisions:** none new. ADR count unchanged at 26.
+- **Issues:** none opened or closed.
+- **Net code change:** zero — both attempted fixes reverted clean. Only carry-forward language in STATE.md + next.md updated to reflect the empirical findings, so the next session sees what was tried and why each path needs design rather than a quick fix.
+- **Recommendation logged in carry-forward:** real fixes are either (a) **conditional exports** (`exports.development → src`, `exports.default → dist`) plus tooling config (`tsx --conditions=development`, vitest `resolve.conditions`), or (b) **app-side bundling** with full transitive npm deps declared in app package.json. Both deserve their own substep when next prioritised.
+- **Tests:** unchanged at 666 green. `pnpm lint` + `pnpm format:check` clean. `pnpm build` clean across all 14 packages + 3 apps.
+- **Next: Phase 11 — 11.1 (ADR 0027 mutation route shape).** See `.control/progress/next.md`.
+
 ## 2026-04-26 (session `2026-04-26T09`) — Phase 10 closed (10.3 + 10.5 + 10.7 + 10.8 + 10.9 across 2 sessions)
 
 - **Phase tag:** `phase-10-assessor-tier3-closed` applied in this commit. Phase 10 entirely shipped — Node / Go / Rust runtimes all live-validated against real `factory build` runs with `gate.verify=true`.
