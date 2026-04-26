@@ -54,17 +54,33 @@
       flag. Tests cover: round-trip read/write, partial update
       (only maxUsd), removing a field via null.
 
-- [ ] 11.5 — **SPA write affordances.** Pending-questions detail page
-      gets an answer textarea + submit. New `app/build` page (or
-      modal on overview) lets the operator pick project + language +
-      autonomy + budget. Project detail page gets `<input>`s for
-      maxUsd / maxSteps. All three forms POST/PUT through `src/lib/api.ts`
-      (centralised bearer + envelope handling). No new pages beyond
-      what's needed; reuse the existing list pages.
-      **Note for next session:** invoke the `frontend-design` skill to
-      help with the form design + Astro Islands wiring before
-      hand-rolling the markup. The skill is the operator's preferred
-      tool for any front-end UX work in this repo.
+- [x] 11.5 — **SPA write affordances.** Three forms wired:
+      - `apps/factory-web/src/pages/questions/detail.astro` gets an
+        answer textarea + submit when `answeredAt === undefined`. POST
+        `/api/v1/pending-questions/:id/answer`. On 409, refetches and
+        renders the recorded answer in a conflict alert. Suggested
+        answers from `options` are clickable shortcuts that fill the
+        textarea.
+      - `apps/factory-web/src/pages/build.astro` (new) — project select
+        populated from `GET /api/v1/projects`, plus optional language /
+        autonomy / maxUsd / maxSteps. Submit disables on first click
+        (build is non-idempotent per ADR 0027 §2). On 200 navigates to
+        `/app/directives/detail?id=<directive.id>`.
+      - `apps/factory-web/src/pages/projects/{index,detail}.astro` (new)
+        — list table + detail with budget defaults form. PUT
+        `/api/v1/projects/:id/budget` for save; "Clear all defaults"
+        button does PUT `{}` behind a `window.confirm`. Pre-fills from
+        the `GET /:id` response's extracted `budgetDefaults`.
+      Centralised `apiPost<TReq,TRes>` / `apiPut<TReq,TRes>` helpers
+      added to `src/lib/api.ts` (JSON-encode + Content-Type, reuse
+      existing `apiFetch` envelope unwrap). New shared CSS primitives
+      (`.form`, `.form-field`, `.btn`, `.btn-primary`, `.alert--*`)
+      added to `Dashboard.astro`'s style block — built on the existing
+      `color-mix(currentColor)` palette so they auto-adapt to light /
+      dark via `color-scheme`. Two new nav entries: Projects, Build.
+      Read-side prerequisite landed in the same step: `GET /api/v1/projects`
+      (list) + `GET /api/v1/projects/:id` (detail with extracted
+      `budgetDefaults` + `language`). +10 daemon tests; total 121.
 
 - [ ] 11.6 — **Live validation.** Operator at the browser exercises
       each route against the running factoryd:

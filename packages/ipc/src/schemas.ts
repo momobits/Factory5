@@ -16,6 +16,7 @@ import {
   modelCategorySchema,
   pendingQuestionSchema,
   projectBudgetDefaultsSchema,
+  projectSchema,
   severitySchema,
   taskResultSchema,
   taskStatusSchema,
@@ -305,6 +306,45 @@ export const apiV1CreateBuildResponseSchema = z.object({
   directive: directiveSchema,
 });
 export type ApiV1CreateBuildResponse = z.infer<typeof apiV1CreateBuildResponseSchema>;
+
+// -----------------------------------------------------------------------------
+// GET /api/v1/projects  (web UI, ADR 0027 sub-step 11.5 — SPA prerequisite)
+// -----------------------------------------------------------------------------
+
+/**
+ * Lists every project in the daemon's registry, most-recently touched first.
+ * Powers the SPA's project-list page and the build form's project dropdown
+ * (operator picks by name; SPA needs name → ULID for the budget route per
+ * ADR 0027 §1). Read-only; bearer-gated under the same `requireUiAuth` as
+ * every other `/api/v1/*` route.
+ */
+export const apiV1ProjectsListResponseSchema = z.object({
+  items: z.array(projectSchema),
+});
+export type ApiV1ProjectsListResponse = z.infer<typeof apiV1ProjectsListResponseSchema>;
+
+// -----------------------------------------------------------------------------
+// GET /api/v1/projects/:id  (web UI, ADR 0027 sub-step 11.5 — SPA prerequisite)
+// -----------------------------------------------------------------------------
+
+/**
+ * Single project by canonical ULID. Returns the registry row plus the
+ * extracted `budgetDefaults` and `language` from the on-disk `project.json`
+ * `metadata` blob — pre-shaped so the SPA detail page can pre-fill its
+ * forms without parsing free-form `metadata` client-side.
+ *
+ * Best-effort on the disk read: if `project.json` is absent or corrupt, the
+ * registry row is still returned with `budgetDefaults` / `language` absent
+ * (the SPA renders an inline note rather than failing the whole page). The
+ * mutation routes (PUT /api/v1/projects/:id/budget) surface those failures
+ * loudly with `PROJECT_PATH_UNREADABLE` / `PROJECT_METADATA_CORRUPT`.
+ */
+export const apiV1ProjectDetailResponseSchema = z.object({
+  project: projectSchema,
+  budgetDefaults: projectBudgetDefaultsSchema.optional(),
+  language: z.enum(['python', 'node', 'go', 'rust']).optional(),
+});
+export type ApiV1ProjectDetailResponse = z.infer<typeof apiV1ProjectDetailResponseSchema>;
 
 // -----------------------------------------------------------------------------
 // PUT /api/v1/projects/:id/budget  (web UI, ADR 0027 sub-step 11.4)

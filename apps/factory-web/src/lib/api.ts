@@ -85,6 +85,32 @@ export async function apiFetch<T = unknown>(path: string, init: RequestInit = {}
 }
 
 /**
+ * POST a JSON body to an `/api/v1/*` endpoint. Wraps {@link apiFetch} —
+ * bearer auto-attached, `Content-Type: application/json` set, body
+ * `JSON.stringify`'d. Same {@link ApiError} envelope on 4xx/5xx.
+ */
+export async function apiPost<TReq, TRes = unknown>(path: string, body: TReq): Promise<TRes> {
+  return apiFetch<TRes>(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * PUT a JSON body to an `/api/v1/*` endpoint. Wraps {@link apiFetch} —
+ * bearer auto-attached, `Content-Type: application/json` set, body
+ * `JSON.stringify`'d. Same {@link ApiError} envelope on 4xx/5xx.
+ */
+export async function apiPut<TReq, TRes = unknown>(path: string, body: TReq): Promise<TRes> {
+  return apiFetch<TRes>(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/**
  * Fetch a path and invoke `render` with the response, or surface the error in
  * `mount` with a friendly message. Centralises the captureTokenFromUrl +
  * token-missing + try/catch that every page would otherwise duplicate.

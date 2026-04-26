@@ -49,6 +49,8 @@ import {
   apiV1PendingQuestionDetailResponseSchema,
   apiV1PendingQuestionsListQuerySchema,
   apiV1PendingQuestionsListResponseSchema,
+  apiV1ProjectDetailResponseSchema,
+  apiV1ProjectsListResponseSchema,
   apiV1SpendQuerySchema,
   apiV1SpendResponseSchema,
   apiV1UpdateProjectBudgetRequestSchema,
@@ -69,6 +71,8 @@ import {
   type ApiV1FindingsListResponse,
   type ApiV1PendingQuestionDetailResponse,
   type ApiV1PendingQuestionsListResponse,
+  type ApiV1ProjectDetailResponse,
+  type ApiV1ProjectsListResponse,
   type ApiV1SpendResponse,
   type ApiV1UpdateProjectBudgetResponse,
   type StatusResponse,
@@ -95,6 +99,7 @@ import {
   loadOrCreateProjectMetadata,
   ProjectMetadataCorruptError,
   ProjectMetadataNotFoundError,
+  readProjectMetadata,
   updateProjectMetadata,
 } from '@factory5/wiki';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
@@ -765,6 +770,68 @@ function registerRoutes(
       },
       'ipc: /api/v1/builds — directive created',
     );
+    reply.send(resp);
+  });
+
+  // ----- GET /api/v1/projects (ADR 0027, sub-step 11.5 — SPA prerequisite) -----
+  // Read-only list of every registered project, most-recently touched first.
+  // Drives the SPA's project-list page and the build form's project dropdown
+  // (operator picks by name → SPA maps to ULID for the budget route's `:id`).
+  app.get('/api/v1/projects', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const items = projectsQ.listAll(opts.db);
+    const resp: ApiV1ProjectsListResponse = apiV1ProjectsListResponseSchema.parse({ items });
+    ipcLog.debug({ reqId: request.id, count: items.length }, 'ipc: /api/v1/projects');
+    reply.send(resp);
+  });
+
+  // ----- GET /api/v1/projects/:id (ADR 0027, sub-step 11.5 — SPA prerequisite) -----
+  // Single project by canonical ULID. Returns the registry row plus pre-shaped
+  // `budgetDefaults` and `language` extracted from the on-disk project.json
+  // metadata so the SPA detail page pre-fills its forms without having to
+  // walk the free-form `metadata` blob client-side.
+  //
+  // Best-effort on the disk read — a missing or corrupt project.json yields
+  // a successful response with the budget/language fields absent rather than
+  // failing the whole page (the SPA renders an inline note instead). The
+  // mutation route surfaces those failures loudly with PROJECT_PATH_UNREADABLE
+  // / PROJECT_METADATA_CORRUPT, which is the right place to learn about them.
+  app.get<{ Params: { id: string } }>('/api/v1/projects/:id', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const { id } = request.params;
+    const project = projectsQ.getById(opts.db, id);
+    if (project === undefined) {
+      throw new IpcRequestError(404, 'PROJECT_NOT_FOUND', `project ${id} not found`);
+    }
+
+    let budgetDefaults: ReturnType<typeof budgetDefaultsFromProjectMeta>;
+    let language: ReturnType<typeof languageFromProjectMeta>;
+    try {
+      const meta = await readProjectMetadata(project.workspacePath);
+      if (meta !== undefined) {
+        budgetDefaults = budgetDefaultsFromProjectMeta(meta);
+        language = languageFromProjectMeta(meta);
+      }
+    } catch (err) {
+      // ProjectMetadataCorruptError is the only expected throw from
+      // readProjectMetadata — treat as soft on the GET path. Log so an
+      // operator chasing a confusing UI state can find a trail.
+      if (err instanceof ProjectMetadataCorruptError) {
+        ipcLog.warn(
+          { reqId: request.id, projectId: id, workspacePath: project.workspacePath },
+          'ipc: /api/v1/projects/:id — project.json corrupt; returning registry row only',
+        );
+      } else {
+        throw err;
+      }
+    }
+
+    const resp: ApiV1ProjectDetailResponse = apiV1ProjectDetailResponseSchema.parse({
+      project,
+      ...(budgetDefaults !== undefined ? { budgetDefaults } : {}),
+      ...(language !== undefined ? { language } : {}),
+    });
+    ipcLog.debug({ reqId: request.id, projectId: id }, 'ipc: /api/v1/projects/:id');
     reply.send(resp);
   });
 

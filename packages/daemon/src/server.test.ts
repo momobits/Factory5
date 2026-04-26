@@ -2146,3 +2146,259 @@ describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.
     await app.close();
   });
 });
+
+describe('IPC server — GET /api/v1/projects (ADR 0027, sub-step 11.5 — SPA prerequisite)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+  let projectDir: string;
+
+  beforeEach(async () => {
+    db = freshDb();
+    doorbell = new Doorbell();
+    projectDir = await mkdtemp(join(tmpdir(), 'factory5-projects-list-'));
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  const UI_TOKEN = 'ui-secret-list';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  /**
+   * Seed a project on disk + a matching registry row. Returns the seeded
+   * project's ULID so tests can target it via `:id`. Mirrors the same
+   * helper used by the PUT-budget describe block above.
+   */
+  async function seedProject(
+    name: string,
+    workspacePath: string,
+    seedMetadata: Record<string, unknown> = {},
+  ): Promise<string> {
+    const factoryDir = join(workspacePath, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    const id = newId();
+    const meta = {
+      id,
+      name,
+      createdAt: '2026-04-25T00:00:00.000Z',
+      factoryVersion: '0.x',
+      metadata: seedMetadata,
+    };
+    await writeFile(join(factoryDir, 'project.json'), JSON.stringify(meta, null, 2));
+    projectsQ.upsert(db, {
+      id,
+      name,
+      workspacePath,
+      status: 'active',
+      createdAt: meta.createdAt,
+      lastTouchedAt: meta.createdAt,
+    });
+    return id;
+  }
+
+  it('returns 401 without bearer', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({ method: 'GET', url: '/api/v1/projects' });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns 503 UI_DISABLED when uiAuthToken is not configured', async () => {
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: undefined });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/projects',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(503);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('UI_DISABLED');
+    await app.close();
+  });
+
+  it('returns an empty list when no projects exist', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/projects',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: unknown[] };
+    expect(body.items).toEqual([]);
+    await app.close();
+  });
+
+  it('returns registered projects, most-recently touched first', async () => {
+    const dirA = await mkdtemp(join(tmpdir(), 'factory5-projects-list-a-'));
+    const dirB = await mkdtemp(join(tmpdir(), 'factory5-projects-list-b-'));
+    try {
+      const idA = await seedProject('alpha', dirA);
+      // Bump B's last_touched_at so it sorts first.
+      const idB = await seedProject('bravo', dirB);
+      projectsQ.upsert(db, {
+        id: idB,
+        name: 'bravo',
+        workspacePath: dirB,
+        status: 'active',
+        createdAt: '2026-04-25T00:00:00.000Z',
+        lastTouchedAt: '2026-04-26T00:00:00.000Z',
+      });
+
+      const app = await buildIpcServer(baseOpts());
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/projects',
+        headers: { authorization: `Bearer ${UI_TOKEN}` },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { items: Array<{ id: string; name: string }> };
+      expect(body.items).toHaveLength(2);
+      expect(body.items[0]?.id).toBe(idB);
+      expect(body.items[0]?.name).toBe('bravo');
+      expect(body.items[1]?.id).toBe(idA);
+      expect(body.items[1]?.name).toBe('alpha');
+      await app.close();
+    } finally {
+      await rm(dirA, { recursive: true, force: true });
+      await rm(dirB, { recursive: true, force: true });
+    }
+  });
+
+  it('GET /:id returns 401 without bearer', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({ method: 'GET', url: `/api/v1/projects/${newId()}` });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('GET /:id returns 404 PROJECT_NOT_FOUND on unknown ULID', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${newId()}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('PROJECT_NOT_FOUND');
+    await app.close();
+  });
+
+  it('GET /:id extracts budgetDefaults + language from on-disk project.json metadata', async () => {
+    const id = await seedProject('sample', projectDir, {
+      budgetDefaults: { maxUsd: 7.5, maxSteps: 200 },
+      language: 'rust',
+    });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${id}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      project: { id: string; name: string };
+      budgetDefaults?: { maxUsd?: number; maxSteps?: number };
+      language?: string;
+    };
+    expect(body.project.id).toBe(id);
+    expect(body.project.name).toBe('sample');
+    expect(body.budgetDefaults).toEqual({ maxUsd: 7.5, maxSteps: 200 });
+    expect(body.language).toBe('rust');
+    await app.close();
+  });
+
+  it('GET /:id omits budgetDefaults / language when project.json has no such fields', async () => {
+    const id = await seedProject('bare', projectDir, {});
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${id}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      project: { id: string };
+      budgetDefaults?: unknown;
+      language?: unknown;
+    };
+    expect(body.project.id).toBe(id);
+    expect(body.budgetDefaults).toBeUndefined();
+    expect(body.language).toBeUndefined();
+    await app.close();
+  });
+
+  it('GET /:id returns the registry row even when project.json is absent (soft fail)', async () => {
+    const id = newId();
+    projectsQ.upsert(db, {
+      id,
+      name: 'orphan',
+      workspacePath: projectDir,
+      status: 'active',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      lastTouchedAt: '2026-04-25T00:00:00.000Z',
+    });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${id}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      project: { id: string; name: string };
+      budgetDefaults?: unknown;
+      language?: unknown;
+    };
+    expect(body.project.id).toBe(id);
+    expect(body.project.name).toBe('orphan');
+    expect(body.budgetDefaults).toBeUndefined();
+    expect(body.language).toBeUndefined();
+    await app.close();
+  });
+
+  it('GET /:id returns the registry row when project.json is corrupt (soft fail + warn log)', async () => {
+    const id = newId();
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    await writeFile(join(factoryDir, 'project.json'), '{ corrupt');
+    projectsQ.upsert(db, {
+      id,
+      name: 'broken',
+      workspacePath: projectDir,
+      status: 'active',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      lastTouchedAt: '2026-04-25T00:00:00.000Z',
+    });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${id}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      project: { id: string; name: string };
+      budgetDefaults?: unknown;
+      language?: unknown;
+    };
+    expect(body.project.id).toBe(id);
+    expect(body.project.name).toBe('broken');
+    expect(body.budgetDefaults).toBeUndefined();
+    expect(body.language).toBeUndefined();
+    await app.close();
+  });
+});

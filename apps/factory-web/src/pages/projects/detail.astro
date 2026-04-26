@@ -1,0 +1,317 @@
+---
+import Dashboard from '../../layouts/Dashboard.astro';
+---
+
+<Dashboard title="Project detail">
+  <div id="mount">Loading…</div>
+
+  <script>
+    import {
+      ApiError,
+      NoTokenError,
+      apiFetch,
+      apiPut,
+      captureTokenFromUrl,
+      el,
+      getToken,
+    } from '../../lib/api';
+
+    interface Project {
+      id: string;
+      name: string;
+      workspacePath: string;
+      status: string;
+      createdAt: string;
+      lastTouchedAt: string;
+    }
+    interface BudgetDefaults {
+      maxUsd?: number;
+      maxSteps?: number;
+    }
+    interface DetailResp {
+      project: Project;
+      budgetDefaults?: BudgetDefaults;
+      language?: string;
+    }
+    interface BudgetResp {
+      projectId: string;
+      budgetDefaults: BudgetDefaults;
+    }
+
+    captureTokenFromUrl();
+
+    const mount = document.getElementById('mount');
+    if (mount === null) throw new Error('mount missing');
+    const projectId = new URLSearchParams(window.location.search).get('id');
+
+    if (projectId === null || projectId.length === 0) {
+      mount.textContent = 'Missing ?id=<projectId> in URL.';
+    } else if (getToken() === null) {
+      mount.textContent = 'No UI token present. Reopen the URL logged by factoryd.';
+    } else {
+      load(projectId, mount);
+    }
+
+    function load(id: string, host: HTMLElement): void {
+      host.textContent = 'Loading…';
+      apiFetch<DetailResp>(`/api/v1/projects/${encodeURIComponent(id)}`)
+        .then((resp) => render(resp, host))
+        .catch((err: unknown) => renderTopError(err, host));
+    }
+
+    function render(d: DetailResp, host: HTMLElement): void {
+      host.innerHTML = '';
+      const p = d.project;
+
+      host.appendChild(el('h3', { style: 'margin: 0 0 0.25rem 0;' }, p.name));
+
+      const meta = el('p', {
+        style:
+          'color: color-mix(in srgb, currentColor 65%, transparent); font-size: 0.85rem; margin: 0 0 0.25rem 0;',
+      });
+      meta.appendChild(el('code', { style: 'font-size: 0.95em;' }, p.id));
+      meta.appendChild(document.createTextNode(' · '));
+      meta.appendChild(document.createTextNode(p.status));
+      meta.appendChild(document.createTextNode(' · last touched '));
+      meta.appendChild(document.createTextNode(p.lastTouchedAt.replace('T', ' ').slice(0, 19)));
+      host.appendChild(meta);
+
+      host.appendChild(
+        el(
+          'p',
+          {
+            style:
+              'font-family: ui-monospace, SFMono-Regular, Consolas, Menlo, monospace; font-size: 0.85rem; color: color-mix(in srgb, currentColor 75%, transparent); margin: 0 0 1.5rem 0;',
+          },
+          p.workspacePath,
+        ),
+      );
+
+      if (d.language !== undefined) {
+        const langLine = el('p', { style: 'font-size: 0.9rem; margin: 0 0 1.5rem 0;' });
+        langLine.appendChild(el('strong', {}, 'Language: '));
+        langLine.appendChild(document.createTextNode(d.language));
+        langLine.appendChild(
+          el(
+            'span',
+            {
+              style: 'color: color-mix(in srgb, currentColor 60%, transparent);',
+            },
+            ' (from project.json metadata.language)',
+          ),
+        );
+        host.appendChild(langLine);
+      }
+
+      host.appendChild(el('h3', { style: 'margin: 0 0 0.25rem 0;' }, 'Budget defaults'));
+
+      const intro = el('p', {
+        style:
+          'color: color-mix(in srgb, currentColor 65%, transparent); font-size: 0.9rem; margin: 0 0 1rem 0; max-width: 36rem;',
+      });
+      intro.appendChild(document.createTextNode('Resolution order per ADR 0027 §4: '));
+      intro.appendChild(el('code', {}, '--max-*'));
+      intro.appendChild(document.createTextNode(' flag → project (here) → '));
+      intro.appendChild(el('code', {}, '~/.factory5/config.toml'));
+      intro.appendChild(document.createTextNode(' → unlimited.'));
+      host.appendChild(intro);
+
+      const alertSlot = el('div', { id: 'alertSlot', style: 'margin-bottom: 1rem;' });
+      host.appendChild(alertSlot);
+
+      const form = el('form', { class: 'form' }) as HTMLFormElement;
+
+      const row = el('div', { class: 'form-row' });
+
+      const usdField = el('div', { class: 'form-field' });
+      usdField.appendChild(el('label', { for: 'maxUsd' }, 'Max USD'));
+      const usdAttrs: Record<string, string> = {
+        id: 'maxUsd',
+        name: 'maxUsd',
+        type: 'number',
+        step: '0.01',
+        min: '0',
+      };
+      if (d.budgetDefaults?.maxUsd !== undefined) {
+        usdAttrs.value = String(d.budgetDefaults.maxUsd);
+      }
+      const usdInput = el('input', usdAttrs) as HTMLInputElement;
+      usdField.appendChild(usdInput);
+      row.appendChild(usdField);
+
+      const stepsField = el('div', { class: 'form-field' });
+      stepsField.appendChild(el('label', { for: 'maxSteps' }, 'Max steps'));
+      const stepsAttrs: Record<string, string> = {
+        id: 'maxSteps',
+        name: 'maxSteps',
+        type: 'number',
+        step: '1',
+        min: '1',
+      };
+      if (d.budgetDefaults?.maxSteps !== undefined) {
+        stepsAttrs.value = String(d.budgetDefaults.maxSteps);
+      }
+      const stepsInput = el('input', stepsAttrs) as HTMLInputElement;
+      stepsField.appendChild(stepsInput);
+      row.appendChild(stepsField);
+
+      form.appendChild(row);
+
+      form.appendChild(
+        el(
+          'p',
+          { class: 'hint', style: 'margin: 0;' },
+          'Empty fields are removed. PUT semantics: the body replaces the entire defaults document.',
+        ),
+      );
+
+      const actions = el('div', { class: 'form-actions' });
+      const saveBtn = el(
+        'button',
+        { type: 'submit', class: 'btn btn-primary' },
+        'Save defaults',
+      ) as HTMLButtonElement;
+      const clearBtn = el(
+        'button',
+        { type: 'button', class: 'btn btn-danger' },
+        'Clear all defaults',
+      ) as HTMLButtonElement;
+      actions.appendChild(saveBtn);
+      actions.appendChild(clearBtn);
+      form.appendChild(actions);
+
+      host.appendChild(form);
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const body: Record<string, number> = {};
+        if (usdInput.value.trim() !== '') {
+          const v = Number.parseFloat(usdInput.value);
+          if (Number.isFinite(v)) body.maxUsd = v;
+        }
+        if (stepsInput.value.trim() !== '') {
+          const v = Number.parseInt(stepsInput.value, 10);
+          if (Number.isFinite(v)) body.maxSteps = v;
+        }
+        submitBudget(body, saveBtn, 'Save defaults', alertSlot, usdInput, stepsInput);
+      });
+
+      clearBtn.addEventListener('click', () => {
+        const ok = window.confirm(
+          'Clear all per-project budget defaults? Future builds fall back to instance config or unlimited.',
+        );
+        if (!ok) return;
+        submitBudget({}, clearBtn, 'Clear all defaults', alertSlot, usdInput, stepsInput);
+      });
+    }
+
+    function submitBudget(
+      body: Record<string, number>,
+      btn: HTMLButtonElement,
+      restoreLabel: string,
+      alertSlot: HTMLElement,
+      usdInput: HTMLInputElement,
+      stepsInput: HTMLInputElement,
+    ): void {
+      const id = new URLSearchParams(window.location.search).get('id');
+      if (id === null) return;
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      alertSlot.innerHTML = '';
+      apiPut<typeof body, BudgetResp>(
+        `/api/v1/projects/${encodeURIComponent(id)}/budget`,
+        body,
+      )
+        .then((resp) => {
+          btn.disabled = false;
+          btn.textContent = restoreLabel;
+          usdInput.value =
+            resp.budgetDefaults.maxUsd !== undefined ? String(resp.budgetDefaults.maxUsd) : '';
+          stepsInput.value =
+            resp.budgetDefaults.maxSteps !== undefined ? String(resp.budgetDefaults.maxSteps) : '';
+          renderInlineSuccess(describeBudget(resp.budgetDefaults), alertSlot);
+        })
+        .catch((err: unknown) => {
+          btn.disabled = false;
+          btn.textContent = restoreLabel;
+          renderInlineError(err, alertSlot);
+        });
+    }
+
+    function describeBudget(b: BudgetDefaults): string {
+      const parts: string[] = [];
+      if (b.maxUsd !== undefined) parts.push(`maxUsd=${String(b.maxUsd)}`);
+      if (b.maxSteps !== undefined) parts.push(`maxSteps=${String(b.maxSteps)}`);
+      return parts.length === 0 ? 'All defaults cleared.' : `Saved: ${parts.join(', ')}.`;
+    }
+
+    function renderInlineSuccess(message: string, slot: HTMLElement): void {
+      slot.innerHTML = '';
+      const alert = el('div', { class: 'alert alert--success' });
+      alert.appendChild(el('h4', {}, 'Saved'));
+      alert.appendChild(el('p', {}, message));
+      slot.appendChild(alert);
+    }
+
+    function renderInlineError(err: unknown, slot: HTMLElement): void {
+      slot.innerHTML = '';
+      const alert = el('div', { class: 'alert alert--conflict' });
+      if (err instanceof ApiError) {
+        alert.appendChild(el('h4', {}, codeHeading(err.code, err.status)));
+        alert.appendChild(el('p', {}, err.message));
+      } else if (err instanceof Error) {
+        alert.appendChild(el('h4', {}, 'Save failed'));
+        alert.appendChild(el('p', {}, err.message));
+      } else {
+        alert.appendChild(el('h4', {}, 'Save failed'));
+        alert.appendChild(el('p', {}, 'Unknown error.'));
+      }
+      slot.appendChild(alert);
+    }
+
+    function renderTopError(err: unknown, host: HTMLElement): void {
+      host.innerHTML = '';
+      if (err instanceof NoTokenError) {
+        host.textContent = err.message;
+        return;
+      }
+      const alert = el('div', { class: 'alert alert--conflict' });
+      if (err instanceof ApiError) {
+        alert.appendChild(el('h4', {}, codeHeading(err.code, err.status)));
+        alert.appendChild(el('p', {}, err.message));
+      } else if (err instanceof Error) {
+        alert.appendChild(el('h4', {}, 'Failed to load project'));
+        alert.appendChild(el('p', {}, err.message));
+      } else {
+        alert.appendChild(el('h4', {}, 'Failed to load project'));
+        alert.appendChild(el('p', {}, 'Unknown error.'));
+      }
+      host.appendChild(alert);
+    }
+
+    function codeHeading(code: string, status: number): string {
+      switch (code) {
+        case 'PROJECT_NOT_FOUND':
+          return 'Project not found in the registry.';
+        case 'PROJECT_PATH_UNREADABLE':
+          return 'Workspace path is no longer readable — was the directory moved?';
+        case 'PROJECT_METADATA_CORRUPT':
+          return 'project.json is unparseable — fix it on disk before saving here.';
+        case 'SCHEMA_VALIDATION_FAILED':
+          return 'Validation failed — values must be positive numbers.';
+        case 'UI_AUTH_REQUIRED':
+          return 'Auth token missing or invalid.';
+        case 'UI_DISABLED':
+          return 'Web UI is disabled on this daemon.';
+        case 'NON_LOCALHOST':
+          return 'Request rejected as non-localhost.';
+        case 'BAD_REQUEST':
+          return 'Bad request.';
+        case 'INTERNAL':
+          return 'Internal server error.';
+        default:
+          return `Error ${String(status)} (${code})`;
+      }
+    }
+  </script>
+</Dashboard>

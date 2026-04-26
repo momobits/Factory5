@@ -1,0 +1,103 @@
+---
+import Dashboard from '../../layouts/Dashboard.astro';
+---
+
+<Dashboard title="Projects">
+  <div id="mount">Loading…</div>
+
+  <script>
+    import { el, loadInto } from '../../lib/api';
+
+    interface Project {
+      id: string;
+      name: string;
+      workspacePath: string;
+      lastTouchedAt: string;
+      status: string;
+    }
+    interface ProjectsList {
+      items: Project[];
+    }
+
+    function render(data: ProjectsList, mount: HTMLElement): void {
+      if (data.items.length === 0) {
+        const alert = el('div', { class: 'alert alert--info' });
+        alert.appendChild(el('h4', {}, 'No projects yet'));
+        const p = el('p', {});
+        p.appendChild(document.createTextNode('Run '));
+        p.appendChild(el('code', {}, 'factory init'));
+        p.appendChild(
+          document.createTextNode(
+            ' in a workspace to register one. Builds and per-project budget defaults will appear here.',
+          ),
+        );
+        alert.appendChild(p);
+        mount.appendChild(alert);
+        return;
+      }
+
+      const intro = el(
+        'p',
+        {
+          style:
+            'color: color-mix(in srgb, currentColor 65%, transparent); font-size: 0.9rem; margin-top: 0;',
+        },
+        `${String(data.items.length)} project${data.items.length === 1 ? '' : 's'}, most-recently touched first.`,
+      );
+      mount.appendChild(intro);
+
+      const table = el(
+        'table',
+        {},
+        el(
+          'thead',
+          {},
+          el(
+            'tr',
+            {},
+            el('th', {}, 'Name'),
+            el('th', {}, 'Status'),
+            el('th', {}, 'Last touched'),
+            el('th', {}, 'Workspace'),
+          ),
+        ),
+      );
+      const tbody = el('tbody', {});
+      for (const p of data.items) {
+        const nameCell = el('td', {});
+        nameCell.appendChild(
+          el(
+            'a',
+            {
+              href: `/app/projects/detail?id=${encodeURIComponent(p.id)}`,
+              class: 'link',
+            },
+            p.name,
+          ),
+        );
+        const tr = el(
+          'tr',
+          {},
+          nameCell,
+          el('td', {}, p.status),
+          el('td', {}, p.lastTouchedAt.replace('T', ' ').slice(0, 19)),
+          el(
+            'td',
+            {
+              style:
+                'font-family: ui-monospace, SFMono-Regular, Consolas, Menlo, monospace; font-size: 0.85rem; color: color-mix(in srgb, currentColor 75%, transparent);',
+            },
+            p.workspacePath,
+          ),
+        );
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      mount.appendChild(table);
+    }
+
+    const mount = document.getElementById('mount');
+    if (mount === null) throw new Error('mount missing');
+    loadInto<ProjectsList>(mount, '/api/v1/projects', render);
+  </script>
+</Dashboard>
