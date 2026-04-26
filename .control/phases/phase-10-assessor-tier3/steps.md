@@ -58,7 +58,7 @@
       Gate: `cargo test`. Integration test. Shape is mechanical once
       Node + Go prove the abstraction.
 
-- [ ] 10.7 — **Live validation — Rust end-to-end.** Small Rust CLI
+- [x] 10.7 — **Live validation — Rust end-to-end.** Small Rust CLI
       spec; full `factory build` loop.
 
 - [x] 10.8 — **`factory init` language picker.** Today the wizard
