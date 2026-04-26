@@ -28,9 +28,10 @@ import {
 } from '@factory5/state';
 import {
   defaultWorkspace,
+  languageFromProjectMeta,
   loadOrCreateProjectMetadata,
   ProjectMetadataCorruptError,
-  type ProjectMetadata,
+  type ProjectLanguage,
   resolveProjectPath,
 } from '@factory5/wiki';
 import type { Command } from 'commander';
@@ -42,30 +43,9 @@ function parseAutonomy(raw: string): AutonomyMode {
   throw new Error(`--autonomy must be chat | assisted | autonomous, got: ${raw}`);
 }
 
-/**
- * Mirror of `@factory5/assessor`'s `Runtime` union. Inlined to avoid an
- * extra workspace dep for one type; the brain does the real dispatch
- * against assessor's canonical type at `loop.ts` via `extractRuntime`.
- */
-type BuildLanguage = 'python' | 'node' | 'go' | 'rust';
-
-function parseLanguage(raw: string): BuildLanguage {
+function parseLanguage(raw: string): ProjectLanguage {
   if (raw === 'python' || raw === 'node' || raw === 'go' || raw === 'rust') return raw;
   throw new Error(`--language must be python | node | go | rust, got: ${raw}`);
-}
-
-/**
- * Read the per-project language recorded by `factory init <project>` (Phase
- * 10.8). Returns `undefined` if the metadata key is absent or not a
- * recognised value — the caller then leaves the directive without a
- * language and the assessor falls back to its `'python'` default.
- *
- * Exported for unit testing; runtime caller is the `factory build` action.
- */
-export function languageFromProjectMeta(meta: ProjectMetadata): BuildLanguage | undefined {
-  const raw = meta.metadata['language'];
-  if (raw === 'python' || raw === 'node' || raw === 'go' || raw === 'rust') return raw;
-  return undefined;
 }
 
 function parsePositiveFloat(flag: string, raw: string): number {

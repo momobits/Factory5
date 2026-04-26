@@ -27,15 +27,20 @@
  * (same HTML/JS for every operator); the data API it calls is.
  */
 
+import { constants as fsConstants } from 'node:fs';
+import { access } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
+import { isAbsolute, join } from 'node:path';
 import process from 'node:process';
 
 import fastifyStatic from '@fastify/static';
 import type { ChannelId, OutboundMessage } from '@factory5/core';
-import { newId } from '@factory5/core';
+import { directiveSchema, newId } from '@factory5/core';
 import {
   apiV1AnswerPendingQuestionRequestSchema,
   apiV1AnswerPendingQuestionResponseSchema,
+  apiV1CreateBuildRequestSchema,
+  apiV1CreateBuildResponseSchema,
   apiV1DirectiveDetailResponseSchema,
   apiV1DirectivesListQuerySchema,
   apiV1DirectivesListResponseSchema,
@@ -56,6 +61,7 @@ import {
   workerAskUserRequestSchema,
   workerAskUserResponseSchema,
   type ApiV1AnswerPendingQuestionResponse,
+  type ApiV1CreateBuildResponse,
   type ApiV1DirectiveDetailResponse,
   type ApiV1DirectivesListResponse,
   type ApiV1FindingsListResponse,
@@ -74,10 +80,17 @@ import {
   modelUsage,
   outbound,
   pendingQuestions,
+  projects as projectsQ,
   spend,
   tasksInflight,
   type Database,
 } from '@factory5/state';
+import {
+  defaultWorkspace,
+  languageFromProjectMeta,
+  loadOrCreateProjectMetadata,
+  ProjectMetadataCorruptError,
+} from '@factory5/wiki';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 
@@ -656,6 +669,90 @@ function registerRoutes(
     reply.send(resp);
   });
 
+  // ----- POST /api/v1/builds (ADR 0027, sub-step 11.3) -----
+  // Mutation surface — mirrors `factory build <project>`'s directive-creation
+  // path (cli/src/commands/build.ts). Bearer-gated like the read routes.
+  // Refuses to create new projects (ADR 0025 / Phase 11 charter): the path
+  // must already exist on disk; operator runs `factory init` for new projects.
+  // Budget resolution is body-only in 11.3; 11.4 layers in the project-tier
+  // fallback (`metadata.budgetDefaults`) shared with the CLI.
+  app.post('/api/v1/builds', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const body = apiV1CreateBuildRequestSchema.parse(request.body);
+
+    const workspace = defaultWorkspace();
+    const projectPath = await resolveExistingProjectPath(body.project, workspace);
+    if (projectPath === undefined) {
+      throw new IpcRequestError(
+        404,
+        'PROJECT_NOT_FOUND',
+        `project ${body.project} not found — run \`factory init\` to create it`,
+      );
+    }
+
+    let projectMeta;
+    try {
+      projectMeta = await loadOrCreateProjectMetadata(projectPath, body.project);
+    } catch (err) {
+      if (err instanceof ProjectMetadataCorruptError) {
+        throw new IpcRequestError(422, 'PROJECT_METADATA_CORRUPT', err.message);
+      }
+      throw err;
+    }
+
+    const language = body.language ?? languageFromProjectMeta(projectMeta);
+    const autonomy = body.autonomy ?? 'assisted';
+
+    const nowIso = new Date().toISOString();
+    projectsQ.upsert(opts.db, {
+      id: projectMeta.id,
+      name: projectMeta.name,
+      workspacePath: projectPath,
+      status: 'active',
+      createdAt: projectMeta.createdAt,
+      lastTouchedAt: nowIso,
+    });
+
+    const limits = body.limits;
+    const hasLimits = limits !== undefined && Object.keys(limits).length > 0;
+    const directive = directiveSchema.parse({
+      id: newId(),
+      source: 'cli',
+      principal: 'web-ui',
+      channelRef: `web-ui-${request.id}`,
+      intent: 'build',
+      payload: {
+        project: body.project,
+        projectPath,
+        workspace,
+        ...(language !== undefined ? { language } : {}),
+      },
+      autonomy,
+      createdAt: nowIso,
+      status: 'pending',
+      projectId: projectMeta.id,
+      ...(hasLimits ? { limits } : {}),
+    });
+    directivesQ.insert(opts.db, directive);
+
+    opts.doorbell.emit('directive.new', { directiveId: directive.id, reason: 'new' });
+
+    const resp: ApiV1CreateBuildResponse = apiV1CreateBuildResponseSchema.parse({ directive });
+    ipcLog.info(
+      {
+        reqId: request.id,
+        directiveId: directive.id,
+        projectId: projectMeta.id,
+        project: body.project,
+        language,
+        autonomy,
+        hasLimits,
+      },
+      'ipc: /api/v1/builds — directive created',
+    );
+    reply.send(resp);
+  });
+
   // ----- POST /worker/ask-user (ADR 0024) -----
   // Bearer-gated; bearer check fires before schema parse so malformed bodies
   // from unauthenticated callers can't probe the schema surface.
@@ -696,6 +793,44 @@ function registerRoutes(
     );
     reply.send(resp);
   });
+}
+
+/**
+ * Best-effort filesystem existence check. Used by the build-creation route to
+ * pre-validate a project path before handing it to `loadOrCreateProjectMetadata`
+ * (which would otherwise create a stray empty project for a typo'd name —
+ * ADR 0025 / Phase 11 charter explicitly puts project-creation out of scope).
+ */
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await access(p, fsConstants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve a build-route `project` argument to an absolute path that already
+ * exists on disk. Returns `undefined` when nothing matches — caller raises
+ * `PROJECT_NOT_FOUND`. Two rungs only:
+ *
+ *   1. Absolute path that exists.
+ *   2. `<workspace>/<name>` that exists.
+ *
+ * Deliberately does NOT call `wiki.resolveProjectPath` because that helper
+ * creates empty directories and copies templates as a side effect, which
+ * is operator-friendly for the CLI but a footgun for the API.
+ */
+async function resolveExistingProjectPath(
+  project: string,
+  workspace: string,
+): Promise<string | undefined> {
+  if (isAbsolute(project)) {
+    return (await fileExists(project)) ? project : undefined;
+  }
+  const inWorkspace = join(workspace, project);
+  return (await fileExists(inWorkspace)) ? inWorkspace : undefined;
 }
 
 /**

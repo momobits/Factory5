@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ProjectMetadata } from '@factory5/wiki';
-
-import { languageFromProjectMeta } from './build.js';
+import { languageFromProjectMeta, type ProjectMetadata } from '@factory5/wiki';
 
 const baseMeta = (metadata: Record<string, unknown>): ProjectMetadata => ({
   id: '01KQ0P14MZZPJRPA5RW929TTSJ',

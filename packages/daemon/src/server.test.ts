@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -19,6 +19,7 @@ import {
   modelUsage,
   outbound,
   pendingQuestions,
+  projects as projectsQ,
   tasksInflight,
   type Database,
   type InflightTask,
@@ -1605,6 +1606,250 @@ describe('IPC server — POST /api/v1/pending-questions/:id/answer (ADR 0027, su
     const persisted = pendingQuestions.getById(db, question.id);
     expect(persisted?.answer).toBe('yes');
     expect(persisted?.answeredAt).toBeDefined();
+    await app.close();
+  });
+});
+
+describe('IPC server — POST /api/v1/builds (ADR 0027, sub-step 11.3)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+  let projectDir: string;
+
+  beforeEach(async () => {
+    db = freshDb();
+    doorbell = new Doorbell();
+    // Each test gets its own on-disk project — the build route writes
+    // .factory/project.json via loadOrCreateProjectMetadata.
+    projectDir = await mkdtemp(join(tmpdir(), 'factory5-build-route-'));
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  const UI_TOKEN = 'ui-secret-xyz';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  it('returns 401 without bearer', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      payload: { project: projectDir },
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns 503 UI_DISABLED when uiAuthToken is not configured', async () => {
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: undefined });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir },
+    });
+    expect(res.statusCode).toBe(503);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('UI_DISABLED');
+    await app.close();
+  });
+
+  it('returns 400 SCHEMA_VALIDATION_FAILED on missing project', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('returns 400 SCHEMA_VALIDATION_FAILED on bad language enum', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir, language: 'kotlin' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('returns 404 PROJECT_NOT_FOUND for an absolute path that does not exist', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const ghostPath = join(tmpdir(), 'factory5-nonexistent-project-xyzzy');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: ghostPath },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('PROJECT_NOT_FOUND');
+    await app.close();
+  });
+
+  it('returns 404 PROJECT_NOT_FOUND for a bare name that does not match the workspace', async () => {
+    const app = await buildIpcServer(baseOpts());
+    // Bare name resolves under defaultWorkspace() → ~/factory5-workspace/<name>
+    // which we don't create here; should miss the second resolver rung too.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: 'this-name-should-not-exist-anywhere-12345' },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('PROJECT_NOT_FOUND');
+    await app.close();
+  });
+
+  it('returns 422 PROJECT_METADATA_CORRUPT on an unparseable project.json', async () => {
+    // Pre-seed a corrupt project.json so loadOrCreateProjectMetadata throws.
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    await writeFile(join(factoryDir, 'project.json'), '{ this is not json');
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir },
+    });
+    expect(res.statusCode).toBe(422);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('PROJECT_METADATA_CORRUPT');
+    await app.close();
+  });
+
+  it('happy path: creates a directive, persists it, and rings the doorbell', async () => {
+    let rung: { directiveId: string; reason: string } | undefined;
+    doorbell.on('directive.new', (payload) => {
+      rung = payload;
+    });
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {
+        project: projectDir,
+        language: 'node',
+        autonomy: 'autonomous',
+        limits: { maxUsd: 5, maxSteps: 100 },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: {
+        id: string;
+        intent: string;
+        autonomy: string;
+        status: string;
+        projectId: string;
+        payload: { project: string; projectPath: string; language: string };
+        limits: { maxUsd: number; maxSteps: number };
+      };
+    };
+    expect(body.directive.intent).toBe('build');
+    expect(body.directive.autonomy).toBe('autonomous');
+    expect(body.directive.status).toBe('pending');
+    expect(body.directive.payload.projectPath).toBe(projectDir);
+    expect(body.directive.payload.language).toBe('node');
+    expect(body.directive.limits).toEqual({ maxUsd: 5, maxSteps: 100 });
+    expect(body.directive.projectId).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+
+    // Persisted in SQLite.
+    const persisted = directivesQ.getById(db, body.directive.id);
+    expect(persisted?.id).toBe(body.directive.id);
+    expect(persisted?.status).toBe('pending');
+
+    // Doorbell rang.
+    expect(rung).toEqual({ directiveId: body.directive.id, reason: 'new' });
+    await app.close();
+  });
+
+  it('happy path without limits: directive lands without limits set', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { directive: { autonomy: string; limits?: unknown } };
+    // CLI-default autonomy.
+    expect(body.directive.autonomy).toBe('assisted');
+    expect(body.directive.limits).toBeUndefined();
+    await app.close();
+  });
+
+  it('language fallback: reads metadata.language when body.language is absent (10.8 parity)', async () => {
+    // Pre-seed project.json with metadata.language = 'rust'.
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    const meta = {
+      id: '01KQ0P14MZZPJRPA5RW929TTSJ',
+      name: 'sample',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      factoryVersion: '0.x',
+      metadata: { language: 'rust' },
+    };
+    await writeFile(join(factoryDir, 'project.json'), JSON.stringify(meta, null, 2));
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { payload: { language?: string }; projectId: string };
+    };
+    expect(body.directive.payload.language).toBe('rust');
+    // Project identity persisted from the seeded file (not freshly minted).
+    expect(body.directive.projectId).toBe(meta.id);
+    await app.close();
+  });
+
+  it('happy path persists the project to the registry', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { directive: { projectId: string } };
+    const project = projectsQ.getById(db, body.directive.projectId);
+    expect(project?.workspacePath).toBe(projectDir);
+    expect(project?.status).toBe('active');
     await app.close();
   });
 });

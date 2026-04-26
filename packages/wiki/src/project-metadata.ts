@@ -146,6 +146,30 @@ export async function loadOrCreateProjectMetadata(
 }
 
 /**
+ * Recognised assessor runtimes (mirrors `@factory5/assessor`'s `Runtime`
+ * union). Inlined here to avoid a wiki → assessor dependency for a single
+ * literal type; both packages stay in sync because the union is enumerated
+ * in `pickLanguageFromMeta` below and tested at the boundary.
+ */
+export type ProjectLanguage = 'python' | 'node' | 'go' | 'rust';
+
+/**
+ * Read the per-project language recorded by `factory init <project>`
+ * (Phase 10.8) or any other writer that lands a value in
+ * `metadata.language`. Returns `undefined` when the metadata key is
+ * absent or carries an unrecognised value — callers fall through to
+ * the next language-resolution tier (CLI flag, assessor default).
+ *
+ * Single source of truth for the language read shared by the CLI's
+ * `factory build` and the web UI's `POST /api/v1/builds` (ADR 0027).
+ */
+export function languageFromProjectMeta(meta: ProjectMetadata): ProjectLanguage | undefined {
+  const raw = meta.metadata['language'];
+  if (raw === 'python' || raw === 'node' || raw === 'go' || raw === 'rust') return raw;
+  return undefined;
+}
+
+/**
  * Resolve metadata read-only — does not create the file. Returns
  * `undefined` when the file is absent. Throws
  * {@link ProjectMetadataCorruptError} on a present-but-invalid file.

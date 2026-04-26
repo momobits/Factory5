@@ -7,7 +7,9 @@
 
 import {
   agentRoleSchema,
+  autonomyModeSchema,
   channelIdSchema,
+  directiveLimitsSchema,
   directiveSchema,
   findingSchema,
   findingStatusSchema,
@@ -266,6 +268,42 @@ export const apiV1AnswerPendingQuestionResponseSchema = z.object({
 export type ApiV1AnswerPendingQuestionResponse = z.infer<
   typeof apiV1AnswerPendingQuestionResponseSchema
 >;
+
+// -----------------------------------------------------------------------------
+// POST /api/v1/builds  (web UI, ADR 0027 sub-step 11.3)
+// -----------------------------------------------------------------------------
+
+/**
+ * Request body for kicking off a build via the web UI mutation surface
+ * (ADR 0027 §1). Mirrors `factory build <project>`'s argument set:
+ *
+ *   - `project` — project name (resolved against `defaultWorkspace()`)
+ *     OR an absolute path. The route refuses to create new projects;
+ *     operator must `factory init` first per the Phase 11 charter.
+ *   - `language` — explicit assessor runtime override; falls through to
+ *     `metadata.language` when absent (Phase 10.8 parity).
+ *   - `autonomy` — `chat` | `assisted` | `autonomous`; defaults to
+ *     `assisted` to match the CLI default.
+ *   - `limits` — explicit per-directive budget ceiling (ADR 0020 shape).
+ *     Body-only resolution in 11.3; 11.4 will add the project-tier
+ *     fallback (`metadata.budgetDefaults`) shared with the CLI.
+ *
+ * Idempotency per ADR 0027 §2: builds are NOT idempotent — each POST
+ * mints a new directive (the SPA's submit button disables on first
+ * click to prevent operator double-submit).
+ */
+export const apiV1CreateBuildRequestSchema = z.object({
+  project: z.string().min(1),
+  language: z.enum(['python', 'node', 'go', 'rust']).optional(),
+  autonomy: autonomyModeSchema.optional(),
+  limits: directiveLimitsSchema.optional(),
+});
+export type ApiV1CreateBuildRequest = z.infer<typeof apiV1CreateBuildRequestSchema>;
+
+export const apiV1CreateBuildResponseSchema = z.object({
+  directive: directiveSchema,
+});
+export type ApiV1CreateBuildResponse = z.infer<typeof apiV1CreateBuildResponseSchema>;
 
 // -----------------------------------------------------------------------------
 // GET /api/v1/spend  (web UI, ADR 0025 sub-step 9.6)

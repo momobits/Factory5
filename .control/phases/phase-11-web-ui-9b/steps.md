@@ -36,7 +36,7 @@
       updated question. Tests cover: happy path, idempotent re-answer,
       404 for unknown id, 400 for missing/empty answer.
 
-- [ ] 11.3 — **Build-creation route.** `POST /api/v1/builds` with
+- [x] 11.3 — **Build-creation route.** `POST /api/v1/builds` with
       `{ project, language?, autonomy?, limits? }`. Mirrors
       `factory build`'s directive-creation path: resolves project
       metadata (creates a directive with `intent: 'build'`), enqueues
