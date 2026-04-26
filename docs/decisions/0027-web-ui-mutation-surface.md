@@ -24,11 +24,11 @@ Five parts, one ADR. The shared envelope across all three routes is the existing
 
 ### 1. Route verbs + URL shapes — pinned per route
 
-| Route                | Method | URL                                          | Body                                                            | Success body                          |
-| -------------------- | ------ | -------------------------------------------- | --------------------------------------------------------------- | ------------------------------------- |
-| Answer a question    | POST   | `/api/v1/pending-questions/:id/answer`       | `{ answer: string }`                                            | `{ question }`                        |
-| Kick off a build     | POST   | `/api/v1/builds`                             | `{ project, language?, autonomy?, limits? }`                    | `{ directive }`                       |
-| Update budget defaults | PUT  | `/api/v1/projects/:id/budget`                | `{ maxUsd?: number, maxSteps?: number }`                        | `{ projectId, budgetDefaults }`       |
+| Route                  | Method | URL                                    | Body                                         | Success body                    |
+| ---------------------- | ------ | -------------------------------------- | -------------------------------------------- | ------------------------------- |
+| Answer a question      | POST   | `/api/v1/pending-questions/:id/answer` | `{ answer: string }`                         | `{ question }`                  |
+| Kick off a build       | POST   | `/api/v1/builds`                       | `{ project, language?, autonomy?, limits? }` | `{ directive }`                 |
+| Update budget defaults | PUT    | `/api/v1/projects/:id/budget`          | `{ maxUsd?: number, maxSteps?: number }`     | `{ projectId, budgetDefaults }` |
 
 **Answer — action-on-resource (`POST …/:id/answer`), not partial update.** `PUT /api/v1/pending-questions/:id { answer }` would imply the question is being partially updated; in fact, posting an answer triggers downstream side effects (worker resume from `waiting_for_human` per ADR 0024 §4, channel ack on the question's original channel). Naming the action at the URL level mirrors the existing `/worker/ask-user` shape and leaves room for sibling actions later (`/cancel`, `/timeout`) without mutating the question's own resource shape.
 
@@ -59,19 +59,19 @@ Reuse the existing `ipcErrorSchema` (`{ error: { code: string, message: string, 
 
 Code list (existing on the read side + new for mutations). New codes are starred:
 
-| Code                                       | HTTP | When                                                                                                                |
-| ------------------------------------------ | ---- | ------------------------------------------------------------------------------------------------------------------- |
-| `UI_AUTH_REQUIRED`                         | 401  | Bearer missing or wrong (existing)                                                                                  |
-| `UI_DISABLED`                              | 503  | Daemon started without `uiAuthToken` (existing)                                                                     |
-| `NON_LOCALHOST`                            | 403  | Request from non-loopback IP (existing)                                                                             |
-| `SCHEMA_VALIDATION_FAILED`                 | 400  | Body doesn't parse against the route's Zod schema; `details` carries the issues array (existing)                    |
-| `BAD_REQUEST`                              | 400  | Other 4xx coercion fallback (existing)                                                                              |
-| `INTERNAL`                                 | 500  | Unhandled exception (existing)                                                                                      |
-| `QUESTION_NOT_FOUND`                       | 404  | `:id` doesn't match a row (existing on Phase 9 read routes; reused)                                                 |
-| `QUESTION_ALREADY_ANSWERED_DIFFERENTLY` ★  | 409  | Re-POST with a different answer than already recorded; original preserved                                           |
-| `PROJECT_NOT_FOUND` ★                      | 404  | Build route: project name doesn't resolve to a path; budget route: ULID not in the `projects` registry              |
-| `PROJECT_PATH_UNREADABLE` ★                | 404  | Project is in the registry but `workspacePath` no longer holds a readable `.factory/project.json` (moved out-of-band) |
-| `PROJECT_METADATA_CORRUPT` ★               | 422  | `project.json` exists but doesn't parse — wraps `ProjectMetadataCorruptError` from `@factory5/wiki`                 |
+| Code                                      | HTTP | When                                                                                                                  |
+| ----------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------- |
+| `UI_AUTH_REQUIRED`                        | 401  | Bearer missing or wrong (existing)                                                                                    |
+| `UI_DISABLED`                             | 503  | Daemon started without `uiAuthToken` (existing)                                                                       |
+| `NON_LOCALHOST`                           | 403  | Request from non-loopback IP (existing)                                                                               |
+| `SCHEMA_VALIDATION_FAILED`                | 400  | Body doesn't parse against the route's Zod schema; `details` carries the issues array (existing)                      |
+| `BAD_REQUEST`                             | 400  | Other 4xx coercion fallback (existing)                                                                                |
+| `INTERNAL`                                | 500  | Unhandled exception (existing)                                                                                        |
+| `QUESTION_NOT_FOUND`                      | 404  | `:id` doesn't match a row (existing on Phase 9 read routes; reused)                                                   |
+| `QUESTION_ALREADY_ANSWERED_DIFFERENTLY` ★ | 409  | Re-POST with a different answer than already recorded; original preserved                                             |
+| `PROJECT_NOT_FOUND` ★                     | 404  | Build route: project name doesn't resolve to a path; budget route: ULID not in the `projects` registry                |
+| `PROJECT_PATH_UNREADABLE` ★               | 404  | Project is in the registry but `workspacePath` no longer holds a readable `.factory/project.json` (moved out-of-band) |
+| `PROJECT_METADATA_CORRUPT` ★              | 422  | `project.json` exists but doesn't parse — wraps `ProjectMetadataCorruptError` from `@factory5/wiki`                   |
 
 `QUESTION_ANSWER_EMPTY`, `INVALID_LANGUAGE`, `INVALID_BUDGET` etc. are **not** added as separate codes — they're caught by Zod (`z.string().min(1)`, `z.enum(['python', …])`, `z.number().positive()`) and surface as `SCHEMA_VALIDATION_FAILED` with the field path in `details`. Adding parallel code constants would duplicate the schema-issues pathway without giving the SPA new switching power; the SPA can render per-field errors by walking `details` directly. The starred codes are exactly the cases that don't reduce to a Zod parse failure.
 
@@ -122,13 +122,13 @@ const maxSteps = options.maxSteps ?? projectDefaults?.maxSteps ?? cfg?.budget.de
 
 Test coverage in `cli/src/commands/build.ts`'s test surface (or a new `spend-roundtrip`-style fixture) confirms the order under all eight presence-combinations.
 
-**Carry-forward — I009 interaction.** I009 (Telegram inbound `/build` doesn't inherit `[budget.defaults]`) becomes "Telegram inbound `/build` doesn't inherit project-level *or* instance-level defaults" once the project tier lands. The right fix for I009 still inherits all three tiers — this ADR doesn't fix I009 but makes the right shape clearer: every directive-creation path (CLI, channel inbound, Web UI build route) should run the same three-tier resolution. The natural extraction point is a shared `resolveDirectiveLimits(projectMeta, cfg, explicitFlags)` helper in `@factory5/brain` or `@factory5/wiki`. Out of scope here; recorded so the I009 fix at the right time picks up the cleanup for free.
+**Carry-forward — I009 interaction.** I009 (Telegram inbound `/build` doesn't inherit `[budget.defaults]`) becomes "Telegram inbound `/build` doesn't inherit project-level _or_ instance-level defaults" once the project tier lands. The right fix for I009 still inherits all three tiers — this ADR doesn't fix I009 but makes the right shape clearer: every directive-creation path (CLI, channel inbound, Web UI build route) should run the same three-tier resolution. The natural extraction point is a shared `resolveDirectiveLimits(projectMeta, cfg, explicitFlags)` helper in `@factory5/brain` or `@factory5/wiki`. Out of scope here; recorded so the I009 fix at the right time picks up the cleanup for free.
 
 ### 5. Auth — same `FACTORY5_UI_TOKEN` bearer; no weaker check on mutations; CSRF out of scope
 
 Mutations register under `/api/v1/*` like the read routes, gated by the same `requireUiAuth` preHandler that already wraps every read route (`packages/daemon/src/server.ts:629-636`). No weaker check; no per-mutation password / re-confirmation; no CSRF double-submit token. Reasoning:
 
-- **Loopback-only.** Per ADR 0025 §2, requests come from a browser tab on `127.0.0.1`. The `isLoopback` preHandler rejects everything else (`packages/daemon/src/server.ts:687-695`). CSRF requires a malicious page on a *different* origin to forge a request to ours; same-origin loopback design forecloses that vector entirely.
+- **Loopback-only.** Per ADR 0025 §2, requests come from a browser tab on `127.0.0.1`. The `isLoopback` preHandler rejects everything else (`packages/daemon/src/server.ts:687-695`). CSRF requires a malicious page on a _different_ origin to forge a request to ours; same-origin loopback design forecloses that vector entirely.
 - **Bearer not cookie.** Tokens live in `sessionStorage`, sent via `Authorization: Bearer`. A page on another origin can't forge that header (CORS preflight blocks it; cookie-based auth would be a different story). The "leaked-by-malicious-extension" risk is identical for reads and mutations; the right mitigation is tab-scoped storage + per-startup rotation, both already in place from ADR 0025.
 - **No weaker mutation check.** Some patterns require re-confirmation (typing a project name) for destructive ops. Nothing in 11.2–11.4 is destructive in the rollback-impossible sense — answers can be amended by re-issuing if 409 returns; builds can be aborted; budget changes are PUT-replaceable. Re-confirmation would add ceremony with no security gain on a single-operator local dashboard.
 
@@ -151,7 +151,7 @@ If/when ADR 0025's deferred "cross-host access" lands, both CSRF and origin-chec
 - `POST /api/v1/builds { project: name }` couples the API to the CLI's name-resolution path (`resolveProjectPath`). If a future change makes name resolution ambiguous (multiple workspaces with same project names), the API inherits that pain. Mitigated: ADR 0021's identity-by-ULID model means the SPA can switch to ULID-as-payload (`POST /api/v1/builds { projectId }`) as a non-breaking schema extension — the server can accept either field; current single-workspace operators have one project per name in practice.
 - `PUT /api/v1/projects/:id/budget` requires the SPA to know the project ULID before submitting, which forces a `GET /api/v1/projects` list endpoint to exist (or the SPA derives ULIDs from the spend / directives endpoints, both of which already echo `projectId`). Phase 11 adds the list endpoint as a small read-side addition at 11.4 or 11.5; not a fundamental cost.
 - Same-bearer auth on mutations means a leaked `FACTORY5_UI_TOKEN` grants both read and write. Mitigated: token is loopback-bound + per-startup rotated; the leaked-token attacker already has local machine access, at which point read vs. write distinctions are weak.
-- Budget tier ordering interaction with I009 is now load-bearing: once project-tier lands, the gap "Telegram inbound doesn't inherit defaults" feels worse because there are *two* tiers it skips instead of one. The fix is still a one-commit extraction; this ADR doesn't address I009 but raises its priority.
+- Budget tier ordering interaction with I009 is now load-bearing: once project-tier lands, the gap "Telegram inbound doesn't inherit defaults" feels worse because there are _two_ tiers it skips instead of one. The fix is still a one-commit extraction; this ADR doesn't address I009 but raises its priority.
 - Re-folding the answer/build/budget shapes into the existing `ipcErrorSchema` means the read-side error code surface grows in scope. Not an actual cost — just a point to keep an eye on as more routes land.
 
 **Reversible?** Yes, layered.
@@ -180,7 +180,7 @@ No persistent state encodes any ADR-0027-specific shape: project.json's `metadat
 
 - **Promote `budgetDefaults` to a top-level field on `ProjectMetadata` (alongside `id`, `name`, `factoryVersion`).** Rejected: ADR 0021's `metadata` extension point is the established home for project-level flags; promoting `budgetDefaults` to top-level would set a precedent that 10.8's `language` should also have been top-level, churning two settled designs. The `metadata` cohort is intentional.
 
-- **Resolve per-project budget defaults at directive-claim time, not at directive-creation time.** Tempting because it would let project-level defaults apply to *all* paths (CLI, Telegram inbound, future API) without each path having to opt in. Rejected for Phase 11: the budget enforcement layer (ADR 0020) reads `directive.limits` at pre-call time; lazy resolution would either pick up the default at claim time (ambiguous: which project context applies then?) or never (regression). The right shape is: every directive-creation path resolves all three tiers up front, and the brain's pre-call check stays the single enforcement site. I009's resolution would extract a shared resolver, not change the enforcement seam.
+- **Resolve per-project budget defaults at directive-claim time, not at directive-creation time.** Tempting because it would let project-level defaults apply to _all_ paths (CLI, Telegram inbound, future API) without each path having to opt in. Rejected for Phase 11: the budget enforcement layer (ADR 0020) reads `directive.limits` at pre-call time; lazy resolution would either pick up the default at claim time (ambiguous: which project context applies then?) or never (regression). The right shape is: every directive-creation path resolves all three tiers up front, and the brain's pre-call check stays the single enforcement site. I009's resolution would extract a shared resolver, not change the enforcement seam.
 
 - **CSRF double-submit token on mutations.** Rejected per §5: same-origin loopback design forecloses CSRF. Bearer-token auth (vs. cookie auth) is the relevant defense. Re-evaluate when ADR 0025's deferred cross-host access lands.
 
@@ -195,6 +195,7 @@ No persistent state encodes any ADR-0027-specific shape: project.json's `metadat
 Sub-step mapping (mirrors `.control/phases/phase-11-web-ui-9b/steps.md`):
 
 - **11.2 — Answer route.** New schemas in `@factory5/ipc/schemas.ts`:
+
   ```ts
   export const apiV1AnswerPendingQuestionRequestSchema = z.object({
     answer: z.string().min(1),
@@ -203,9 +204,11 @@ Sub-step mapping (mirrors `.control/phases/phase-11-web-ui-9b/steps.md`):
     question: pendingQuestionSchema,
   });
   ```
+
   New route `POST /api/v1/pending-questions/:id/answer` in `packages/daemon/src/server.ts` after the GET-detail route, sharing the `requireUiAuth` preHandler. Handler: `pendingQuestions.getById` + branch on `answeredAt` / `answer` per §2; call `pendingQuestions.answer` on the new-or-same-answer path; throw `IpcRequestError(409, 'QUESTION_ALREADY_ANSWERED_DIFFERENTLY', …)` on the different-answer path; call `detectOrphanedAnswer` and log the warning either way (matches Telegram / Discord channel-collector parity). Tests in `server.test.ts`: happy path, idempotent re-POST, 409 conflict, 404 unknown id, 400 empty body (Zod path), 401 missing token.
 
 - **11.3 — Build route.** New schemas:
+
   ```ts
   export const apiV1CreateBuildRequestSchema = z.object({
     project: z.string().min(1),
@@ -217,9 +220,11 @@ Sub-step mapping (mirrors `.control/phases/phase-11-web-ui-9b/steps.md`):
     directive: directiveSchema,
   });
   ```
+
   New route `POST /api/v1/builds`. Handler reuses `resolveProjectPath` + `loadOrCreateProjectMetadata` + `directivesQ.insert` from `packages/cli/src/commands/build.ts`. The shared directive-creation logic should be extracted to `@factory5/brain` (or `@factory5/wiki`) so both CLI and API share one path; pick the home at 11.3 implementation. Tests: happy path with explicit limits; language fallback from `metadata.language`; budget resolution from `metadata.budgetDefaults` (depends on 11.4 having landed first, or 11.3's tests stub the project meta); 404 unknown project; 422 corrupt project metadata; 401 missing token.
 
 - **11.4 — Budget route.** Adds `projectBudgetDefaultsSchema` to `@factory5/core/schemas.ts`. Adds `budgetDefaultsFromProjectMeta` helper to `@factory5/wiki/project-metadata.ts`. New schemas in `@factory5/ipc/schemas.ts`:
+
   ```ts
   export const apiV1UpdateProjectBudgetRequestSchema = projectBudgetDefaultsSchema;
   export const apiV1UpdateProjectBudgetResponseSchema = z.object({
@@ -227,6 +232,7 @@ Sub-step mapping (mirrors `.control/phases/phase-11-web-ui-9b/steps.md`):
     budgetDefaults: projectBudgetDefaultsSchema,
   });
   ```
+
   New route `PUT /api/v1/projects/:id/budget`. Handler: look up `:id` in the `projects` registry → `workspacePath`; throw `PROJECT_NOT_FOUND` if absent; read `project.json` (throws `PROJECT_PATH_UNREADABLE` on ENOENT, `PROJECT_METADATA_CORRUPT` on a `ProjectMetadataCorruptError`); replace `metadata.budgetDefaults` with the request body (full-document); write back atomically via the existing `writeFileAtomic` pattern. Update `cli/src/commands/build.ts` budget resolution to read project-tier between flag and config. Tests: round-trip read/write; PUT with partial body removes omitted fields; PUT empty body clears all defaults; 404 unknown ULID; 404 unreadable workspace path; 422 corrupt project.json; build-resolution test confirming three-tier order across all eight presence combinations.
 
 - **11.5 — SPA write affordances.** Per the charter; uses the schemas above and the centralised `src/lib/api.ts` envelope handler. Each form maps to one route + one error-code switch. Out of scope for this ADR.
