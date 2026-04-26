@@ -26,13 +26,13 @@ Run `/session-start` for the full drift check.
 
 ## Standing rule for 11.5 (and any future UI work in this repo)
 
-**Invoke the `frontend-dev` plugin / skill BEFORE hand-rolling Astro markup
-or form designs.** The operator's preference is to let `frontend-dev` drive
+**Invoke the `frontend-design` plugin / skill BEFORE hand-rolling Astro markup
+or form designs.** The operator's preference is to let `frontend-design` drive
 the design + Islands wiring; implement against its output. Don't pre-empt the
 skill by sketching the markup yourself.
 
 Memory:
-[`feedback_use_frontend_dev_skill.md`](../../../C:/Users/Momo/.claude/projects/G--Projects-Large-Projects-factory-factory5/memory/feedback_use_frontend_dev_skill.md).
+[`feedback_use_frontend_design_skill.md`](../../../C:/Users/Momo/.claude/projects/G--Projects-Large-Projects-factory-factory5/memory/feedback_use_frontend_design_skill.md).
 
 ## Next concrete work — 11.5 (SPA write affordances)
 
@@ -136,6 +136,6 @@ Phase 11 — 4/7 closed; 11.5 SPA write affordances next
 Last action: docs(state) <SHA> (session end) on top of feat(11.4) 3231c5c
 Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-10-assessor-tier3-closed
 Open blockers: 0 (I009 + I012 + I014 non-blocking)
-Proposed next action: 11.5 — SPA write affordances (invoke `frontend-dev` skill first)
+Proposed next action: 11.5 — SPA write affordances (invoke `frontend-design` skill first)
 Ready to proceed?
 ```

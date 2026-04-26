@@ -61,8 +61,8 @@
       maxUsd / maxSteps. All three forms POST/PUT through `src/lib/api.ts`
       (centralised bearer + envelope handling). No new pages beyond
       what's needed; reuse the existing list pages.
-      **Note for next session:** invoke the `frontend-dev` plugin /
-      skill to help with the form design + Astro Islands wiring before
+      **Note for next session:** invoke the `frontend-design` skill to
+      help with the form design + Astro Islands wiring before
       hand-rolling the markup. The skill is the operator's preferred
       tool for any front-end UX work in this repo.
 

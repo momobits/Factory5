@@ -29,7 +29,7 @@
 
 All three forms route through `src/lib/api.ts` (centralised bearer + envelope unwrap + error-code switch over the codes pinned in ADR 0027 §3). The `:id` on the budget route is the project ULID; Phase 11 will need a `GET /api/v1/projects` list endpoint so the SPA can map names → ULIDs (cheap read-side addition; lands at 11.5 alongside the form work).
 
-**Standing rule for 11.5 (and any future factory5 UI work):** invoke the `frontend-dev` plugin / skill BEFORE hand-rolling Astro markup. The operator's preference is to let `frontend-dev` drive design + Islands wiring; implement against its output. Recorded in `feedback_use_frontend_dev_skill.md` memory and surfaced in `.control/phases/phase-11-web-ui-9b/steps.md` 11.5 entry.
+**Standing rule for 11.5 (and any future factory5 UI work):** invoke the `frontend-design` plugin / skill BEFORE hand-rolling Astro markup. The operator's preference is to let `frontend-design` drive design + Islands wiring; implement against its output. Recorded in `feedback_use_frontend_dev_skill.md` memory and surfaced in `.control/phases/phase-11-web-ui-9b/steps.md` 11.5 entry.
 
 After 11.5: 11.6 (operator-driven live validation against a real factoryd), 11.7 (phase close).
 
@@ -61,7 +61,7 @@ Earlier tags intact: `phase-9-web-ui-closed`, `phase-8-worker-ask-user-closed`, 
 
 ## In-flight work
 
-- None. 11.4 closed clean; 11.5 hasn't opened yet (waits for next session + `frontend-dev` skill invocation).
+- None. 11.4 closed clean; 11.5 hasn't opened yet (waits for next session + `frontend-design` skill invocation).
 
 ---
 
@@ -116,7 +116,7 @@ If resuming after `/session-end` or a cold start:
 
 1. Read `CLAUDE.md` (root) — standing brief incl. Control-framework section.
 2. Read this STATE.md.
-3. Read `.control/phases/phase-11-web-ui-9b/{README.md,steps.md}` — note the 11.5 entry includes the standing rule about invoking the `frontend-dev` skill BEFORE writing UI code.
+3. Read `.control/phases/phase-11-web-ui-9b/{README.md,steps.md}` — note the 11.5 entry includes the standing rule about invoking the `frontend-design` skill BEFORE writing UI code.
 4. Skim [ADR 0027](../../docs/decisions/0027-web-ui-mutation-surface.md) — load-bearing contract for the routes the SPA forms wire against.
 5. Run `/session-start` for the full drift check.
 
@@ -124,7 +124,7 @@ If resuming after `/session-end` or a cold start:
 
 **Memory updates this session:**
 
-- New: `feedback_use_frontend_dev_skill.md` — standing preference to invoke `frontend-dev` plugin/skill before hand-rolling factory5 UI.
+- New: `feedback_use_frontend_design_skill.md` — standing preference to invoke the `frontend-design` skill before hand-rolling factory5 UI.
 
 **Carry-forward** (still non-blocking):
 
