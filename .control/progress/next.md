@@ -127,7 +127,7 @@ Report back on wake-up with a status block in this shape:
 
 ```
 Phase 12 — 0/5 closed; 12.1 ADR for worker-sandbox contract next
-Last action: chore(phase-11) <SHA> (phase close + Phase 12 scaffold)
+Last action: docs(state) <SHA> (session end) on top of chore(phase-11) fa5ee25 (phase close)
 Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-11-web-ui-9b-closed
 Open blockers: 0 (I009 + I012 + I014 non-blocking)
 Proposed next action: 12.1 — survey claude-cli's native fs-scoping config + author ADR 0028

@@ -2,7 +2,7 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-26 (session `2026-04-26T16`, phase-close) — Phase 11 closed: ADR 0027 + three backend mutation routes + SPA write affordances + GET /api/v1/projects + operator-driven live browser smoke. Tag `phase-11-web-ui-9b-closed`. Phase 12 (worker filesystem-scoping) kicks off.
+**Last updated:** 2026-04-26 (session `2026-04-26T16`, session-end after phase 11 close) — Phase 11 closed at `fa5ee25` with tag `phase-11-web-ui-9b-closed`. ADR 0027 + three backend mutation routes + SPA write affordances + GET /api/v1/projects + operator-driven live browser smoke. Phase 12 (worker filesystem-scoping) scaffolded; kicks off next session at 12.1.
 **Current phase:** 12 — Worker filesystem-scoping — **🟢 active**
 **Current sub-phase:** n/a — single-charter phase
 **Current step:** 12.1 — ADR for sandbox contract (next)
@@ -32,9 +32,9 @@ The Phase 11 forward queue identified Phase 12's three forcing functions: F001 (
 ## Git state
 
 - **Branch:** main (ahead of `origin/main` — push at operator discretion)
-- **Last commit:** `chore(phase-11): close phase 11, kick off phase 12` (this commit). Recent log: this commit → `db90421 docs(11.6)` → `97469e9 chore(harness)` → `08a0d63 feat(11.5)` → `a34f473 docs(state)` → `c83e3d5 docs(state)` → `3231c5c feat(11.4)`. Tag `phase-11-web-ui-9b-closed` placed on this commit.
-- **Uncommitted changes:** none (modulo `.claude/scheduled_tasks.lock` which the harness rewrites whenever a session resumes — not phase-relevant; gets swept up at the next harness chore commit).
-- **Last phase tag:** `phase-11-web-ui-9b-closed` (set this commit).
+- **Last commit:** session-end `docs(state)` lands on top of phase-close. Recent log: this session-end commit → `fa5ee25 chore(phase-11)` (tag here) → `db90421 docs(11.6)` → `97469e9 chore(harness)` → `08a0d63 feat(11.5)` → `a34f473 docs(state)` → `c83e3d5 docs(state)`. Tag `phase-11-web-ui-9b-closed` placed on `fa5ee25`.
+- **Uncommitted changes:** none at session end (modulo `.claude/scheduled_tasks.lock` which the harness rewrites on session resume — gets swept up at the next harness chore commit).
+- **Last phase tag:** `phase-11-web-ui-9b-closed` (placed on `fa5ee25`).
 
 Earlier tags intact: `phase-10-assessor-tier3-closed`, `phase-9-web-ui-closed`, `phase-8-worker-ask-user-closed`, `addendum-onboarding-closed`, `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-7-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`, `protocol-initialised`.
 
