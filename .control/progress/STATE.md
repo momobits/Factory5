@@ -2,7 +2,7 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-26 (Phase 12 close commit) — Phase 12 closed with tag `phase-12-worker-fs-scoping-closed`. ADR 0028 + new package `@factory5/worker-sandbox` + worker wiring + 96 new tests + operator-driven live validation. Phase 13 (operator experience polish + carry-forward sweep) scaffolded; kicks off next session at 13.1.
+**Last updated:** 2026-04-27 (session `2026-04-26T19`, session-end after Phase 12 close) — Phase 12 closed at `ed88a60` with tag `phase-12-worker-fs-scoping-closed`. ADR 0028 + new package `@factory5/worker-sandbox` + worker wiring + 96 new regression tests + operator-driven live validation. Phase 13 (operator experience polish + carry-forward sweep) scaffolded; kicks off next session at 13.1.
 **Current phase:** 13 — Operator experience polish + carry-forward sweep — **🟢 active**
 **Current sub-phase:** n/a — single-charter phase
 **Current step:** 13.1 — File-sink logger bug (next)
@@ -31,10 +31,10 @@ The Phase 12 forward queue identified Phase 13's four targets: file-sink logger 
 
 ## Git state
 
-- **Branch:** main (ahead of `origin/main` — push at operator discretion)
-- **Last commit:** `chore(phase-12): close phase 12, kick off phase 13` (tag here). Recent log: this close commit → `09b0876 docs(12.4)` → `1f070f9 test(12.3)` → `fab1327 feat(12.2)` → `452db47 docs(12.1)` → `1cc13ed docs(state)` (Phase 11 session-end) → `fa5ee25 chore(phase-11)` (Phase 11 close, tag there). Tag `phase-12-worker-fs-scoping-closed` placed on this commit.
+- **Branch:** main (ahead of `origin/main` by 7 commits — push at operator discretion).
+- **Last commit:** session-end `docs(state)` lands on top of Phase-12 close. Recent log: this session-end commit → `ed88a60 chore(phase-12)` (Phase 12 close, tag here) → `09b0876 docs(12.4)` → `1f070f9 test(12.3)` → `fab1327 feat(12.2)` → `452db47 docs(12.1)` → `1cc13ed docs(state)` (Phase 11 session-end) → `fa5ee25 chore(phase-11)` (Phase 11 close, tag there). Tag `phase-12-worker-fs-scoping-closed` placed on `ed88a60`.
 - **Uncommitted changes:** none at session end (modulo `.claude/scheduled_tasks.lock` which the harness rewrites on session resume — gets swept up at the next harness chore commit).
-- **Last phase tag:** `phase-12-worker-fs-scoping-closed` (placed on this close commit).
+- **Last phase tag:** `phase-12-worker-fs-scoping-closed` (placed on `ed88a60`).
 
 Earlier tags intact: `phase-11-web-ui-9b-closed`, `phase-10-assessor-tier3-closed`, `phase-9-web-ui-closed`, `phase-8-worker-ask-user-closed`, `addendum-onboarding-closed`, `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-7-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`, `protocol-initialised`.
 
