@@ -1,39 +1,46 @@
 # Next session — paste this to start
 
-Phase 15 (Demand-driven runoff) survived its first session-boundary still paused. Session `2026-04-27T22` was a still-quiet pass-through: `/session-start` → confirm state with no drift → `/session-end` without opening a sub-step. No code edits, no live-LLM spend, no new issues filed, no smoke runs. Single `docs(state)` commit refreshing the cursor + journal entry + this prompt.
+Phase 15 closed still-quiet 2026-04-28 (tag `phase-15-demand-driven-runoff-closed`). **Zero sub-steps shipped.** Phase content across its lifetime: scaffold + 1 still-quiet pass-through + close commit. The carry-forward candidate pool (Bash sandboxing, `/build` flag parsing, network egress scoping, orphan `node.exe`, Phase 6 follow-ups) stayed deferral-predicate-unsatisfied throughout — no incident, no operator request, no demand signal.
 
-Workspace at session boundary: **876 tests** green across 15 packages (last gate, Phase 14.5 close — unchanged this session, no code touched). lint + format + build all clean from that same gate. `docs/issues/INDEX.md` Open table still empty (third session in a row). Migration count still 8.
+**Active Control phase chain exited.** No Phase 16 scaffolded. Future sessions bootstrap into a dormant state, not a paused phase. The framework supports re-entry from the dormant state when a demand signal surfaces.
 
-This is now **two consecutive session boundaries** with no demand signal for Phase 15.
+Workspace at exit: **876 tests** green across 15 packages (last gate, Phase 14.5 close — unchanged across Phase 15 because no code changed). lint + format + build clean from that same gate. `docs/issues/INDEX.md` Open empty (4th session in a row). `origin/main` synced. 28 ADRs, 8 migrations, 15 packages + 3 apps. No `CompleteArchitecture.md` change in Phase 15.
 
 ## Pickup
 
-Read `CLAUDE.md`, then `.control/progress/STATE.md`, then the Phase 15 charter at `.control/phases/phase-15-demand-driven-runoff/{README.md,steps.md}`. Run `/session-start` for the full drift check.
+Read `CLAUDE.md`, then `.control/progress/STATE.md`. **There is no current phase README/steps.md to read** — the active Control phase chain exited at Phase 15 close. Last phase artifact (closed, not active): `.control/phases/phase-15-demand-driven-runoff/`. Detailed phase shape: `docs/Phase15_Progress.md`.
 
-The phase remains pending demand signal — no predetermined first sub-step. Until something bites, the codebase sits at a stable position with the open-issue tracker empty.
+Run `/session-start` for the full drift check. The git verification will confirm the close tag + branch position.
 
-## Recommended next action — three branches, in priority
+## Recommended next action — two branches
 
-1. **Something bit between sessions.** Open 15.1 against whichever item from the candidate pool fires first. New issue, smoke finding, feature request, operator pain — whatever the bite is. Treat that as the actual phase content; the candidate pool below is the menu, but the bite is the order.
+1. **A demand signal has surfaced.** New issue, incident, smoke finding, operator feature request, anything. Scaffold Phase 16 against it:
 
-2. **Nothing bit; close Phase 15 still-quiet** _(recommended if branch 1 is empty)_. The phase charter explicitly enables this path. Single-commit operation:
+   - Pick a short name reflecting the actual bite (don't pre-cook).
+   - Create `.control/phases/phase-16-<short-name>/{README.md,steps.md}` modelled on the Phase 14 or Phase 15 templates.
+   - Update STATE.md: `Current phase: 16 — <name>`, `Current step: 16.1 — <bite-specific subject>`, refresh "Next action" to point at 16.1's concrete first move.
+   - Open 16.1 against the bite. Commit shape: `<type>(16.1): <subject>`.
+   - The framework supports this re-entry path fully — the dormant state is not a special case.
 
-   - `/phase-close` produces tag `phase-15-demand-driven-runoff-closed`.
-   - Author short `docs/Phase15_Progress.md` recording: charter + two still-quiet passes (Phase 14 close session + this session) + final state.
-   - Prepend a one-line entry to `docs/PROGRESS.md` noting the still-quiet close.
-   - Exit the active Control-managed phase chain until new work demands a phase frame.
-   - $0 spend. No new ADRs (no architecture shipped). No `CompleteArchitecture.md` change.
+2. **Nothing has surfaced.** Confirm state, end the session. The dormant state has zero per-session protocol overhead — no "still-dormant pass" pattern is needed (unlike Phase 15's still-quiet pass shape, which existed because the phase was nominally open). If nothing changed at all this session, even the session-end docs commit can be skipped.
 
-3. **Another still-quiet pass-through** _(only if there's a specific reason to keep Phase 15 nominally open)_. Same shape as this session — bootstrap, confirm, end. Only choose this branch if there's an explicit signal to expect demand soon. Otherwise, branch 2 is the cleaner record.
+## Out-of-band operator actions (no Claude involvement, doable any time)
 
-## Candidate pool (unchanged from Phase 14 close, all non-blocking)
+- Kill the orphan `node.exe` on port 25295 (older Node install at `C:\Program Files (x86)\nodejs\node.exe`, identified Phase 14.1, not from factory5). Or change factoryd's default port if you'd rather sidestep it.
+- PAT revocation — Phase 6 hold-over.
+- `gh repo delete` — Phase 6 hold-over.
+- Env var cleanup — Phase 6 hold-over.
 
-1. **Bash sandboxing** — ADR 0028 §4 explicitly deferred. Open only on a real incident: a worker doing something with `Bash` that should have been gated. Phase 12.4 + 13.x + 14.x + this still-quiet pass all produced **zero** `decision":"deny"` lines.
-2. **`/build` flag parsing on Telegram + Discord** — today an inbound `/build foo --max-usd 5` parses the whole text as a project name. The shared `resolveDirectiveLimits` helper from 13.3 already accepts an `explicitFlags` slot — wiring is one line once the parser exists. Defer until an operator asks.
-3. **Network egress scoping** — long-tail concern; wait for an egress-policy demand signal.
-4. **Orphan `node.exe` on port 25295** — noted during Phase 14.1 smoke. A Node process at `C:\Program Files (x86)\nodejs\node.exe` (older Node install) squatting on factoryd's default port. Diagnostic-only candidate.
-5. **Phase 6 operator follow-ups** — PAT revoke, `gh repo delete`, env var cleanup. Out-of-band.
-6. **Anything new the operator surfaces** — new issues, post-`pnpm factoryd` smoke findings, feature requests.
+None of these need a phase frame.
+
+## Carry-forward candidate pool (for whenever Phase 16 opens, all still non-blocking)
+
+1. **Bash sandboxing** — ADR 0028 §4 deferred. Open only on a real incident: a worker doing something with `Bash` that should have been gated. Phase 12.4 + 13.x + 14.x + Phase 15's still-quiet pass all produced **zero** `decision":"deny"` lines.
+2. **`/build` flag parsing on Telegram + Discord** — operator-request-driven. The shared `resolveDirectiveLimits` helper from 13.3 already accepts an `explicitFlags` slot — wiring is one line once the parser exists.
+3. **Network egress scoping** — long-tail, demand-driven.
+4. **Orphan `node.exe` on port 25295** — operator-side action (see above).
+5. **Phase 6 operator follow-ups** — out-of-band (see above).
+6. **Anything new the operator surfaces.**
 
 ## Out of scope (still deferred)
 
@@ -41,17 +48,17 @@ The phase remains pending demand signal — no predetermined first sub-step. Unt
 - **Discord per-question reply matcher** — Phase 7c live data showed no equivalent FIFO mismatch on Discord; one-line wiring if it ever surfaces.
 - **Web UI extensions** — covered by ADR 0025 + 0027 + Phase 11. Future Web UI work would be its own phase.
 
-## Stable-state observation
+## Stable-state observation (final, pre-dormancy)
 
-factory5's open issue tracker is empty, all carry-forwards from Phases 9–14 are addressed, and the codebase is at the most stable point in its history. Two consecutive still-quiet session boundaries strongly suggest closing Phase 15 still-quiet is the right next move — the phase was always designed as a paused-state on demand signal, and there is no protocol cost to closing it without sub-steps. Closing cleanly is a more accurate signal of project state than holding the phase open indefinitely.
+factory5's open issue tracker is empty, all carry-forwards from Phases 9–14 are addressed, Phase 15's paused-state closed without sub-steps, and the codebase is at the most stable point in its history. Closing the Control phase chain is the most accurate signal of project state — there is no active work, and no work demands a phase frame.
 
 Report back on wake-up with a status block:
 
 ```
-Phase 15 — pending demand signal (0 sub-steps opened, 2 still-quiet pass-throughs)
-Last action: docs(state) <sha> — still-quiet session 2026-04-27T22
-Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-14-carry-forward-continuation-closed
-Open blockers: 0
-Proposed next action: if something has bitten — open 15.1; otherwise — /phase-close still-quiet
+No active phase — Control phase chain dormant since 2026-04-28
+Last action: chore(phase-15) <sha> — close phase 15 still-quiet
+Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-15-demand-driven-runoff-closed
+Open blockers: 0   |   Open issues: 0
+Proposed next action: if something has surfaced — scaffold Phase 16 against it; otherwise — confirm + end the session
 Ready to proceed?
 ```

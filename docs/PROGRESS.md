@@ -4,6 +4,16 @@ Chronological log of work on factory5 itself. Update this at the end of every wo
 
 ---
 
+## 2026-04-28 — Phase 15 closed still-quiet (Demand-driven runoff)
+
+- Phase tagged `phase-15-demand-driven-runoff-closed`. **Zero sub-steps shipped.** Phase 15 was scaffolded at Phase 14 close as a demand-signal-driven placeholder; no demand signal surfaced across two session boundaries; the operator chose to close cleanly rather than hold the phase open indefinitely. No code, no migrations, no ADRs, no `CompleteArchitecture.md` change, no test additions, $0 cumulative spend.
+- **Control phase chain is now dormant.** STATE.md's "Current phase" field is `n/a — Control chain dormant`. **No Phase 16 scaffolded** — a new phase will open if/when something demands one. The charter's "close the Control-managed phase chain if the codebase remains stable and no new work demands a phase frame" path was followed.
+- Carry-forward (still non-blocking, no longer wrapped by an active phase): Bash sandboxing (incident-driven), `/build` flag parsing on Telegram + Discord (operator-request-driven), network egress scoping (demand-driven), orphan `node.exe` on port 25295 (operator-side decision — already identified during 14.1 as an older Node install squatter), Phase 6 operator follow-ups (out-of-band — PAT revoke, `gh repo delete`, env var cleanup).
+- Workspace state at close (unchanged from Phase 14.5 close gate; no code touched in Phase 15): **876 tests** green across 15 packages, 28 ADRs, 8 schema migrations, lint + format + build all clean. `docs/issues/INDEX.md` Open table empty (still). The codebase is at the most stable point in its history.
+- Phase 15 ran across three session boundaries: scaffold (2026-04-27T19, `6cc0008`) → still-quiet pass-through (2026-04-27T22, `c2a12db`) → still-quiet close (2026-04-28T01, this commit). No live-LLM calls, no smoke runs, no operator-driven validation needed.
+
+---
+
 ## 2026-04-27 — Phase 14 closed (Carry-forward continuation + ergonomics)
 
 - Phase tagged `phase-14-carry-forward-continuation-closed`. All five sub-steps shipped in a single sustained session arc the same day Phase 13 closed: 14.1 stale-dist dev-loop (conditional exports + `tsx --conditions=development`) → 14.2 I013 status re-read → RESOLVED (paid down by Phase 10.3) → 14.3 I012 → RESOLVED (new `pending_questions.bot_message_id` column targeting) → 14.4 `factory questions cleanup` CLI + Windows mojibake README addendum → 14.5 phase close.
