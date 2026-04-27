@@ -9,7 +9,7 @@
  * `/status` surfaces them without taking the whole daemon down.
  */
 
-import type { ChannelId, Directive, OutboundMessage } from '@factory5/core';
+import type { ChannelId, Directive, DirectiveLimits, OutboundMessage } from '@factory5/core';
 import type { Logger } from '@factory5/logger';
 
 import type { ChannelPlugin, SendResult } from './types.js';
@@ -41,6 +41,16 @@ export interface ChannelRegistryOptions {
    * fall back to passing the raw project name — the pre-I011 behaviour.
    */
   resolveProjectPath?: (name: string) => Promise<string>;
+  /**
+   * Optional resolver that merges project-tier `metadata.budgetDefaults`
+   * with the instance `config.toml [budget.defaults]` tier and returns
+   * the resulting `DirectiveLimits` (or `undefined` for unlimited).
+   * Threaded through to each plugin's `ChannelContext` so inbound
+   * `/build <name>` handlers can produce directives with the same
+   * three-tier limits as `factory build` (issue I009 fix). When unset,
+   * inbound `/build` directives carry no `limits` — the pre-fix path.
+   */
+  resolveBuildLimits?: (name: string) => Promise<DirectiveLimits | undefined>;
 }
 
 /**
@@ -60,11 +70,13 @@ export class ChannelRegistry implements ChannelRegistryView {
   private readonly onInbound: ChannelRegistryOptions['onInbound'];
   private readonly configByPlugin: Map<ChannelPlugin, unknown>;
   private readonly resolveProjectPath: ChannelRegistryOptions['resolveProjectPath'];
+  private readonly resolveBuildLimits: ChannelRegistryOptions['resolveBuildLimits'];
 
   constructor(opts: ChannelRegistryOptions) {
     this.log = opts.log;
     this.onInbound = opts.onInbound;
     this.resolveProjectPath = opts.resolveProjectPath;
+    this.resolveBuildLimits = opts.resolveBuildLimits;
     this.configByPlugin = new Map(opts.plugins.map((p) => [p.plugin, p.config]));
     for (const { plugin } of opts.plugins) {
       this.entries.set(plugin.id, {
@@ -105,6 +117,9 @@ export class ChannelRegistry implements ChannelRegistryView {
             onInbound: (d) => this.onInbound(d),
             ...(this.resolveProjectPath !== undefined
               ? { resolveProjectPath: this.resolveProjectPath }
+              : {}),
+            ...(this.resolveBuildLimits !== undefined
+              ? { resolveBuildLimits: this.resolveBuildLimits }
               : {}),
           },
           validated,

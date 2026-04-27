@@ -378,6 +378,68 @@ describe('DiscordChannel inbound', () => {
     await plugin.stop();
   });
 
+  it('build directive carries `limits` from resolveBuildLimits (I009 fix)', async () => {
+    // Mirrors the Telegram I009 regression. Pre-Phase-13.3 the Discord
+    // plugin emitted a `/build` directive with no `limits`; the
+    // resolveBuildLimits callback now threads project + config tiers.
+    const stub = makeStubClient();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const plugin = createDiscordChannel({ clientFactory: () => stub.client, db });
+    await plugin.start(
+      {
+        log: createLogger('test.discord'),
+        onInbound: (d) => inbounds.push(d),
+        resolveProjectPath: async (name) => `/resolved/${name}`,
+        resolveBuildLimits: async (name) => {
+          if (name !== 'budget-test-discord') return undefined;
+          return { maxUsd: 7, maxSteps: 150 };
+        },
+      },
+      { token: 'x', buildPrefix: '/build' },
+    );
+    stub.fireReady();
+    await stub.emit(
+      makeMessage({
+        id: 'm-budget',
+        content: '<@bot-1> /build budget-test-discord',
+        authorId: 'u1',
+        channelId: 'chan-budget',
+        startThread: vi.fn(async () => ({ id: 'thread-budget' })),
+      }),
+    );
+    expect(inbounds).toHaveLength(1);
+    const d = inbounds[0] as Directive;
+    expect(d.intent).toBe('build');
+    expect(d.limits).toEqual({ maxUsd: 7, maxSteps: 150 });
+    await plugin.stop();
+  });
+
+  it('build directive has no `limits` when resolveBuildLimits is unwired', async () => {
+    const stub = makeStubClient();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const plugin = createDiscordChannel({ clientFactory: () => stub.client, db });
+    await plugin.start(
+      { log: createLogger('test.discord'), onInbound: (d) => inbounds.push(d) },
+      { token: 'x', buildPrefix: '/build' },
+    );
+    stub.fireReady();
+    await stub.emit(
+      makeMessage({
+        id: 'm-no-limits',
+        content: '<@bot-1> /build legacy-no-limits',
+        authorId: 'u1',
+        channelId: 'chan-x',
+        startThread: vi.fn(async () => ({ id: 'thread-no-limits' })),
+      }),
+    );
+    expect(inbounds).toHaveLength(1);
+    const d = inbounds[0] as Directive;
+    expect(d.limits).toBeUndefined();
+    await plugin.stop();
+  });
+
   it('answers a pending question when posted in the question thread', async () => {
     const stub = makeStubClient();
     const db = freshDb();

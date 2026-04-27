@@ -91,10 +91,26 @@
     valid URL whose `?t=…` resolves against `/api/v1/status`.
   - Document the new command in `packages/cli/README.md`.
 
-- [ ] 13.3 — **I009 fix — extract `resolveDirectiveLimits`.** Phase
+- [x] 13.3 — **I009 fix — extract `resolveDirectiveLimits`.** Phase
       11.4 added the project-tier in CLI + daemon; Telegram + Discord
       inbound `/build` still skip two tiers. The right shape is one
       shared helper called from every directive-creation path.
+
+      **Closed.** Helper landed in `@factory5/wiki`
+      (`resolveDirectiveLimits({ explicitFlags, projectDefaults,
+      configDefaults }) → DirectiveLimits | undefined`). Per-field
+      independent merge with explicit > project > config precedence.
+      All four directive-creation paths rewired:
+      (1) `factory build` (CLI) refactored to call the helper inline;
+      (2) `POST /api/v1/builds` gained the missing config-tier via new
+      `IpcServerOptions.configBudgetDefaults` threaded from the
+      daemon's loaded `fileConfig`; (3) Telegram inbound and (4)
+      Discord inbound gained a new `resolveBuildLimits(name)` callback
+      on `ChannelContext` that the daemon binds to a closure that
+      loads `projectMeta` + applies the helper. Channels stay
+      decoupled from `@factory5/wiki` — the daemon does the wiring.
+      I009 moved to RESOLVED. Workspace 832 → 847 passing tests
+      (+15 across wiki, channels, daemon). Lint + format + build clean.
 
   Sub-actions:
   - Pick the home — `@factory5/brain` (where pre-call enforcement

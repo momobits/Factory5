@@ -36,7 +36,13 @@
  * tests can feed in a stub client instead of calling the live Discord API.
  */
 
-import { newId, type Directive, type Intent, type OutboundMessage } from '@factory5/core';
+import {
+  newId,
+  type Directive,
+  type DirectiveLimits,
+  type Intent,
+  type OutboundMessage,
+} from '@factory5/core';
 import type { Logger } from '@factory5/logger';
 import { openDatabase, pendingQuestions, type Database } from '@factory5/state';
 import {
@@ -187,6 +193,7 @@ export class DiscordChannel implements ChannelPlugin {
   private log: Logger | undefined;
   private onInbound: ChannelContext['onInbound'] | undefined;
   private resolveProjectPath: ChannelContext['resolveProjectPath'] | undefined;
+  private resolveBuildLimits: ChannelContext['resolveBuildLimits'] | undefined;
   private db: Database | undefined;
   private ownsDb = false;
   private messageHandler: ((msg: Message) => Promise<void>) | undefined;
@@ -201,6 +208,7 @@ export class DiscordChannel implements ChannelPlugin {
     this.log = ctx.log;
     this.onInbound = ctx.onInbound;
     this.resolveProjectPath = ctx.resolveProjectPath;
+    this.resolveBuildLimits = ctx.resolveBuildLimits;
     this.config = discordConfigSchema.parse(rawConfig);
 
     if (this.externalDb !== undefined) {
@@ -319,9 +327,11 @@ export class DiscordChannel implements ChannelPlugin {
     // For build intent, resolve project name to absolute workspace path
     // before enqueueing — parallels the Telegram change (issue I011).
     let payload: Record<string, unknown>;
+    let resolvedProjectName: string | undefined;
     if (intent === 'build') {
       const buildPayload = this.parseBuildPayload(text);
       const projectName = buildPayload['project'];
+      if (typeof projectName === 'string') resolvedProjectName = projectName;
       if (typeof projectName === 'string' && this.resolveProjectPath !== undefined) {
         try {
           const projectPath = await this.resolveProjectPath(projectName);
@@ -340,6 +350,26 @@ export class DiscordChannel implements ChannelPlugin {
       payload = { text };
     }
 
+    // Three-tier budget resolution for inbound /build (issue I009 fix).
+    // Mirrors the Telegram path: the daemon binds resolveBuildLimits to a
+    // closure that merges project metadata with config defaults; without
+    // it (tests, standalone scripts) the directive carries no `limits`.
+    let limits: DirectiveLimits | undefined;
+    if (
+      intent === 'build' &&
+      resolvedProjectName !== undefined &&
+      this.resolveBuildLimits !== undefined
+    ) {
+      try {
+        limits = await this.resolveBuildLimits(resolvedProjectName);
+      } catch (err) {
+        this.log?.warn(
+          { err, projectName: resolvedProjectName },
+          'discord: resolveBuildLimits failed — directive will run uncapped',
+        );
+      }
+    }
+
     const directive: Directive = {
       id: newId(),
       source: 'discord',
@@ -350,6 +380,7 @@ export class DiscordChannel implements ChannelPlugin {
       autonomy: intent === 'build' ? 'autonomous' : 'chat',
       createdAt: new Date().toISOString(),
       status: 'pending',
+      ...(limits !== undefined ? { limits } : {}),
     };
 
     try {

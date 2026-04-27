@@ -22,7 +22,7 @@ import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import { closeDatabase, openDatabase, runMigrations, type Database } from '@factory5/state';
 
-import type { Directive, Event } from '@factory5/core';
+import type { Directive, DirectiveLimits, Event } from '@factory5/core';
 import { askUser, channelConfigFor, loadConfig } from '@factory5/brain';
 import {
   createChannelRegistry,
@@ -45,7 +45,13 @@ import {
   projects as projectsQ,
   tasksInflight,
 } from '@factory5/state';
-import { defaultWorkspace, resolveProjectPath } from '@factory5/wiki';
+import {
+  budgetDefaultsFromProjectMeta,
+  defaultWorkspace,
+  loadOrCreateProjectMetadata,
+  resolveDirectiveLimits,
+  resolveProjectPath,
+} from '@factory5/wiki';
 
 import { startBrainSupervisor } from './brain-supervisor.js';
 import { Doorbell } from './doorbell.js';
@@ -228,14 +234,20 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
       }
     }
 
+    // Load fileConfig once at boot — the channels registry needs it to
+    // build budget-tier resolvers (issue I009 fix), and the IPC server
+    // needs `[budget.defaults]` for `POST /api/v1/builds`'s third tier.
+    // `noConfigFile` short-circuits both paths to `undefined` (test mode).
+    const fileConfig =
+      opts.noConfigFile === true ? undefined : await loadConfig().catch(() => undefined);
+    const configBudgetDefaults = fileConfig?.budget?.defaults;
+
     let channelRegistry: ChannelRegistry | undefined;
     if (opts.noChannels !== true) {
       // Resolve per-plugin config: explicit `opts.channelConfigs` wins over
       // anything we'd load from `config.toml`. Missing config blocks are
       // passed as `undefined` — each plugin's `configSchema` defaults
       // whatever the schema says is optional.
-      const fileConfig =
-        opts.noConfigFile === true ? undefined : await loadConfig().catch(() => undefined);
       const pluginList = opts.channelPlugins ?? buildDefaultChannelPlugins(fileConfig);
       const plugins = pluginList.map((plugin) => {
         const overrideBlock = opts.channelConfigs?.[plugin.id];
@@ -250,6 +262,28 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
       const registryWorkspace = fileConfig?.general.workspace ?? defaultWorkspace();
       const registryResolveProjectPath = async (name: string): Promise<string> =>
         resolveProjectPath(name, registryWorkspace);
+      // Bind the three-tier budget resolver so inbound `/build <name>`
+      // directives carry the same `limits` as `factory build` (ADR 0027 §4
+      // / issue I009). Loads project metadata once, merges with the
+      // instance-config tier, returns `undefined` for unlimited.
+      const registryResolveBuildLimits = async (
+        name: string,
+      ): Promise<DirectiveLimits | undefined> => {
+        try {
+          const projectPath = await resolveProjectPath(name, registryWorkspace);
+          const meta = await loadOrCreateProjectMetadata(projectPath, name);
+          return resolveDirectiveLimits({
+            projectDefaults: budgetDefaultsFromProjectMeta(meta),
+            configDefaults: configBudgetDefaults,
+          });
+        } catch (err) {
+          log.warn(
+            { err, projectName: name },
+            'daemon: resolveBuildLimits failed — directive will run uncapped',
+          );
+          return undefined;
+        }
+      };
       const registry = createChannelRegistry({
         log: createLogger('daemon.channels'),
         plugins,
@@ -264,6 +298,7 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
           }
         },
         resolveProjectPath: registryResolveProjectPath,
+        resolveBuildLimits: registryResolveBuildLimits,
       });
       await registry.start();
       subsystems.push({ name: 'channels', stop: () => registry.stop() });
@@ -294,6 +329,7 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
         ...(workerAskUserHandler !== undefined ? { workerAskUser: workerAskUserHandler } : {}),
         ...(opts.uiAuthToken !== undefined ? { uiAuthToken: opts.uiAuthToken } : {}),
         ...(opts.webUiStaticPath !== undefined ? { webUiStaticPath: opts.webUiStaticPath } : {}),
+        configBudgetDefaults,
       });
       subsystems.push({ name: 'ipc', stop: ipc.stop });
     }

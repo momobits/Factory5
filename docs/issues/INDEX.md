@@ -14,17 +14,17 @@ Internal issue tracker for factory5 itself. Mirrors the finding-lifecycle patter
 
 ## Open
 
-| ID                                                              | Severity | Area              | Title                                                                              | Created    |
-| --------------------------------------------------------------- | -------- | ----------------- | ---------------------------------------------------------------------------------- | ---------- |
-| [I009](I009-telegram-inbound-budget-defaults.md)                | MEDIUM   | channels/telegram | Telegram/Discord inbound doesn't inherit `[budget.defaults]` — builds run uncapped | 2026-04-23 |
-| [I012](I012-telegram-reply-matcher-fifo-not-targeted.md)        | LOW      | channels/telegram | Telegram Reply-feature answer matcher is FIFO — can't target a specific question   | 2026-04-23 |
-| [I013](I013-worker-worktree-cleanup-blocked-by-node-modules.md) | MEDIUM   | worker/worktree   | Worker's `pnpm install` leaves `node_modules/` that blocks worktree cleanup (Win)  | 2026-04-24 |
-| [I014](I014-architect-resume-no-autocommit.md)                  | MEDIUM   | brain/architect   | Architect re-running on existing project leaves wiki edits uncommitted             | 2026-04-26 |
+| ID                                                              | Severity | Area              | Title                                                                             | Created    |
+| --------------------------------------------------------------- | -------- | ----------------- | --------------------------------------------------------------------------------- | ---------- |
+| [I012](I012-telegram-reply-matcher-fifo-not-targeted.md)        | LOW      | channels/telegram | Telegram Reply-feature answer matcher is FIFO — can't target a specific question  | 2026-04-23 |
+| [I013](I013-worker-worktree-cleanup-blocked-by-node-modules.md) | MEDIUM   | worker/worktree   | Worker's `pnpm install` leaves `node_modules/` that blocks worktree cleanup (Win) | 2026-04-24 |
+| [I014](I014-architect-resume-no-autocommit.md)                  | MEDIUM   | brain/architect   | Architect re-running on existing project leaves wiki edits uncommitted            | 2026-04-26 |
 
 ## Resolved (last 20)
 
 | ID                                                           | Severity | Area                    | Title                                                                                                                                           | Resolved   |
 | ------------------------------------------------------------ | -------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| [I009](I009-telegram-inbound-budget-defaults.md)             | MEDIUM   | channels/telegram       | Telegram/Discord inbound doesn't inherit `[budget.defaults]` — builds run uncapped                                                              | 2026-04-27 |
 | [I015](I015-file-sink-logger-silent-fail.md)                 | MAJOR    | @factory5/logger        | File-sink logger silently disabled by transitive `createLogger` calls at module init                                                            | 2026-04-27 |
 | [I011](I011-telegram-inbound-no-project-resolution.md)       | HIGH     | channels/telegram       | Telegram inbound doesn't resolve project paths — `/build` fails off factoryd's cwd                                                              | 2026-04-23 |
 | [I010](I010-worker-spawn-enoent-junction-cwd.md)             | LOW      | worker/run-worker       | Worker subprocess spawn fails with `ENOENT` when `cwd` is inside a Windows junction (WONTFIX — junction artifact, not reproduced post-I011-fix) | 2026-04-23 |

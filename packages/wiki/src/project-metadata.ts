@@ -19,7 +19,12 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { newId, projectBudgetDefaultsSchema, type ProjectBudgetDefaults } from '@factory5/core';
+import {
+  newId,
+  projectBudgetDefaultsSchema,
+  type DirectiveLimits,
+  type ProjectBudgetDefaults,
+} from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 
 const log = createLogger('wiki.project-metadata');
@@ -186,6 +191,43 @@ export function budgetDefaultsFromProjectMeta(
   const raw = meta.metadata['budgetDefaults'];
   const parsed = projectBudgetDefaultsSchema.safeParse(raw);
   return parsed.success ? parsed.data : undefined;
+}
+
+/**
+ * Resolve a directive's `limits` from the three known tiers, per ADR 0027 §4
+ * resolution order:
+ *
+ *   `explicitFlags` → `projectDefaults` → `configDefaults` → unlimited
+ *
+ * Per-field independent — `--max-usd 5` can apply even when the project's
+ * `metadata.budgetDefaults.maxSteps` is set. Returns `undefined` when no
+ * tier supplies any field (the unlimited path; brain treats absent
+ * `limits` as no cap).
+ *
+ * Single source of truth shared by every directive-creation path
+ * (`factory build`, `POST /api/v1/builds`, Telegram inbound `/build`,
+ * Discord inbound `/build`) so a future tier-shape change lands in one
+ * file. Issue I009 is the regression that motivated extracting this:
+ * Telegram + Discord plugins were creating directives with no `limits`
+ * because they never reached this resolution.
+ */
+export function resolveDirectiveLimits(opts: {
+  /** Per-invocation overrides (e.g. CLI `--max-usd` flag, web body). */
+  explicitFlags?: { maxUsd?: number | undefined; maxSteps?: number | undefined } | undefined;
+  /** Per-project tier (Web UI–writable). Read with {@link budgetDefaultsFromProjectMeta}. */
+  projectDefaults?: ProjectBudgetDefaults | undefined;
+  /** Instance config tier (`config.toml [budget.defaults]`). */
+  configDefaults?: { maxUsd?: number | undefined; maxSteps?: number | undefined } | undefined;
+}): DirectiveLimits | undefined {
+  const maxUsd =
+    opts.explicitFlags?.maxUsd ?? opts.projectDefaults?.maxUsd ?? opts.configDefaults?.maxUsd;
+  const maxSteps =
+    opts.explicitFlags?.maxSteps ?? opts.projectDefaults?.maxSteps ?? opts.configDefaults?.maxSteps;
+  if (maxUsd === undefined && maxSteps === undefined) return undefined;
+  return {
+    ...(maxUsd !== undefined ? { maxUsd } : {}),
+    ...(maxSteps !== undefined ? { maxSteps } : {}),
+  };
 }
 
 /**

@@ -102,6 +102,7 @@ import {
   ProjectMetadataCorruptError,
   ProjectMetadataNotFoundError,
   readProjectMetadata,
+  resolveDirectiveLimits,
   updateProjectMetadata,
 } from '@factory5/wiki';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
@@ -196,6 +197,15 @@ export interface IpcServerOptions {
    * resolves this from its install layout; tests typically leave it unset.
    */
   webUiStaticPath?: string;
+  /**
+   * Instance-config budget defaults (`config.toml [budget.defaults]`) —
+   * the third tier in `resolveDirectiveLimits`'s merge order (ADR 0027 §4).
+   * The daemon loads `config.toml` once at boot and threads this through
+   * so `POST /api/v1/builds` can apply the same three-tier resolution as
+   * `factory build` (issue I009: the body-only resolution skipped this
+   * tier). When omitted, the route falls back to body + project tiers.
+   */
+  configBudgetDefaults?: { maxUsd?: number | undefined; maxSteps?: number | undefined } | undefined;
 }
 
 export interface IpcServerHandle {
@@ -761,17 +771,17 @@ function registerRoutes(
       lastTouchedAt: nowIso,
     });
 
-    // Budget resolution per ADR 0027 §4 — body wins over project-tier
-    // metadata.budgetDefaults; the daemon doesn't have config-tier access
-    // so the third tier is CLI-only. Per-field independent so the body
-    // can override one ceiling without flushing the project's other.
-    const projectDefaults = budgetDefaultsFromProjectMeta(projectMeta);
-    const limits: { maxUsd?: number; maxSteps?: number } = {};
-    const maxUsd = body.limits?.maxUsd ?? projectDefaults?.maxUsd;
-    const maxSteps = body.limits?.maxSteps ?? projectDefaults?.maxSteps;
-    if (maxUsd !== undefined) limits.maxUsd = maxUsd;
-    if (maxSteps !== undefined) limits.maxSteps = maxSteps;
-    const hasLimits = Object.keys(limits).length > 0;
+    // Budget resolution via the shared three-tier helper (ADR 0027 §4 /
+    // I009 fix). Body wins over per-project `metadata.budgetDefaults`,
+    // which wins over instance-config `[budget.defaults]` (Phase 13.3
+    // wired the third tier through `IpcServerOptions.configBudgetDefaults`
+    // — pre-fix the daemon discarded it).
+    const limits = resolveDirectiveLimits({
+      explicitFlags: body.limits,
+      projectDefaults: budgetDefaultsFromProjectMeta(projectMeta),
+      configDefaults: opts.configBudgetDefaults,
+    });
+    const hasLimits = limits !== undefined;
     const directive = directiveSchema.parse({
       id: newId(),
       source: 'cli',

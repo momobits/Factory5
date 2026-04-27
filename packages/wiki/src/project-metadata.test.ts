@@ -11,6 +11,7 @@ import {
   budgetDefaultsFromProjectMeta,
   loadOrCreateProjectMetadata,
   readProjectMetadata,
+  resolveDirectiveLimits,
   updateProjectMetadata,
   type ProjectMetadata,
 } from './project-metadata.js';
@@ -302,6 +303,58 @@ describe('budgetDefaultsFromProjectMeta (ADR 0027 §4 read helper)', () => {
       budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: 'unlimited' })),
     ).toBeUndefined();
     expect(budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: null }))).toBeUndefined();
+  });
+});
+
+describe('resolveDirectiveLimits (Phase 13.3 — three-tier merge for I009)', () => {
+  it('returns undefined when no tier supplies any field', () => {
+    expect(resolveDirectiveLimits({})).toBeUndefined();
+    expect(
+      resolveDirectiveLimits({ explicitFlags: {}, projectDefaults: {}, configDefaults: {} }),
+    ).toBeUndefined();
+  });
+
+  it('falls through to configDefaults when nothing else is set', () => {
+    expect(resolveDirectiveLimits({ configDefaults: { maxUsd: 3 } })).toEqual({ maxUsd: 3 });
+    expect(resolveDirectiveLimits({ configDefaults: { maxUsd: 3, maxSteps: 50 } })).toEqual({
+      maxUsd: 3,
+      maxSteps: 50,
+    });
+  });
+
+  it('projectDefaults override configDefaults per field', () => {
+    expect(
+      resolveDirectiveLimits({
+        projectDefaults: { maxUsd: 10 },
+        configDefaults: { maxUsd: 3, maxSteps: 50 },
+      }),
+    ).toEqual({ maxUsd: 10, maxSteps: 50 });
+  });
+
+  it('explicitFlags override both lower tiers per field', () => {
+    expect(
+      resolveDirectiveLimits({
+        explicitFlags: { maxUsd: 100 },
+        projectDefaults: { maxUsd: 10, maxSteps: 200 },
+        configDefaults: { maxUsd: 3, maxSteps: 50 },
+      }),
+    ).toEqual({ maxUsd: 100, maxSteps: 200 });
+  });
+
+  it('per-field independence — one explicit flag does not flush the others', () => {
+    expect(
+      resolveDirectiveLimits({
+        explicitFlags: { maxSteps: 999 },
+        projectDefaults: { maxUsd: 10 },
+        configDefaults: { maxUsd: 3, maxSteps: 50 },
+      }),
+    ).toEqual({ maxUsd: 10, maxSteps: 999 });
+  });
+
+  it('omits absent fields rather than emitting undefined values (matches schema)', () => {
+    const result = resolveDirectiveLimits({ projectDefaults: { maxSteps: 100 } });
+    expect(result).toEqual({ maxSteps: 100 });
+    expect(result).not.toHaveProperty('maxUsd');
   });
 });
 

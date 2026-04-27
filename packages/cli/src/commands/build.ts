@@ -32,6 +32,7 @@ import {
   languageFromProjectMeta,
   loadOrCreateProjectMetadata,
   ProjectMetadataCorruptError,
+  resolveDirectiveLimits,
   type ProjectLanguage,
   resolveProjectPath,
 } from '@factory5/wiki';
@@ -139,20 +140,17 @@ export function registerBuildCommand(program: Command): void {
             lastTouchedAt: nowIso,
           });
 
-          // Resolve budget ceilings (ADR 0027 §4): explicit CLI flag wins
-          // over per-project `metadata.budgetDefaults` (Web UI–writable),
-          // which wins over `~/.factory5/config.toml [budget.defaults]`
-          // (ADR 0020). Per-field independent so `--max-usd 5` can apply
-          // even when `metadata.budgetDefaults.maxSteps` is set.
+          // Resolve budget ceilings via the shared three-tier helper
+          // (ADR 0027 §4 / I009 fix): explicit CLI flag → per-project
+          // `metadata.budgetDefaults` (Web UI–writable) → `config.toml`
+          // `[budget.defaults]` (ADR 0020). Per-field independent.
           const cfg = await loadConfig().catch(() => undefined);
-          const projectDefaults = budgetDefaultsFromProjectMeta(projectMeta);
-          const limits: { maxUsd?: number; maxSteps?: number } = {};
-          const maxUsd = options.maxUsd ?? projectDefaults?.maxUsd ?? cfg?.budget.defaults.maxUsd;
-          const maxSteps =
-            options.maxSteps ?? projectDefaults?.maxSteps ?? cfg?.budget.defaults.maxSteps;
-          if (maxUsd !== undefined) limits.maxUsd = maxUsd;
-          if (maxSteps !== undefined) limits.maxSteps = maxSteps;
-          const hasLimits = Object.keys(limits).length > 0;
+          const limits = resolveDirectiveLimits({
+            explicitFlags: { maxUsd: options.maxUsd, maxSteps: options.maxSteps },
+            projectDefaults: budgetDefaultsFromProjectMeta(projectMeta),
+            configDefaults: cfg?.budget.defaults,
+          });
+          const hasLimits = limits !== undefined;
 
           const directive = directiveSchema.parse({
             id: newId(),
@@ -174,9 +172,10 @@ export function registerBuildCommand(program: Command): void {
           });
           directivesQ.insert(db, directive);
 
-          const limitsLine = hasLimits
-            ? `  limits:   ${maxUsd !== undefined ? `max_usd=$${maxUsd.toFixed(2)} ` : ''}${maxSteps !== undefined ? `max_steps=${String(maxSteps)}` : ''}\n`
-            : '';
+          const limitsLine =
+            limits !== undefined
+              ? `  limits:   ${limits.maxUsd !== undefined ? `max_usd=$${limits.maxUsd.toFixed(2)} ` : ''}${limits.maxSteps !== undefined ? `max_steps=${String(limits.maxSteps)}` : ''}\n`
+              : '';
           const languageLine = language !== undefined ? `  language: ${language}\n` : '';
           stdout.write(
             `factory build ${project}\n  directive: ${directive.id}\n  path: ${projectPath}\n  autonomy: ${autonomy}\n${languageLine}${limitsLine}\n`,

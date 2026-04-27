@@ -2,8 +2,9 @@
 id: I009
 severity: MEDIUM
 area: channels/telegram
-status: OPEN
+status: RESOLVED
 created: 2026-04-23
+resolved: 2026-04-27
 ---
 
 # Telegram inbound doesn't inherit `[budget.defaults]` — directives created via `/build` run uncapped
@@ -72,4 +73,32 @@ but worth flagging.
 
 ## Resolution
 
-(filled when work begins)
+**Phase 13.3 (2026-04-27).** Extracted the three-tier merge into a shared
+`resolveDirectiveLimits({ explicitFlags, projectDefaults, configDefaults })`
+helper in `@factory5/wiki` (`packages/wiki/src/project-metadata.ts`).
+All four directive-creation paths now call it:
+
+1. `factory build` (CLI) — already had the merge inline; refactored to the helper.
+2. `POST /api/v1/builds` (daemon) — added the missing config-tier (third
+   tier) by threading `IpcServerOptions.configBudgetDefaults` from the
+   daemon's loaded `fileConfig`.
+3. Telegram inbound `/build` — gained a new `resolveBuildLimits` callback
+   on `ChannelContext` that the daemon binds to a closure calling
+   `loadOrCreateProjectMetadata` then `resolveDirectiveLimits` (project +
+   config tiers).
+4. Discord inbound `/build` — same `ChannelContext` callback wiring.
+
+Regression coverage:
+
+- `packages/wiki/src/project-metadata.test.ts` — 6 unit tests for the
+  helper covering all tier-precedence + per-field-independence cases.
+- `packages/channels/src/telegram.test.ts` — 4 inbound regression tests:
+  limits applied from resolver, no limits when resolver returns
+  undefined, no limits when resolver is unwired (legacy path), no limits
+  when resolver throws (degrade gracefully).
+- `packages/channels/src/discord.test.ts` — 2 inbound regression tests
+  (limits-applied + resolver-unwired).
+- `packages/daemon/src/server.test.ts` — 3 new `/api/v1/builds` tests
+  covering the new config tier (alone, vs project tier, vs body).
+
+Workspace 832 → 847 passing tests. Lint + format + build clean.

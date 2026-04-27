@@ -46,7 +46,13 @@
  *     drive messages via {@link TelegramChannel._simulateUpdate}.
  */
 
-import { newId, type Directive, type Intent, type OutboundMessage } from '@factory5/core';
+import {
+  newId,
+  type Directive,
+  type DirectiveLimits,
+  type Intent,
+  type OutboundMessage,
+} from '@factory5/core';
 import type { Logger } from '@factory5/logger';
 import { openDatabase, pendingQuestions, type Database } from '@factory5/state';
 import { z } from 'zod';
@@ -382,6 +388,7 @@ export class TelegramChannel implements ChannelPlugin {
   private log: Logger | undefined;
   private onInbound: ChannelContext['onInbound'] | undefined;
   private resolveProjectPath: ChannelContext['resolveProjectPath'] | undefined;
+  private resolveBuildLimits: ChannelContext['resolveBuildLimits'] | undefined;
   private db: Database | undefined;
   private ownsDb = false;
   private abortController: AbortController | undefined;
@@ -399,6 +406,7 @@ export class TelegramChannel implements ChannelPlugin {
     this.log = ctx.log;
     this.onInbound = ctx.onInbound;
     this.resolveProjectPath = ctx.resolveProjectPath;
+    this.resolveBuildLimits = ctx.resolveBuildLimits;
     this.config = telegramConfigSchema.parse(rawConfig);
 
     if (this.externalDb !== undefined) {
@@ -568,9 +576,11 @@ export class TelegramChannel implements ChannelPlugin {
     // when the resolver is unwired — tests and standalone scripts that
     // construct the channel without the daemon pass through the old shape.
     let payload: Record<string, unknown>;
+    let resolvedProjectName: string | undefined;
     if (intent === 'build') {
       const buildPayload = this.parseBuildPayload(strippedText);
       const projectName = buildPayload['project'];
+      if (typeof projectName === 'string') resolvedProjectName = projectName;
       if (typeof projectName === 'string' && this.resolveProjectPath !== undefined) {
         try {
           const projectPath = await this.resolveProjectPath(projectName);
@@ -589,6 +599,27 @@ export class TelegramChannel implements ChannelPlugin {
       payload = { text: strippedText };
     }
 
+    // Three-tier budget resolution for inbound /build (issue I009 fix).
+    // The daemon binds `resolveBuildLimits` to a closure that merges the
+    // project's `metadata.budgetDefaults` with the instance config's
+    // `[budget.defaults]`. When the resolver is unwired (tests / standalone
+    // scripts), the directive carries no `limits` — the pre-fix path.
+    let limits: DirectiveLimits | undefined;
+    if (
+      intent === 'build' &&
+      resolvedProjectName !== undefined &&
+      this.resolveBuildLimits !== undefined
+    ) {
+      try {
+        limits = await this.resolveBuildLimits(resolvedProjectName);
+      } catch (err) {
+        this.log.warn(
+          { err, projectName: resolvedProjectName },
+          'telegram: resolveBuildLimits failed — directive will run uncapped',
+        );
+      }
+    }
+
     const directive: Directive = {
       id: newId(),
       source: 'telegram',
@@ -599,6 +630,7 @@ export class TelegramChannel implements ChannelPlugin {
       autonomy: intent === 'build' ? 'autonomous' : 'chat',
       createdAt: new Date().toISOString(),
       status: 'pending',
+      ...(limits !== undefined ? { limits } : {}),
     };
 
     try {

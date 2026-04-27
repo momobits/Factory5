@@ -7,7 +7,7 @@
  * from `outbound_messages` and sent via the channel's `send` method.
  */
 
-import type { ChannelId, Directive, OutboundMessage } from '@factory5/core';
+import type { ChannelId, Directive, DirectiveLimits, OutboundMessage } from '@factory5/core';
 import type { Logger } from '@factory5/logger';
 import type { ZodSchema } from 'zod';
 
@@ -47,6 +47,21 @@ export interface ChannelContext {
    * the name relative to its own cwd, which is the gap I011 fixes).
    */
   resolveProjectPath?: (name: string) => Promise<string>;
+  /**
+   * Resolve the budget ceilings for an inbound `/build <name>` directive
+   * by merging the per-project `metadata.budgetDefaults` with the instance
+   * `config.toml [budget.defaults]` tier (ADR 0027 §4 / issue I009 fix).
+   * The daemon binds this to a closure over the loaded `fileConfig` and
+   * a `loadOrCreateProjectMetadata` call at channel-registry creation
+   * time so the channel plugin doesn't need to import `@factory5/wiki`
+   * or `@factory5/brain`.
+   *
+   * Returns `undefined` when no tier supplies any field (the unlimited
+   * path; the brain treats absent `limits` as no cap). Optional because
+   * test harnesses that wire the registry without the daemon emit
+   * directives with no `limits` (the pre-fix behaviour).
+   */
+  resolveBuildLimits?: (name: string) => Promise<DirectiveLimits | undefined>;
 }
 
 export interface SendResult {

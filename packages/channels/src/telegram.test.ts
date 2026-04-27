@@ -462,6 +462,155 @@ describe('TelegramChannel inbound', () => {
     await plugin.stop();
   });
 
+  it('build directive carries `limits` from resolveBuildLimits (I009 fix)', async () => {
+    // Regression for I009: pre-fix, Telegram inbound `/build` skipped both
+    // project-tier `metadata.budgetDefaults` and config-tier
+    // `[budget.defaults]`. Phase 13.3 threads `resolveBuildLimits` through
+    // `ChannelContext`; the daemon binds it to a closure that merges the
+    // project + config tiers via wiki's `resolveDirectiveLimits`.
+    const api = makeStubApi();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    const resolveBuildLimits = async (
+      name: string,
+    ): Promise<{ maxUsd?: number; maxSteps?: number } | undefined> => {
+      // Mirror what the daemon binds: merge a project-tier { maxUsd: 5 }
+      // (Web UI–writable) with a config-tier { maxSteps: 200 }.
+      if (name !== 'budget-test-project') return undefined;
+      return { maxUsd: 5, maxSteps: 200 };
+    };
+    await plugin.start(
+      {
+        log: createLogger('test.telegram'),
+        onInbound: (d) => inbounds.push(d),
+        resolveProjectPath: async (name) => `/resolved/${name}`,
+        resolveBuildLimits,
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 99,
+      message: makeMessage({
+        messageId: 99,
+        text: '/build budget-test-project',
+        chatId: 1225367797,
+        fromId: 1225367797,
+      }),
+    });
+    expect(inbounds).toHaveLength(1);
+    const d = inbounds[0] as Directive;
+    expect(d.intent).toBe('build');
+    expect(d.limits).toEqual({ maxUsd: 5, maxSteps: 200 });
+    await plugin.stop();
+  });
+
+  it('build directive has no `limits` when resolveBuildLimits returns undefined', async () => {
+    const api = makeStubApi();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram'),
+        onInbound: (d) => inbounds.push(d),
+        resolveProjectPath: async (name) => `/resolved/${name}`,
+        // Returns undefined → no project tier, no config tier — unlimited path.
+        resolveBuildLimits: async () => undefined,
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 100,
+      message: makeMessage({
+        messageId: 100,
+        text: '/build no-limits-project',
+        chatId: 1225367797,
+        fromId: 1225367797,
+      }),
+    });
+    expect(inbounds).toHaveLength(1);
+    const d = inbounds[0] as Directive;
+    expect(d.limits).toBeUndefined();
+    await plugin.stop();
+  });
+
+  it('build directive has no `limits` when resolveBuildLimits is unwired (pre-I011 path)', async () => {
+    // Standalone-script / test-harness path that wires the channel
+    // without the daemon. Inbound directives carry no `limits` — the
+    // pre-Phase-13.3 behaviour. Documented so a future contract tweak
+    // surfaces here.
+    const api = makeStubApi();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram'),
+        onInbound: (d) => inbounds.push(d),
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 101,
+      message: makeMessage({
+        messageId: 101,
+        text: '/build legacy-flow',
+        chatId: 1225367797,
+        fromId: 1225367797,
+      }),
+    });
+    expect(inbounds).toHaveLength(1);
+    const d = inbounds[0] as Directive;
+    expect(d.limits).toBeUndefined();
+    await plugin.stop();
+  });
+
+  it('build directive has no `limits` when resolveBuildLimits throws', async () => {
+    const api = makeStubApi();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram'),
+        onInbound: (d) => inbounds.push(d),
+        resolveProjectPath: async (name) => `/resolved/${name}`,
+        resolveBuildLimits: async () => {
+          throw new Error('boom');
+        },
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 102,
+      message: makeMessage({
+        messageId: 102,
+        text: '/build throws-here',
+        chatId: 1225367797,
+        fromId: 1225367797,
+      }),
+    });
+    expect(inbounds).toHaveLength(1);
+    const d = inbounds[0] as Directive;
+    // The plugin swallows the failure (logs a warning); directive runs
+    // uncapped rather than crashing the inbound path.
+    expect(d.limits).toBeUndefined();
+    await plugin.stop();
+  });
+
   it('falls back to raw name when resolveProjectPath throws', async () => {
     const api = makeStubApi();
     const inbounds: Directive[] = [];

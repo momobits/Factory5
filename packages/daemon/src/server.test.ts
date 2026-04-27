@@ -1999,6 +1999,91 @@ describe('IPC server — POST /api/v1/builds (ADR 0027, sub-step 11.3)', () => {
     expect(body.directive.limits).toEqual({ maxUsd: 9, maxSteps: 75 });
     await app.close();
   });
+
+  it('budget tier: configBudgetDefaults applies as the third tier (Phase 13.3 / I009)', async () => {
+    // Pre-fix the route only merged body + project-tier; instance-config
+    // `[budget.defaults]` was never threaded in. Phase 13.3 added the
+    // `configBudgetDefaults` option so the route applies all three tiers
+    // exactly like `factory build`.
+    const app = await buildIpcServer({
+      ...baseOpts(),
+      configBudgetDefaults: { maxUsd: 1.5, maxSteps: 30 },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir }, // No body.limits, no project meta — falls all the way through.
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { limits?: { maxUsd?: number; maxSteps?: number } };
+    };
+    expect(body.directive.limits).toEqual({ maxUsd: 1.5, maxSteps: 30 });
+    await app.close();
+  });
+
+  it('budget tier: project-tier overrides config-tier per field (Phase 13.3)', async () => {
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    const meta = {
+      id: '01KQ0P14MZZPJRPA5RW929TTSJ',
+      name: 'sample',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      factoryVersion: '0.x',
+      metadata: { budgetDefaults: { maxUsd: 5 } }, // Only maxUsd at project tier.
+    };
+    await writeFile(join(factoryDir, 'project.json'), JSON.stringify(meta, null, 2));
+
+    const app = await buildIpcServer({
+      ...baseOpts(),
+      configBudgetDefaults: { maxUsd: 1, maxSteps: 30 }, // maxSteps comes from here.
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { limits?: { maxUsd?: number; maxSteps?: number } };
+    };
+    expect(body.directive.limits).toEqual({ maxUsd: 5, maxSteps: 30 });
+    await app.close();
+  });
+
+  it('budget tier: body.limits overrides both lower tiers per field (Phase 13.3)', async () => {
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    const meta = {
+      id: '01KQ0P14MZZPJRPA5RW929TTSJ',
+      name: 'sample',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      factoryVersion: '0.x',
+      metadata: { budgetDefaults: { maxUsd: 5, maxSteps: 100 } },
+    };
+    await writeFile(join(factoryDir, 'project.json'), JSON.stringify(meta, null, 2));
+
+    const app = await buildIpcServer({
+      ...baseOpts(),
+      configBudgetDefaults: { maxUsd: 1, maxSteps: 10 },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir, limits: { maxSteps: 999 } },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { limits?: { maxUsd?: number; maxSteps?: number } };
+    };
+    // body wins for maxSteps; project tier wins for maxUsd; config tier
+    // unused when both higher tiers fill in.
+    expect(body.directive.limits).toEqual({ maxUsd: 5, maxSteps: 999 });
+    await app.close();
+  });
 });
 
 describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.4)', () => {
