@@ -7,6 +7,12 @@
  * @packageDocumentation
  */
 
-export { createLogger, initLogger, getRootLogger, withBuildSink } from './logger.js';
+export {
+  createLogger,
+  initLogger,
+  getRootLogger,
+  withBuildSink,
+  __resetLoggerForTests,
+} from './logger.js';
 export type { Logger, LoggerOptions, BuildSinkHandle } from './logger.js';
 export { logsDir, dataDir } from './paths.js';

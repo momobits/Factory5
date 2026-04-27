@@ -1,6 +1,31 @@
 /**
  * Pino-based logger with per-component children, file + console sinks,
  * and per-build sink mirroring.
+ *
+ * Init contract — read this before changing the boot semantics:
+ *
+ *   - `initLogger(opts)` is the *explicit* boot. Apps call it once at
+ *     startup before any log line is emitted.
+ *   - `createLogger(component)` may be called at module top level. It
+ *     returns a lazy `Proxy` that doesn't bind to the root logger
+ *     until the first log call. By that time the app has had its
+ *     chance to call `initLogger` explicitly.
+ *   - If the app forgets and a log line fires before `initLogger`,
+ *     a *fallback auto-init* kicks in with `noFile: true` and process
+ *     name `unknown` — useful for ad-hoc / test scripts but never the
+ *     intended production state.
+ *   - If `initLogger(opts)` is called *after* an auto-init has already
+ *     happened, it **replaces** the root and the existing
+ *     `createLogger`-returned proxies pick up the new root on their
+ *     next call. This is what fixes I015 (file sink silently disabled
+ *     by transitive top-level `createLogger` calls).
+ *
+ * Pre-I015 behaviour: `createLogger` itself triggered auto-init.
+ * Because every workspace package declares `const log =
+ * createLogger('component')` at module top level, the auto-init
+ * (which runs with `noFile: true`) always won the race against the
+ * app's explicit `initLogger({ processName: 'factoryd' })` call,
+ * leaving the file sink permanently disabled in production.
  */
 
 import { mkdirSync } from 'node:fs';
@@ -28,15 +53,10 @@ export interface LoggerOptions {
 }
 
 let rootLogger: PinoLogger | undefined;
+type InitMode = 'unset' | 'auto' | 'explicit';
+let initMode: InitMode = 'unset';
 
-/**
- * Initialize the root logger. Must be called once per process before any
- * `createLogger` call. Apps (`apps/factory/src/main.ts`,
- * `apps/factoryd/src/main.ts`) call this immediately on startup.
- */
-export function initLogger(opts: LoggerOptions): PinoLogger {
-  if (rootLogger !== undefined) return rootLogger;
-
+function buildRootLogger(opts: LoggerOptions): PinoLogger {
   const level = opts.level ?? env['FACTORY5_LOG_LEVEL'] ?? 'info';
   const dir = logsDir();
   if (opts.noFile !== true) {
@@ -50,7 +70,6 @@ export function initLogger(opts: LoggerOptions): PinoLogger {
 
   if (opts.noConsole !== true) {
     if (stdout.isTTY) {
-      // Pretty-printed for humans
       const pretty = pino.transport({
         target: 'pino-pretty',
         options: {
@@ -62,7 +81,6 @@ export function initLogger(opts: LoggerOptions): PinoLogger {
       });
       streams.push({ level, stream: pretty });
     } else {
-      // JSON for CI / non-TTY
       streams.push({ level, stream: stdout });
     }
   }
@@ -89,12 +107,47 @@ export function initLogger(opts: LoggerOptions): PinoLogger {
     serializers: pino.stdSerializers,
   };
 
-  rootLogger = streams.length > 0 ? pino(baseOptions, multistream(streams)) : pino(baseOptions);
+  return streams.length > 0 ? pino(baseOptions, multistream(streams)) : pino(baseOptions);
+}
 
+/**
+ * Initialize the root logger explicitly. Apps (`apps/factory/src/main.ts`,
+ * `apps/factoryd/src/main.ts`) call this once on startup.
+ *
+ * If a previous auto-init (triggered by a log line that fired before this
+ * call) has already built a root, this **replaces** that root. Any
+ * `createLogger`-returned proxies pick up the new root on their next
+ * call, so the explicit-init streams (notably the file sink) take effect.
+ *
+ * Idempotent: a second explicit `initLogger` call returns the existing
+ * root unchanged.
+ */
+export function initLogger(opts: LoggerOptions): PinoLogger {
+  if (initMode === 'explicit') return rootLogger!;
+  if (rootLogger !== undefined && typeof rootLogger.flush === 'function') {
+    try {
+      rootLogger.flush();
+    } catch {
+      // Auto-init root was console-only; flushing is best-effort. The new
+      // root takes over regardless.
+    }
+  }
+  rootLogger = buildRootLogger(opts);
+  initMode = 'explicit';
   return rootLogger;
 }
 
-/** Get the root logger. Throws if `initLogger` has not been called. */
+function autoInitLogger(): PinoLogger {
+  if (rootLogger !== undefined) return rootLogger;
+  rootLogger = buildRootLogger({
+    processName: env['FACTORY5_PROCESS_NAME'] ?? 'unknown',
+    noFile: true,
+  });
+  initMode = 'auto';
+  return rootLogger;
+}
+
+/** Get the root logger. Throws if neither `initLogger` nor an auto-init has run. */
 export function getRootLogger(): PinoLogger {
   if (rootLogger === undefined) {
     throw new Error('logger not initialized — call initLogger({ processName }) at app startup');
@@ -109,6 +162,13 @@ export function getRootLogger(): PinoLogger {
  * Per-component log levels can be set via env: `FACTORY5_LOG_LEVEL_BRAIN_TRIAGE=debug`
  * (uppercase, dots → underscores).
  *
+ * The returned logger is a `Proxy` that resolves to a Pino child of the
+ * current root logger on first access. If `initLogger` is called after
+ * the proxy is created (the typical app boot order, since modules
+ * declare `const log = createLogger('foo')` at top level), the proxy
+ * automatically picks up the explicit root on its next call. See I015
+ * for the failure mode this defends against.
+ *
  * @example
  * ```ts
  * const log = createLogger('brain.triage');
@@ -116,19 +176,59 @@ export function getRootLogger(): PinoLogger {
  * ```
  */
 export function createLogger(component: string): PinoLogger {
-  if (rootLogger === undefined) {
-    // Auto-init with sensible defaults — apps SHOULD call initLogger explicitly,
-    // but if a library is loaded standalone (e.g., tests), don't crash.
-    initLogger({ processName: env['FACTORY5_PROCESS_NAME'] ?? 'unknown', noFile: true });
-  }
-  const root = getRootLogger();
   const overrideKey = `FACTORY5_LOG_LEVEL_${component.toUpperCase().replace(/\./g, '_')}`;
-  const override = env[overrideKey];
-  const child = root.child({ component });
-  if (override !== undefined && override.length > 0) {
-    child.level = override;
-  }
-  return child;
+
+  let cachedChild: PinoLogger | undefined;
+  let cachedRoot: PinoLogger | undefined;
+
+  const resolve = (): PinoLogger => {
+    const root = rootLogger ?? autoInitLogger();
+    if (root !== cachedRoot) {
+      cachedChild = root.child({ component });
+      cachedRoot = root;
+      const override = env[overrideKey];
+      if (override !== undefined && override.length > 0) {
+        cachedChild.level = override;
+      }
+    }
+    return cachedChild!;
+  };
+
+  return new Proxy({} as PinoLogger, {
+    get(_target, prop, _receiver) {
+      const real = resolve() as unknown as Record<string | symbol, unknown>;
+      const value = real[prop];
+      if (typeof value === 'function') {
+        return (value as (...args: unknown[]) => unknown).bind(real);
+      }
+      return value;
+    },
+    set(_target, prop, value) {
+      const real = resolve() as unknown as Record<string | symbol, unknown>;
+      real[prop] = value;
+      return true;
+    },
+    has(_target, prop) {
+      const real = resolve() as unknown as Record<string | symbol, unknown>;
+      return prop in real;
+    },
+    ownKeys(_target) {
+      return Reflect.ownKeys(resolve() as unknown as object);
+    },
+    getOwnPropertyDescriptor(_target, prop) {
+      return Reflect.getOwnPropertyDescriptor(resolve() as unknown as object, prop);
+    },
+  });
+}
+
+/**
+ * Reset module-level state. Test-only. Production code never calls this.
+ * Lets test suites that toggle init flavours run cleanly without leaking
+ * a previous suite's root into the next.
+ */
+export function __resetLoggerForTests(): void {
+  rootLogger = undefined;
+  initMode = 'unset';
 }
 
 /**

@@ -6,12 +6,33 @@
 
 ## Phase 13 — Operator experience polish
 
-- [ ] 13.1 — **File-sink logger bug.** The Pino file sink at
+- [x] 13.1 — **File-sink logger bug.** The Pino file sink at
       `<dataDir>/logs/factoryd-<YYYY-MM-DD>.log` does not materialise
       on disk despite `mkdirSync(logsDir, { recursive: true })` running
       during `initLogger`. Pretty-printed stdout works, so the
       multistream construction succeeds — only the file destination is
       broken. Investigate, write a regression test, fix.
+
+      **Closed.** Root cause: `createLogger`'s auto-init fallback fired
+      from transitive top-level imports (50+ `const log =
+      createLogger('foo')` declarations across packages). The auto-init
+      ran with `noFile: true`, so the explicit
+      `initLogger({ processName: 'factoryd' })` in
+      `apps/factoryd/src/main.ts:105` was a no-op against the cached
+      auto-init root — file sink never built, every line tagged
+      `"process":"unknown"`. Fix in `packages/logger/src/logger.ts`:
+      (1) `createLogger` now returns a `Proxy` that defers child
+      binding until the first log call, (2) `initLogger` replaces an
+      auto-init root when called explicitly, so existing top-level
+      `createLogger` references pick up the explicit root on next
+      call. Regression coverage in
+      `packages/logger/src/filesink-repro.test.ts`: 7 new tests
+      including a subprocess driver against the dist build that
+      asserts the file lands on disk and contains
+      `"process":"factoryd"`. I015 moved to RESOLVED. End-to-end
+      verified by running `npx tsx apps/factoryd/src/main.ts
+      --foreground` against a clean `.factory/`: log file
+      materialises, all lines tagged `"process":"factoryd"`.
 
   Sub-actions:
   - File a major issue under `docs/issues/` (regression-test required
