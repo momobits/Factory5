@@ -21,8 +21,8 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,json,md,yml,yaml}\"",
     "typecheck": "pnpm -r run typecheck",
     "clean": "pnpm -r exec rimraf dist .turbo node_modules/.cache",
-    "factory": "tsx apps/factory/src/main.ts",
-    "factoryd": "tsx apps/factoryd/src/main.ts"
+    "factory": "tsx --conditions=development apps/factory/src/main.ts",
+    "factoryd": "tsx --conditions=development apps/factoryd/src/main.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

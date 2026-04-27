@@ -9,9 +9,11 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
       "import": "./dist/index.js"
     },
     "./hook-runtime": {
+      "development": "./src/hook-runtime.ts",
       "import": "./dist/hook-runtime.js"
     }
   },

@@ -6,12 +6,15 @@
 
 ## Phase 14 — Carry-forward continuation + ergonomics
 
-- [ ] 14.1 — **First-bite carry-forward.** Opens against whichever
-      candidate from the README charter is biting the operator first.
-      Likely candidates (in rough priority order, but not pre-decided):
-      stale-dist dev-loop gotcha (now overdue since Phase 9), I013
-      status re-read, I012 Telegram FIFO matcher, stale
-      pending_questions DB sweep, PowerShell em-dash README addendum.
+- [x] 14.1 — **Stale-dist dev-loop gotcha (overdue since Phase 9).**
+      Conditional exports + `tsx --conditions=development`: each
+      `packages/*/package.json` adds `"development": "./src/<entry>.ts"`
+      to its `exports` map; root `pnpm factoryd` / `pnpm factory` and
+      each app's `dev` script pass `--conditions=development` so dev
+      runs route to source. Prod path (`node dist/main.js`) unchanged.
+      Verified: factoryd boots cleanly with `packages/daemon/dist/`
+      removed; same boot fails with `ERR_MODULE_NOT_FOUND` when the
+      flag is absent. 855 tests still green.
 
 - [ ] 14.2 — **Second carry-forward.** Same shape as 14.1. Pick from
       the remaining candidate pool by demand signal.

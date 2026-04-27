@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "build": "tsup src/main.ts --format esm --sourcemap --clean --target node20",
-    "dev": "tsx src/main.ts",
+    "dev": "tsx --conditions=development src/main.ts",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit"
   },

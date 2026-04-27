@@ -9,10 +9,12 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
       "import": "./dist/index.js"
     },
     "./paths": {
       "types": "./dist/paths.d.ts",
+      "development": "./src/paths.ts",
       "import": "./dist/paths.js"
     }
   },
