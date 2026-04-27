@@ -37,8 +37,16 @@
       regression tests across telegram, outbound-worker, and
       pending-questions queries.
 
-- [ ] 14.4 — _(optional)_ **Fourth carry-forward.** May not be
-      reached if the first three exhaust the pain.
+- [x] 14.4 — **Pending-questions orphan sweep CLI plus Windows
+      mojibake README addendum.** New `findOrphaned` /
+      `markOrphanAnswered` helpers in `pendingQuestions` (channel-
+      and since-aware, oldest-first; idempotent answered-row guard).
+      A `factory questions cleanup` command (with `--since` and
+      `--dry-run` flags) lists orphans and stamps each with a
+      self-describing synthetic note when not in dry-run. Twelve
+      regression tests across state and CLI. README gains a "Windows
+      operator tips" subsection pointing at the UTF-8 console encoding
+      fix for PowerShell 5.1 em-dash mojibake.
 
 - [ ] 14.5 — **Phase close.** Tag
       `phase-14-carry-forward-continuation-closed`. Author

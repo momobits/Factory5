@@ -13,6 +13,7 @@ import { registerDirectiveCommand } from './commands/directive.js';
 import { registerDoctorCommand } from './commands/doctor.js';
 import { registerFindingsCommand } from './commands/findings.js';
 import { registerInitCommand } from './commands/init.js';
+import { registerQuestionsCommand } from './commands/questions.js';
 import { registerResumeCommand } from './commands/resume.js';
 import { registerSpendCommand } from './commands/spend.js';
 import { registerStatusCommand } from './commands/status.js';
@@ -41,6 +42,7 @@ export function buildCli(opts: BuildCliOptions = {}): Command {
   registerDoctorCommand(program);
   registerFindingsCommand(program);
   registerInitCommand(program);
+  registerQuestionsCommand(program);
   registerResumeCommand(program);
   registerSpendCommand(program);
   registerStatusCommand(program);

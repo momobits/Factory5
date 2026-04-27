@@ -30,6 +30,16 @@ pnpm factory --version
 pnpm factoryd --version
 ```
 
+### Windows operator tips
+
+- **PowerShell em-dash mojibake.** factory5's logs and CLI output use proper em-dashes (`—`) and other UTF-8 punctuation. Windows PowerShell defaults to a legacy code page and will render these as `â€"` etc. Set the console to UTF-8 once per session (or in your `$PROFILE`):
+
+  ```powershell
+  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+  ```
+
+  Windows Terminal + Windows PowerShell 7+ usually pick this up automatically; classic PowerShell 5.1 does not.
+
 ## Layout
 
 ```

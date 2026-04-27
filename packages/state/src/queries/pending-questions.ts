@@ -206,3 +206,76 @@ export function detectOrphanedAnswer(
   if (!isTerminalStatus(task.status)) return undefined;
   return { taskId: q.taskId, taskStatus: task.status };
 }
+
+// -----------------------------------------------------------------------------
+// Orphan sweep (Phase 14.4)
+// -----------------------------------------------------------------------------
+
+/**
+ * Summary row for {@link findOrphaned}. Joined fields from the parent
+ * directive are kept here (rather than fetching directive rows separately)
+ * so an operator-facing CLI can render a one-line digest per orphan.
+ */
+export interface OrphanedQuestion {
+  id: string;
+  directiveId: string;
+  directiveStatus: string;
+  directiveSource: string;
+  channel: string;
+  question: string;
+  createdAt: string;
+}
+
+/**
+ * Find unanswered questions whose parent directive is in a terminal state
+ * (`complete` / `failed` / `blocked`). These are escalations / `ask_user`
+ * prompts that the operator never answered before the directive ended on
+ * its own — by the time anyone replies, no consumer remains. Used by the
+ * `factory questions cleanup` CLI sweep.
+ *
+ * Returns rows oldest first so the CLI can show the longest-stale entries
+ * up top. The optional `since` filter (ISO-8601 date or datetime) clamps
+ * the scan to rows created strictly before the cutoff — useful for
+ * "older than 90 days" sweeps that leave the last few days alone.
+ */
+export function findOrphaned(db: Database, options: { since?: string } = {}): OrphanedQuestion[] {
+  const wheres = [`pq.answered_at IS NULL`, `d.status IN ('complete','failed','blocked')`];
+  const params: unknown[] = [];
+  if (options.since !== undefined) {
+    wheres.push(`pq.created_at < ?`);
+    params.push(options.since);
+  }
+  const rows = db
+    .prepare(
+      `SELECT pq.id           AS id,
+              pq.directive_id  AS directiveId,
+              d.status         AS directiveStatus,
+              d.source         AS directiveSource,
+              pq.channel       AS channel,
+              pq.question      AS question,
+              pq.created_at    AS createdAt
+         FROM pending_questions pq
+         JOIN directives d ON d.id = pq.directive_id
+        WHERE ${wheres.join(' AND ')}
+        ORDER BY pq.created_at ASC`,
+    )
+    .all(...params) as OrphanedQuestion[];
+  return rows;
+}
+
+/**
+ * Mark an orphaned question as answered with a synthetic note. Preserves
+ * the row for forensic value and ensures the matcher's `answered_at IS
+ * NULL` predicate skips it. Caller passes the orphan record so we can
+ * build a self-describing answer string without a second lookup.
+ */
+export function markOrphanAnswered(
+  db: Database,
+  orphan: { id: string; directiveId: string; directiveStatus: string },
+  when: string,
+): void {
+  const note = `[orphaned by factory questions cleanup at ${when}: directive ${orphan.directiveId} ended ${orphan.directiveStatus}]`;
+  db.prepare(
+    'UPDATE pending_questions SET answered_at = ?, answer = ? WHERE id = ? AND answered_at IS NULL',
+  ).run(when, note, orphan.id);
+}

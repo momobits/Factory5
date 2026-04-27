@@ -175,3 +175,118 @@ describe('pendingQuestions.setBotMessageId / findOpenByBotMessageId (I012)', () 
     expect(pendingQuestions.findOpenByBotMessageId(db, 'telegram', '200')).toBeUndefined();
   });
 });
+
+describe('pendingQuestions.findOrphaned / markOrphanAnswered (Phase 14.4)', () => {
+  let db: BetterSqlite3.Database;
+
+  beforeEach(() => {
+    db = freshDb();
+  });
+
+  it('returns open questions whose directive is in a terminal state', () => {
+    const completedDir = seedDirective(db, { status: 'complete' });
+    const failedDir = seedDirective(db, { status: 'failed' });
+    const blockedDir = seedDirective(db, { status: 'blocked' });
+    pendingQuestions.create(db, makeQuestion(db, { directiveId: completedDir }));
+    pendingQuestions.create(db, makeQuestion(db, { directiveId: failedDir }));
+    pendingQuestions.create(db, makeQuestion(db, { directiveId: blockedDir }));
+
+    const orphans = pendingQuestions.findOrphaned(db);
+    expect(orphans).toHaveLength(3);
+    expect(orphans.map((o) => o.directiveStatus).sort()).toEqual(['blocked', 'complete', 'failed']);
+  });
+
+  it('skips questions whose directive is still running / pending / claimed', () => {
+    const liveDir = seedDirective(db, { status: 'running' });
+    const pendingDir = seedDirective(db, { status: 'pending' });
+    const claimedDir = seedDirective(db, { status: 'claimed' });
+    pendingQuestions.create(db, makeQuestion(db, { directiveId: liveDir }));
+    pendingQuestions.create(db, makeQuestion(db, { directiveId: pendingDir }));
+    pendingQuestions.create(db, makeQuestion(db, { directiveId: claimedDir }));
+
+    expect(pendingQuestions.findOrphaned(db)).toEqual([]);
+  });
+
+  it('skips already-answered rows even when the directive is terminal', () => {
+    const dir = seedDirective(db, { status: 'complete' });
+    const q = makeQuestion(db, { directiveId: dir });
+    pendingQuestions.create(db, q);
+    pendingQuestions.answer(db, q.id, 'too late', new Date().toISOString());
+
+    expect(pendingQuestions.findOrphaned(db)).toEqual([]);
+  });
+
+  it('respects the `since` filter (rows created strictly before the cutoff)', () => {
+    const dir = seedDirective(db, { status: 'complete' });
+    const oldQ = makeQuestion(db, {
+      directiveId: dir,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    const recentQ = makeQuestion(db, {
+      directiveId: dir,
+      createdAt: '2026-04-20T00:00:00.000Z',
+    });
+    pendingQuestions.create(db, oldQ);
+    pendingQuestions.create(db, recentQ);
+
+    const orphans = pendingQuestions.findOrphaned(db, { since: '2026-04-01T00:00:00.000Z' });
+    expect(orphans.map((o) => o.id)).toEqual([oldQ.id]);
+  });
+
+  it('orders results oldest-first', () => {
+    const dir = seedDirective(db, { status: 'complete' });
+    const q1 = makeQuestion(db, {
+      directiveId: dir,
+      createdAt: '2026-04-20T00:00:00.000Z',
+    });
+    const q2 = makeQuestion(db, {
+      directiveId: dir,
+      createdAt: '2026-04-10T00:00:00.000Z',
+    });
+    const q3 = makeQuestion(db, {
+      directiveId: dir,
+      createdAt: '2026-04-15T00:00:00.000Z',
+    });
+    pendingQuestions.create(db, q1);
+    pendingQuestions.create(db, q2);
+    pendingQuestions.create(db, q3);
+
+    const orphans = pendingQuestions.findOrphaned(db);
+    expect(orphans.map((o) => o.id)).toEqual([q2.id, q3.id, q1.id]);
+  });
+
+  it('markOrphanAnswered stamps a self-describing synthetic note', () => {
+    const dir = seedDirective(db, { status: 'failed' });
+    const q = makeQuestion(db, { directiveId: dir });
+    pendingQuestions.create(db, q);
+    const when = '2026-04-27T19:00:00.000Z';
+
+    pendingQuestions.markOrphanAnswered(
+      db,
+      { id: q.id, directiveId: dir, directiveStatus: 'failed' },
+      when,
+    );
+
+    const after = pendingQuestions.getById(db, q.id);
+    expect(after?.answeredAt).toBe(when);
+    expect(after?.answer).toContain(`directive ${dir} ended failed`);
+    expect(after?.answer).toContain(when);
+  });
+
+  it('markOrphanAnswered is a no-op on an already-answered row', () => {
+    const dir = seedDirective(db, { status: 'complete' });
+    const q = makeQuestion(db, { directiveId: dir });
+    pendingQuestions.create(db, q);
+    pendingQuestions.answer(db, q.id, 'real answer', '2026-04-25T00:00:00.000Z');
+
+    pendingQuestions.markOrphanAnswered(
+      db,
+      { id: q.id, directiveId: dir, directiveStatus: 'complete' },
+      '2026-04-27T19:00:00.000Z',
+    );
+
+    const after = pendingQuestions.getById(db, q.id);
+    expect(after?.answer).toBe('real answer');
+    expect(after?.answeredAt).toBe('2026-04-25T00:00:00.000Z');
+  });
+});
