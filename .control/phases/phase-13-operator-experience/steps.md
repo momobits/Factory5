@@ -161,10 +161,23 @@
     after architect runs.
   - Move I014's row in `docs/issues/INDEX.md` to RESOLVED.
 
-- [ ] 13.5 — **Phase close.** Tag `phase-13-operator-experience-closed`.
+- [x] 13.5 — **Phase close.** Tag `phase-13-operator-experience-closed`.
       `docs/Phase13_Progress.md` + `docs/PROGRESS.md` entry. Likely no
       `CompleteArchitecture.md` change (sweep phase, no new
       architectural seam) — or a small extension if 13.1's logger fix
       changes the multistream contract. Scaffold Phase 14 (carry
       forward by demand signal — most likely Bash sandboxing if a
       live incident surfaces by then, else continue paying down debt).
+
+      **Closed.** Final gates: pnpm build / test / lint / format all
+      clean; 855 tests passing across 15 packages (was 813 at Phase
+      12 close; +42 from this phase). All four target carry-forwards
+      RESOLVED (I009, I014, I015) plus the `factory ui-token` ADR
+      0025 §2 ergonomic gap. No new ADRs (sweep phase); no
+      `CompleteArchitecture.md` change (the logger Proxy + new
+      `/ui-token` route + helper extraction + auto-commit are all
+      below the architecture-seam threshold). Phase 14 scaffolded
+      at `.control/phases/phase-14-carry-forward-continuation/`,
+      themed as continuation of the carry-forward sweep with the
+      stale-dist dev-loop gotcha (overdue since Phase 9) at the
+      top of the candidate pool. Demand-signal-ordered.
