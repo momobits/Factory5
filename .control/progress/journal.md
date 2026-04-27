@@ -2,6 +2,20 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-04-27 (session `2026-04-27T22`) — Still-quiet pass-through (Phase 15 pending demand signal)
+
+- **Phase 15 remained paused.** No demand signal surfaced this session — no incident, no operator feature request, no smoke finding bumped, no new issue filed. The session ran the bootstrap protocol (`/session-start`), confirmed state with no drift, and ended via `/session-end` without opening a sub-step. First still-quiet pass since Phase 15 scaffolded at Phase 14 close.
+- **Commits this session:** `1626ced..<this>`. Just this one `docs(state)` session-end commit refreshing STATE.md + appending this journal entry + rewriting `next.md`. No code changes, no test changes, no issue files touched. Working tree clean before and after; ahead of origin/main by 65.
+- **Decisions:** none. No ADRs added. No protocol amendments. The phase charter's explicit "If nothing has bitten by next session: do nothing" guidance was followed verbatim.
+- **Issues:** none filed, none closed. `docs/issues/INDEX.md` Open table stays **empty** for the third session in a row (Phase 14 close + Phase 15 scaffold + this still-quiet pass).
+- **Significant blockers hit:** zero. By design — paused-state sessions don't run into blockers because they don't run.
+- **Tests / lint / format / build:** unchanged from Phase 14.5 close gate. Not re-run this session — the protocol doesn't demand it for a no-edit pass, and prior gate stays valid until code changes. Last gate (still applicable): **876 tests** across 15 packages, lint + format clean, build clean across 15 packages + 3 apps.
+- **Spend: $0.** No live-LLM calls, no smoke runs, nothing.
+- **End-to-end smoke:** none. The orphan `node.exe` on port 25295 noted during Phase 14.1 smoke wasn't re-investigated this session — it stays a Phase 15 candidate.
+- **Memory:** unchanged. No new feedback or project memories. Existing memories all still apply (`feedback_fix_root_causes.md`, `feedback_use_frontend_design_skill.md`).
+- **Stable-state observation reinforced.** Two consecutive session boundaries with no demand signal. The bias is shifting toward closing Phase 15 still-quiet rather than holding it nominally open across more sessions. The phase charter explicitly enables this — see Phase 15 README §"Done criteria" and the rollback plan section. `docs/PROGRESS.md` would gain a one-line entry; `docs/Phase15_Progress.md` would be a short charter recording two still-quiet passes + the close.
+- **Next: same shape.** If something has bitten by next session, open 15.1 against whichever candidate fires first. Otherwise, the recommended next move is `/phase-close` for a still-quiet Phase 15 close (tag `phase-15-demand-driven-runoff-closed`) — single commit, $0 spend, exits the active Control phase chain until new demand surfaces.
+
 ## 2026-04-27 (session `2026-04-27T19`) — Phase 14 closed (14.1 → 14.5)
 
 - **Phase 14 closed** (tag `phase-14-carry-forward-continuation-closed` on `6cc0008`). All 5 sub-steps shipped in a single sustained session arc the same day Phase 13 closed. Carry-forward continuation + ergonomics complete: stale-dist dev-loop fix → I013 status reconciliation → I012 fix → `factory questions cleanup` CLI + Windows mojibake README addendum → this phase-close commit (14.5).
