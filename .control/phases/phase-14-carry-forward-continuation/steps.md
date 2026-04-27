@@ -48,8 +48,11 @@
       operator tips" subsection pointing at the UTF-8 console encoding
       fix for PowerShell 5.1 em-dash mojibake.
 
-- [ ] 14.5 — **Phase close.** Tag
+- [x] 14.5 — **Phase close.** Tag
       `phase-14-carry-forward-continuation-closed`. Author
       `docs/Phase14_Progress.md`, prepend a Phase 14 entry to
-      `docs/PROGRESS.md`. Likely no `CompleteArchitecture.md` change
-      (sweep phase). Scaffold Phase 15 by demand signal.
+      `docs/PROGRESS.md`. No `CompleteArchitecture.md` change
+      (sweep phase, as predicted). Scaffolded Phase 15 — Demand-
+      driven runoff — at
+      `.control/phases/phase-15-demand-driven-runoff/`. Phase 15 is
+      pending demand signal; opens when something bites.

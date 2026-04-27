@@ -1,149 +1,65 @@
 # Next session — paste this to start
 
-Phase 13 closed 2026-04-27 (tag `phase-13-operator-experience-closed`).
-All 5 sub-steps shipped in a single session arc: 13.1 file-sink logger
-fix (I015) → 13.2 `factory ui-token` CLI + IPC route → 13.3
-`resolveDirectiveLimits` shared helper across all four directive-
-creation paths (I009) → 13.4 architect auto-commits its wiki writes
-on resume (I014) → 13.5 phase close. **No new ADRs** (sweep phase);
-**no `CompleteArchitecture.md` change**. Three issues moved to
-RESOLVED (I009, I014, I015) plus the long-standing ADR 0025 §2
-ergonomic gap.
+Phase 14 closed 2026-04-27 (tag `phase-14-carry-forward-continuation-closed`). All five planned sub-steps shipped in a single sustained session arc the same day Phase 13 closed: **14.1** stale-dist dev-loop (conditional exports + `tsx --conditions=development`) → **14.2** I013 → RESOLVED (paid down by Phase 10.3) → **14.3** I012 → RESOLVED (new `pending_questions.bot_message_id` column targeting) → **14.4** `factory questions cleanup` CLI + Windows mojibake README addendum → **14.5** phase close.
 
-End-to-end smoke datapoints (this session):
+Workspace: **876 tests** green across 15 packages (was 855, +21 from this phase). lint + format clean. Builds clean across 15 packages + 3 apps. Spend this phase: $0 (all TS / docs / migration / IPC / CLI work).
 
-- 13.1: `npx tsx apps/factoryd/src/main.ts --foreground` against a
-  clean `.factory/` → `.factory/logs/factoryd-2026-04-27.log`
-  materialises (2247 bytes); every line tagged
-  `"process":"factoryd"` (was `"unknown"` pre-fix — the smoking gun).
-- 13.2: same factoryd run + `node apps/factory/dist/main.js ui-token`
-  → printed `http://127.0.0.1:25295/app/?t=<48-hex>`, exit 0.
-  `--token-only` returned just the bare token.
-- 13.3: factoryd boots clean with the new `resolveBuildLimits`
-  callback wired into the channel registry; channel tests assert
-  `directive.limits` is set when the resolver returns project +
-  config tiers.
-- 13.4: 8 unit tests around `commitArchitectWritesIfRepo` cover all
-  branches incl. graceful-degrade on git failure and isolation from
-  unrelated dirty `docs/`.
+`docs/issues/INDEX.md` Open table is **empty for the first time** since the tracker was instituted. Both prior open issues (I012 + I013) moved to RESOLVED.
 
-Workspace: **855 tests** green across 15 packages (was 813). lint +
-format clean. Builds clean across 15 packages + 3 apps. Spend this
-session: $0 (all TS / docs / IPC work).
+End-to-end smoke datapoints (this phase):
+
+- **14.1**: factoryd boots clean with `packages/daemon/dist/` renamed away → proves source routing under the `development` condition. Same boot fails with `ERR_MODULE_NOT_FOUND` when `--conditions=development` is absent → proves the condition is what's wiring it up. Tested on Node 22.22.2 + tsx 4.21.0 + Windows.
+- **14.3**: regression tests in telegram, outbound-worker, and pending-questions queries cover the I012 disambiguation scenario (the issue's exact two-open-questions-in-same-chat repro) plus back-compat for legacy unstamped rows.
+- **14.4**: `runQuestionsCleanup` unit-tested across no-op, list-and-mark, dry-run, since-filter, and invalid-since paths.
+
+Migration count: **7 → 8** (`008-pending-questions-bot-message-id`).
 
 ## Pickup
 
-Read `CLAUDE.md`, then `.control/progress/STATE.md` (current phase /
-step / carry-forwards), then the Phase 14 charter at
-`.control/phases/phase-14-carry-forward-continuation/{README.md,steps.md}`.
-Phase 14 is **demand-signal-ordered** — 14.1 opens against
-whichever candidate bites the operator first, not in a pre-decided
-priority. Likely first target: stale-dist dev-loop gotcha (overdue
-since Phase 9 close).
+Read `CLAUDE.md`, then `.control/progress/STATE.md` (current phase / step / Phase 15 candidate pool), then the Phase 15 charter at `.control/phases/phase-15-demand-driven-runoff/{README.md,steps.md}`.
+
+Phase 15 is **pending demand signal** — no predetermined first sub-step. Until something bites, the codebase sits at a stable position with the open-issue tracker empty.
 
 Run `/session-start` for the full drift check.
 
-## Next concrete work — 14.1 (first-bite carry-forward)
+## Next concrete work — 15.1 (pending demand signal)
 
-**Default pick: stale-dist dev-loop gotcha.** This has been on the
-list since Phase 9's "Non-trivial finding" — `apps/factoryd` imports
-`@factory5/daemon` via `main: "./dist/index.js"`, so `pnpm factoryd`
-in dev doesn't see un-rebuilt source. Every workspace-dep edit
-currently needs a manual `pnpm build` before relaunching factoryd.
-The Phase 13.1 + 13.3 sessions both hit this several times when
-testing daemon-side fixes against an actual factoryd run.
+**No predetermined first bite.** Candidate pool (rough priority, not pre-decided):
 
-Two solution shapes on the table (decide at 14.1 open):
+1. **Bash sandboxing.** Deferred since ADR 0028 §4. Open only on a real incident — a worker doing something with `Bash` that should have been gated. Phases 12.4 + 13.x + 14.x all produced zero `decision":"deny"` lines.
+2. **`/build` flag parsing on Telegram + Discord.** Today an inbound `/build foo --max-usd 5` parses the whole text as a project name. The shared `resolveDirectiveLimits` helper from 13.3 already accepts an `explicitFlags` slot — wiring is one line once the parser exists. Defer until an operator asks.
+3. **Network egress scoping.** Long-tail concern; wait for an egress-policy demand signal.
+4. **Orphan `node.exe` on port 25295.** Noted during 14.1 smoke: a Node process at `C:\Program Files (x86)\nodejs\node.exe` (older Node install path, not our pnpm-managed runtime) is squatting on factoryd's default port. Not from any factoryd we ran (no pidfile). Could be diagnostic-only or surface a deeper issue.
+5. **Phase 6 operator follow-ups** (out-of-band) — PAT revoke, `gh repo delete`, env var cleanup.
+6. **Anything new the operator surfaces.** New issues, smoke findings, feature requests.
 
-- **A. Conditional exports + `--conditions=development`.** Each
-  `packages/*/package.json` adds a `"development":
-"./src/index.ts"` condition; running with
-  `node --conditions=development` (or `tsx --conditions=development`)
-  routes imports to source. Lowest blast radius; works with the
-  existing tsx-based dev runner.
-- **B. Flip `main` to `src/index.ts`** in dev-only packages and
-  bundle the production paths for prod runs. Simpler config but
-  breaks the prod-vs-dev parity Phase 9 chose.
-
-Re-read Phase 9.9's "Non-trivial finding" in
-`docs/Phase9_Progress.md` for the original recommendation before
-picking. Then pick one shape, apply across all `packages/*`
-relevant to `apps/factoryd`'s import chain, smoke-verify by
-editing a daemon source file and confirming `pnpm factoryd`
-picks up the change without a manual rebuild.
-
-If 14.1 lands an ADR-level decision (e.g. "we're committing to
-dev-mode-only conditional exports"), pin it as ADR 0029.
-Otherwise no new ADR; the change lives in package.json + the
-factoryd launcher invocation.
-
-## Then by demand signal
-
-Pick from the Phase 14 candidate pool as each bites:
-
-**14.x — I013 status re-read.** INDEX.md still lists I013 as
-MEDIUM/OPEN (`worker-worktree-cleanup-blocked-by-node-modules`).
-Phase 10's `prePurgeDepDirs` rimraf'd the symptom and Phase 12's
-sandbox cleanup further shrank the surface. Re-read the issue
-file; if nothing's still un-fixed, move it to RESOLVED with a
-pointer to Phase 10's fix + Phase 12's surface reduction. If yes,
-scope a targeted patch.
-
-**14.x — I012 — Telegram FIFO matcher.**
-`packages/channels/src/telegram.ts` `maybeAnswerPendingQuestion`
-matches inbound replies by chat-id LIKE prefix; can't disambiguate
-when there are >1 open questions in the same chat. One-line guard:
-when >1 open question, require `reply_to_message.message_id`
-(Telegram already includes it in the inbound update payload).
-
-**14.x — Stale pending_questions DB sweep.** 14 orphaned escalations
-from older completed directives. One-shot SQL or a CLI surface
-(`factory questions cleanup --orphaned --since <date>`).
-
-**14.x — PowerShell em-dash README addendum.** One-paragraph note
-in the project README pointing operators at
-`[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`. Free,
-no-code change.
-
-**14.5 — Phase close.** Tag
-`phase-14-carry-forward-continuation-closed`. Author
-`docs/Phase14_Progress.md`, prepend `docs/PROGRESS.md`. Likely no
-`CompleteArchitecture.md` change (sweep phase). Scaffold Phase 15
-by demand signal — Bash sandboxing if a real incident materialises
-by then; otherwise continue paying down debt.
+If nothing has bitten by next session: do nothing. Phase 15 is a paused state, not a queued backlog. Run `/session-start`, confirm state, and end the session if no work signals are present.
 
 ## Carry-forward (still non-blocking)
 
-- **Stale-dist dev-loop gotcha** (overdue since Phase 9) — 14.x
-  candidate.
-- **I013** (MEDIUM, OPEN per INDEX, but likely paid down) — re-read
-  candidate.
-- **I012** (LOW, OPEN) — Telegram inbound FIFO matcher.
-- **14 stale "open" pending_questions** (LOW) — DB sweep.
-- **PowerShell em-dash mojibake** (LOW) — README addendum.
-- **Phase 6 operator follow-ups** (out-of-band) — PAT revoke,
-  `gh repo delete`, env var cleanup.
+- Bash sandboxing (incident-driven)
+- `/build` flag parsing on Telegram + Discord (operator-request-driven)
+- Network egress scoping (demand-driven)
+- Orphan `node.exe` on port 25295 (diagnostic)
+- Phase 6 operator follow-ups (out-of-band)
 
 ## Out of scope (still deferred)
 
-- **Bash sandboxing** — Phase 12 + Phase 13 both deferred. 12.4
-  produced zero deny lines; demand signal still absent. Revisit on
-  a real incident.
-- **Network egress scoping** — long-tail; wait for an egress-policy
-  demand signal.
-- **Telegram/Discord `/build` flag parsing** (e.g.
-  `/build foo --max-usd 5`). Hypothesis from I009 fix discussion.
-  The shared `resolveDirectiveLimits` accepts an `explicitFlags`
-  slot; once the parser lands, wiring is one line. Defer until an
-  operator asks.
+- **Worker-subprocess `ask_user`** — fully covered by ADR 0024 + Phase 8 implementation; no follow-up.
+- **Discord per-question reply matcher** (the I012 mirror) — Phase 7c live data showed no equivalent FIFO mismatch on Discord; the channel matcher there already keys on per-message snowflake refs through `discord.js`'s reply primitives. One-line wiring if it ever surfaces.
+- **Web UI extensions** — covered by ADR 0025 + 0027 + Phase 11. Future Web UI work would be its own phase.
 
-Report back on wake-up with a status block in this shape:
+## Stable-state observation
+
+factory5's open issue tracker is empty, all carry-forwards from Phases 9–13 are addressed, and the codebase is at the most stable point in its history. If demand signal stays absent for several sessions, it may be appropriate to close Phase 15 as a "still-quiet" close (no sub-steps shipped, just records the dormancy + tag) and exit the active Control phase chain until new work surfaces.
+
+Report back on wake-up with a status block:
 
 ```
-Phase 14 — 0/5 closed; 14.1 first-bite carry-forward (stale-dist dev-loop gotcha most likely)
-Last action: chore(phase-13) eb4ade3 (close + tag) on top of fix(13.4) 00682ef (architect auto-commit)
-Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-13-operator-experience-closed
-Open blockers: 0 (all carry-forwards are non-blocking polish)
-Proposed next action: 14.1 — pick stale-dist dev-loop gotcha (or another candidate if operator preference shifts)
+Phase 15 — pending demand signal (0 sub-steps opened)
+Last action: chore(phase-14) <sha> (close + tag)
+Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-14-carry-forward-continuation-closed
+Open blockers: 0
+Proposed next action: pause unless something has surfaced; otherwise open 15.1 against the first bite
 Ready to proceed?
 ```
