@@ -16,8 +16,15 @@
       removed; same boot fails with `ERR_MODULE_NOT_FOUND` when the
       flag is absent. 855 tests still green.
 
-- [ ] 14.2 — **Second carry-forward.** Same shape as 14.1. Pick from
-      the remaining candidate pool by demand signal.
+- [x] 14.2 — **I013 status re-read → RESOLVED (paid down by Phase
+      10.3).** Code re-read confirmed `prePurgeDepDirs` lives at
+      `packages/worker/src/worktree.ts:375` and is invoked by
+      `cleanupWorktree` at line 358 (before `git worktree remove
+      --force`). Regression test at `worktree.test.ts:138` covers
+      the node_modules-leak scenario; cross-runtime concern handled
+      (`.venv` + `__pycache__` purged alongside). Issue file moved
+      to `status: RESOLVED, resolved: 2026-04-24`; INDEX row moved
+      from Open to Resolved.
 
 - [ ] 14.3 — **Third carry-forward.** Same.
 

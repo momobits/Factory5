@@ -2,8 +2,9 @@
 id: I013
 severity: MEDIUM
 area: worker/worktree
-status: OPEN
+status: RESOLVED
 created: 2026-04-24
+resolved: 2026-04-24
 ---
 
 # Worker worktree `git remove --force` fails with "Directory not empty" when the worker created a `node_modules/` inside its worktree
@@ -76,4 +77,10 @@ would hit the same failure mode. `~/factory5-workspace/ask-user-smoke`
 
 ## Resolution
 
-_(filled when work begins)_
+Hypothesis option 1 ("cheapest") landed in the same Phase 10.3 session that surfaced the issue. Status was held OPEN through Phases 11–13 as doc drift; reconciled in Phase 14.2 (2026-04-27) after a code re-read confirmed both the fix and its regression test were intact and the cross-runtime concern was already covered.
+
+- **Fix commit:** `50bab61 feat(10.3): node live validation passes — language threading + I013 + JSON parser fixes` (2026-04-24).
+- **Code:** `packages/worker/src/worktree.ts` exports `prePurgeDepDirs(worktreePath)` — rimrafs `node_modules`, `.venv`, and `__pycache__` with `{ recursive: true, force: true, maxRetries: 3, retryDelay: 50 }`. `cleanupWorktree` invokes it immediately before `git worktree remove --force` (line 358). Best-effort: a failed rimraf is logged and the git command still runs (it surfaces the real error if any).
+- **Regression test:** `packages/worker/src/worktree.test.ts:138` — "cleanup success removes the worktree even when worker left node_modules behind (I013)". Stages a real `node_modules/fake-pkg` inside the worktree, runs `cleanupWorktree({ outcome: 'success' })`, asserts both the worktree dir and the project's leaked `node_modules` are gone.
+- **Cross-runtime:** `.venv` and `__pycache__` are purged alongside `node_modules`, addressing the Python concern from the Hypothesis section.
+- **Surface reduction:** Phase 12's worker filesystem-scoping (ADR 0028) further narrows when a worker can write outside its allowed gate, shrinking the surface area for stray dep-dir installs in the first place.
