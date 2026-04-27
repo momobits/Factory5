@@ -21,7 +21,7 @@
 
 import type { OutboundMessage } from '@factory5/core';
 import type { Logger } from '@factory5/logger';
-import { outbound, type Database } from '@factory5/state';
+import { outbound, pendingQuestions, type Database } from '@factory5/state';
 
 import type { Doorbell } from './doorbell.js';
 
@@ -85,6 +85,23 @@ export function startOutboundWorker(opts: OutboundWorkerOptions): OutboundWorker
         const result = await opts.deliver(msg);
         if (result.delivered) {
           outbound.markDelivered(opts.db, msg.id, new Date().toISOString());
+          // I012: when this outbound carried an `ask_user`/escalation question,
+          // stamp the provider's message id back onto pending_questions so the
+          // channel matcher can pin a Reply-feature answer to this exact
+          // question instead of falling back to FIFO. Best-effort: a missing
+          // questionId or externalId just skips the stamp; a DB failure is
+          // logged but doesn't fail the delivery.
+          const questionId = readQuestionId(msg.metadata);
+          if (questionId !== undefined && result.externalId !== undefined) {
+            try {
+              pendingQuestions.setBotMessageId(opts.db, questionId, result.externalId);
+            } catch (err) {
+              opts.log.warn(
+                { messageId: msg.id, questionId, err },
+                'outbound: failed to stamp bot_message_id on pending question',
+              );
+            }
+          }
           opts.log.debug(
             { messageId: msg.id, target: msg.targetChannel, externalId: result.externalId },
             'outbound: delivered',
@@ -187,4 +204,15 @@ function sleep(ms: number): Promise<void> {
     const t = setTimeout(resolve, ms);
     if (typeof t.unref === 'function') t.unref();
   });
+}
+
+/**
+ * Pull a `questionId` out of an outbound's `metadata` blob if present.
+ * The blob is `Record<string, unknown>` per the schema; both `askUser`
+ * and `escalateBlocked` write `{ kind: 'ask_user', questionId }`.
+ */
+function readQuestionId(metadata: Record<string, unknown> | undefined): string | undefined {
+  if (metadata === undefined) return undefined;
+  const raw = metadata['questionId'];
+  return typeof raw === 'string' && raw.length > 0 ? raw : undefined;
 }

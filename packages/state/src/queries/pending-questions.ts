@@ -19,6 +19,7 @@ interface Row {
   deadline_at: string | null;
   answered_at: string | null;
   answer: string | null;
+  bot_message_id: string | null;
 }
 
 function rowToQuestion(row: Row): PendingQuestion {
@@ -34,6 +35,7 @@ function rowToQuestion(row: Row): PendingQuestion {
     ...(row.deadline_at !== null ? { deadlineAt: row.deadline_at } : {}),
     ...(row.answered_at !== null ? { answeredAt: row.answered_at } : {}),
     ...(row.answer !== null ? { answer: row.answer } : {}),
+    ...(row.bot_message_id !== null ? { botMessageId: row.bot_message_id } : {}),
   });
 }
 
@@ -43,8 +45,8 @@ export function create(db: Database, q: PendingQuestion): void {
   db.prepare(
     `INSERT INTO pending_questions
        (id, directive_id, task_id, question, options_json, channel, channel_ref,
-        created_at, deadline_at, answered_at, answer)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        created_at, deadline_at, answered_at, answer, bot_message_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     validated.id,
     validated.directiveId,
@@ -57,7 +59,40 @@ export function create(db: Database, q: PendingQuestion): void {
     validated.deadlineAt ?? null,
     validated.answeredAt ?? null,
     validated.answer ?? null,
+    validated.botMessageId ?? null,
   );
+}
+
+/**
+ * Stamp the bot's outbound message id on the question — called by the
+ * outbound worker after a successful delivery so {@link findOpenByBotMessageId}
+ * can later disambiguate Reply-feature answers (I012). Idempotent: a
+ * second call with the same id is a no-op; calling against an already-
+ * answered or non-existent row updates 0 rows and silently succeeds.
+ */
+export function setBotMessageId(db: Database, id: string, botMessageId: string): void {
+  db.prepare('UPDATE pending_questions SET bot_message_id = ? WHERE id = ?').run(botMessageId, id);
+}
+
+/**
+ * Find the open question whose outbound was delivered with this provider
+ * message id. Returns `undefined` if none — caller must fall back to the
+ * legacy channel_ref / LIKE rungs for rows that pre-date migration 008
+ * or for outbounds whose delivery failed before stamping. (I012)
+ */
+export function findOpenByBotMessageId(
+  db: Database,
+  channel: string,
+  botMessageId: string,
+): PendingQuestion | undefined {
+  const row = db
+    .prepare(
+      `SELECT * FROM pending_questions
+        WHERE channel = ? AND bot_message_id = ? AND answered_at IS NULL
+        LIMIT 1`,
+    )
+    .get(channel, botMessageId) as Row | undefined;
+  return row !== undefined ? rowToQuestion(row) : undefined;
 }
 
 /** Fetch a pending question by id. */

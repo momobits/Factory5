@@ -14,14 +14,13 @@ Internal issue tracker for factory5 itself. Mirrors the finding-lifecycle patter
 
 ## Open
 
-| ID                                                       | Severity | Area              | Title                                                                            | Created    |
-| -------------------------------------------------------- | -------- | ----------------- | -------------------------------------------------------------------------------- | ---------- |
-| [I012](I012-telegram-reply-matcher-fifo-not-targeted.md) | LOW      | channels/telegram | Telegram Reply-feature answer matcher is FIFO — can't target a specific question | 2026-04-23 |
+_None._
 
 ## Resolved (last 20)
 
 | ID                                                              | Severity | Area                    | Title                                                                                                                                           | Resolved   |
 | --------------------------------------------------------------- | -------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| [I012](I012-telegram-reply-matcher-fifo-not-targeted.md)        | LOW      | channels/telegram       | Telegram Reply-feature answer matcher is FIFO — can't target a specific question                                                                | 2026-04-27 |
 | [I014](I014-architect-resume-no-autocommit.md)                  | MEDIUM   | brain/architect         | Architect re-running on existing project leaves wiki edits uncommitted                                                                          | 2026-04-27 |
 | [I009](I009-telegram-inbound-budget-defaults.md)                | MEDIUM   | channels/telegram       | Telegram/Discord inbound doesn't inherit `[budget.defaults]` — builds run uncapped                                                              | 2026-04-27 |
 | [I015](I015-file-sink-logger-silent-fail.md)                    | MAJOR    | @factory5/logger        | File-sink logger silently disabled by transitive `createLogger` calls at module init                                                            | 2026-04-27 |

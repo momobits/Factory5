@@ -734,6 +734,141 @@ describe('TelegramChannel inbound', () => {
     expect(api.sent[0]?.text).toContain(questionId);
     await plugin.stop();
   });
+
+  it('targets the specific question whose bot message was replied to (I012)', async () => {
+    // Regression: two open questions in the same chat. The operator uses
+    // Telegram's Reply feature on the *newer* question's bot message; the
+    // matcher must answer that question, not fall back to FIFO and silently
+    // answer the older one.
+    const api = makeStubApi();
+    const db = freshDb();
+    const directiveId = newId();
+    const olderQuestionId = newId();
+    const newerQuestionId = newId();
+    const chatId = 1225367797;
+    const directiveChannelRef = `${String(chatId)}#10`;
+    directivesQ.insert(db, {
+      id: directiveId,
+      source: 'telegram',
+      principal: String(chatId),
+      channelRef: directiveChannelRef,
+      intent: 'build',
+      payload: { project: 'example' },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'running',
+    });
+    // Older question: bot delivered it as message_id=100.
+    pendingQuestions.create(db, {
+      id: olderQuestionId,
+      directiveId,
+      question: 'older question',
+      channel: 'telegram',
+      channelRef: directiveChannelRef,
+      createdAt: '2026-04-23T11:39:27.000Z',
+      botMessageId: '100',
+    });
+    // Newer question: bot delivered it as message_id=200.
+    pendingQuestions.create(db, {
+      id: newerQuestionId,
+      directiveId,
+      question: 'newer question',
+      channel: 'telegram',
+      channelRef: directiveChannelRef,
+      createdAt: '2026-04-23T11:56:57.000Z',
+      botMessageId: '200',
+    });
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: (d) => inbounds.push(d) },
+      { botToken: 'fake' },
+    );
+    // Operator replies to the newer bot message (message_id=200).
+    await plugin._simulateUpdate({
+      update_id: 9,
+      message: makeMessage({
+        messageId: 31,
+        text: 'abort',
+        chatId,
+        fromId: chatId,
+        replyTo: { messageId: 200, fromBotId: 42 },
+      }),
+    });
+    expect(inbounds).toHaveLength(0);
+    const newer = pendingQuestions.getById(db, newerQuestionId);
+    const older = pendingQuestions.getById(db, olderQuestionId);
+    expect(newer?.answeredAt).toBeDefined();
+    expect(newer?.answer).toBe('abort');
+    expect(older?.answeredAt).toBeUndefined();
+    expect(older?.answer).toBeUndefined();
+    await new Promise((r) => setTimeout(r, 5));
+    await plugin.stop();
+  });
+
+  it('falls back to channel_ref/LIKE when bot_message_id is unstamped (legacy rows)', async () => {
+    // A pre-migration-008 question (or an outbound that was never stamped
+    // because delivery failed before the worker could record the externalId)
+    // should still be answerable by the legacy chat-id LIKE rung — this is
+    // the back-compat path the I012 fix preserves.
+    const api = makeStubApi();
+    const db = freshDb();
+    const directiveId = newId();
+    const questionId = newId();
+    const chatId = 1225367797;
+    directivesQ.insert(db, {
+      id: directiveId,
+      source: 'telegram',
+      principal: String(chatId),
+      channelRef: `${String(chatId)}#10`,
+      intent: 'build',
+      payload: { project: 'example' },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'running',
+    });
+    pendingQuestions.create(db, {
+      id: questionId,
+      directiveId,
+      question: 'unstamped',
+      channel: 'telegram',
+      channelRef: `${String(chatId)}#10`,
+      createdAt: new Date().toISOString(),
+      // No botMessageId — legacy / un-stamped row.
+    });
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: (d) => inbounds.push(d) },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 11,
+      message: makeMessage({
+        messageId: 31,
+        text: 'yes',
+        chatId,
+        fromId: chatId,
+        // Reply to some bot message we have no record of — exact rung misses,
+        // legacy LIKE rung must still match by chat id.
+        replyTo: { messageId: 999, fromBotId: 42 },
+      }),
+    });
+    expect(inbounds).toHaveLength(0);
+    const q = pendingQuestions.getById(db, questionId);
+    expect(q?.answeredAt).toBeDefined();
+    expect(q?.answer).toBe('yes');
+    await new Promise((r) => setTimeout(r, 5));
+    await plugin.stop();
+  });
 });
 
 describe('TelegramChannel send', () => {

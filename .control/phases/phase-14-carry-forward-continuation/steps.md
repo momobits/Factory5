@@ -19,14 +19,23 @@
 - [x] 14.2 — **I013 status re-read → RESOLVED (paid down by Phase
       10.3).** Code re-read confirmed `prePurgeDepDirs` lives at
       `packages/worker/src/worktree.ts:375` and is invoked by
-      `cleanupWorktree` at line 358 (before `git worktree remove
-      --force`). Regression test at `worktree.test.ts:138` covers
-      the node_modules-leak scenario; cross-runtime concern handled
-      (`.venv` + `__pycache__` purged alongside). Issue file moved
-      to `status: RESOLVED, resolved: 2026-04-24`; INDEX row moved
-      from Open to Resolved.
+      `cleanupWorktree` at line 358 (before `git worktree remove --force`).
+      Regression test at `worktree.test.ts:138` covers the
+      node_modules-leak scenario; cross-runtime concern handled (`.venv`
+      and `__pycache__` purged alongside). Issue file moved to
+      `status: RESOLVED, resolved: 2026-04-24`; INDEX row moved from
+      Open to Resolved.
 
-- [ ] 14.3 — **Third carry-forward.** Same.
+- [x] 14.3 — **I012 — Telegram Reply-feature matcher pinned to specific
+      question.** Migration 008 adds `pending_questions.bot_message_id`
+      (nullable, indexed); the outbound worker stamps the provider's
+      message id onto the linked question after successful delivery
+      (when `metadata.questionId` is set). Telegram matcher now prefers
+      the exact `bot_message_id = ?` rung when an inbound reply
+      includes `reply_to_message.message_id`; falls through to the
+      legacy `channel_ref` / `LIKE` rungs for un-stamped rows. Four
+      regression tests across telegram, outbound-worker, and
+      pending-questions queries.
 
 - [ ] 14.4 — _(optional)_ **Fourth carry-forward.** May not be
       reached if the first three exhaust the pain.

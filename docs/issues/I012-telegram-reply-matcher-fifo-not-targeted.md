@@ -2,8 +2,9 @@
 id: I012
 severity: LOW
 area: channels/telegram
-status: OPEN
+status: RESOLVED
 created: 2026-04-23
+resolved: 2026-04-27
 ---
 
 # Telegram Reply-feature answer matcher is FIFO, not targeted — can't pick a specific open question
@@ -95,4 +96,19 @@ surfaces "open questions per directive" more prominently.
 
 ## Resolution
 
-(filled when work begins)
+Took a hybrid of the two fix directions: a new `bot_message_id` column on `pending_questions` (Hypothesis fix #1, "record the bot's outbound message_id") plus an outbound-worker hook to populate it (so the existing `metadata.questionId` plumbing flows through naturally — no Telegram-specific send-path rewrite needed). Schema migration is small (one nullable ALTER + a partial index); back-compat preserved by falling through to the legacy `channel_ref` / `LIKE` rungs when the column is NULL.
+
+- **Schema (migration 008):** `pending_questions.bot_message_id TEXT` (nullable) + partial index `idx_pending_bot_message ON (bot_message_id) WHERE bot_message_id IS NOT NULL AND answered_at IS NULL`.
+- **Schema (`@factory5/core`):** `pendingQuestionSchema` gains optional `botMessageId: z.string().min(1).optional()`.
+- **State helpers (`packages/state/src/queries/pending-questions.ts`):** `setBotMessageId(db, id, botMessageId)` writes the stamp; `findOpenByBotMessageId(db, channel, botMessageId)` returns the open row whose stamped message id matches (channel-scoped, idempotent).
+- **Outbound worker (`packages/daemon/src/outbound-worker.ts`):** after a successful `deliver()`, when the outbound's `metadata.questionId` is a string and the channel returned an `externalId`, the worker calls `setBotMessageId`. Best-effort: a thrown DB error is logged but never fails the delivery.
+- **Telegram matcher (`packages/channels/src/telegram.ts:maybeAnswerPendingQuestion`):** a new exact rung now runs first — `findOpenByBotMessageId('telegram', String(replyTo.message_id))`. Falls through to the existing `channel_ref` / `LIKE 'chatId#%'` rungs only when the exact rung misses (legacy rows, failed-pre-stamp deliveries, or non-Reply messages).
+- **Regression coverage:**
+  - `packages/channels/src/telegram.test.ts` "targets the specific question whose bot message was replied to (I012)" — two open questions on the same directive/chat with distinct `bot_message_id`s; an inbound reply targeting the newer's id correctly answers the newer, leaves the older untouched.
+  - `packages/channels/src/telegram.test.ts` "falls back to channel_ref/LIKE when bot_message_id is unstamped (legacy rows)" — proves back-compat for pre-migration rows.
+  - `packages/daemon/src/outbound-worker.test.ts` "stamps bot_message_id on the linked pending question (I012)" — proves the worker stamps on delivery; companion test asserts no-stamp when the outbound has no `questionId`.
+  - `packages/state/src/queries/pending-questions.test.ts` "setBotMessageId / findOpenByBotMessageId" — round-trip, channel scoping, answered-row exclusion, no-op on unknown id, undefined for unstamped rows.
+
+Discord wasn't touched in this fix: its current `maybeAnswerPendingQuestion` already keys on per-message snowflake refs through `discord.js`'s reply primitives, and Phase 7c's live data showed no equivalent FIFO mismatch. If the column gets used there later, the Discord `send` path would extend the same `setBotMessageId` call after `posted.id` lands.
+
+The hypothesis section's option-2 ("teach workers not to need pnpm install in their worktree") was deliberately not pursued — it's adjacent and bigger; option-1 closes the actual matcher bug without that scope.

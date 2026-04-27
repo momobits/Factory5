@@ -663,25 +663,42 @@ export class TelegramChannel implements ChannelPlugin {
     if (this.db === undefined || this.api === undefined || this.log === undefined) return false;
     const replyTo = message.reply_to_message;
     if (replyTo === undefined) return false;
-    const candidateRef = `${String(message.chat.id)}#${String(replyTo.message_id)}`;
-    // Also match by chat id alone — a pending question can be attached to
-    // the whole chat if the directive was triggered without a known
-    // message id. (`LIKE '<chatId>#%'` matches any message in that chat.)
-    const rows = this.db
-      .prepare(
-        `SELECT id, directive_id AS directiveId
-           FROM pending_questions
-          WHERE channel = 'telegram'
-            AND (channel_ref = ? OR channel_ref LIKE ?)
-            AND answered_at IS NULL
-          ORDER BY created_at ASC
-          LIMIT 1`,
-      )
-      .all(candidateRef, `${String(message.chat.id)}#%`) as Array<{
-      id: string;
-      directiveId: string;
-    }>;
-    const row = rows[0];
+    // I012: prefer the exact bot-message-id rung. The outbound worker stamps
+    // `pending_questions.bot_message_id` with the provider's message_id on
+    // delivery, so when the operator uses Telegram's Reply feature on a
+    // specific bot question we can pin to that exact question even when
+    // multiple are open in the same chat. Falls through to the legacy
+    // channel_ref / LIKE rungs for pre-migration-008 rows or for outbounds
+    // whose delivery succeeded before they could be stamped.
+    let row: { id: string; directiveId: string } | undefined;
+    const targeted = pendingQuestions.findOpenByBotMessageId(
+      this.db,
+      'telegram',
+      String(replyTo.message_id),
+    );
+    if (targeted !== undefined) {
+      row = { id: targeted.id, directiveId: targeted.directiveId };
+    } else {
+      const candidateRef = `${String(message.chat.id)}#${String(replyTo.message_id)}`;
+      // Also match by chat id alone — a pending question can be attached to
+      // the whole chat if the directive was triggered without a known
+      // message id. (`LIKE '<chatId>#%'` matches any message in that chat.)
+      const rows = this.db
+        .prepare(
+          `SELECT id, directive_id AS directiveId
+             FROM pending_questions
+            WHERE channel = 'telegram'
+              AND (channel_ref = ? OR channel_ref LIKE ?)
+              AND answered_at IS NULL
+            ORDER BY created_at ASC
+            LIMIT 1`,
+        )
+        .all(candidateRef, `${String(message.chat.id)}#%`) as Array<{
+        id: string;
+        directiveId: string;
+      }>;
+      row = rows[0];
+    }
     if (row === undefined) return false;
     pendingQuestions.answer(this.db, row.id, text, new Date().toISOString());
     this.log.info(

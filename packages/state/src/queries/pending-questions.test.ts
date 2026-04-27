@@ -128,3 +128,50 @@ describe('pendingQuestions.listPaged', () => {
     expect(pendingQuestions.listPaged(db)).toEqual({ items: [], total: 0 });
   });
 });
+
+describe('pendingQuestions.setBotMessageId / findOpenByBotMessageId (I012)', () => {
+  let db: BetterSqlite3.Database;
+
+  beforeEach(() => {
+    db = freshDb();
+  });
+
+  it('round-trips: stamp then find', () => {
+    const q = makeQuestion(db, { channel: 'telegram', channelRef: '555#10' });
+    pendingQuestions.create(db, q);
+
+    pendingQuestions.setBotMessageId(db, q.id, '200');
+
+    const found = pendingQuestions.findOpenByBotMessageId(db, 'telegram', '200');
+    expect(found?.id).toBe(q.id);
+    expect(found?.botMessageId).toBe('200');
+  });
+
+  it('does not match across channels', () => {
+    const tg = makeQuestion(db, { channel: 'telegram', channelRef: '555#10' });
+    pendingQuestions.create(db, tg);
+    pendingQuestions.setBotMessageId(db, tg.id, '200');
+
+    expect(pendingQuestions.findOpenByBotMessageId(db, 'discord', '200')).toBeUndefined();
+  });
+
+  it('does not match an already-answered question', () => {
+    const q = makeQuestion(db, { channel: 'telegram', channelRef: '555#10' });
+    pendingQuestions.create(db, q);
+    pendingQuestions.setBotMessageId(db, q.id, '200');
+    pendingQuestions.answer(db, q.id, 'done', new Date().toISOString());
+
+    expect(pendingQuestions.findOpenByBotMessageId(db, 'telegram', '200')).toBeUndefined();
+  });
+
+  it('setBotMessageId is a silent no-op for an unknown question id', () => {
+    expect(() => pendingQuestions.setBotMessageId(db, newId(), '200')).not.toThrow();
+  });
+
+  it('returns undefined for an unstamped question (legacy / pre-migration row)', () => {
+    const q = makeQuestion(db, { channel: 'telegram', channelRef: '555#10' });
+    pendingQuestions.create(db, q);
+
+    expect(pendingQuestions.findOpenByBotMessageId(db, 'telegram', '200')).toBeUndefined();
+  });
+});

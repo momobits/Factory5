@@ -256,6 +256,14 @@ export const pendingQuestionSchema = z.object({
   deadlineAt: isoDateTimeSchema.optional(),
   answeredAt: isoDateTimeSchema.optional(),
   answer: z.string().optional(),
+  /**
+   * Provider-side message id of the outbound that carried this question
+   * (Telegram `message_id`, Discord snowflake). Stamped by the outbound
+   * worker on successful delivery; lets the channel matcher disambiguate
+   * Reply-feature answers when multiple questions are open in the same
+   * chat (I012).
+   */
+  botMessageId: z.string().min(1).optional(),
 });
 
 // -----------------------------------------------------------------------------
