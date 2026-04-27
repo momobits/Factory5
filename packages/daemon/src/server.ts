@@ -62,6 +62,7 @@ import {
   sendRequestSchema,
   sendResponseSchema,
   statusResponseSchema,
+  uiTokenResponseSchema,
   workerAskUserRequestSchema,
   workerAskUserResponseSchema,
   type ApiV1AnswerPendingQuestionResponse,
@@ -76,6 +77,7 @@ import {
   type ApiV1SpendResponse,
   type ApiV1UpdateProjectBudgetResponse,
   type StatusResponse,
+  type UiTokenResponse,
   type WorkerAskUserRequest,
   type WorkerAskUserResponse,
 } from '@factory5/ipc';
@@ -379,6 +381,41 @@ function registerRoutes(
         warnings: [],
       }),
     );
+  });
+
+  // ----- GET /ui-token (Phase 13.2 — ADR 0025 §2 carry-forward) -----
+  // Operator recovery for the dashboard URL when terminal scrollback is
+  // gone. Returns the live UI bearer plus the URL the operator should
+  // open. Intentionally unauthenticated: same threat profile as `/status`
+  // and `/healthz` — loopback-only via the preHandler IP guard, and the
+  // token isn't a secret from local users (it lives in the daemon's
+  // process env, readable via /proc/<pid>/environ on Linux or Process
+  // Explorer on Windows). Cross-origin browser tabs that hit this route
+  // over loopback can't read the JSON response under default same-origin
+  // policy, so a malicious tab cannot exfiltrate the token.
+  //
+  // Returns 503 when the daemon is running CLI-only (no `uiAuthToken`
+  // configured). The CLI prints a friendly message in that case.
+  app.get('/ui-token', async (request, reply) => {
+    if (opts.uiAuthToken === undefined) {
+      throw new IpcRequestError(
+        503,
+        'UI_DISABLED',
+        'daemon is not configured with a UI auth token',
+      );
+    }
+    const port = request.socket.localPort ?? opts.port;
+    const hasStaticBundle = opts.webUiStaticPath !== undefined;
+    const url = hasStaticBundle
+      ? `http://127.0.0.1:${String(port)}/app/?t=${opts.uiAuthToken}`
+      : `http://localhost:4321/app/?t=${opts.uiAuthToken}`;
+    const resp: UiTokenResponse = uiTokenResponseSchema.parse({
+      token: opts.uiAuthToken,
+      url,
+      hasStaticBundle,
+    });
+    ipcLog.debug({ reqId: request.id, hasStaticBundle }, 'ipc: /ui-token');
+    reply.send(resp);
   });
 
   // ----- GET /api/v1/status (ADR 0025) -----

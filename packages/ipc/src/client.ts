@@ -19,12 +19,14 @@ import {
   sendRequestSchema,
   sendResponseSchema,
   statusResponseSchema,
+  uiTokenResponseSchema,
   type DirectiveNotifyRequest,
   type DirectiveNotifyResponse,
   type ReloadConfigResponse,
   type SendRequest,
   type SendResponse,
   type StatusResponse,
+  type UiTokenResponse,
 } from './schemas.js';
 
 const log = createLogger('ipc.client');
@@ -41,6 +43,13 @@ export interface DaemonClient {
   send(req: SendRequest): Promise<SendResponse>;
   notifyDirective(req: DirectiveNotifyRequest): Promise<DirectiveNotifyResponse>;
   reloadConfig(): Promise<ReloadConfigResponse>;
+  /**
+   * Fetch the live UI token + dashboard URL. Returns the same shape every
+   * time the daemon is up; throws {@link IpcRequestError} with code
+   * `UI_DISABLED` (status 503) when the daemon is running CLI-only (no UI
+   * token configured).
+   */
+  uiToken(): Promise<UiTokenResponse>;
 }
 
 export function createDaemonClient(opts: DaemonClientOptions = {}): DaemonClient {
@@ -63,6 +72,9 @@ export function createDaemonClient(opts: DaemonClientOptions = {}): DaemonClient
     },
     async reloadConfig(): Promise<ReloadConfigResponse> {
       return post(base, '/reload-config', {}, reloadConfigResponseSchema, timeoutMs);
+    },
+    async uiToken(): Promise<UiTokenResponse> {
+      return get(base, '/ui-token', uiTokenResponseSchema, timeoutMs);
     },
   };
 }

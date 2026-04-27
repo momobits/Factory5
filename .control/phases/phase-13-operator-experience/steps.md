@@ -51,11 +51,33 @@
   - Update `docs/issues/INDEX.md` row when the issue lands and again
     when it closes.
 
-- [ ] 13.2 — **`factory ui-token` CLI command.** ADR 0025 §2
+- [x] 13.2 — **`factory ui-token` CLI command.** ADR 0025 §2
       carry-forward, on the list since Phase 7. Operator closes terminal
       → loses dashboard URL; restart rotates the token (lose session
       tabs). Fix: small CLI subcommand that reads the live daemon's
       currently-active `FACTORY5_UI_TOKEN` and prints the dashboard URL.
+
+      **Closed.** Picked the dedicated-route shape over extending
+      `/status` (don't leak the token from an unauthenticated route the
+      SPA already uses for liveness checks). New `GET /ui-token` on the
+      daemon returns `{ token, url, hasStaticBundle }`. Auth: loopback-
+      only, no bearer — matches the threat model of `/status` and
+      `/healthz` (the token isn't a secret from local users; it lives
+      in the daemon's process env, readable via `/proc/<pid>/environ`).
+      Cross-origin browser tabs that hit the route over loopback can't
+      read the JSON response under the default same-origin policy.
+      `url` is the factoryd-hosted dashboard URL when an SPA bundle is
+      mounted, else the dev-server URL (`http://localhost:4321/app/?t=…`)
+      with a hint. New CLI subcommand
+      `packages/cli/src/commands/ui-token.ts` plus a `runUiToken`
+      function that returns the exit code (test-friendly).
+      `--token-only` prints just the bare token for env-var piping.
+      Regression coverage: 5 daemon-side route tests
+      (`server.test.ts`) + 7 CLI roundtrip tests
+      (`commands/ui-token.test.ts`). End-to-end verified by booting
+      `factoryd --foreground` and running `factory ui-token` against
+      it — printed URL with the live token, exit 0; `--token-only`
+      printed just the token.
 
   Sub-actions:
   - Decide where the daemon exposes the token: extend the existing

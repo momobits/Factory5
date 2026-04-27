@@ -17,6 +17,7 @@ import { registerResumeCommand } from './commands/resume.js';
 import { registerSpendCommand } from './commands/spend.js';
 import { registerStatusCommand } from './commands/status.js';
 import { registerStubCommands } from './commands/stubs.js';
+import { registerUiTokenCommand } from './commands/ui-token.js';
 
 export interface BuildCliOptions {
   /** Override the binary name shown in --help. */
@@ -44,6 +45,7 @@ export function buildCli(opts: BuildCliOptions = {}): Command {
   registerSpendCommand(program);
   registerStatusCommand(program);
   registerStubCommands(program);
+  registerUiTokenCommand(program);
 
   return program;
 }

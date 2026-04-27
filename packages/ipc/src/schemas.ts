@@ -91,6 +91,37 @@ export const reloadConfigResponseSchema = z.object({
 export type ReloadConfigResponse = z.infer<typeof reloadConfigResponseSchema>;
 
 // -----------------------------------------------------------------------------
+// GET /ui-token  (operator → daemon — for `factory ui-token` CLI command)
+// -----------------------------------------------------------------------------
+
+/**
+ * Response shape for the daemon's `/ui-token` endpoint. Exposes the live
+ * `FACTORY5_UI_TOKEN` so the operator can recover the dashboard URL after
+ * losing terminal scrollback (per ADR 0025 §2 — the token rotates per
+ * daemon startup).
+ *
+ * Threat model: route is loopback-only (preHandler IP guard) and
+ * unauthenticated, matching `/status` and `/healthz`. Local users that
+ * can run a shell on the host can already read the token from the
+ * daemon's process env, so the loopback bind is the real boundary.
+ * Cross-origin browser tabs that hit this route over loopback cannot
+ * read the JSON response under the default same-origin policy (no CORS
+ * headers are set).
+ *
+ * `url` is the operator-friendly factoryd-hosted dashboard URL when a
+ * static SPA bundle is present; otherwise the dev-server URL the
+ * operator can hit directly while running `pnpm --filter factory-web dev`.
+ * `hasStaticBundle` lets the CLI tag the URL with a "build the SPA"
+ * hint when false.
+ */
+export const uiTokenResponseSchema = z.object({
+  token: z.string().min(1),
+  url: z.string().min(1),
+  hasStaticBundle: z.boolean(),
+});
+export type UiTokenResponse = z.infer<typeof uiTokenResponseSchema>;
+
+// -----------------------------------------------------------------------------
 // POST /worker/ask-user  (worker subprocess → daemon → brain)
 // -----------------------------------------------------------------------------
 

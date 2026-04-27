@@ -16,6 +16,7 @@ Commander-based CLI. Used by the `factory` binary in `apps/factory`.
 | `factory init [--discord-token … --discord-application-id … ...]` | 1/4   | **done** | Writes `config.toml`; populates `[channels.discord]` when `--discord-*` given |
 | `factory resume <project>`                                        | 2     | **done** | Resume the most recent build for a project                                    |
 | `factory status [--limit N]`                                      | 1     | **done** | Projects + recent directives + per-directive spend                            |
+| `factory ui-token [--token-only]`                                 | 13    | **done** | Print the dashboard URL with the live `FACTORY5_UI_TOKEN`                     |
 | `factory logs [--component] [--directive] [--follow]`             | 3+    | stub     | Tail logs across components                                                   |
 | `factory inspect <directiveId>`                                   | 3+    | planned  | Stitch all logs/state for a directive                                         |
 | `factory push <project>`                                          | 5     | planned  | Push completed project to GitHub                                              |
@@ -102,6 +103,21 @@ stored in `directives.blocked_reason`. For the automated version —
 ## `factory chat`
 
 Interactive REPL that writes `intent=chat` directives against a running daemon and polls `outbound_messages` for replies. Type `/quit` or `Ctrl-D` to exit.
+
+## `factory ui-token`
+
+Recover the dashboard URL after losing the terminal scrollback. The web UI bearer (`FACTORY5_UI_TOKEN`) is rotated per daemon startup, so the URL printed at boot is the only way to log into the live dashboard until the daemon restarts. This command queries the running daemon for its current token via the loopback-only `/ui-token` IPC route and prints the dashboard URL.
+
+```
+$ factory ui-token
+http://127.0.0.1:25295/app/?t=ab12cd34…
+```
+
+When the SPA bundle hasn't been built (`pnpm --filter factory-web build`), the printed URL points at the dev server (`http://localhost:4321/app/?t=…`) and a hint is added.
+
+`--token-only` prints just the bare token, useful for piping into env vars or `curl -H "Authorization: Bearer $(factory ui-token --token-only)"`.
+
+Exit codes: `0` on success, `2` if no daemon is running, `3` if the daemon is running CLI-only (no UI bundle), `1` on any other failure.
 
 ## API
 

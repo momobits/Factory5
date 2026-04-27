@@ -9,6 +9,7 @@ import {
   reloadConfigResponseSchema,
   sendResponseSchema,
   statusResponseSchema,
+  uiTokenResponseSchema,
 } from '@factory5/ipc';
 import { newId, type Directive, type Finding, type PendingQuestion } from '@factory5/core';
 import {
@@ -495,6 +496,98 @@ describe('IPC server — POST /worker/ask-user (ADR 0024)', () => {
     const body = res.json() as { error: { code: string; message: string } };
     expect(body.error.code).toBe('TASK_NOT_FOUND');
     expect(body.error.message).toBe('no such task');
+    await app.close();
+  });
+});
+
+describe('IPC server — GET /ui-token (Phase 13.2)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+  });
+
+  it('returns 503 UI_DISABLED when uiAuthToken is not configured', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({ method: 'GET', url: '/ui-token' });
+    expect(res.statusCode).toBe(503);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('UI_DISABLED');
+    await app.close();
+  });
+
+  it('returns 200 + token + url + hasStaticBundle:true when SPA bundle is configured', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'factory5-ui-token-'));
+    try {
+      await writeFile(join(tmp, 'index.html'), '<!doctype html>');
+      const app = await buildIpcServer({
+        ...baseOpts(),
+        uiAuthToken: 'ui-token-xyz',
+        webUiStaticPath: tmp,
+      });
+      const res = await app.inject({ method: 'GET', url: '/ui-token' });
+      expect(res.statusCode).toBe(200);
+      const parsed = uiTokenResponseSchema.parse(res.json());
+      expect(parsed.token).toBe('ui-token-xyz');
+      expect(parsed.hasStaticBundle).toBe(true);
+      expect(parsed.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/app\/\?t=ui-token-xyz$/);
+      await app.close();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('returns hasStaticBundle:false + dev-server URL when SPA bundle missing', async () => {
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: 'ui-token-no-bundle' });
+    const res = await app.inject({ method: 'GET', url: '/ui-token' });
+    expect(res.statusCode).toBe(200);
+    const parsed = uiTokenResponseSchema.parse(res.json());
+    expect(parsed.token).toBe('ui-token-no-bundle');
+    expect(parsed.hasStaticBundle).toBe(false);
+    expect(parsed.url).toBe('http://localhost:4321/app/?t=ui-token-no-bundle');
+    await app.close();
+  });
+
+  it('does not require a bearer token (loopback-only is the auth boundary)', async () => {
+    // Same threat model as `/status` — bearer-less is intentional. The
+    // route's defense is the preHandler IP guard plus same-origin policy
+    // on the response.
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: 'ui-token-abc' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/ui-token',
+      // No Authorization header.
+    });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('rejects non-loopback requests', async () => {
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: 'ui-token-net' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/ui-token',
+      remoteAddress: '10.0.0.5',
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('NON_LOCALHOST');
     await app.close();
   });
 });
