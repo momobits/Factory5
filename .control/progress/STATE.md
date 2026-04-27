@@ -2,7 +2,7 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-27T20:45:00Z (session `2026-04-27T19`, post Phase 14 close commit) — Phase 14 closed with tag `phase-14-carry-forward-continuation-closed`. Five sub-steps shipped in a single sustained session arc the same day Phase 13 closed: 14.1 (stale-dist dev-loop / conditional exports) → 14.2 (I013 status reconciliation) → 14.3 (I012 / `bot_message_id` targeting) → 14.4 (`factory questions cleanup` CLI + Windows mojibake README) → 14.5 (phase close). No new ADRs (sweep phase). `docs/issues/INDEX.md` Open table is empty for the first time. Phase 15 (Demand-driven runoff) scaffolded; opens when something bites.
+**Last updated:** 2026-04-27T21:05:00Z (session `2026-04-27T19`, session-end after Phase 14 close) — Phase 14 closed at `6cc0008` with tag `phase-14-carry-forward-continuation-closed`. Five sub-steps shipped in a single sustained session arc the same day Phase 13 closed: 14.1 (stale-dist dev-loop / conditional exports) → 14.2 (I013 status reconciliation) → 14.3 (I012 / `bot_message_id` targeting) → 14.4 (`factory questions cleanup` CLI + Windows mojibake README) → 14.5 (phase close). No new ADRs (sweep phase). `docs/issues/INDEX.md` Open table is empty for the first time. Phase 15 (Demand-driven runoff) scaffolded; opens when something bites.
 **Current phase:** 15 — Demand-driven runoff — **⏸ pending demand signal**
 **Current sub-phase:** n/a — single-charter phase
 **Current step:** 15.1 — first demand signal (placeholder; phase opens against whatever bites)
@@ -37,7 +37,7 @@ If nothing has bitten by next session: do nothing. Phase 15 is a paused state, n
 ## Git state
 
 - **Branch:** main (ahead of `origin/main` by 62 commits — push at operator discretion).
-- **Last commit:** `<phase-14-close-sha> chore(phase-14): close phase 14, kick off phase 15`. Phase 14 close + Phase 15 scaffold landed in one commit; tag `phase-14-carry-forward-continuation-closed` placed on this SHA. Recent log: this close commit → `448505f fix(14.4)` (questions cleanup CLI + Windows mojibake README) → `6e40872 fix(14.3)` (I012 / `bot_message_id`) → `ee96dcd fix(14.2)` (I013 → RESOLVED) → `95b901b fix(14.1)` (conditional exports for dev hot-reload) → `208d4ad docs(state)` (Phase 13 session-end) → `eb4ade3 chore(phase-13)` (Phase 13 close, tag).
+- **Last commit:** `6cc0008 chore(phase-14): close phase 14, kick off phase 15`. Phase 14 close + Phase 15 scaffold landed in one commit; tag `phase-14-carry-forward-continuation-closed` placed on this SHA. Recent log: this session-end commit (`docs(state)`) → `d583117 docs(journal)` (Phase 14 close journal append) → `6cc0008 chore(phase-14)` → `448505f fix(14.4)` (questions cleanup CLI + Windows mojibake README) → `6e40872 fix(14.3)` (I012 / `bot_message_id`) → `ee96dcd fix(14.2)` (I013 → RESOLVED) → `95b901b fix(14.1)` (conditional exports for dev hot-reload) → `208d4ad docs(state)` (Phase 13 session-end) → `eb4ade3 chore(phase-13)` (Phase 13 close, tag).
 - **Uncommitted changes:** none at session boundary.
 - **Last phase tag:** `phase-14-carry-forward-continuation-closed` (placed on the close commit).
 
@@ -84,7 +84,7 @@ All 28 ADRs live under `docs/decisions/`. **Phase 13 + Phase 14 each added zero 
 
 ## Recently completed (last 5 phase closes / major steps)
 
-- **Phase 14 closed** — 2026-04-27 — `<phase-14-close-sha> chore(phase-14)` + tag `phase-14-carry-forward-continuation-closed`. Sweep phase: I012 + I013 → RESOLVED, conditional exports for dev hot-reload, `factory questions cleanup` CLI, Windows mojibake README addendum. 855 → 876 tests; no new ADRs; no `CompleteArchitecture.md` change. `docs/issues/INDEX.md` Open table now empty.
+- **Phase 14 closed** — 2026-04-27 — `6cc0008 chore(phase-14)` + tag `phase-14-carry-forward-continuation-closed`. Sweep phase: I012 + I013 → RESOLVED, conditional exports for dev hot-reload, `factory questions cleanup` CLI, Windows mojibake README addendum. 855 → 876 tests; no new ADRs; no `CompleteArchitecture.md` change. `docs/issues/INDEX.md` Open table now empty.
 - **Phase 14 sub-step 14.4 — `factory questions cleanup` CLI + Windows mojibake README** — 2026-04-27 — `448505f fix(14.4)`. New `findOrphaned` / `markOrphanAnswered` helpers; pure `runQuestionsCleanup` for testability; "Windows operator tips" subsection in README.
 - **Phase 14 sub-step 14.3 — I012 → RESOLVED** — 2026-04-27 — `6e40872 fix(14.3)`. Migration 008 (`pending_questions.bot_message_id`); outbound-worker stamp on delivery; new exact rung in Telegram matcher. Discord untouched (Phase 7c live data showed no FIFO mismatch).
 - **Phase 14 sub-step 14.2 — I013 → RESOLVED** — 2026-04-27 — `ee96dcd fix(14.2)`. Pure doc reconciliation; `prePurgeDepDirs` + regression test were already shipped in Phase 10.3 (`50bab61`).

@@ -57,7 +57,7 @@ Report back on wake-up with a status block:
 
 ```
 Phase 15 — pending demand signal (0 sub-steps opened)
-Last action: chore(phase-14) <sha> (close + tag)
+Last action: chore(phase-14) 6cc0008 (close + tag)
 Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-14-carry-forward-continuation-closed
 Open blockers: 0
 Proposed next action: pause unless something has surfaced; otherwise open 15.1 against the first bite
