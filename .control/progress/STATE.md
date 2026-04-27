@@ -2,107 +2,109 @@
 
 > Single source of truth for Control's operational cursor. Read this first every session. Updated at every `/session-end` and by the `PreCompact` hook.
 
-**Last updated:** 2026-04-27 (session `2026-04-26T19`, session-end after Phase 12 close) — Phase 12 closed at `ed88a60` with tag `phase-12-worker-fs-scoping-closed`. ADR 0028 + new package `@factory5/worker-sandbox` + worker wiring + 96 new regression tests + operator-driven live validation. Phase 13 (operator experience polish + carry-forward sweep) scaffolded; kicks off next session at 13.1.
-**Current phase:** 13 — Operator experience polish + carry-forward sweep — **🟢 active**
+**Last updated:** 2026-04-27T15:29:53Z (session `2026-04-27T13`, session-end after Phase 13 close) — Phase 13 closed at `eb4ade3` with tag `phase-13-operator-experience-closed`. Five sub-steps shipped in a single session arc: 13.1 (logger fix / I015) → 13.2 (`factory ui-token` CLI + IPC route) → 13.3 (`resolveDirectiveLimits` helper / I009) → 13.4 (architect auto-commit / I014) → 13.5 (phase close). No new ADRs (sweep phase). Phase 14 (carry-forward continuation + ergonomics) scaffolded; opens at 14.1 next session.
+**Current phase:** 14 — Carry-forward continuation + ergonomics — **🟢 active**
 **Current sub-phase:** n/a — single-charter phase
-**Current step:** 13.1 — File-sink logger bug (next)
-**Status:** Working tree clean. **813 tests** green across 15 packages. `pnpm lint` + `pnpm format:check` clean. `pnpm build` clean across 15 packages + 3 apps.
+**Current step:** 14.1 — first-bite carry-forward (next; demand-signal-ordered)
+**Status:** Working tree clean. **855 tests** green across 15 packages. `pnpm lint` + `pnpm format:check` clean. `pnpm build` clean across 15 packages + 3 apps.
 
 ---
 
 ## Project spec
 
-**Canonical:** `CompleteArchitecture.md` at root. §22 "Pluggable runtimes" added at Phase 10 close. §23 "Web UI mutation surface" added at Phase 11 close. **§24 "Worker filesystem-scoping" added at Phase 12 close.** Phase 13 is a sweep phase — likely no `CompleteArchitecture.md` change unless 13.1's logger fix changes the multistream contract.
+**Canonical:** `CompleteArchitecture.md` at root. §22 "Pluggable runtimes" added at Phase 10 close. §23 "Web UI mutation surface" added at Phase 11 close. §24 "Worker filesystem-scoping" added at Phase 12 close. **No §25 yet** — Phase 13 was a sweep phase and shipped no new architectural seam.
 **Current reference:** `docs/ARCHITECTURE.md` (evolves), `docs/CONTRACTS.md`, `docs/SKILLS.md`, `docs/AGENTS.md`.
-**Phase history:** `docs/PROGRESS.md` (chronological). `docs/Phase12_Progress.md` written at Phase 12 close (one charter doc per phase pattern). `docs/Phase13_Progress.md` will land at 13.5.
+**Phase history:** `docs/PROGRESS.md` (chronological). `docs/Phase13_Progress.md` written at 13.5 (one charter doc per phase pattern). `docs/Phase14_Progress.md` will land at the eventual 14.x phase close.
 **Role:** the `docs/` tree is authoritative. `.control/architecture/overview.md` is a pointer.
 
 ---
 
 ## Next action
 
-**Sub-step 13.1 — File-sink logger bug.** Investigate why `<dataDir>/logs/factoryd-<YYYY-MM-DD>.log` does not materialise on disk despite `mkdirSync(logsDir, { recursive: true })` running during `initLogger`. Pretty-printed stdout works (multistream construction succeeds); only the file destination is broken. Trace `pino.destination({ sync: false, mkdir: true })` for silently-swallowed errors. File a major issue under `docs/issues/` first (regression-test required before close per CLAUDE.md), then write the regression test in `@factory5/logger`, then fix.
+**Sub-step 14.1 — First-bite carry-forward.** Demand-signal-ordered: 14.1 opens against whichever Phase 14 candidate the operator hits first. The candidate pool, in rough priority order (per `.control/phases/phase-14-carry-forward-continuation/README.md`):
 
-After 13.1: 13.2 (`factory ui-token` CLI command — ADR 0025 §2 carry-forward), 13.3 (I009 fix — extract `resolveDirectiveLimits` shared helper), 13.4 (I014 fix — architect commits wiki on resume), 13.5 (phase close).
+1. **Stale-dist dev-loop gotcha (now overdue since Phase 9).** `apps/factoryd` imports `@factory5/daemon` via `main: "./dist/index.js"`, so dev runs don't see un-rebuilt source — every workspace-dep edit currently requires manual `pnpm build` before `pnpm factoryd`. Two solutions on the table: (A) conditional exports + `--conditions=development` (lowest blast radius); (B) flip `main` to `src/index.ts` for dev-only packages and bundle prod paths. Pick at sub-step open.
+2. **I013 status re-read.** INDEX still shows OPEN; Phase 10's `prePurgeDepDirs` rimraf'd the symptom and Phase 12's sandbox cleanup further shrank the surface. Likely a doc-status drift; verify and move to RESOLVED with a regression-pointer or scope a residual fix.
+3. **I012 — Telegram FIFO matcher.** `maybeAnswerPendingQuestion` matches inbound replies by chat-id LIKE prefix; can't disambiguate when there are two open questions in the same chat. One-line guard: when >1 open question, require `reply_to_message.message_id` (Telegram already includes it).
+4. **Stale "open" pending_questions DB sweep.** 14 orphaned escalations from older completed directives. One-shot SQL or a `factory questions cleanup --orphaned --since <date>` CLI surface.
+5. **PowerShell em-dash mojibake README addendum.** `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` documented in the project README. Free, no-code change.
+6. **Phase 6 operator follow-ups** — PAT revoke, `gh repo delete`, env var cleanup. Out-of-band, may not land this phase.
 
-The Phase 12 forward queue identified Phase 13's four targets: file-sink logger (12.4-discovered), `factory ui-token` (Phase 7+ carry-forward; operator just hit the friction during 12.4), I009 (Phase 11 carry-forward, amplified by 11.4), I014 (Phase 10 carry-forward).
+After Phase 14 closes (5 sub-steps incl. close): next phase by demand signal (Bash sandboxing if an incident surfaces, network egress scoping, or another sweep round).
 
 ---
 
 ## Git state
 
-- **Branch:** main (ahead of `origin/main` by 7 commits — push at operator discretion).
-- **Last commit:** session-end `docs(state)` lands on top of Phase-12 close. Recent log: this session-end commit → `ed88a60 chore(phase-12)` (Phase 12 close, tag here) → `09b0876 docs(12.4)` → `1f070f9 test(12.3)` → `fab1327 feat(12.2)` → `452db47 docs(12.1)` → `1cc13ed docs(state)` (Phase 11 session-end) → `fa5ee25 chore(phase-11)` (Phase 11 close, tag there). Tag `phase-12-worker-fs-scoping-closed` placed on `ed88a60`.
-- **Uncommitted changes:** none at session end (modulo `.claude/scheduled_tasks.lock` which the harness rewrites on session resume — gets swept up at the next harness chore commit).
-- **Last phase tag:** `phase-12-worker-fs-scoping-closed` (placed on `ed88a60`).
+- **Branch:** main (ahead of `origin/main` by 56 commits — push at operator discretion).
+- **Last commit:** `eb4ade3 chore(phase-13): close phase 13, kick off phase 14`. Phase-13 close + Phase 14 scaffold landed in one commit; tag `phase-13-operator-experience-closed` placed on this SHA. Recent log: this session-end commit (`docs(state)`) → `eb4ade3 chore(phase-13)` → `00682ef fix(13.4)` (architect auto-commit / I014) → `bf79c26 fix(13.3)` (`resolveDirectiveLimits` / I009) → `f25b323 feat(13.2)` (`factory ui-token`) → `652f411 fix(13.1)` (logger / I015) → `5b9fdd6 docs(state)` (Phase 12 session-end) → `ed88a60 chore(phase-12)` (Phase 12 close, tag).
+- **Uncommitted changes:** none at session end (modulo `.claude/scheduled_tasks.lock` — harness rewrite on resume, swept by next harness chore commit).
+- **Last phase tag:** `phase-13-operator-experience-closed` (placed on `eb4ade3`).
 
-Earlier tags intact: `phase-11-web-ui-9b-closed`, `phase-10-assessor-tier3-closed`, `phase-9-web-ui-closed`, `phase-8-worker-ask-user-closed`, `addendum-onboarding-closed`, `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-7-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`, `protocol-initialised`.
+Earlier tags intact: `phase-12-worker-fs-scoping-closed`, `phase-11-web-ui-9b-closed`, `phase-10-assessor-tier3-closed`, `phase-9-web-ui-closed`, `phase-8-worker-ask-user-closed`, `addendum-onboarding-closed`, `phase-7c-telegram-channel-closed`, `phase-7b-spend-dashboard-closed`, `phase-7a-budget-enforcement-closed`, `phase-7-closed`, `phase-6-closed`, `phase-6a-findings-registry-closed`, `phase-6c-verifier-overhaul-closed`, `protocol-initialised`.
 
 ---
 
 ## Open blockers
 
-- **None for Phase 13.** All carry-forwards below are non-blocking.
-- **Carry-forward** (12.4-discovered + Phase 10/11 long-tail):
-  - **File-sink logger bug** (MAJOR, OPEN, `@factory5/logger`) — `<dataDir>/logs/factoryd-*.log` does not materialise despite `mkdirSync` running. Pretty-printed stdout works; only file sink broken. Discovered during 12.4 operator investigation. Phase 13.1 — file as a major issue + regression test + fix.
-  - **`factory ui-token` CLI command** (MEDIUM, OPEN, ADR 0025 §2 carry-forward) — operator closes terminal → loses dashboard URL; per-startup token rotation means restart loses session tabs. On the carry-forward list since Phase 7. Phase 13.2.
-  - **I009** (MEDIUM, OPEN, `channels/telegram` + `channels/discord`) — Telegram/Discord inbound `/build` doesn't inherit `[budget.defaults]`. After 11.4 it skips two tiers (project + config), not one. Right fix: extract a shared `resolveDirectiveLimits(projectMeta, cfg, explicitFlags)` helper in `@factory5/brain` or `@factory5/wiki`. Phase 13.3.
-  - **I014** (MEDIUM, OPEN, `brain/architect`) — architect re-running on existing project leaves wiki edits uncommitted, dirty-tripping `gate.verify`. Targeted fix: stage + commit at end of `runArchitect` if a git repo exists. Phase 13.4.
-  - **I012** (LOW, OPEN, `channels/telegram`) — `maybeAnswerPendingQuestion` FIFO matcher can't target a specific open question. Carries forward.
-  - **14 stale "open" pending_questions** (LOW) — orphaned escalations from older directives that completed without being answered. One-shot DB sweep when convenient.
-  - **PowerShell em-dash mojibake** (LOW) — operator-side console codepage issue (`[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`); not a factory5 bug.
-  - **Stale-dist dev-loop gotcha** — Phase 9's recommended one-line fix is incompatible with the prod runtime path; needs design (conditional exports + `--conditions=development`, OR app-side bundling with full transitive npm deps declared). Workaround: `pnpm build` after editing workspace deps before running `pnpm factoryd`.
-  - **Phase 6 operator follow-ups** (PAT revoke, `gh repo delete`, env var cleanup) — out-of-band.
+- **None for Phase 14.** The remaining carry-forwards are all non-blocking polish items.
+- **Carry-forward** (Phase 9–12 long-tail; Phase 14 candidate pool):
+  - **Stale-dist dev-loop gotcha** (now overdue since Phase 9 close) — `apps/factoryd` imports compiled `dist/index.js`; dev edits don't propagate without manual `pnpm build`. Phase 14 candidate.
+  - **I013** (MEDIUM, OPEN per INDEX, but likely paid down) — `worker/worktree`. INDEX row says "node_modules blocks worktree cleanup (Win)" but Phase 10's `prePurgeDepDirs` fixed the symptom and Phase 12's sandbox cleanup further shrank the surface. Doc drift; Phase 14 should re-read and either RESOLVE or scope.
+  - **I012** (LOW, OPEN, `channels/telegram`) — `maybeAnswerPendingQuestion` FIFO matcher; can't target a specific open question when >1 are open in the same chat. Phase 14 candidate.
+  - **14 stale "open" pending_questions** (LOW) — orphaned escalations from older completed directives. One-shot DB sweep when convenient.
+  - **PowerShell em-dash mojibake** (LOW) — operator-side console codepage; cheapest fix is a one-paragraph README addendum.
+  - **Phase 6 operator follow-ups** (LOW, out-of-band) — PAT revoke, `gh repo delete`, env var cleanup.
 
 ---
 
 ## In-flight work
 
-- None. Phase 12 closed clean; Phase 13 hasn't opened (waits for next session + 13.1).
+- None. Phase 13 closed clean; Phase 14 hasn't opened (waits for next session + 14.1).
 
 ---
 
 ## Test / eval status
 
-- **Last test run:** 2026-04-26 (Phase 12 close gate) — **813 tests** across 15 packages, all green on Windows. `pnpm lint` + `pnpm format:check` clean. `pnpm build` clean across 15 packages + 3 apps.
-- **Per-package counts (post-Phase-12):** core 14, logger 13, ipc 14, providers 39, state 134, assessor 79, wiki 58, channels 62, events 3, worker 38 (+10 sandbox-integration), brain 74, daemon 121, cli 63, worker-mcp 15, **worker-sandbox 89** (86 passed + 3 Linux-only skipped on Windows runner — NEW). Sum = 813.
-- **Live run datapoints:** Phase 12.4 — `log-totals-cli` directive `01KQ5PNR3GYMCW48NBWVZQE75W` ran end-to-end via `factory build` under the new gate, $3.07, terminal status `blocked` (4 blocking + 4 advisory findings). 4 `worker.sandbox: gate up` lines emitted; **zero deny lines** across the full build. Builder `4p8pb1j2` advanced base from `aa3a1263 → 0d4dcbc3` with 1 file changed under the gate. Worktree cleanup all clean — `.factory/worktrees/` empty on disk post-build.
-- **Pre-existing flake:** `packages/daemon/src/pidfile.test.ts > pidfile > reaps a stale pidfile (dead owner)` flaked once under parallel test load on Windows during Phase 11; passed on retry and in isolation. Not from any Phase 11 / 12 change; documented for awareness, no action taken.
+- **Last test run:** 2026-04-27 (Phase 13.5 close gate) — **855 tests** across 15 packages, all green on Windows. `pnpm lint` + `pnpm format:check` clean. `pnpm build` clean across 15 packages + 3 apps.
+- **Per-package counts (post-Phase-13):** core 14, logger 20 (+7 from 13.1 file-sink + I015 subprocess driver), ipc 14, providers 39, state 134, assessor 79, wiki 64 (+6 from 13.3 `resolveDirectiveLimits` helper), channels 68 (+4 telegram + +2 discord I009 inbound regression), events 3, worker 38, worker-mcp 15, worker-sandbox 89 (86 passed + 3 Linux-only skipped on Windows runner), brain 82 (+8 from 13.4 architect auto-commit), daemon 129 (+5 ui-token route + +3 config-tier `/api/v1/builds`), cli 70 (+7 from 13.2 ui-token round-trip). Sum (passing) = 855.
+- **Live run datapoints this phase:** none required. Phase 13 was TS-only; the 13.1 fix was end-to-end smoke-verified by booting `npx tsx apps/factoryd/src/main.ts --foreground` against a clean `.factory/` and observing both the file materialise + every line tagged `"process":"factoryd"`. Same factoryd run powered the 13.2 end-to-end smoke (`factory ui-token` returned the live URL).
+- **Pre-existing flake (still tracked):** `packages/daemon/src/pidfile.test.ts > pidfile > reaps a stale pidfile (dead owner)` flaked once under parallel test load on Windows during Phase 11; passed on retry and in isolation. Not from any Phase 11/12/13 change. No action taken.
 
 ---
 
 ## Recent decisions (last 3 ADRs)
 
-- **ADR 0028** (2026-04-26) — Worker-sandbox contract: gate site + path-prefix algebra + out-of-scope behaviour + Bash story + write-vs-read scope. Five sub-decisions in one ADR (multi-decision shape per ADRs 0024/0025/0026/0027): (1) gate site — three Claude Code-native primitives layered per-spawn (`permissions.deny` + PreToolUse hook + `--permission-mode acceptEdits`); MCP middleware infeasible (Claude Code's MCP layer adds tools, can't intercept built-ins); OS sandbox too heavy + not cross-platform. (2) Path-prefix algebra `{ workspaceRoots, readOnlyRoots, allowSymlinks }` with Windows case-insensitive + UNC + symlink-rejection edges. (3) Hard-error out-of-scope (`permissionDecision: deny` listing allowed roots, never deny rules — no evasion hints). (4) Bash story accepted as Phase 12 limitation; OS-level Bash sandboxing deferred. (5) Write-vs-read scope — explicit asymmetry; writes worktree-only, reads broader.
-- **ADR 0027** (2026-04-26) — Web UI mutation surface.
-- **ADR 0026** (2026-04-24) — Pluggable assessor runtimes.
+- **ADR 0028** (2026-04-26, Phase 12) — Worker-sandbox contract: gate site + path-prefix algebra + out-of-scope behaviour + Bash story + write-vs-read scope. Five sub-decisions in one ADR.
+- **ADR 0027** (2026-04-26, Phase 11) — Web UI mutation surface.
+- **ADR 0026** (2026-04-24, Phase 10) — Pluggable assessor runtimes.
 
-All 28 ADRs live under `docs/decisions/`. Phase 12 added one (0028). Phase 13 is a sweep phase — no new ADRs expected unless 13.1 surfaces a multistream-design decision.
+All 28 ADRs live under `docs/decisions/`. **Phase 13 added zero ADRs** (sweep phase — none of the four fixes warranted pinning a new contract).
 
 ---
 
 ## Recently completed (last 5 phase closes / major steps)
 
-- **Phase 12 closed** — 2026-04-26 — this commit + tag `phase-12-worker-fs-scoping-closed`. Worker filesystem-scoping shipped. ADR 0028 + new 15th workspace package `@factory5/worker-sandbox` + worker wiring + 96 new tests + operator-driven live validation. Three forcing functions paid down (F001, Phase 8 carry-forward, I013).
-- **Phase 12 sub-step 12.4 — Live validation** — 2026-04-26 — `09b0876 docs(12.4)`. Operator-driven `factory build log-totals-cli`; 5/5 tasks succeeded under the gate, 4 sandbox-up lines, zero deny lines, $3.07 spend.
-- **Phase 12 sub-step 12.3 — Regression tests** — 2026-04-26 — `1f070f9 test(12.3)`. 96 new tests across `worker-sandbox` (89: path-prefix + evaluate-tool-call + settings + hook-runtime) + `worker` (10: sandbox-integration). Includes F001 replay scenario, cross-platform out-of-scope, symlink rejection.
-- **Phase 12 sub-step 12.2 — Implementation** — 2026-04-26 — `fab1327 feat(12.2)`. New `@factory5/worker-sandbox` package + `prepareSandbox` helper in `runWorker.ts` + `permissionMode` flip from `bypassPermissions` to `acceptEdits` + `FACTORY5_DISABLE_WORKER_SANDBOX` env var + `worker.sandbox` logger.
-- **Phase 12 sub-step 12.1 — ADR 0028** — 2026-04-26 — `452db47 docs(12.1)`. Five-decision multi-part ADR pinning the worker-sandbox contract before any code landed.
+- **Phase 13 closed** — 2026-04-27 — `eb4ade3 chore(phase-13)` + tag `phase-13-operator-experience-closed`. Sweep phase paid down four issues (I009, I014, I015) plus the ADR 0025 §2 ergonomic gap. 813 → 855 tests; no new ADRs; no `CompleteArchitecture.md` change.
+- **Phase 13 sub-step 13.4 — Architect auto-commit** — 2026-04-27 — `00682ef fix(13.4)`. `commitArchitectWritesIfRepo` helper; stages only architect-written paths; degrades gracefully on git failure. I014 → RESOLVED.
+- **Phase 13 sub-step 13.3 — `resolveDirectiveLimits`** — 2026-04-27 — `bf79c26 fix(13.3)`. Shared helper across all four directive-creation paths. New `ChannelContext.resolveBuildLimits` callback; new `IpcServerOptions.configBudgetDefaults`. I009 → RESOLVED.
+- **Phase 13 sub-step 13.2 — `factory ui-token`** — 2026-04-27 — `f25b323 feat(13.2)`. New CLI command + `GET /ui-token` IPC route (loopback-only, no bearer; same threat model as `/status`/`/healthz`). ADR 0025 §2 carry-forward closed.
+- **Phase 13 sub-step 13.1 — File-sink logger fix (I015)** — 2026-04-27 — `652f411 fix(13.1)`. `createLogger` Proxy-deferred; `initLogger` replaces auto-init root. End-to-end verified. I015 → RESOLVED.
 
 ---
 
 ## Attempts that didn't work (current step only)
 
-- None for Phase 13 yet — phase hasn't opened.
+- None for Phase 14 yet — phase hasn't opened.
 
 ---
 
 ## Environment snapshot
 
 - **Language / runtime:** TypeScript strict mode on Node 20+ (ADR 0001). pnpm workspaces. ESM (NodeNext) with explicit `.js` import extensions.
-- **Key pinned deps (unchanged from Phase 11 close):** `astro ^5.0.0`, `@astrojs/check ^0.9.0` (in `apps/factory-web/`); `@fastify/static ^7.0.0` (in `@factory5/daemon`); Pino, Zod, Commander, Fastify v4, better-sqlite3, discord.js, chokidar, simple-git, vitest, ulid, `@modelcontextprotocol/sdk ^1.0.0`. **No new external deps in Phase 12.**
+- **Key pinned deps (Phase 13 changes):** `simple-git ^3.25.0` newly explicit in `@factory5/brain` (already a worker dep transitively). No other dep changes. Other pinned deps unchanged from Phase 12 close: `astro ^5.0.0`, `@astrojs/check ^0.9.0`, `@fastify/static ^7.0.0`, Pino, Zod, Commander, Fastify v4, better-sqlite3, discord.js, chokidar, vitest, ulid, `@modelcontextprotocol/sdk ^1.0.0`.
 - **Model in use:** Claude Opus 4.7 for session work.
-- **Other:** Windows + Linux cross-platform mandatory. **15 packages + 3 apps** (`@factory5/worker-sandbox` added at 12.2). **813 tests**. `CHANNEL_IDS` narrowed to `['cli','discord','telegram']` (ADR 0019). Budget enforcement per ADR 0020. Project identity via `.factory/project.json` (ADR 0021). Cross-session spend via `factory spend` (7b.3). Telegram channel via plugin-owned long-poll (ADR 0022). Instance data dir via cwd-walk (ADR 0023). Worker `ask_user` per ADR 0024. Web UI per ADR 0025 + mutation surface per ADR 0027. Pluggable runtime per ADR 0026. **Worker filesystem-scoping per ADR 0028.**
+- **Other:** Windows + Linux cross-platform mandatory. **15 packages + 3 apps**. **855 tests**. `CHANNEL_IDS` narrowed to `['cli','discord','telegram']` (ADR 0019). Budget enforcement per ADR 0020 + Phase 13.3's shared helper. Project identity via `.factory/project.json` (ADR 0021). Cross-session spend via `factory spend` (7b.3). Telegram channel via plugin-owned long-poll (ADR 0022). Instance data dir via cwd-walk (ADR 0023). Worker `ask_user` per ADR 0024. Web UI per ADR 0025 + mutation surface per ADR 0027 + new `factory ui-token` CLI surface (Phase 13.2). Pluggable runtime per ADR 0026. Worker filesystem-scoping per ADR 0028.
 - **Host toolchain at Phase 10 close (still current):** pnpm 9.12.0, Node v22.22.2, Go 1.26.2, Rust/Cargo 1.95.0 — all on PATH.
 
 ---
@@ -113,15 +115,14 @@ If resuming after `/session-end` or a cold start:
 
 1. Read `CLAUDE.md` (root) — standing brief incl. Control-framework section.
 2. Read this STATE.md.
-3. Read `.control/phases/phase-13-operator-experience/{README.md,steps.md}` — Phase 13 charter.
-4. Skim Phase 12 carry-forwards above; the file-sink logger bug (13.1) blocks future on-disk debugging until resolved.
+3. Read `.control/phases/phase-14-carry-forward-continuation/{README.md,steps.md}` — Phase 14 charter.
+4. Skim Phase 13 carry-forwards above; Phase 14 is demand-signal-ordered, so 14.1 opens against whichever item bites first.
 5. Run `/session-start` for the full drift check.
 
-**Budget for Phase 13:** ~2–3 sessions. All four sub-steps are TS work, $0 spend. Optional cheap smoke run after 13.3 to verify Telegram inbound path picks up project-tier defaults — pick a small fixture so the smoke costs $1–3 if exercised.
+**Budget for Phase 14:** ~2–3 sessions. All carry-forwards are TS / docs work, $0 spend baseline. No live-LLM smoke runs anticipated unless a fix touches a code path that benefits from end-to-end verification (e.g. the stale-dist dev-loop fix would benefit from a `pnpm factoryd` smoke).
 
-**Memory:** unchanged from Phase 12 close. `feedback_use_frontend_design_skill.md` still applies to any future SPA work; `feedback_fix_root_causes.md` continues to apply (paying down debt is exactly the spirit). No new memories from Phase 12.
+**Memory:** unchanged from Phase 13 close. `feedback_use_frontend_design_skill.md` still applies to any future SPA work; `feedback_fix_root_causes.md` continues to apply (13.1's logger fix exemplified it — not papering over with `noFile: true` defaults but tracing to the auto-init footgun). No new memories from Phase 13.
 
-**Carry-forward** (still non-blocking):
+**Carry-forward** (still non-blocking; Phase 14 candidate pool):
 
-- File-sink logger bug (Phase 13.1, MAJOR) + `factory ui-token` CLI (Phase 13.2, MEDIUM) + I009 (Phase 13.3, MEDIUM) + I014 (Phase 13.4, MEDIUM).
-- I012 (LOW). Stale "open" pending_questions cleanup. PowerShell em-dash mojibake (operator-side fix). Stale-dist dev-loop gotcha. Phase 6 operator follow-ups.
+- Stale-dist dev-loop gotcha (overdue) + I013 status re-read + I012 Telegram FIFO matcher + stale pending_questions DB sweep + PowerShell em-dash README addendum + Phase 6 operator follow-ups.

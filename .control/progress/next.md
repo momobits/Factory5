@@ -1,151 +1,149 @@
 # Next session — paste this to start
 
-Phase 12 closed 2026-04-26 (tag `phase-12-worker-fs-scoping-closed`).
-All 5 sub-steps shipped: ADR 0028 + new 15th workspace package
-`@factory5/worker-sandbox` + worker wiring + 96 new regression tests +
-operator-driven live validation. Three forcing functions paid down with
-one mechanism: F001 (Phase 6c verifier hallucination), Phase 8's
-deferred fs-scoping, Phase 10's I013 worktree-cleanup pain.
+Phase 13 closed 2026-04-27 (tag `phase-13-operator-experience-closed`).
+All 5 sub-steps shipped in a single session arc: 13.1 file-sink logger
+fix (I015) → 13.2 `factory ui-token` CLI + IPC route → 13.3
+`resolveDirectiveLimits` shared helper across all four directive-
+creation paths (I009) → 13.4 architect auto-commits its wiki writes
+on resume (I014) → 13.5 phase close. **No new ADRs** (sweep phase);
+**no `CompleteArchitecture.md` change**. Three issues moved to
+RESOLVED (I009, I014, I015) plus the long-standing ADR 0025 §2
+ergonomic gap.
 
-Live validation datapoint (12.4): `factory build log-totals-cli`,
-directive `01KQ5PNR3GYMCW48NBWVZQE75W`, 5/5 tasks succeeded, 4
-`worker.sandbox: gate up` lines, **zero deny lines**, $3.07 spend.
-One builder advanced base from `aa3a1263 → 0d4dcbc3` with 1 file
-changed under the gate — write-side gate is permissive within scope.
+End-to-end smoke datapoints (this session):
 
-Workspace: 813 tests green across 15 packages. lint + format clean.
-Builds clean across 15 packages + 3 apps.
+- 13.1: `npx tsx apps/factoryd/src/main.ts --foreground` against a
+  clean `.factory/` → `.factory/logs/factoryd-2026-04-27.log`
+  materialises (2247 bytes); every line tagged
+  `"process":"factoryd"` (was `"unknown"` pre-fix — the smoking gun).
+- 13.2: same factoryd run + `node apps/factory/dist/main.js ui-token`
+  → printed `http://127.0.0.1:25295/app/?t=<48-hex>`, exit 0.
+  `--token-only` returned just the bare token.
+- 13.3: factoryd boots clean with the new `resolveBuildLimits`
+  callback wired into the channel registry; channel tests assert
+  `directive.limits` is set when the resolver returns project +
+  config tiers.
+- 13.4: 8 unit tests around `commitArchitectWritesIfRepo` cover all
+  branches incl. graceful-degrade on git failure and isolation from
+  unrelated dirty `docs/`.
+
+Workspace: **855 tests** green across 15 packages (was 813). lint +
+format clean. Builds clean across 15 packages + 3 apps. Spend this
+session: $0 (all TS / docs / IPC work).
 
 ## Pickup
 
 Read `CLAUDE.md`, then `.control/progress/STATE.md` (current phase /
-step / carry-forwards), then the Phase 13 charter at
-`.control/phases/phase-13-operator-experience/{README.md,steps.md}`.
-The `README.md` lays out the four-fix sweep: file-sink logger bug
-(13.1), `factory ui-token` CLI (13.2), I009 fix (13.3), I014 fix
-(13.4). All four are TS work, $0 spend baseline (optional cheap
-smoke after 13.3).
+step / carry-forwards), then the Phase 14 charter at
+`.control/phases/phase-14-carry-forward-continuation/{README.md,steps.md}`.
+Phase 14 is **demand-signal-ordered** — 14.1 opens against
+whichever candidate bites the operator first, not in a pre-decided
+priority. Likely first target: stale-dist dev-loop gotcha (overdue
+since Phase 9 close).
 
 Run `/session-start` for the full drift check.
 
-## Next concrete work — 13.1 (File-sink logger bug)
+## Next concrete work — 14.1 (first-bite carry-forward)
 
-Discovered during 12.4 operator investigation: the daemon writes
-pretty-printed log lines to stdout (visible in the foreground
-factoryd terminal) but the file sink at
-`<dataDir>/logs/factoryd-<YYYY-MM-DD>.log` does not materialise on
-disk. `mkdirSync(logsDir, { recursive: true })` runs during
-`initLogger` (no exception bubbles up — daemon starts cleanly), but
-the directory + file never appear. `find` across `~/.factory`,
-`~/.factory5`, repo `.factory/`, and AppData all turn up empty.
+**Default pick: stale-dist dev-loop gotcha.** This has been on the
+list since Phase 9's "Non-trivial finding" — `apps/factoryd` imports
+`@factory5/daemon` via `main: "./dist/index.js"`, so `pnpm factoryd`
+in dev doesn't see un-rebuilt source. Every workspace-dep edit
+currently needs a manual `pnpm build` before relaunching factoryd.
+The Phase 13.1 + 13.3 sessions both hit this several times when
+testing daemon-side fixes against an actual factoryd run.
 
-Three sub-actions:
+Two solution shapes on the table (decide at 14.1 open):
 
-1. **File a major issue under `docs/issues/`.** Per CLAUDE.md issue
-   lifecycle: major issues need a regression test before they go to
-   RESOLVED. Title something like `I0XX-file-sink-logger-silent-fail.md`
-   with frontmatter (status: OPEN, severity: MAJOR, component:
-   `@factory5/logger`). Reference `packages/logger/src/logger.ts`
-   `initLogger` + the `pino.destination({ dest, sync: false, mkdir: true })`
-   call site. Update `docs/issues/INDEX.md`.
+- **A. Conditional exports + `--conditions=development`.** Each
+  `packages/*/package.json` adds a `"development":
+"./src/index.ts"` condition; running with
+  `node --conditions=development` (or `tsx --conditions=development`)
+  routes imports to source. Lowest blast radius; works with the
+  existing tsx-based dev runner.
+- **B. Flip `main` to `src/index.ts`** in dev-only packages and
+  bundle the production paths for prod runs. Simpler config but
+  breaks the prod-vs-dev parity Phase 9 chose.
 
-2. **Reproduce + diagnose.** Trace
-   `pino.destination({ sync: false, mkdir: true })` behaviour:
-   - Is the lazy file open silently swallowing errors via an
-     unlistened-to `'error'` event on the destination stream?
-   - Is `mkdirSync` running but with a wrong `dir` value at module-init
-     vs spawn-time cwd resolution?
-   - Does `multistream` suppress per-stream errors so the broken file
-     destination is silently skipped?
+Re-read Phase 9.9's "Non-trivial finding" in
+`docs/Phase9_Progress.md` for the original recommendation before
+picking. Then pick one shape, apply across all `packages/*`
+relevant to `apps/factoryd`'s import chain, smoke-verify by
+editing a daemon source file and confirming `pnpm factoryd`
+picks up the change without a manual rebuild.
 
-   Build a minimal in-isolation repro (small `.test.ts` that calls
-   `initLogger`, writes a line, asserts the file exists). Iterate
-   until the failure is deterministic.
+If 14.1 lands an ADR-level decision (e.g. "we're committing to
+dev-mode-only conditional exports"), pin it as ADR 0029.
+Otherwise no new ADR; the change lives in package.json + the
+factoryd launcher invocation.
 
-3. **Fix at the right layer + add a regression test.** Likely options:
-   - Attach an `'error'` listener to the destination stream that
-     re-throws / surfaces via `multistream`.
-   - Switch the file sink to `sync: true` / a direct
-     `fs.createWriteStream` if pino's lazy-open semantics aren't
-     compatible with our `mkdirSync` ordering.
-   - Move the `mkdirSync` to be inside the destination construction
-     guard so it always runs immediately before the open.
+## Then by demand signal
 
-   The regression test in `packages/logger/src/logger.test.ts` (or
-   a new file): `initLogger`, write a known line, read the file from
-   disk, assert the JSON line is there. Cross-platform-safe (use
-   `tmpdir()` + `mkdtemp` per the existing test patterns).
+Pick from the Phase 14 candidate pool as each bites:
 
-Output: an issue file, a regression test, a fix in `@factory5/logger`,
-a passing test. INDEX row moves to RESOLVED at the close.
+**14.x — I013 status re-read.** INDEX.md still lists I013 as
+MEDIUM/OPEN (`worker-worktree-cleanup-blocked-by-node-modules`).
+Phase 10's `prePurgeDepDirs` rimraf'd the symptom and Phase 12's
+sandbox cleanup further shrank the surface. Re-read the issue
+file; if nothing's still un-fixed, move it to RESOLVED with a
+pointer to Phase 10's fix + Phase 12's surface reduction. If yes,
+scope a targeted patch.
 
-## Then in order
+**14.x — I012 — Telegram FIFO matcher.**
+`packages/channels/src/telegram.ts` `maybeAnswerPendingQuestion`
+matches inbound replies by chat-id LIKE prefix; can't disambiguate
+when there are >1 open questions in the same chat. One-line guard:
+when >1 open question, require `reply_to_message.message_id`
+(Telegram already includes it in the inbound update payload).
 
-**13.2 — `factory ui-token` CLI command.** ADR 0025 §2 carry-forward;
-on the list since Phase 7. Operator just hit this during 12.4 (token
-rotates per startup, terminal scrollback is the only recovery, no
-CLI command to surface the live token). Add a small subcommand
-`packages/cli/src/commands/ui-token.ts` that hits a daemon route
-and prints the URL with token. Decide at 13.2 open whether to extend
-`/status` or add a dedicated `/ui-token` route.
+**14.x — Stale pending_questions DB sweep.** 14 orphaned escalations
+from older completed directives. One-shot SQL or a CLI surface
+(`factory questions cleanup --orphaned --since <date>`).
 
-**13.3 — I009 fix — extract `resolveDirectiveLimits`.** Phase 11.4
-landed the project-tier in CLI + daemon; Telegram + Discord inbound
-`/build` still skip two tiers. Extract one shared helper called from
-every directive-creation path. Decide between `@factory5/brain` and
-`@factory5/wiki` based on the existing import graph. Regression test:
-Telegram inbound `/build` against a project with stored
-`metadata.budgetDefaults` picks up the project-tier limits.
+**14.x — PowerShell em-dash README addendum.** One-paragraph note
+in the project README pointing operators at
+`[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`. Free,
+no-code change.
 
-**13.4 — I014 fix — architect commits wiki on resume.** When
-`runArchitect` re-runs on an existing project (typical for
-`factory resume`), tracked `docs/knowledge/*.md` edits stay
-uncommitted in main and dirty-trip `gate.verify`. Targeted fix:
-stage + commit at the end of `runArchitect` if `isGitRepo`. Use
-`simpleGit` (already a dep). Regression test: build a fixture, dirty
-`docs/knowledge/`, run a resume, assert tree clean post-architect.
-
-**13.5 — Phase close.** Tag `phase-13-operator-experience-closed`.
-Author `docs/Phase13_Progress.md`, prepend `docs/PROGRESS.md`. Likely
-no `CompleteArchitecture.md` change (sweep phase, no new
-architectural seam) — unless 13.1's logger fix changes the
-multistream contract. Scaffold Phase 14 by demand signal (Bash
-sandboxing if a real incident materialised, else continue paying
-down debt).
-
-## Mid-phase opportunities
-
-If a session lands in any of the four touched seams, two carry-forwards
-are one-commit wins:
-
-- **PowerShell em-dash mojibake** — adjust log messages to use ASCII
-  `--` instead of UTF-8 `—`, OR document the
-  `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` fix in
-  the project README. Operator-side, but a one-line README addition
-  would help future operators.
-- **14 stale "open" pending_questions** — one-shot DB sweep:
-  `UPDATE pending_questions SET status = 'orphaned' WHERE created_at < <90-days-ago> AND answered_at IS NULL`. Maybe expose as
-  `factory questions cleanup --orphaned --since <date>`.
+**14.5 — Phase close.** Tag
+`phase-14-carry-forward-continuation-closed`. Author
+`docs/Phase14_Progress.md`, prepend `docs/PROGRESS.md`. Likely no
+`CompleteArchitecture.md` change (sweep phase). Scaffold Phase 15
+by demand signal — Bash sandboxing if a real incident materialises
+by then; otherwise continue paying down debt.
 
 ## Carry-forward (still non-blocking)
 
-- **File-sink logger bug** (MAJOR, OPEN) — handled in 13.1.
-- **`factory ui-token` CLI command** (MEDIUM, OPEN) — handled in 13.2.
-- **I009** (MEDIUM, OPEN) — handled in 13.3.
-- **I014** (MEDIUM, OPEN) — handled in 13.4.
+- **Stale-dist dev-loop gotcha** (overdue since Phase 9) — 14.x
+  candidate.
+- **I013** (MEDIUM, OPEN per INDEX, but likely paid down) — re-read
+  candidate.
 - **I012** (LOW, OPEN) — Telegram inbound FIFO matcher.
 - **14 stale "open" pending_questions** (LOW) — DB sweep.
-- **PowerShell em-dash mojibake** (LOW) — operator-side fix.
-- **Stale-dist dev-loop gotcha** — needs design.
-- **Phase 6 operator follow-up** — out-of-band.
+- **PowerShell em-dash mojibake** (LOW) — README addendum.
+- **Phase 6 operator follow-ups** (out-of-band) — PAT revoke,
+  `gh repo delete`, env var cleanup.
+
+## Out of scope (still deferred)
+
+- **Bash sandboxing** — Phase 12 + Phase 13 both deferred. 12.4
+  produced zero deny lines; demand signal still absent. Revisit on
+  a real incident.
+- **Network egress scoping** — long-tail; wait for an egress-policy
+  demand signal.
+- **Telegram/Discord `/build` flag parsing** (e.g.
+  `/build foo --max-usd 5`). Hypothesis from I009 fix discussion.
+  The shared `resolveDirectiveLimits` accepts an `explicitFlags`
+  slot; once the parser lands, wiring is one line. Defer until an
+  operator asks.
 
 Report back on wake-up with a status block in this shape:
 
 ```
-Phase 13 — 0/5 closed; 13.1 file-sink logger bug next
-Last action: chore(phase-12) <SHA> (close + tag) on top of docs(12.4) 09b0876 (live validation)
-Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-12-worker-fs-scoping-closed
-Open blockers: 0 (file-sink-logger MAJOR + 3× MEDIUM carry-forwards all sweep targets, not blockers)
-Proposed next action: 13.1 — file the issue, write a regression test, fix the logger
+Phase 14 — 0/5 closed; 14.1 first-bite carry-forward (stale-dist dev-loop gotcha most likely)
+Last action: chore(phase-13) eb4ade3 (close + tag) on top of fix(13.4) 00682ef (architect auto-commit)
+Git: branch=main, last=<latest-sha>, uncommitted=no, tag=phase-13-operator-experience-closed
+Open blockers: 0 (all carry-forwards are non-blocking polish)
+Proposed next action: 14.1 — pick stale-dist dev-loop gotcha (or another candidate if operator preference shifts)
 Ready to proceed?
 ```
