@@ -127,17 +127,33 @@
   - Move I009's row in `docs/issues/INDEX.md` to RESOLVED when the
     fix lands.
 
-- [ ] 13.4 — **I014 fix — architect commits wiki on resume.** When
+- [x] 13.4 — **I014 fix — architect commits wiki on resume.** When
       `runArchitect` modifies tracked `docs/knowledge/*.md` files on
       a `factory resume`, the edits stay uncommitted in main and
       dirty-trip `gate.verify`. Targeted fix: stage + commit at the
       end of `runArchitect` if a git repo exists.
 
+      **Closed.** Adopted Option 1 of I014's hypothesis (targeted
+      fix in `runArchitect` only). New helper
+      `commitArchitectWritesIfRepo` in `packages/brain/src/architect.ts`:
+      checks `projectPath/.git` for repo presence, stages the exact
+      file paths the architect wrote (not `docs/` wholesale, so
+      unrelated user-pending edits stay dirty rather than being
+      swept up), commits with subject "factory: architect updated wiki
+      for directive ID" only when something is actually staged after
+      the add, and degrades gracefully on git failure (logged warn,
+      no throw). Added `simple-git` to `@factory5/brain`'s deps. 8
+      unit tests cover modify-and-commit, new-page-and-commit,
+      default-subject, no-op-on-identical, no-op-on-non-repo,
+      no-op-on-empty-pages, graceful-degrade, and
+      isolation-from-unrelated-dirty-docs. I014 moved to RESOLVED.
+      Workspace 847 to 855 passing. Lint + format + build clean.
+
   Sub-actions:
   - In `runArchitect`, after writing the wiki pages, check
     `isGitRepo(projectPath)`; if true, run `git add docs/` + commit
-    with a deterministic message (e.g. `factory: architect updated
-wiki for directive <id>`).
+    with a deterministic message (e.g. "factory: architect updated
+    wiki for directive ID").
   - Use `simpleGit` (already a dep). Don't run if no changes
     (`git status --porcelain` empty after add).
   - Regression test: build a fixture, manually dirty `docs/knowledge/`

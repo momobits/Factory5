@@ -2,8 +2,9 @@
 id: I014
 severity: MEDIUM
 area: brain/architect
-status: OPEN
+status: RESOLVED
 created: 2026-04-26
+resolved: 2026-04-27
 ---
 
 # Architect re-running on an existing project leaves wiki edits uncommitted, dirtying the gate
@@ -67,4 +68,32 @@ similar issues.
 
 ## Resolution
 
-_(filled when work begins)_
+**Phase 13.4 (2026-04-27).** Adopted Option 1 from the hypothesis (the
+targeted fix). After `runArchitect` writes its pages, a new
+`commitArchitectWritesIfRepo` helper:
+
+1. Skips when `<projectPath>/.git` doesn't exist (no-repo path —
+   matches the original Option 1 guard).
+2. Stages **only the file paths the architect wrote** (not `docs/`
+   wholesale) — protects unrelated user-pending edits in `docs/` from
+   being swept into the architect's commit.
+3. Commits with deterministic subject
+   `factory: architect updated wiki for directive <id>` (or `factory:
+architect updated wiki` when no directive id is supplied).
+4. Skips the commit if `git status` reports nothing staged after the
+   add (the architect rewrote pages to identical content).
+5. Swallows git failures and logs a warning rather than crashing the
+   directive — a failed auto-commit is recoverable by hand, but a
+   thrown error mid-architect would lose the call's spend.
+
+`simple-git` was added to `@factory5/brain`'s dependencies (already a
+worker dep, now explicit for brain too).
+
+Regression coverage in `packages/brain/src/architect.test.ts` — 8
+tests covering: tree-clean post-commit, untracked-page commit, default
+subject without directive id, no-op on identical-content rewrite,
+no-op on non-repo, no-op on empty-pages, graceful degrade on git
+failure (the I014 spirit — never crash a directive on this), and
+isolation (architect commit must NOT sweep up unrelated dirty docs/).
+
+Workspace 847 → 855 passing. Lint + format + build clean.
