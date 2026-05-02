@@ -3,9 +3,9 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-02 18:45 UTC by step 1.1 commit
+**Last updated:** 2026-05-02 19:10 UTC by step 1.2 commit
 **Current phase:** 1 — doc-sweep
-**Current step:** 1.2 — Refresh `packages/channels/README.md`
+**Current step:** 1.3 — Refresh `apps/factory-web/README.md`
 **Status:** ready
 
 ---
@@ -20,7 +20,7 @@
 
 ## Next action
 
-Step 1.2 — refresh `packages/channels/README.md` per [`../../UPGRADE/plans/tier-1-doc-sweep.md`](../../UPGRADE/plans/tier-1-doc-sweep.md) §1.2. Rewrite the Status section (Telegram + web no longer "future" — ADRs 0022, 0025, 0027); add a Telegram plugin section (config schema, capabilities, smoke script); add a Web channel section that explicitly calls out web is **not** a `ChannelPlugin` (it's a Fastify mount). Move "Adding a channel" to the bottom and verify the steps still match current code.
+Step 1.3 — refresh `apps/factory-web/README.md` per [`../../UPGRADE/plans/tier-1-doc-sweep.md`](../../UPGRADE/plans/tier-1-doc-sweep.md) §1.3. Remove the `(wired in 9.3)` Control-era phase reference; add a Pages section listing the 9 SPA pages and what each one is for; keep the existing dev-loop and prod-loop sections intact.
 
 ---
 
@@ -63,11 +63,11 @@ None — pre-Phase-1 housekeeping committed (see "Recently completed"). Step 1.1
 
 ## Recently completed (last 5 steps)
 
-- Step 1.1 — refresh `packages/cli/README.md` (drop Phase column; add spend/findings/questions cleanup rows; remove `inspect`/`push`; reword `logs` stub) — 2026-05-02 — pending commit
+- Step 1.2 — refresh `packages/channels/README.md` (Status section reflects what's shipped; new Telegram plugin + Web ≠ ChannelPlugin sections; Adding-a-channel verified) — 2026-05-02 — pending commit
+- Step 1.1 — refresh `packages/cli/README.md` (drop Phase column; add spend/findings/questions cleanup rows; remove `inspect`/`push`; reword `logs` stub) — 2026-05-02 — `d33635a`
 - Reconcile STATE.md + Phase 1 README to actual git state (drift fix) — 2026-05-02 — `91541a9`
 - Bootstrap factory5 project docs (scanned from codebase) — 2026-05-02 — `cc35dd2`
 - Re-acknowledge Control v2.2.1 in project docs (CLAUDE.md, UPGRADE/README.md, .prettierignore, .claude/settings.json) — 2026-05-02 — `f84476e`
-- Install Control framework v2.2.1 (also landed UPGRADE/ workspace files in same commit) — 2026-05-02 — `e94393e`
 
 ---
 
