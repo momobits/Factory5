@@ -27,7 +27,7 @@ Open [`../phases/phase-2-channel-parity/README.md`](../phases/phase-2-channel-pa
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `22e0e54` — feat(2.2): wire Telegram setMyCommands + extract command-handlers.ts
+- **Last commit:** `442a213` — docs(state): session end for step 2.2
 - **Uncommitted changes:** none (working tree clean)
 - **Last phase tag:** `phase-1-doc-sweep-closed` (annotated tag at commit `10e400a`)
 
