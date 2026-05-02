@@ -46,13 +46,21 @@ import {
 import type { Logger } from '@factory5/logger';
 import { openDatabase, pendingQuestions, type Database } from '@factory5/state';
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ChannelType,
   Client,
   Events,
   GatewayIntentBits,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Interaction,
   type Message,
+  type ModalSubmitInteraction,
   type RESTPostAPIApplicationCommandsJSONBody,
   type TextBasedChannel,
   type ThreadChannel,
@@ -207,6 +215,98 @@ export function channelRefFor(message: Message): string {
   const parent = message.channel.isThread() ? message.channel.parentId : message.channelId;
   const threadOrMsg = message.channel.isThread() ? message.channelId : message.id;
   return `${parent ?? message.channelId}#${threadOrMsg}`;
+}
+
+// ---------------------------------------------------------------------------
+// Pending-question button affordances (Phase 2.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Custom-id prefixes for button + modal interactions. Discord caps custom
+ * ids at 100 chars; ULIDs are 26, so `factory:question:<ulid>:answer` fits
+ * comfortably.
+ */
+export const QUESTION_BUTTON_PREFIX = 'factory:question:';
+export const ANSWER_MODAL_PREFIX = 'factory:answer:';
+export const ANSWER_INPUT_ID = 'factory:answer-text';
+
+export type QuestionButtonAction = 'answer' | 'skip' | 'escalate';
+
+/**
+ * Read the `metadata.questionId` annotation that {@link
+ * brain/src/ask-user.ts} stamps on `ask_user` outbounds. Returns `undefined`
+ * when the outbound carries no question — the bare-text send path stays
+ * untouched. Exported so tests and the matching Telegram side can share
+ * the parse rule.
+ */
+export function readQuestionMetadata(metadata: unknown): { questionId: string } | undefined {
+  if (typeof metadata !== 'object' || metadata === null) return undefined;
+  const m = metadata as Record<string, unknown>;
+  if (m['kind'] !== 'ask_user') return undefined;
+  const id = m['questionId'];
+  return typeof id === 'string' && id.length > 0 ? { questionId: id } : undefined;
+}
+
+/** Build the Answer / Skip / Escalate row attached to an `ask_user` outbound. */
+export function buildQuestionComponents(
+  questionId: string,
+): Array<ActionRowBuilder<ButtonBuilder>> {
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`${QUESTION_BUTTON_PREFIX}${questionId}:answer`)
+      .setLabel('Answer')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`${QUESTION_BUTTON_PREFIX}${questionId}:skip`)
+      .setLabel('Skip')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`${QUESTION_BUTTON_PREFIX}${questionId}:escalate`)
+      .setLabel('Escalate')
+      .setStyle(ButtonStyle.Danger),
+  );
+  return [row];
+}
+
+/**
+ * Modal shown when the operator taps the Answer button. The text input is
+ * a multi-line paragraph capped at 2000 chars (Discord's hard limit). The
+ * label is the question text truncated to 45 chars (Discord caps labels).
+ */
+export function buildAnswerModal(questionId: string, question: string): ModalBuilder {
+  const labelText = question.length > 45 ? `${question.slice(0, 44)}…` : question;
+  const input = new TextInputBuilder()
+    .setCustomId(ANSWER_INPUT_ID)
+    .setLabel(labelText.length > 0 ? labelText : 'Answer')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setMaxLength(2000);
+  const row = new ActionRowBuilder<TextInputBuilder>().addComponents(input);
+  return new ModalBuilder()
+    .setCustomId(`${ANSWER_MODAL_PREFIX}${questionId}`)
+    .setTitle('Answer factory question')
+    .addComponents(row);
+}
+
+/** Decode `factory:question:<id>:<action>`. Returns `undefined` for non-matches. */
+export function parseQuestionButtonId(
+  customId: string,
+): { questionId: string; action: QuestionButtonAction } | undefined {
+  if (!customId.startsWith(QUESTION_BUTTON_PREFIX)) return undefined;
+  const rest = customId.slice(QUESTION_BUTTON_PREFIX.length);
+  const lastColon = rest.lastIndexOf(':');
+  if (lastColon <= 0) return undefined;
+  const questionId = rest.slice(0, lastColon);
+  const action = rest.slice(lastColon + 1);
+  if (action !== 'answer' && action !== 'skip' && action !== 'escalate') return undefined;
+  return { questionId, action };
+}
+
+/** Decode `factory:answer:<id>` (the modal's customId). */
+export function parseAnswerModalId(customId: string): { questionId: string } | undefined {
+  if (!customId.startsWith(ANSWER_MODAL_PREFIX)) return undefined;
+  const questionId = customId.slice(ANSWER_MODAL_PREFIX.length);
+  return questionId.length > 0 ? { questionId } : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -365,9 +465,22 @@ export class DiscordChannel implements ChannelPlugin {
       if (!('send' in channel) || typeof channel.send !== 'function') {
         return { delivered: false, error: `discord: channel ${targetId} is not sendable` };
       }
-      const posted = await (channel as { send: (text: string) => Promise<{ id: string }> }).send(
-        msg.text,
-      );
+      // Phase 2.3 — when the brain stamps `metadata.kind = 'ask_user'` on
+      // an outbound (see brain/src/ask-user.ts), attach the
+      // Answer/Skip/Escalate button row. The bare-text path stays
+      // unchanged so non-question outbounds keep their current shape.
+      const meta = readQuestionMetadata(msg.metadata);
+      type SendablePayload =
+        | string
+        | { content: string; components: Array<ActionRowBuilder<ButtonBuilder>> };
+      const sendable = channel as { send: (payload: SendablePayload) => Promise<{ id: string }> };
+      const posted =
+        meta !== undefined
+          ? await sendable.send({
+              content: msg.text,
+              components: buildQuestionComponents(meta.questionId),
+            })
+          : await sendable.send(msg.text);
       return { delivered: true, externalId: posted.id };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -611,15 +724,37 @@ export class DiscordChannel implements ChannelPlugin {
     await this.handleInteraction(interaction);
   }
 
-  // ---- slash-command dispatch ----
+  // ---- interaction dispatch ----
 
   /**
-   * Routes any `interactionCreate` event. Non-chat-input interactions
-   * (buttons, modals, autocomplete) fall through silently — Phase 2 step
-   * 2.3 wires button affordances; this step handles slash commands only.
+   * Routes any `interactionCreate` event. Branches:
+   *
+   * - chat-input commands → slash dispatch (Phase 2.1).
+   * - buttons whose `customId` starts with `factory:question:` →
+   *   pending-question button affordances (Phase 2.3). Answer opens a
+   *   modal; Skip / Escalate write a synthetic answer immediately.
+   * - modal submits whose `customId` starts with `factory:answer:` →
+   *   the operator's typed answer is recorded via {@link
+   *   pendingQuestions.answer}.
+   *
+   * Anything else (autocomplete, select menus, …) falls through silently.
    */
   private async handleInteraction(interaction: Interaction): Promise<void> {
-    if (!interaction.isChatInputCommand()) return;
+    if (interaction.isChatInputCommand()) {
+      await this.handleSlashCommand(interaction);
+      return;
+    }
+    if (interaction.isButton()) {
+      await this.handleQuestionButton(interaction);
+      return;
+    }
+    if (interaction.isModalSubmit()) {
+      await this.handleAnswerModalSubmit(interaction);
+      return;
+    }
+  }
+
+  private async handleSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
     if (this.db === undefined || this.log === undefined || this.onInbound === undefined) {
       return;
     }
@@ -636,7 +771,117 @@ export class DiscordChannel implements ChannelPlugin {
       setProjectBudget: this.setProjectBudget,
       allowedUserIds: config.allowedUserIds,
     };
-    await dispatchSlashInteraction(ctx, interaction as ChatInputCommandInteraction);
+    await dispatchSlashInteraction(ctx, interaction);
+  }
+
+  private async handleQuestionButton(interaction: ButtonInteraction): Promise<void> {
+    const parsed = parseQuestionButtonId(interaction.customId);
+    if (parsed === undefined) return; // not one of ours
+    if (this.db === undefined || this.log === undefined) return;
+
+    const allow = this.config?.allowedUserIds ?? [];
+    if (allow.length > 0 && !allow.includes(interaction.user.id)) {
+      await interaction.reply({ content: '(not authorised)', ephemeral: true });
+      return;
+    }
+
+    const question = pendingQuestions.getById(this.db, parsed.questionId);
+    if (question === undefined) {
+      await interaction.reply({ content: '(question not found)', ephemeral: true });
+      return;
+    }
+    if (question.answeredAt !== undefined) {
+      await interaction.reply({ content: '(question already answered)', ephemeral: true });
+      return;
+    }
+
+    if (parsed.action === 'answer') {
+      // The modal must be the FIRST acknowledgement of the interaction —
+      // discord.js rejects a `showModal` after `reply`/`deferReply`.
+      await interaction.showModal(buildAnswerModal(parsed.questionId, question.question));
+      return;
+    }
+
+    // Skip / Escalate — synthetic answer, immediate ack.
+    const synthetic = parsed.action === 'skip' ? '[skip]' : '[escalate]';
+    pendingQuestions.answer(this.db, parsed.questionId, synthetic, new Date().toISOString());
+    this.log.info(
+      {
+        questionId: parsed.questionId,
+        directiveId: question.directiveId,
+        action: parsed.action,
+        userId: interaction.user.id,
+      },
+      'discord: pending question answered via button',
+    );
+    this.warnIfOrphaned(parsed.questionId, question.directiveId);
+    await interaction.reply({
+      content: parsed.action === 'skip' ? '(skipped)' : '(escalated)',
+      ephemeral: true,
+    });
+  }
+
+  private async handleAnswerModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+    const parsed = parseAnswerModalId(interaction.customId);
+    if (parsed === undefined) return; // not one of ours
+    if (this.db === undefined || this.log === undefined) return;
+
+    const allow = this.config?.allowedUserIds ?? [];
+    if (allow.length > 0 && !allow.includes(interaction.user.id)) {
+      await interaction.reply({ content: '(not authorised)', ephemeral: true });
+      return;
+    }
+
+    const text = interaction.fields.getTextInputValue(ANSWER_INPUT_ID).trim();
+    if (text.length === 0) {
+      await interaction.reply({ content: '(empty answer ignored)', ephemeral: true });
+      return;
+    }
+
+    const question = pendingQuestions.getById(this.db, parsed.questionId);
+    if (question === undefined) {
+      await interaction.reply({ content: '(question not found)', ephemeral: true });
+      return;
+    }
+    if (question.answeredAt !== undefined) {
+      await interaction.reply({ content: '(question already answered)', ephemeral: true });
+      return;
+    }
+
+    pendingQuestions.answer(this.db, parsed.questionId, text, new Date().toISOString());
+    this.log.info(
+      {
+        questionId: parsed.questionId,
+        directiveId: question.directiveId,
+        userId: interaction.user.id,
+      },
+      'discord: pending question answered via modal',
+    );
+    this.warnIfOrphaned(parsed.questionId, question.directiveId);
+    await interaction.reply({ content: '(answered)', ephemeral: true });
+  }
+
+  /**
+   * Mirror the messageCreate / Telegram orphan-detection behaviour: when
+   * the answer lands on a question whose linked task has already entered a
+   * terminal state, the answer is preserved for forensic value but no
+   * worker remains to consume it. Log loudly so the operator understands
+   * why the build didn't resume. (ADR 0024 §4.)
+   */
+  private warnIfOrphaned(questionId: string, directiveId: string): void {
+    if (this.db === undefined || this.log === undefined) return;
+    const orphan = pendingQuestions.detectOrphanedAnswer(this.db, questionId);
+    if (orphan !== undefined) {
+      this.log.warn(
+        {
+          questionId,
+          directiveId,
+          taskId: orphan.taskId,
+          taskStatus: orphan.taskStatus,
+        },
+        'discord: answer recorded for question whose task is terminal — no consumer remains',
+      );
+    }
   }
 }
 

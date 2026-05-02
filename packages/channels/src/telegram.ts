@@ -57,6 +57,7 @@ import type { Logger } from '@factory5/logger';
 import { openDatabase, pendingQuestions, type Database } from '@factory5/state';
 import { z } from 'zod';
 
+import { readQuestionMetadata } from './discord.js';
 import { FACTORY_SUBCOMMANDS, type FactorySubcommand } from './discord-commands.js';
 import {
   PROJECT_LANGUAGES,
@@ -157,10 +158,32 @@ export interface TelegramMessage {
   };
 }
 
+/**
+ * Inline-keyboard callback delivered when the operator taps a button
+ * attached to one of the bot's messages (Phase 2.3). Telegram caps
+ * `data` at 64 bytes — we encode `factory:q:<questionId>:a|s|e`. (`q`
+ * over `question`; `a/s/e` over `answer/skip/escalate` — short enough
+ * that a 26-char ULID fits with margin to spare.)
+ */
+export interface TelegramCallbackQuery {
+  id: string;
+  from: {
+    id: number;
+    is_bot: boolean;
+    username?: string;
+    first_name?: string;
+  };
+  /** Message the buttons were attached to. Optional per the Bot API. */
+  message?: TelegramMessage;
+  chat_instance: string;
+  data?: string;
+}
+
 export interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
   edited_message?: TelegramMessage;
+  callback_query?: TelegramCallbackQuery;
 }
 
 export interface TelegramBotIdentity {
@@ -168,6 +191,22 @@ export interface TelegramBotIdentity {
   is_bot: true;
   username: string;
   first_name?: string;
+}
+
+/**
+ * Inline-keyboard payload attached to {@link TelegramApi.sendMessage} when
+ * the outbound carries a pending-question annotation. The shape matches
+ * Telegram's `reply_markup` schema 1:1 — we only support
+ * `inline_keyboard`, not `keyboard` / `force_reply` / `remove_keyboard`,
+ * because Phase 2.3 only needs button affordances.
+ */
+export interface TelegramInlineKeyboardMarkup {
+  inline_keyboard: ReadonlyArray<
+    ReadonlyArray<{
+      text: string;
+      callback_data: string;
+    }>
+  >;
 }
 
 /**
@@ -205,6 +244,12 @@ export interface TelegramApi {
      * by the API but not used by this plugin yet.
      */
     parseMode?: 'HTML' | 'MarkdownV2';
+    /**
+     * Inline keyboard / button affordances attached to the outbound (Phase
+     * 2.3). Threaded through to the API as `reply_markup`. Optional —
+     * non-question outbounds keep their bare-text shape.
+     */
+    replyMarkup?: TelegramInlineKeyboardMarkup;
   }): Promise<{ message_id: number }>;
   /**
    * Register the bot's command list (Phase 2.2). Optional in the contract
@@ -212,6 +257,19 @@ export interface TelegramApi {
    * registration on start". The default HTTP impl always provides it.
    */
   setMyCommands?: (opts: { commands: ReadonlyArray<TelegramBotCommandSpec> }) => Promise<true>;
+  /**
+   * Acknowledge a button tap (Phase 2.3). Telegram requires every
+   * callback_query to be answered within ~15 s or the user sees a
+   * spinning indicator on the button. `text` is shown as a transient
+   * popup; `showAlert` upgrades it to a modal-style alert. Optional in
+   * the contract so test stubs can omit it; the default HTTP impl always
+   * provides it.
+   */
+  answerCallbackQuery?: (opts: {
+    callbackQueryId: string;
+    text?: string;
+    showAlert?: boolean;
+  }) => Promise<true>;
 }
 
 export type TelegramApiFactory = (botToken: string) => TelegramApi;
@@ -290,10 +348,11 @@ export function defaultTelegramApiFactory(botToken: string): TelegramApi {
         networkBudgetMs,
       );
     },
-    async sendMessage({ chatId, text, replyToMessageId, parseMode }) {
+    async sendMessage({ chatId, text, replyToMessageId, parseMode, replyMarkup }) {
       const params: Record<string, unknown> = { chat_id: chatId, text };
       if (replyToMessageId !== undefined) params['reply_to_message_id'] = replyToMessageId;
       if (parseMode !== undefined) params['parse_mode'] = parseMode;
+      if (replyMarkup !== undefined) params['reply_markup'] = replyMarkup;
       return callTelegram<{ message_id: number }>(
         botToken,
         'sendMessage',
@@ -304,6 +363,12 @@ export function defaultTelegramApiFactory(botToken: string): TelegramApi {
     },
     async setMyCommands({ commands }) {
       return callTelegram<true>(botToken, 'setMyCommands', { commands }, undefined, 10_000);
+    },
+    async answerCallbackQuery({ callbackQueryId, text, showAlert }) {
+      const params: Record<string, unknown> = { callback_query_id: callbackQueryId };
+      if (text !== undefined) params['text'] = text;
+      if (showAlert === true) params['show_alert'] = true;
+      return callTelegram<true>(botToken, 'answerCallbackQuery', params, undefined, 10_000);
     },
   };
 }
@@ -380,6 +445,48 @@ export function isDirectedAtBot(
   }
   if (message.reply_to_message?.from?.id === botId) return true;
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Pending-question button affordances (Phase 2.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Telegram's `callback_data` field is capped at 64 bytes UTF-8. We encode
+ * `factory:q:<questionId>:a|s|e` — `q` over `question`, single-letter
+ * action — so a 26-char ULID fits comfortably (ULID + envelope = 38 chars).
+ */
+const QUESTION_CALLBACK_PREFIX = 'factory:q:';
+
+export type TelegramQuestionAction = 'answer' | 'skip' | 'escalate';
+
+/** Build the inline-keyboard markup attached to an `ask_user` outbound. */
+export function buildQuestionInlineKeyboard(questionId: string): TelegramInlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [
+        { text: 'Answer', callback_data: `${QUESTION_CALLBACK_PREFIX}${questionId}:a` },
+        { text: 'Skip', callback_data: `${QUESTION_CALLBACK_PREFIX}${questionId}:s` },
+        { text: 'Escalate', callback_data: `${QUESTION_CALLBACK_PREFIX}${questionId}:e` },
+      ],
+    ],
+  };
+}
+
+/** Decode `factory:q:<id>:a|s|e`. Returns `undefined` for non-matches. */
+export function parseQuestionCallbackData(
+  data: string | undefined,
+): { questionId: string; action: TelegramQuestionAction } | undefined {
+  if (data === undefined || !data.startsWith(QUESTION_CALLBACK_PREFIX)) return undefined;
+  const rest = data.slice(QUESTION_CALLBACK_PREFIX.length);
+  const lastColon = rest.lastIndexOf(':');
+  if (lastColon <= 0) return undefined;
+  const questionId = rest.slice(0, lastColon);
+  const code = rest.slice(lastColon + 1);
+  const action: TelegramQuestionAction | undefined =
+    code === 'a' ? 'answer' : code === 's' ? 'skip' : code === 'e' ? 'escalate' : undefined;
+  if (action === undefined) return undefined;
+  return { questionId, action };
 }
 
 /**
@@ -541,12 +648,19 @@ export class TelegramChannel implements ChannelPlugin {
         error: err instanceof Error ? err.message : String(err),
       };
     }
+    // Phase 2.3 — when the brain stamps `metadata.kind = 'ask_user'` on
+    // the outbound (see brain/src/ask-user.ts), attach the inline-keyboard
+    // Answer/Skip/Escalate buttons. Bare-text path is unchanged.
+    const meta = readQuestionMetadata(msg.metadata);
     try {
       const result = await this.api.sendMessage({
         chatId: parsed.chatId,
         text: msg.text,
         ...(parsed.replyToMessageId !== undefined
           ? { replyToMessageId: parsed.replyToMessageId }
+          : {}),
+        ...(meta !== undefined
+          ? { replyMarkup: buildQuestionInlineKeyboard(meta.questionId) }
           : {}),
       });
       return { delivered: true, externalId: String(result.message_id) };
@@ -580,7 +694,11 @@ export class TelegramChannel implements ChannelPlugin {
         const updates = await this.api.getUpdates({
           ...(this.offset !== undefined ? { offset: this.offset } : {}),
           timeoutSec: this.config.pollTimeoutSec,
-          allowedUpdates: ['message'],
+          // Phase 2.3 — `callback_query` lands when an operator taps a
+          // pending-question button. The poll loop has to opt into them
+          // explicitly; without `callback_query` in the allow-list
+          // Telegram silently drops the updates.
+          allowedUpdates: ['message', 'callback_query'],
           signal,
         });
         backoffMs = 0;
@@ -603,6 +721,10 @@ export class TelegramChannel implements ChannelPlugin {
   }
 
   private async handleUpdate(update: TelegramUpdate): Promise<void> {
+    if (update.callback_query !== undefined) {
+      await this.handleCallbackQuery(update.callback_query);
+      return;
+    }
     const message = update.message;
     if (message === undefined) return; // edited / non-message updates ignored for now
     await this.handleMessage(message);
@@ -885,6 +1007,105 @@ export class TelegramChannel implements ChannelPlugin {
         this.log?.warn({ err, questionId: row.id }, 'telegram: answer ack failed');
       });
     return true;
+  }
+
+  // ---- callback_query (Phase 2.3) ----
+
+  /**
+   * Handle a button tap from the inline keyboard attached to an `ask_user`
+   * outbound. Symmetric with the Discord button handler:
+   *
+   * - `skip` / `escalate` write a synthetic answer (`[skip]` / `[escalate]`)
+   *   immediately so the brain's `pollForAnswer` can resume the worker.
+   * - `answer` cannot pop a modal (Telegram has none); instead the popup
+   *   directs the operator to use Telegram's Reply feature on the bot's
+   *   question, which lands via {@link maybeAnswerPendingQuestion}.
+   *
+   * Every callback MUST be answered via `answerCallbackQuery` within ~15 s
+   * or the user sees a stuck spinner on the button.
+   */
+  private async handleCallbackQuery(query: TelegramCallbackQuery): Promise<void> {
+    if (
+      this.db === undefined ||
+      this.api === undefined ||
+      this.log === undefined ||
+      this.config === undefined
+    ) {
+      return;
+    }
+    const parsed = parseQuestionCallbackData(query.data);
+    if (parsed === undefined) return; // not one of ours
+
+    // Allow-list: callback_query.from is the user who tapped the button.
+    // Reuse the same chat allow-list as inbound messages — operators
+    // without chat permission shouldn't be able to act on questions in it.
+    const chatId = query.message?.chat.id;
+    const allowed = this.config.allowedChatIds;
+    if (chatId !== undefined && allowed.length > 0 && !allowed.includes(chatId)) {
+      await this.ackCallback(query.id, '(chat not authorised)');
+      return;
+    }
+
+    const question = pendingQuestions.getById(this.db, parsed.questionId);
+    if (question === undefined) {
+      await this.ackCallback(query.id, '(question not found)');
+      return;
+    }
+    if (question.answeredAt !== undefined) {
+      await this.ackCallback(query.id, '(already answered)');
+      return;
+    }
+
+    if (parsed.action === 'answer') {
+      await this.ackCallback(
+        query.id,
+        'Reply to the bot’s question message to send your answer.',
+        true,
+      );
+      return;
+    }
+
+    const synthetic = parsed.action === 'skip' ? '[skip]' : '[escalate]';
+    pendingQuestions.answer(this.db, parsed.questionId, synthetic, new Date().toISOString());
+    this.log.info(
+      {
+        questionId: parsed.questionId,
+        directiveId: question.directiveId,
+        action: parsed.action,
+        userId: query.from.id,
+      },
+      'telegram: pending question answered via button',
+    );
+    const orphan = pendingQuestions.detectOrphanedAnswer(this.db, parsed.questionId);
+    if (orphan !== undefined) {
+      this.log.warn(
+        {
+          questionId: parsed.questionId,
+          directiveId: question.directiveId,
+          taskId: orphan.taskId,
+          taskStatus: orphan.taskStatus,
+        },
+        'telegram: answer recorded for question whose task is terminal — no consumer remains',
+      );
+    }
+    await this.ackCallback(query.id, parsed.action === 'skip' ? '(skipped)' : '(escalated)');
+  }
+
+  private async ackCallback(
+    callbackQueryId: string,
+    text?: string,
+    showAlert = false,
+  ): Promise<void> {
+    if (this.api?.answerCallbackQuery === undefined) return;
+    try {
+      await this.api.answerCallbackQuery({
+        callbackQueryId,
+        ...(text !== undefined ? { text } : {}),
+        ...(showAlert ? { showAlert: true } : {}),
+      });
+    } catch (err) {
+      this.log?.warn({ err, callbackQueryId }, 'telegram: answerCallbackQuery failed');
+    }
   }
 
   /** Test helper: feed an update through the handler path directly. */

@@ -18,13 +18,17 @@ import {
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildQuestionInlineKeyboard,
   createTelegramChannel,
   isDirectedAtBot,
+  parseQuestionCallbackData,
   parseTelegramRef,
   stripTelegramMention,
   telegramChannelRefFor,
   type TelegramApi,
   type TelegramBotIdentity,
+  type TelegramCallbackQuery,
+  type TelegramInlineKeyboardMarkup,
   type TelegramMessage,
   type TelegramUpdate,
 } from './telegram.js';
@@ -49,10 +53,21 @@ function freshDb(): ReturnType<typeof openDatabase> {
 }
 
 interface StubTelegramApi extends TelegramApi {
-  sent: Array<{ chatId: number; text: string; replyToMessageId?: number; parseMode?: string }>;
+  sent: Array<{
+    chatId: number;
+    text: string;
+    replyToMessageId?: number;
+    parseMode?: string;
+    replyMarkup?: TelegramInlineKeyboardMarkup;
+  }>;
   updateQueue: ReadonlyArray<TelegramUpdate>[];
-  getUpdatesCalls: Array<{ offset?: number; timeoutSec: number }>;
+  getUpdatesCalls: Array<{
+    offset?: number;
+    timeoutSec: number;
+    allowedUpdates?: ReadonlyArray<string>;
+  }>;
   setMyCommandsCalls: Array<{ commands: ReadonlyArray<{ command: string; description: string }> }>;
+  callbackAcks: Array<{ callbackQueryId: string; text?: string; showAlert?: boolean }>;
   failNextGet?: Error;
   failSend?: Error;
   failSetMyCommands?: Error;
@@ -64,11 +79,16 @@ function makeStubApi(identity: TelegramBotIdentity = BOT_IDENTITY): StubTelegram
     updateQueue: [],
     getUpdatesCalls: [],
     setMyCommandsCalls: [],
+    callbackAcks: [],
     async getMe() {
       return identity;
     },
-    async getUpdates({ offset, timeoutSec, signal }) {
-      api.getUpdatesCalls.push({ ...(offset !== undefined ? { offset } : {}), timeoutSec });
+    async getUpdates({ offset, timeoutSec, allowedUpdates, signal }) {
+      api.getUpdatesCalls.push({
+        ...(offset !== undefined ? { offset } : {}),
+        timeoutSec,
+        ...(allowedUpdates !== undefined ? { allowedUpdates } : {}),
+      });
       if (api.failNextGet !== undefined) {
         const err = api.failNextGet;
         api.failNextGet = undefined;
@@ -89,19 +109,28 @@ function makeStubApi(identity: TelegramBotIdentity = BOT_IDENTITY): StubTelegram
         signal.addEventListener('abort', onAbort, { once: true });
       });
     },
-    async sendMessage({ chatId, text, replyToMessageId, parseMode }) {
+    async sendMessage({ chatId, text, replyToMessageId, parseMode, replyMarkup }) {
       if (api.failSend !== undefined) throw api.failSend;
       api.sent.push({
         chatId,
         text,
         ...(replyToMessageId !== undefined ? { replyToMessageId } : {}),
         ...(parseMode !== undefined ? { parseMode } : {}),
+        ...(replyMarkup !== undefined ? { replyMarkup } : {}),
       });
       return { message_id: api.sent.length };
     },
     async setMyCommands({ commands }) {
       if (api.failSetMyCommands !== undefined) throw api.failSetMyCommands;
       api.setMyCommandsCalls.push({ commands });
+      return true;
+    },
+    async answerCallbackQuery({ callbackQueryId, text, showAlert }) {
+      api.callbackAcks.push({
+        callbackQueryId,
+        ...(text !== undefined ? { text } : {}),
+        ...(showAlert === true ? { showAlert: true } : {}),
+      });
       return true;
     },
   };
@@ -1382,6 +1411,352 @@ describe('TelegramChannel — /factory slash commands', () => {
     expect(inbounds).toHaveLength(0);
     await vi.waitFor(() => expect(api.sent.length).toBe(1), { timeout: 200 });
     expect(api.sent[0]!.text).toContain('factory status');
+    await plugin.stop();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 2.3 — pending-question button affordances
+// ---------------------------------------------------------------------------
+
+describe('parseQuestionCallbackData', () => {
+  it('decodes a/s/e action codes', () => {
+    expect(parseQuestionCallbackData('factory:q:Q1:a')).toEqual({
+      questionId: 'Q1',
+      action: 'answer',
+    });
+    expect(parseQuestionCallbackData('factory:q:Q1:s')).toEqual({
+      questionId: 'Q1',
+      action: 'skip',
+    });
+    expect(parseQuestionCallbackData('factory:q:Q1:e')).toEqual({
+      questionId: 'Q1',
+      action: 'escalate',
+    });
+  });
+  it('returns undefined for non-factory callback_data', () => {
+    expect(parseQuestionCallbackData(undefined)).toBeUndefined();
+    expect(parseQuestionCallbackData('something:else')).toBeUndefined();
+    expect(parseQuestionCallbackData('factory:q:Q1:z')).toBeUndefined();
+    expect(parseQuestionCallbackData('factory:q:Q1')).toBeUndefined();
+  });
+  it('preserves question ids that contain colons', () => {
+    expect(parseQuestionCallbackData('factory:q:Q:1:s')).toEqual({
+      questionId: 'Q:1',
+      action: 'skip',
+    });
+  });
+});
+
+describe('buildQuestionInlineKeyboard', () => {
+  it('emits a single row of three labelled buttons under the 64-byte cap', () => {
+    const kb = buildQuestionInlineKeyboard('01KQABCDEF1234567890ABCDEF');
+    expect(kb.inline_keyboard).toHaveLength(1);
+    const row = kb.inline_keyboard[0]!;
+    expect(row.map((b) => b.text)).toEqual(['Answer', 'Skip', 'Escalate']);
+    for (const btn of row) {
+      expect(btn.callback_data.length).toBeLessThanOrEqual(64);
+    }
+  });
+});
+
+describe('TelegramChannel send (Phase 2.3 buttons)', () => {
+  it('attaches reply_markup when metadata.questionId is set', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake' },
+    );
+    const res = await plugin.send({
+      id: newId(),
+      targetChannel: 'telegram',
+      targetRef: '12345#42',
+      text: 'should I proceed?',
+      metadata: { kind: 'ask_user', questionId: 'Q-buttons' },
+      createdAt: new Date().toISOString(),
+      attempts: 0,
+    });
+    expect(res.delivered).toBe(true);
+    expect(api.sent).toHaveLength(1);
+    const sent = api.sent[0]!;
+    expect(sent.replyMarkup).toBeDefined();
+    const kb = sent.replyMarkup!;
+    expect(kb.inline_keyboard).toHaveLength(1);
+    expect(kb.inline_keyboard[0]).toHaveLength(3);
+    expect(kb.inline_keyboard[0]![0]!.callback_data).toBe('factory:q:Q-buttons:a');
+    await plugin.stop();
+  });
+
+  it('omits reply_markup for plain outbounds', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake' },
+    );
+    await plugin.send({
+      id: newId(),
+      targetChannel: 'telegram',
+      targetRef: '12345',
+      text: 'plain reply',
+      createdAt: new Date().toISOString(),
+      attempts: 0,
+    });
+    expect(api.sent[0]!.replyMarkup).toBeUndefined();
+    await plugin.stop();
+  });
+});
+
+describe('TelegramChannel poll loop allowedUpdates (Phase 2.3)', () => {
+  it('requests both message and callback_query updates', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: true,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake' },
+    );
+    // Wait for the first getUpdates round-trip to land.
+    await vi.waitFor(() => expect(api.getUpdatesCalls.length).toBeGreaterThan(0), {
+      timeout: 200,
+    });
+    expect(api.getUpdatesCalls[0]!.allowedUpdates).toEqual(['message', 'callback_query']);
+    await plugin.stop();
+  });
+});
+
+function makeCallbackQuery(opts: {
+  data: string;
+  fromId?: number;
+  chatId?: number;
+  queryId?: string;
+}): TelegramCallbackQuery {
+  return {
+    id: opts.queryId ?? 'cb-1',
+    from: { id: opts.fromId ?? 999, is_bot: false, username: 'op' },
+    chat_instance: 'inst-1',
+    data: opts.data,
+    ...(opts.chatId !== undefined
+      ? {
+          message: {
+            message_id: 100,
+            chat: { id: opts.chatId, type: 'private' },
+            date: 1_700_000_000,
+          } satisfies TelegramMessage,
+        }
+      : {}),
+  };
+}
+
+function seedTelegramQuestion(
+  db: ReturnType<typeof freshDb>,
+  questionId: string,
+): { directiveId: string } {
+  const directiveId = newId();
+  directivesQ.insert(db, {
+    id: directiveId,
+    source: 'telegram',
+    principal: '1225367797',
+    channelRef: '1225367797#30',
+    intent: 'build',
+    payload: { project: 'example' },
+    autonomy: 'autonomous',
+    createdAt: new Date().toISOString(),
+    status: 'running',
+  });
+  pendingQuestions.create(db, {
+    id: questionId,
+    directiveId,
+    question: 'Proceed?',
+    channel: 'telegram',
+    channelRef: '1225367797#30',
+    createdAt: new Date().toISOString(),
+  });
+  return { directiveId };
+}
+
+describe('TelegramChannel callback_query handler (Phase 2.3)', () => {
+  it('Skip action records [skip] and acks the popup', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const questionId = newId();
+    seedTelegramQuestion(db, questionId);
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 30,
+      callback_query: makeCallbackQuery({ data: `factory:q:${questionId}:s` }),
+    });
+    const q = pendingQuestions.getById(db, questionId);
+    expect(q?.answer).toBe('[skip]');
+    expect(q?.answeredAt).toBeDefined();
+    expect(api.callbackAcks).toHaveLength(1);
+    expect(api.callbackAcks[0]!.text).toMatch(/skipped/i);
+    await plugin.stop();
+  });
+
+  it('Escalate action records [escalate]', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const questionId = newId();
+    seedTelegramQuestion(db, questionId);
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 31,
+      callback_query: makeCallbackQuery({ data: `factory:q:${questionId}:e` }),
+    });
+    const q = pendingQuestions.getById(db, questionId);
+    expect(q?.answer).toBe('[escalate]');
+    await plugin.stop();
+  });
+
+  it('Answer action sends a popup hint and does NOT record an answer', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const questionId = newId();
+    seedTelegramQuestion(db, questionId);
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 32,
+      callback_query: makeCallbackQuery({ data: `factory:q:${questionId}:a` }),
+    });
+    const q = pendingQuestions.getById(db, questionId);
+    expect(q?.answeredAt).toBeUndefined();
+    expect(api.callbackAcks).toHaveLength(1);
+    expect(api.callbackAcks[0]!.text).toMatch(/reply/i);
+    expect(api.callbackAcks[0]!.showAlert).toBe(true);
+    await plugin.stop();
+  });
+
+  it('reports already-answered when the question was previously closed', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const questionId = newId();
+    seedTelegramQuestion(db, questionId);
+    pendingQuestions.answer(db, questionId, 'previous', new Date().toISOString());
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 33,
+      callback_query: makeCallbackQuery({ data: `factory:q:${questionId}:s` }),
+    });
+    const q = pendingQuestions.getById(db, questionId);
+    expect(q?.answer).toBe('previous'); // unchanged
+    expect(api.callbackAcks[0]!.text).toMatch(/already/i);
+    await plugin.stop();
+  });
+
+  it('reports question-not-found for an unknown id', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 34,
+      callback_query: makeCallbackQuery({ data: 'factory:q:MISSING:s' }),
+    });
+    expect(api.callbackAcks).toHaveLength(1);
+    expect(api.callbackAcks[0]!.text).toMatch(/not found/i);
+    await plugin.stop();
+  });
+
+  it('ignores foreign callback_data', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 35,
+      callback_query: makeCallbackQuery({ data: 'someone-else:thing' }),
+    });
+    expect(api.callbackAcks).toHaveLength(0);
+    await plugin.stop();
+  });
+
+  it('blocks callbacks from outside the chat allow-list', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const questionId = newId();
+    seedTelegramQuestion(db, questionId);
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake', allowedChatIds: [1225367797] },
+    );
+    await plugin._simulateUpdate({
+      update_id: 36,
+      callback_query: makeCallbackQuery({
+        data: `factory:q:${questionId}:s`,
+        chatId: 99, // not in the allow-list
+      }),
+    });
+    expect(api.callbackAcks).toHaveLength(1);
+    expect(api.callbackAcks[0]!.text).toMatch(/not authorised/i);
+    const q = pendingQuestions.getById(db, questionId);
+    expect(q?.answeredAt).toBeUndefined();
     await plugin.stop();
   });
 });
