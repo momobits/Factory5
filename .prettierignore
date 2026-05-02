@@ -2,3 +2,8 @@ pnpm-lock.yaml
 dist/
 node_modules/
 .astro/
+
+# Framework-managed — Control owns its own format rules
+.control/
+.claude/
+

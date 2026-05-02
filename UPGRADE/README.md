@@ -36,6 +36,6 @@ This directory holds the audit, plans, log, issues, and specs for the work to ta
 
 ## Conventions
 
-- This is **not** a recreation of the old Control framework. There are no hooks, no slash commands, no auto-snapshots, no phase tags, no commit-shape rules. The discipline is: read these docs, do the work, append to the log.
+- **Control orchestrates execution; this directory holds the content.** The Control framework (`.control/`) provides the operational layer — cursor in `STATE.md`, phase gating, slash commands, hooks. Per-tier work in [`ROADMAP.md`](ROADMAP.md) maps onto Control phases under `.control/phases/phase-N-<name>/`. See [`../CLAUDE.md`](../CLAUDE.md) "Control framework" section for the session-start protocol; this directory holds the audit/roadmap/plans/log/issues that those phases iterate over.
 - Code-side discipline still applies (see `CLAUDE.md` at the repo root): no `console.log`, no `any`, all four `pnpm` gates clean (`build`, `test`, `lint`, `format:check`) before declaring work done.
 - ADRs (`docs/decisions/`) remain the canonical "why" record. If a tier introduces a new architectural decision, write an ADR in addition to any spec under [`specs/`](specs). Specs pin shapes; ADRs explain rationale.

@@ -2,6 +2,35 @@
 
 > **Read this first.** It is the standing brief for any session working on factory5 itself. The repo follows the same disciplines factory imposes on its outputs: design before code, verification-first, finding lifecycle.
 
+## Control framework (operational layer)
+
+This project uses the **Control framework** for session management — cursor, phase gating, hook-driven snapshots, slash-command discipline. Framework reference: [`.control/PROJECT_PROTOCOL.md`](.control/PROJECT_PROTOCOL.md). Tunables: [`.control/config.sh`](.control/config.sh). Project spec: [`.control/SPEC.md`](.control/SPEC.md).
+
+**At session start:**
+
+1. Read [`.control/progress/STATE.md`](.control/progress/STATE.md) — current phase, step, next action.
+2. Read the current phase's `README.md` and `steps.md` (path in STATE.md).
+3. Read [`UPGRADE/LOG.md`](UPGRADE/LOG.md) — the most recent entry is the upgrade-side handoff state.
+4. Run `/session-start` for the full git/state drift check.
+5. **Wait for user confirmation before editing code.**
+
+**Workspaces — what's where:**
+
+- **Long-form content** stays in `docs/` — `ARCHITECTURE.md`, `CONTRACTS.md`, `SKILLS.md`, `AGENTS.md`, `ONBOARDING.md`, `decisions/` (ADRs).
+- **Operational cursor** lives in `.control/` — `progress/STATE.md`, `progress/journal.md`, `phases/phase-<N>/`, `snapshots/` (gitignored), `SPEC.md`.
+- **Upgrade workspace** lives in [`UPGRADE/`](UPGRADE/) — `AUDIT.md`, `ROADMAP.md`, `LOG.md`, `ISSUES.md`, `plans/`, `specs/`. Control phases iterate over upgrade tiers; map them as you scaffold via `/bootstrap` and per-phase scaffolds.
+- **ADRs** go under `docs/decisions/` (factory5's `NNNN` numbering, append-only). `.control/architecture/decisions/` stays empty — don't fork the set.
+- **Issues** for upgrade work go in [`UPGRADE/ISSUES.md`](UPGRADE/ISSUES.md). Operational issues that fit Control's `/new-issue` flow can use `.control/issues/`.
+
+**Control invariants:**
+
+- Every sub-step closes with a commit. Every phase closes with a tag (`phase-N-<name>-closed`) via `/phase-close`.
+- In the same commit that closes a sub-step, flip the matching `- [ ]` in `.control/phases/<phase>/steps.md` to `- [x]`. Also tick the matching item in [`UPGRADE/ROADMAP.md`](UPGRADE/ROADMAP.md) and the relevant tier plan.
+- **After any commit, tag, step-close, or phase close, state the next Control command explicitly** (e.g. _"Run `/session-end` next."_, _"Continue with the next sub-step."_, _"Run `/phase-close` when all step checkboxes are flipped."_). The user should never have to infer which command fits the current state.
+- Append to [`UPGRADE/LOG.md`](UPGRADE/LOG.md) at session end so future sessions can pick up cold.
+- Don't advance a step with uncommitted work unless STATE.md's "In-flight work" explains why.
+- Do not edit accepted ADRs in `docs/decisions/` — supersede with a new one.
+
 ## Before touching code
 
 1. **Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** — the canonical system design.
