@@ -14,11 +14,16 @@ if (-not (Test-Path $StateFile)) {
 
 # Extract content of "## $label" section: returns lines after the heading
 # until the next "## " heading or "---" separator (whichever comes first).
+#
+# `-Encoding utf8` matters: STATE.md is authored as UTF-8 (em-dashes,
+# section signs, …) but PowerShell 5.1's `Get-Content` defaults to the
+# active codepage (CP-1252 on most en-US Windows hosts), which would
+# decode `—` as `â€"` and `§` as `Â§` — visible mojibake in next.md.
 function Extract-StateSection($label) {
     $printing = $false
     $out = @()
     $heading = "## $label"
-    foreach ($line in (Get-Content $StateFile)) {
+    foreach ($line in (Get-Content $StateFile -Encoding utf8)) {
         if ($line -eq $heading) { $printing = $true; continue }
         if ($printing -and $line -match '^## ') { break }
         if ($printing -and $line -eq '---') { break }
@@ -58,8 +63,12 @@ $nextAction
 $notes
 "@
 
-# Normalize CRLF -> LF for parity with bash sibling
+# Normalize CRLF -> LF for parity with bash sibling. UTF-8 without BOM
+# matches what the bash heredoc writes; the BOM that `WriteAllText`'s
+# default UTF8Encoding emits is invisible most places but trips a
+# minority of tooling.
 $content = $content -replace "`r`n", "`n"
-[System.IO.File]::WriteAllText((Join-Path (Get-Location) $NextFile), $content)
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText((Join-Path (Get-Location) $NextFile), $content, $utf8NoBom)
 
 [Console]::Error.WriteLine("[regenerate-next-md] wrote $NextFile from $StateFile at $ts")

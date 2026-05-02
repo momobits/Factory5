@@ -6,6 +6,43 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-02 — Tier 2 session 2a — Discord slash + Telegram setMyCommands
+
+Closed Phase 2 steps 2.1 and 2.2 — the "structural" half of channel parity. Both Discord and Telegram now expose the brain's eight-intent vocabulary as a native chat surface (slash commands on Discord, `/` autocomplete + `/<cmd>` parser on Telegram); the two transports dispatch through a shared `command-handlers.ts` so future tweaks land in one place.
+
+**Commits this session:**
+
+- `8ea8e4a` feat(2.1): wire Discord slash commands
+- `22e0e54` feat(2.2): wire Telegram setMyCommands + extract command-handlers.ts
+- `(this commit)` docs(state): session end for step 2.2
+
+**Decisions (judgement calls; no ADRs):**
+
+- **`setProjectBudget` as a `ChannelContext` callback** (not a `@factory5/wiki` import in `@factory5/channels`). Symmetry with `resolveProjectPath` / `resolveBuildLimits`; daemon binds the callback over `wiki.updateProjectMetadata`. Channel plugins stay free of wiki coupling. `SetProjectBudgetError` sentinel with stable codes (`NOT_FOUND` / `AMBIGUOUS` / `PATH_UNREADABLE` / `METADATA_CORRUPT`) so handlers return structured failures rather than throwing.
+- **Cancel for 2.1 = `markBlocked`-only.** Step 2.4 will swap in real `AbortController` plumbing + worker SIGTERM/SIGKILL discipline. The slash-command UX-message explicitly notes "2.1 marks the row blocked. Step 2.4 will additionally kill running workers within 10 s." so an operator running a long build during the gap window isn't surprised.
+- **Telegram `/build` migrated to the shared `runBuild` handler** (i.e. the legacy `parseBuildPayload` is gone). The directive shape is preserved (project + spec + projectPath + language + limits) — just `payload.text` is dropped (no consumer reads it; one roundtrip-test assertion updated). Unifies the message-driven `/build` path with the `command-handlers.ts` contract.
+- **`buildPrefix` config** preserved in the schema for backward compat but no longer load-bearing. Operators who customised it (e.g. `buildPrefix = '!build'`) lose that customisation; canonical trigger is `/build` going forward. Documented in the schema comment.
+- **Telegram reply formatting:** HTML mode with `<pre>` blocks for tabular reads (`status` / `spend` / `findings`); plain text for state-changing commands (`build` / `resume` / `cancel` / `budget`). Avoids MarkdownV2's escape-character footgun.
+- **Slash-command channelRef shape** for Discord (`discord-slash-<timestamp>`) is acknowledged as not routable for brain outbound replies — known gap, mostly cosmetic for 2.1's confirmation-only UX. Telegram-side uses the existing `<chatId>#<messageId>` shape and reaches the user normally. Revisit when 2.3 lands button affordances and the brain might want to send progress updates back.
+- **`payload.text` on chat directives stays.** Only build directives drop it (the brain's chat-intent flow does read `payload.text`).
+
+**Minor fixes:** `.claude/hooks/regenerate-next-md.ps1` UTF-8 round-trip fix landed during the 2.2-2.3 idle window — `Get-Content -Encoding utf8` + `WriteAllText` with a no-BOM `UTF8Encoding $false`. The mojibake on em-dashes (`—` → `â€"`) and section signs (`§` → `Â§`) that the prior session-end worked around manually is now fixed at source.
+
+**State of `main` at session end:**
+
+- `pnpm build` ✅
+- `pnpm test` ✅ (938 passed, 3 skipped — Windows/Linux-only worker-sandbox branches; channels package: 103/103)
+- `pnpm lint` ✅
+- `pnpm format:check` ✅
+- Phase 2 progress: 2.1 + 2.2 closed; 2.3 / 2.4 / 2.5 still open. Phase 2 tag (`phase-2-channel-parity-closed`) goes on at step 2.7 once live-smoke acceptance is met.
+
+**Next session pointer:**
+
+- Step **2.3** = pending-question button affordances on Discord + Telegram. Discord: `ActionRowBuilder` with Answer / Skip / Escalate buttons; Answer opens a `ModalBuilder`. Telegram: inline keyboard via `reply_markup`; poll loop expanded to handle `callback_query` updates. Outbound message schema needs a `metadata: { questionId }` field so the channel `send()` can decide to attach buttons. Existing thread-reply / reply-to-bot path stays as the fallback.
+- Sessions remaining for Phase 2: 2.3 (this) + a session for 2.4 + 2.5 + phase-close.
+
+---
+
 ## 2026-05-02 — Tier 1 (doc-sweep) shipped end-to-end; Tier 2 scaffolded
 
 Closed Tier 1 in a single session. All seven Tier-1 issues (U001-U003 stale READMEs, U014-U015 missing onboarding sections, U016 missing workflows doc, U017 missing CLAUDE.md authoring guide) resolved. Tier 2 (channel parity) scaffolded under `.control/phases/phase-2-channel-parity/`; ready to begin step 2.1 (Discord slash commands) next session.

@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-02 21:45 UTC by /session-end
+**Last updated:** 2026-05-02 22:35 UTC by /session-end (session 2a complete)
 **Current phase:** 2 — channel-parity
-**Current step:** 2.1 — Wire Discord slash commands
-**Status:** ready (phase 2 not started; clean handoff from phase 1 close)
+**Current step:** 2.3 — Pending-question button affordances (next; 2.1 + 2.2 closed)
+**Status:** ready (clean working tree; phase 2a tier — slash + setMyCommands — done)
 
 ---
 
@@ -20,16 +20,16 @@
 
 ## Next action
 
-Open [`../phases/phase-2-channel-parity/README.md`](../phases/phase-2-channel-parity/README.md) and [`steps.md`](../phases/phase-2-channel-parity/steps.md). Step **2.1 = wire Discord slash commands** per [`../../UPGRADE/plans/tier-2-channel-parity.md`](../../UPGRADE/plans/tier-2-channel-parity.md) §2.1. New file `packages/channels/src/discord-commands.ts` (definitions + handlers); edit `packages/channels/src/discord.ts` to call `client.application.commands.set(commandList, guildId?)` on `Events.ClientReady` and register an `interactionCreate` listener. Embed-formatted responses; no LLM for the read commands (`status`/`spend`/`findings`).
+Open [`../phases/phase-2-channel-parity/README.md`](../phases/phase-2-channel-parity/README.md) and [`steps.md`](../phases/phase-2-channel-parity/steps.md). Step **2.3 = pending-question button affordances** per [`../../UPGRADE/plans/tier-2-channel-parity.md`](../../UPGRADE/plans/tier-2-channel-parity.md) §2.3. Touches `packages/channels/src/discord.ts` `send()` (attach `ActionRowBuilder` with Answer/Skip/Escalate buttons when `msg.metadata.questionId` is set), `packages/channels/src/telegram.ts` `send()` (inline_keyboard via `reply_markup`), and the Telegram poll loop to handle `callback_query` updates alongside messages. Discord side also needs a button-`interactionCreate` branch (in addition to slash). The legacy thread-reply / reply-to-bot answer path stays intact — buttons are additive.
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `1384ae8` — chore(phase-1): close phase 1, kick off phase 2
+- **Last commit:** `22e0e54` — feat(2.2): wire Telegram setMyCommands + extract command-handlers.ts
 - **Uncommitted changes:** none (working tree clean)
-- **Last phase tag:** `phase-1-doc-sweep-closed` (annotated tag at commit `10e400a` — the last Phase 1 work commit; supersedes the legacy `phase-15-demand-driven-runoff-closed` from the removed v1 framework)
+- **Last phase tag:** `phase-1-doc-sweep-closed` (annotated tag at commit `10e400a`)
 
 ---
 
@@ -41,13 +41,13 @@ Open [`../phases/phase-2-channel-parity/README.md`](../phases/phase-2-channel-pa
 
 ## In-flight work
 
-None. Phase 2 has not started yet.
+None. Step 2.2 closed cleanly; 2.3 has not started.
 
 ---
 
 ## Test / eval status
 
-- **Last test run:** 2026-05-02 — 876 passed, 3 skipped (worker-sandbox Windows-only / Linux-only branches; `describe.skipIf`)
+- **Last test run:** 2026-05-02 — 938 passed, 3 skipped (worker-sandbox Windows-only / Linux-only branches; `describe.skipIf`). Channels package: 103/103 across 5 files.
 - **Eval score** (agent phases only): n/a
 - **Regression tests:** unit + integration only; no eval harness
 
@@ -59,21 +59,23 @@ None. Phase 2 has not started yet.
 - ADR 0027 — web-ui-mutation-surface (`POST /api/v1/builds`, `POST /api/v1/pending-questions/:id/answer`, `PUT /api/v1/projects/:id/budget`)
 - ADR 0026 — pluggable-runtime-contract (assessor pluggable across Python / Node / Go / Rust; env-owning vs env-assuming provisioner; failure-mode taxonomy)
 
+No new ADRs decided in this session — the `setProjectBudget` callback shape and the shared `command-handlers.ts` extraction were judgement calls within the tier-2 plan, not architectural decisions.
+
 ---
 
 ## Recently completed (last 5 steps)
 
+- Step 2.2 — Wire Telegram `setMyCommands` + extract transport-agnostic `command-handlers.ts` shared with Discord; replace `/build` legacy parser with shared `runBuild`; new HTML-mode reply formatter with `<pre>` tables — 2026-05-02 — `22e0e54`
+- Step 2.1 — Wire Discord slash commands (`/factory status / spend / findings / resume / cancel / budget / build`); register guild-scoped or global; embed responses; SQLite-direct reads; `setProjectBudget` callback added to `ChannelContext` — 2026-05-02 — `8ea8e4a`
 - Phase 1 (doc-sweep) closed + Phase 2 (channel-parity) scaffolded — close commit `1384ae8` (tag `phase-1-doc-sweep-closed` on `10e400a`) — 2026-05-02
 - Step 1.8 — tier-1 acceptance prep (mark U001-003/U014-017 resolved in UPGRADE/ISSUES.md; fix orphan factory-inspect ref in packages/logger/README.md) — 2026-05-02 — `10e400a`
 - Step 1.7 — reconcile `docs/SKILLS.md` + `docs/AGENTS.md` against current code (add `ask-user` skill row; update 4 agents' Tools + Default-skills columns) — 2026-05-02 — `e75b5dd`
-- Step 1.6 — write `docs/WORKFLOWS.md` (four canonical loops; surface decision matrix; CLAUDE.md authoring guide); cross-references from 4 anchor docs — 2026-05-02 — `b813037`
-- Step 1.5 — add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md` — 2026-05-02 — `010843b`
 
 ---
 
 ## Attempts that didn't work (current step only)
 
-- None yet — Step 2.1 not started.
+- None yet — Step 2.3 not started.
 
 ---
 
@@ -88,12 +90,25 @@ None. Phase 2 has not started yet.
 
 ## Notes for next session
 
-Phase 2 splits into ~2 sessions per the tier plan: **2a** = slash commands + `setMyCommands` + button affordances (steps 2.1-2.3); **2b** = `factory cancel` plumbing + 8-intent triage classification (steps 2.4-2.5). Step 2.6 (`factory chat` per-turn timeout) is optional — defer to Phase 3 if the streaming-progress path wins.
+Phase 2 split, recap: **2a** = 2.1 + 2.2 + 2.3 (slash + setMyCommands + button affordances) — 2.1 + 2.2 done this session; 2.3 is what's left in 2a. **2b** = 2.4 + 2.5 (cancel-kills-workers + 8-intent triage). Step 2.6 (`factory chat` per-turn timeout) is optional and deferrable to Phase 3 if the streaming path wins.
 
-Discord guild-vs-global slash-command scope decision: guild-scoped when `config.guildId` is set (instant register), global otherwise (1-hour propagation). Documented in tier-2 plan §"Risks + decisions".
+**Step 2.3 design notes** (read before starting):
 
-Phase 2 is the first phase that touches code (packages/channels, packages/brain, packages/cli, packages/state, packages/ipc). Live-smoke against a real Discord bot + Telegram bot is part of acceptance — confirm test bots are configured (`factory doctor`) before Step 2.1 starts.
+- The shape is symmetric between transports: when an outbound message has metadata flagging it as a pending-question prompt, attach button affordances. The brain emits the outbound; the channel plugin's `send()` is what attaches the buttons. So the contract change is: the outbound message needs a way to signal "this is a question" + carry the question id.
+- Today the plugins look up pending-question rows via `channelRef`-LIKE matching for the answer path; for the outbound side, the brain's outbound emitter doesn't pass extra metadata. Two options: (a) add a `metadata: { questionId }` field to the `OutboundMessage` schema, or (b) have the channel plugin look up "is there an open pending question for this directive?" by directiveId before sending. Option (a) is cleaner — explicit signal beats inferred.
+- Discord buttons: `ActionRowBuilder<ButtonBuilder>` with three buttons. CustomIds like `factory:question:<id>:answer`, `factory:question:<id>:skip`, `factory:question:<id>:escalate`. The "Answer" button opens a `ModalBuilder` with a single `TextInputBuilder`; submission lands in `interactionCreate` as a `ModalSubmitInteraction`.
+- Telegram inline keyboards: `reply_markup: { inline_keyboard: [[ {text, callback_data} ... ]] }`. Callbacks come back as `update.callback_query` — the poll loop currently only requests `allowed_updates: ['message']`, so it'll need `['message', 'callback_query']`.
+- `pendingQuestions.answer(db, id, text, ts)` is the existing call; both flows funnel through it.
 
-**Known hook bug:** `.claude/hooks/regenerate-next-md.ps1` reads STATE.md as CP-1252 but writes UTF-8, mangling em-dashes (`—` → `â€"`) and section signs (`§` → `Â§`) when the source contains those characters. Worked around at this session's /session-end by writing next.md manually after the hook ran. Worth a small fix during Phase 2 idle — open the script and ensure both the read and write specify UTF-8 explicitly (`Get-Content -Encoding utf8`, `Out-File -Encoding utf8`). The bash variant is presumably fine.
+**Code-touching surfaces this session (cumulative for Phase 2 so far):**
+
+- `packages/channels/src/{discord,telegram,command-handlers,discord-commands}.ts` — primary
+- `packages/channels/src/{registry,types}.ts` — added `setProjectBudget` callback
+- `packages/daemon/src/index.ts` — bound `registrySetProjectBudget` over `wiki.updateProjectMetadata`
+- All four `pnpm` gates green; full workspace 938 tests pass.
+
+**Live-smoke acceptance still pending** for Phase 2: `/factory <cmd>` against a real Discord bot, `/<cmd>` against a real Telegram bot, with both `setMyCommands`-registered and slash-registered surfaces honoured. Done at `/phase-close` (step 2.7) once 2.3+2.4+2.5 land.
+
+**Hook fix (cleared):** `.claude/hooks/regenerate-next-md.ps1` previously read STATE.md as CP-1252 (default for `Get-Content` on en-US Windows) but wrote UTF-8 with BOM, mangling em-dashes (`—` → `â€"`) and section signs (`§` → `Â§`). Fixed in this session-end commit: `Get-Content -Encoding utf8` + `WriteAllText` with a `UTF8Encoding $false` (no BOM) for parity with the bash sibling. The `next.md` produced by THIS session-end is the first run with the fix.
 
 Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions; this STATE.md is the operational cursor (overwritten at each `/session-end`).
