@@ -55,6 +55,8 @@ import {
   apiV1SpendResponseSchema,
   apiV1UpdateProjectBudgetRequestSchema,
   apiV1UpdateProjectBudgetResponseSchema,
+  cancelDirectiveRequestSchema,
+  cancelDirectiveResponseSchema,
   directiveNotifyRequestSchema,
   IpcRequestError,
   ipcErrorSchema,
@@ -76,14 +78,17 @@ import {
   type ApiV1ProjectsListResponse,
   type ApiV1SpendResponse,
   type ApiV1UpdateProjectBudgetResponse,
+  type CancelDirectiveResponse,
   type StatusResponse,
   type UiTokenResponse,
   type WorkerAskUserRequest,
   type WorkerAskUserResponse,
 } from '@factory5/ipc';
+import { cancelDirective as brainCancelDirective } from '@factory5/brain';
 import type { Logger } from '@factory5/logger';
 import { createLogger } from '@factory5/logger';
 import {
+  CancelDirectiveError,
   directives as directivesQ,
   findingsRegistry,
   modelUsage,
@@ -378,6 +383,39 @@ function registerRoutes(
       'ipc: /directives/notify',
     );
     reply.send({ acknowledged: true });
+  });
+
+  // ----- POST /directives/:id/cancel (Phase 2.4) -----
+  // Active-cancel: flips the directive's row to `failed` AND fires the
+  // brain's per-directive AbortController so the worker subprocess gets
+  // SIGTERM (then SIGKILL after grace) within the 10 s acceptance budget.
+  // Distinct from `directive mark-blocked`, which only updates the row —
+  // `cancel` actively kills the in-flight work.
+  app.post<{ Params: { id: string } }>('/directives/:id/cancel', async (request, reply) => {
+    const body = cancelDirectiveRequestSchema.parse(request.body ?? {});
+    const id = request.params.id;
+    let updated;
+    try {
+      updated = directivesQ.cancelDirective(opts.db, id, body.reason);
+    } catch (err) {
+      if (err instanceof CancelDirectiveError) {
+        if (err.code === 'NOT_FOUND') {
+          throw new IpcRequestError(404, 'NOT_FOUND', err.message);
+        }
+        throw new IpcRequestError(409, 'ALREADY_TERMINAL', err.message);
+      }
+      throw err;
+    }
+    const abortFired = brainCancelDirective(id, body.reason ?? 'cancelled');
+    ipcLog.info(
+      { reqId: request.id, directiveId: id, reason: body.reason, abortFired },
+      'ipc: /directives/:id/cancel',
+    );
+    const resp: CancelDirectiveResponse = cancelDirectiveResponseSchema.parse({
+      directive: updated,
+      abortFired,
+    });
+    reply.send(resp);
   });
 
   // ----- POST /reload-config -----

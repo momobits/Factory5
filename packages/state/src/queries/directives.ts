@@ -194,6 +194,21 @@ export class MarkBlockedError extends Error {
   }
 }
 
+/**
+ * Thrown when {@link cancelDirective} is called on an unknown id or on a
+ * directive that's already in a terminal state. Carries the same
+ * code/message contract as {@link MarkBlockedError} so the CLI / daemon
+ * route can branch on `code` without string-matching.
+ */
+export class CancelDirectiveError extends Error {
+  readonly code: 'NOT_FOUND' | 'ALREADY_TERMINAL';
+  constructor(code: 'NOT_FOUND' | 'ALREADY_TERMINAL', message: string) {
+    super(message);
+    this.name = 'CancelDirectiveError';
+    this.code = code;
+  }
+}
+
 const TERMINAL_STATUSES: ReadonlySet<Directive['status']> = new Set([
   'blocked',
   'complete',
@@ -234,6 +249,56 @@ export function markBlocked(db: Database, id: string, reason?: string): Directiv
     });
   });
   return markTx();
+}
+
+/**
+ * Active-cancel: flip a non-terminal directive to `failed` with
+ * `blocked_reason` set (defaulting to `'cancelled'`).
+ *
+ * Distinct from {@link markBlocked} on two axes:
+ *
+ *   - **Terminal status** is `failed`, not `blocked`. `cancelled`
+ *     directives are operator-driven failures; `blocked` is the brain's
+ *     own way of saying "I gave up on my own" (escalation needs an
+ *     operator answer, budget tripped, etc.).
+ *   - **Intent**: this is the DB-side half of `factory cancel`. The other
+ *     half — actually killing the in-flight worker subprocess — is the
+ *     brain's per-directive AbortController, fired in tandem from the
+ *     daemon's `POST /directives/:id/cancel` route.
+ *
+ * Refuses to touch a directive that's already terminal — flipping a
+ * `complete` directive to `failed` would be a data-integrity bug, not a
+ * recovery. Throws {@link CancelDirectiveError} with `code = 'NOT_FOUND'`
+ * for unknown ids and `'ALREADY_TERMINAL'` when the directive is in a
+ * terminal status.
+ */
+export function cancelDirective(db: Database, id: string, reason?: string): Directive {
+  const trimmed = reason !== undefined ? reason.trim() : '';
+  const finalReason = trimmed.length > 0 ? trimmed : 'cancelled';
+  const cancelTx = db.transaction(() => {
+    const row = db.prepare('SELECT * FROM directives WHERE id = ?').get(id) as Row | undefined;
+    if (row === undefined) {
+      throw new CancelDirectiveError('NOT_FOUND', `directive ${id} not found`);
+    }
+    if (TERMINAL_STATUSES.has(row.status as Directive['status'])) {
+      throw new CancelDirectiveError(
+        'ALREADY_TERMINAL',
+        `directive ${id} is already ${row.status}; refusing to cancel`,
+      );
+    }
+    db.prepare(
+      `UPDATE directives
+         SET status = 'failed',
+             blocked_reason = ?
+       WHERE id = ?`,
+    ).run(finalReason, id);
+    return rowToDirective({
+      ...row,
+      status: 'failed',
+      blocked_reason: finalReason,
+    });
+  });
+  return cancelTx();
 }
 
 // ---------------------------------------------------------------------------

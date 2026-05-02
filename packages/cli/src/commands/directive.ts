@@ -8,7 +8,13 @@
  *     Flip a non-terminal directive to `blocked` and optionally record a
  *     reason. Handy when the brain left a directive stuck `running` after
  *     an escalation-kill (shell timeout, ctrl-C, background-task kill) and
- *     you want a clean status instead of a manual SQL poke.
+ *     you want a clean status instead of a manual SQL poke. **Does not**
+ *     touch in-flight worker subprocesses; the row simply changes status.
+ *     Use {@link registerCancelCommand `factory cancel <id>`} (Phase 2.4)
+ *     when you want the actual workers killed in addition to the row
+ *     flipping — that path goes through the daemon's
+ *     `POST /directives/:id/cancel` and propagates an AbortSignal into
+ *     the worker subprocess.
  *
  * This is a straight SQL command — works whether or not factoryd is
  * running. The brain's own serve loop only touches `pending` and `claimed`

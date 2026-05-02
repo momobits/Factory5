@@ -526,7 +526,12 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
     opts.findingRegistry,
   );
 
-  const desiredOutcome: 'success' | 'failure' = error === undefined ? 'success' : 'failure';
+  // Phase 2.4 — cancellation cleans the worktree (operator abandoned the
+  // work, no diff to triage). Other failures preserve the worktree so a
+  // human can inspect what the agent did before it failed.
+  const wasAborted = opts.signal?.aborted === true;
+  const desiredOutcome: 'success' | 'failure' | 'cancelled' =
+    error === undefined ? 'success' : wasAborted ? 'cancelled' : 'failure';
   try {
     await cleanupWorktree({
       projectPath: opts.projectPath,

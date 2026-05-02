@@ -69,9 +69,12 @@ export interface CleanupOptions {
   handle: WorktreeHandle;
   /**
    * `success` = merge task branch back into base, remove worktree, delete
-   *   branch. `failure` = leave worktree and branch in place.
+   *   branch. `failure` = leave worktree and branch in place. `cancelled`
+   *   (Phase 2.4) = remove worktree + delete branch WITHOUT merging — the
+   *   operator chose to abandon the work, so we want a clean slate, not a
+   *   partial diff to triage.
    */
-  outcome: 'success' | 'failure';
+  outcome: 'success' | 'failure' | 'cancelled';
 }
 
 async function pathExists(p: string): Promise<boolean> {
@@ -390,11 +393,16 @@ export async function prePurgeDepDirs(worktreePath: string): Promise<void> {
 /**
  * Release a worktree according to the task outcome. Success → merge back +
  * remove; failure → leave in place (logged, tracked, but not reclaimed) so a
- * human can diff the branch.
+ * human can diff the branch; cancelled → remove without merging (operator
+ * abandoned the run; no diff to triage).
  */
 export async function cleanupWorktree(opts: CleanupOptions): Promise<void> {
   if (opts.outcome === 'success') {
     await mergeAndRemove(opts.projectPath, opts.handle);
+    return;
+  }
+  if (opts.outcome === 'cancelled') {
+    await discardAndRemove(opts.projectPath, opts.handle);
     return;
   }
   log.warn(
@@ -404,6 +412,49 @@ export async function cleanupWorktree(opts: CleanupOptions): Promise<void> {
       branch: opts.handle.branch,
     },
     'worktree: task failed — leaving worktree in place for inspection',
+  );
+}
+
+/**
+ * Cancellation-mode cleanup (Phase 2.4): remove the worktree directory and
+ * delete the task branch without merging anything back. Best-effort on each
+ * step — a failure to delete the branch (e.g. operator already cleaned up
+ * by hand) is logged but doesn't fail the call. Mirrors the
+ * pre-purge → `worktree remove` → `branch -D` shape of {@link mergeAndRemove}
+ * minus the merge.
+ */
+async function discardAndRemove(projectPath: string, handle: WorktreeHandle): Promise<void> {
+  if (!(await isGitRepo(projectPath))) return;
+  const git = simpleGit(projectPath);
+
+  // Strip dep dirs first so `git worktree remove --force` doesn't fall over
+  // on Windows (same I013 hazard the merge path mitigates).
+  await prePurgeDepDirs(handle.path);
+
+  try {
+    await git.raw(['worktree', 'remove', '--force', handle.path]);
+  } catch (err) {
+    log.warn(
+      {
+        projectPath,
+        worktreePath: handle.path,
+        branch: handle.branch,
+        err: (err as Error).message,
+      },
+      'worktree: cancellation cleanup — worktree remove failed (preserved for manual cleanup)',
+    );
+    // Don't try to drop the branch if the worktree refused to leave —
+    // the operator may want to inspect what's there.
+    return;
+  }
+  try {
+    await git.raw(['branch', '-D', handle.branch]);
+  } catch {
+    /* branch already gone (some git versions remove it with the worktree) */
+  }
+  log.info(
+    { projectPath, branch: handle.branch },
+    'worktree: cancellation cleanup — worktree and branch removed',
   );
 }
 

@@ -11,7 +11,7 @@ export { runMigrations, currentSchemaVersion } from './migrations/index.js';
 
 // Per-table query helpers
 export * as directives from './queries/directives.js';
-export { MarkBlockedError } from './queries/directives.js';
+export { CancelDirectiveError, MarkBlockedError } from './queries/directives.js';
 export * as events from './queries/events.js';
 export * as outbound from './queries/outbound.js';
 export * as sessions from './queries/sessions.js';

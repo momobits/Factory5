@@ -315,6 +315,42 @@ class AbortError extends Error {
   override readonly name = 'AbortError';
 }
 
+/**
+ * Grace window between SIGTERM and SIGKILL on a running claude-cli
+ * subprocess (Phase 2.4). 5 s leaves room for the subprocess to flush
+ * stdio buffers and run any registered cleanup handlers; if it ignores
+ * SIGTERM (or we're on Windows where Node simulates SIGTERM as a hard
+ * terminate) the SIGKILL fallback bounds the cancel budget. The 10 s
+ * acceptance budget for `factory cancel` covers SIGTERM + grace + SIGKILL
+ * with margin to spare.
+ */
+const KILL_GRACE_MS = 5000;
+
+/**
+ * Soft-kill a child subprocess: SIGTERM, then SIGKILL after the grace
+ * window if it's still running. Returns synchronously — the SIGKILL timer
+ * is unref'd so it doesn't keep the event loop alive on its own; the
+ * caller's existing `child.once('close', …)` listener remains the
+ * authoritative settle path.
+ */
+function softKill(child: ChildProcessWithoutNullStreams): void {
+  try {
+    child.kill('SIGTERM');
+  } catch {
+    /* already exited */
+    return;
+  }
+  const t = setTimeout(() => {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      /* exited during grace */
+    }
+  }, KILL_GRACE_MS);
+  if (typeof t.unref === 'function') t.unref();
+  child.once('close', () => clearTimeout(t));
+}
+
 function collectRun(child: ChildProcessWithoutNullStreams, opts: RunOptions): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const stdoutChunks: Buffer[] = [];
@@ -327,11 +363,7 @@ function collectRun(child: ChildProcessWithoutNullStreams, opts: RunOptions): Pr
       settled = true;
       clearTimeout(timer);
       if (opts.signal !== undefined) opts.signal.removeEventListener('abort', onAbort);
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        /* ignore */
-      }
+      softKill(child);
       reject(err);
     };
 
@@ -420,11 +452,7 @@ async function* streamClaude(
     settled = true;
     clearTimeout(timer);
     if (opts.signal !== undefined) opts.signal.removeEventListener('abort', onAbort);
-    try {
-      child.kill('SIGKILL');
-    } catch {
-      /* ignore */
-    }
+    softKill(child);
     queue.push(item);
     notify();
   };
@@ -533,11 +561,10 @@ async function* streamClaude(
     }
   } finally {
     // Consumer break / error / done — make sure the child is cleaned up.
-    try {
-      child.kill('SIGKILL');
-    } catch {
-      /* ignore */
-    }
+    // softKill is idempotent: if `finish` already fired it's a redundant
+    // SIGTERM (harmless), otherwise it gives the subprocess the same
+    // SIGTERM-then-SIGKILL grace as the abort path.
+    softKill(child);
     clearTimeout(timer);
     if (opts.signal !== undefined) opts.signal.removeEventListener('abort', onAbort);
   }

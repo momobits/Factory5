@@ -80,6 +80,41 @@ export const directiveNotifyResponseSchema = z.object({
 export type DirectiveNotifyResponse = z.infer<typeof directiveNotifyResponseSchema>;
 
 // -----------------------------------------------------------------------------
+// POST /directives/:id/cancel  (operator → daemon — Phase 2.4)
+// -----------------------------------------------------------------------------
+
+/**
+ * Request body for `POST /directives/:id/cancel`. Both fields optional —
+ * an empty body is the canonical "kill it now, no reason" form.
+ *
+ *   - `reason` — free-text, persisted to `directives.blocked_reason`.
+ *     Defaults to `"cancelled"` server-side when omitted / empty.
+ *
+ * Distinct from `POST /directives/notify { reason: 'cancelled' }` — that
+ * is a doorbell *event* telling the brain "look at this directive again";
+ * this route is the active-cancel CRUD surface that flips the row to
+ * `failed` AND fires the brain's per-directive AbortController.
+ */
+export const cancelDirectiveRequestSchema = z.object({
+  reason: z.string().min(1).optional(),
+});
+export type CancelDirectiveRequest = z.infer<typeof cancelDirectiveRequestSchema>;
+
+export const cancelDirectiveResponseSchema = z.object({
+  directive: directiveSchema,
+  /**
+   * `true` iff the daemon was hosting the brain that was running this
+   * directive — i.e. an in-process AbortController existed and fired,
+   * which propagates to the worker subprocess. `false` means the DB row
+   * was updated but no in-flight worker was found in this process; the
+   * directive may be running in a separate `factory build --inline`
+   * shell that the daemon can't signal cross-process.
+   */
+  abortFired: z.boolean(),
+});
+export type CancelDirectiveResponse = z.infer<typeof cancelDirectiveResponseSchema>;
+
+// -----------------------------------------------------------------------------
 // POST /reload-config
 // -----------------------------------------------------------------------------
 

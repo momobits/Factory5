@@ -2,8 +2,10 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { _resetCancellationRegistry, registerCancellation } from '@factory5/brain';
 import { initLogger } from '@factory5/logger';
 import {
+  cancelDirectiveResponseSchema,
   directiveNotifyResponseSchema,
   IpcRequestError,
   reloadConfigResponseSchema,
@@ -2580,3 +2582,180 @@ describe('IPC server — GET /api/v1/projects (ADR 0027, sub-step 11.5 — SPA p
     await app.close();
   });
 });
+
+describe('IPC server — POST /directives/:id/cancel (Phase 2.4)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+    _resetCancellationRegistry();
+  });
+
+  afterEach(() => {
+    db.close();
+    _resetCancellationRegistry();
+  });
+
+  it('flips a running directive to failed and returns abortFired=false when no controller is registered', async () => {
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    directivesQ.updateStatus(db, directive.id, 'running');
+
+    const app = await buildIpcServer({
+      host: '127.0.0.1',
+      port: 0,
+      db,
+      doorbell,
+      startedAt: STARTED_AT,
+      version: '0.0.1',
+      processName: 'factoryd-test',
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/directives/${directive.id}/cancel`,
+      payload: { reason: 'changed my mind' },
+    });
+    expect(res.statusCode).toBe(200);
+    const parsed = cancelDirectiveResponseSchema.parse(res.json());
+    expect(parsed.directive.status).toBe('failed');
+    expect(parsed.directive.blockedReason).toBe('changed my mind');
+    expect(parsed.abortFired).toBe(false);
+
+    // DB row should be updated.
+    const fresh = directivesQ.getById(db, directive.id);
+    expect(fresh?.status).toBe('failed');
+    expect(fresh?.blockedReason).toBe('changed my mind');
+    await app.close();
+  });
+
+  it('fires the brain-side AbortController and returns abortFired=true', async () => {
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    directivesQ.updateStatus(db, directive.id, 'running');
+
+    // Pretend the brain claimed this directive (serve loop's
+    // registerCancellation pattern).
+    const handle = registerCancellation(directive.id);
+
+    const app = await buildIpcServer({
+      host: '127.0.0.1',
+      port: 0,
+      db,
+      doorbell,
+      startedAt: STARTED_AT,
+      version: '0.0.1',
+      processName: 'factoryd-test',
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/directives/${directive.id}/cancel`,
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    const parsed = cancelDirectiveResponseSchema.parse(res.json());
+    expect(parsed.abortFired).toBe(true);
+    expect(handle.signal.aborted).toBe(true);
+    handle.release();
+    await app.close();
+  });
+
+  it('defaults reason to "cancelled" when body.reason is omitted', async () => {
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    directivesQ.updateStatus(db, directive.id, 'running');
+
+    const app = await buildIpcServer({
+      host: '127.0.0.1',
+      port: 0,
+      db,
+      doorbell,
+      startedAt: STARTED_AT,
+      version: '0.0.1',
+      processName: 'factoryd-test',
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/directives/${directive.id}/cancel`,
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    const parsed = cancelDirectiveResponseSchema.parse(res.json());
+    expect(parsed.directive.blockedReason).toBe('cancelled');
+    await app.close();
+  });
+
+  it('returns 404 NOT_FOUND for an unknown directive id', async () => {
+    const app = await buildIpcServer({
+      host: '127.0.0.1',
+      port: 0,
+      db,
+      doorbell,
+      startedAt: STARTED_AT,
+      version: '0.0.1',
+      processName: 'factoryd-test',
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/directives/${newId()}/cancel`,
+      payload: { reason: 'nope' },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('NOT_FOUND');
+    await app.close();
+  });
+
+  it('returns 409 ALREADY_TERMINAL for a terminal directive', async () => {
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    directivesQ.updateStatus(db, directive.id, 'complete');
+
+    const app = await buildIpcServer({
+      host: '127.0.0.1',
+      port: 0,
+      db,
+      doorbell,
+      startedAt: STARTED_AT,
+      version: '0.0.1',
+      processName: 'factoryd-test',
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/directives/${directive.id}/cancel`,
+      payload: {},
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('ALREADY_TERMINAL');
+    await app.close();
+  });
+
+  it('rejects non-loopback callers with 403 NON_LOCALHOST', async () => {
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    const app = await buildIpcServer({
+      host: '127.0.0.1',
+      port: 0,
+      db,
+      doorbell,
+      startedAt: STARTED_AT,
+      version: '0.0.1',
+      processName: 'factoryd-test',
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/directives/${directive.id}/cancel`,
+      payload: {},
+      remoteAddress: '10.0.0.5',
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('NON_LOCALHOST');
+    await app.close();
+  });
+});
+
+// Workaround for unused-import lint when only types are referenced above.
+void IpcRequestError;

@@ -12,6 +12,8 @@ import type { z } from 'zod';
 
 import { IpcRequestError } from './errors.js';
 import {
+  cancelDirectiveRequestSchema,
+  cancelDirectiveResponseSchema,
   directiveNotifyRequestSchema,
   directiveNotifyResponseSchema,
   ipcErrorSchema,
@@ -20,6 +22,8 @@ import {
   sendResponseSchema,
   statusResponseSchema,
   uiTokenResponseSchema,
+  type CancelDirectiveRequest,
+  type CancelDirectiveResponse,
   type DirectiveNotifyRequest,
   type DirectiveNotifyResponse,
   type ReloadConfigResponse,
@@ -42,6 +46,14 @@ export interface DaemonClient {
   status(): Promise<StatusResponse>;
   send(req: SendRequest): Promise<SendResponse>;
   notifyDirective(req: DirectiveNotifyRequest): Promise<DirectiveNotifyResponse>;
+  /**
+   * Active-cancel a directive (Phase 2.4). Flips the row to `failed` and
+   * fires the brain's per-directive AbortController. Throws
+   * {@link IpcRequestError} with code `NOT_FOUND` (404) for unknown ids
+   * and `ALREADY_TERMINAL` (409) when the directive is already in a
+   * terminal status.
+   */
+  cancelDirective(id: string, req?: CancelDirectiveRequest): Promise<CancelDirectiveResponse>;
   reloadConfig(): Promise<ReloadConfigResponse>;
   /**
    * Fetch the live UI token + dashboard URL. Returns the same shape every
@@ -69,6 +81,19 @@ export function createDaemonClient(opts: DaemonClientOptions = {}): DaemonClient
     async notifyDirective(req: DirectiveNotifyRequest): Promise<DirectiveNotifyResponse> {
       const validated = directiveNotifyRequestSchema.parse(req);
       return post(base, '/directives/notify', validated, directiveNotifyResponseSchema, timeoutMs);
+    },
+    async cancelDirective(
+      id: string,
+      req: CancelDirectiveRequest = {},
+    ): Promise<CancelDirectiveResponse> {
+      const validated = cancelDirectiveRequestSchema.parse(req);
+      return post(
+        base,
+        `/directives/${encodeURIComponent(id)}/cancel`,
+        validated,
+        cancelDirectiveResponseSchema,
+        timeoutMs,
+      );
     },
     async reloadConfig(): Promise<ReloadConfigResponse> {
       return post(base, '/reload-config', {}, reloadConfigResponseSchema, timeoutMs);

@@ -26,6 +26,8 @@ import { createLogger } from '@factory5/logger';
 import type { ProviderRegistry } from '@factory5/providers';
 import { directives as directivesQ, type Database } from '@factory5/state';
 
+import { registerCancellation } from './cancellation.js';
+
 const log = createLogger('brain.serve');
 
 /** Default polling cadence when no doorbell is wired (or to catch missed events). */
@@ -112,16 +114,32 @@ export async function runServe(opts: ServeOptions): Promise<void> {
           { directiveId: directive.id, intent: directive.intent, inflight: inflight.size + 1 },
           'serve: claimed directive',
         );
+        // Phase 2.4 — register a per-directive cancellation controller.
+        // The combined signal fires on either parent-shutdown or a
+        // `factory cancel <id>` over IPC. Released in the finally clause
+        // below so a subsequent cancel for the same id is a no-op.
+        const cancellation = registerCancellation(directive.id, opts.signal);
         const runPromise = runOne(directive, {
           db: opts.db,
           registry: opts.registry,
           claimedBy,
-          signal: opts.signal,
+          signal: cancellation.signal,
         })
           .then(() => {
             log.info({ directiveId: directive.id }, 'serve: directive finished');
           })
           .catch((err: unknown) => {
+            // Operator-driven cancel: row has already been flipped to
+            // `failed` by the daemon's /cancel route — leave it alone.
+            // Recognised by the per-directive signal aborting while the
+            // parent (shutdown) signal is still live.
+            if (cancellation.signal.aborted && !opts.signal.aborted) {
+              log.info(
+                { directiveId: directive.id, err },
+                'serve: directive cancelled — DB row already updated by cancel route',
+              );
+              return;
+            }
             // If we aborted mid-run, mark the directive as blocked so it
             // doesn't get stuck in `running` forever — resume can pick it up.
             if (opts.signal.aborted) {
@@ -151,6 +169,7 @@ export async function runServe(opts: ServeOptions): Promise<void> {
             log.error({ err, directiveId: directive.id }, 'serve: directive threw');
           })
           .finally(() => {
+            cancellation.release();
             inflight.delete(directive.id);
             pendingWake?.();
           });

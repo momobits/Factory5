@@ -9,6 +9,7 @@
 
 export * from './agents/registry.js';
 export * from './ask-user.js';
+export * from './cancellation.js';
 export * from './loop.js';
 export * from './triage.js';
 export * from './architect.js';

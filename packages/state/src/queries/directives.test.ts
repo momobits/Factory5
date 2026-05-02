@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { runMigrations } from '../migrations/index.js';
 import * as directives from './directives.js';
-import { MarkBlockedError, ORPHAN_STALE_AFTER_MS } from './directives.js';
+import { CancelDirectiveError, MarkBlockedError, ORPHAN_STALE_AFTER_MS } from './directives.js';
 import * as modelUsage from './model-usage.js';
 
 type DirectiveRow = Parameters<typeof directives.insert>[1];
@@ -124,6 +124,81 @@ describe('directives.markBlocked', () => {
     ).run(d.id);
     directives.markBlocked(db, d.id, '   ');
     expect(directives.getById(db, d.id)?.blockedReason).toBe('pre-set');
+  });
+});
+
+describe('directives.cancelDirective (Phase 2.4)', () => {
+  let db: BetterSqlite3.Database;
+  beforeEach(() => {
+    db = freshDb();
+  });
+
+  it('flips running → failed with the supplied reason', () => {
+    const d = baseDirective();
+    directives.insert(db, d);
+    directives.updateStatus(db, d.id, 'running');
+
+    const out = directives.cancelDirective(db, d.id, '  user-initiated  ');
+    expect(out.status).toBe('failed');
+    expect(out.blockedReason).toBe('user-initiated');
+
+    const fresh = directives.getById(db, d.id);
+    expect(fresh?.status).toBe('failed');
+    expect(fresh?.blockedReason).toBe('user-initiated');
+  });
+
+  it('defaults reason to "cancelled" when omitted', () => {
+    const d = baseDirective();
+    directives.insert(db, d);
+    directives.updateStatus(db, d.id, 'running');
+
+    const out = directives.cancelDirective(db, d.id);
+    expect(out.status).toBe('failed');
+    expect(out.blockedReason).toBe('cancelled');
+  });
+
+  it('also accepts pending directives (cancel before claim)', () => {
+    const d = baseDirective();
+    directives.insert(db, d);
+
+    const out = directives.cancelDirective(db, d.id, 'changed my mind');
+    expect(out.status).toBe('failed');
+    expect(out.blockedReason).toBe('changed my mind');
+  });
+
+  it('throws NOT_FOUND for unknown id', () => {
+    expect.assertions(2);
+    try {
+      directives.cancelDirective(db, newId(), 'nope');
+    } catch (err) {
+      expect(err).toBeInstanceOf(CancelDirectiveError);
+      expect((err as CancelDirectiveError).code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('throws ALREADY_TERMINAL for terminal statuses', () => {
+    const states: Array<'blocked' | 'complete' | 'failed'> = ['blocked', 'complete', 'failed'];
+    for (const s of states) {
+      const d = baseDirective();
+      directives.insert(db, d);
+      directives.updateStatus(db, d.id, s);
+      expect.assertions(states.length * 2);
+      try {
+        directives.cancelDirective(db, d.id, 'too late');
+      } catch (err) {
+        expect(err).toBeInstanceOf(CancelDirectiveError);
+        expect((err as CancelDirectiveError).code).toBe('ALREADY_TERMINAL');
+      }
+    }
+  });
+
+  it('treats whitespace-only reason as default', () => {
+    const d = baseDirective();
+    directives.insert(db, d);
+    directives.updateStatus(db, d.id, 'running');
+
+    const out = directives.cancelDirective(db, d.id, '   \n\t  ');
+    expect(out.blockedReason).toBe('cancelled');
   });
 });
 
