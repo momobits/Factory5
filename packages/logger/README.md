@@ -55,11 +55,22 @@ Default minimum level is `info`. Override per process with `FACTORY5_LOG_LEVEL`.
 
 ## Operator interface
 
-(Implemented by `apps/factory` CLI; this package provides the substrate.)
+This package writes logs; the `factory` CLI surfaces them. Today `factory logs` is a stub — it prints a hint pointing at `~/.factory5/logs/` (or `%LOCALAPPDATA%\factory5\logs\` on Windows) and exits. Tail those files directly:
 
 ```bash
-factory logs                              # tail recent logs across all components
-factory logs --component brain --follow   # live tail brain logs
-factory logs --directive 01HQXM... --level warn+
-factory inspect 01HQXM...                 # all logs for a directive across processes
+# Linux / Mac
+tail -f ~/.factory5/logs/factoryd-*.log
+tail -f ~/.factory5/logs/factory-*.log
+
+# Windows (PowerShell)
+Get-Content -Wait $env:LOCALAPPDATA\factory5\logs\factoryd-*.log
 ```
+
+Each log line is one JSON object with stable component / correlation-id fields, so `jq` works for filtering:
+
+```bash
+jq 'select(.component == "brain.triage")' ~/.factory5/logs/factoryd-*.log
+jq 'select(.directiveId == "01HQXM...")' ~/.factory5/logs/factoryd-*.log
+```
+
+The richer `factory logs --component / --directive / --follow` and a directive-scoped log-stitcher are tracked as planned UX in the upgrade roadmap.

@@ -24,30 +24,6 @@ Severity:
 
 ## Open
 
-### U001 — packages/cli/README.md is stale
-
-- **Severity**: medium
-- **Tier**: 1
-- **Area**: docs / cli
-- **Description**: Has a "Phase" column from the Control era; missing rows for `factory spend`, `factory findings`, `factory questions cleanup` (all shipped); `factory logs` shown as "stub" but is planned-only today; `factory inspect` and `factory push` still listed as planned and may stay that way.
-- **Resolution**: Tier 1 doc sweep — drop Phase column, add missing rows, re-evaluate stub/planned markers.
-
-### U002 — packages/channels/README.md is catastrophically stale
-
-- **Severity**: high
-- **Tier**: 1
-- **Area**: docs / channels
-- **Description**: Says _"`telegram` channel — future (Phase 5+)"_; _"`web` channel — future"_; _"`discord` channel — phase-4 (this release)"_. Telegram is fully shipped (ADR 0022); web is fully shipped (ADRs 0025, 0027); Discord is matured beyond phase-4. Doc misleads any reader trying to understand the channel layer.
-- **Resolution**: Tier 1 doc sweep — rewrite Status section; add Telegram plugin section; add Web channel section (note that web isn't a `ChannelPlugin` — it's Fastify routes; clarify the boundary).
-
-### U003 — apps/factory-web/README.md has minor staleness
-
-- **Severity**: low
-- **Tier**: 1
-- **Area**: docs / web
-- **Description**: References "(wired in 9.3)" — phase-number scaffolding from Control era. Otherwise OK.
-- **Resolution**: Tier 1 doc sweep — strip phase-number references, add a brief page-index section.
-
 ### U004 — `factory cancel` does not exist; `mark-blocked` is the workaround
 
 - **Severity**: high
@@ -136,38 +112,6 @@ Severity:
 - **Description**: Pending-question round-trip is plain text on both Discord and Telegram. Discord supports buttons; Telegram supports inline keyboards. _"Answer / Skip / Escalate"_ buttons would be a meaningful UX upgrade.
 - **Resolution**: Tier 2 — add buttons on the pending-question outbound messages.
 
-### U014 — No `docs/ONBOARDING.md` section for the web UI
-
-- **Severity**: high
-- **Tier**: 1
-- **Area**: docs
-- **Description**: Dashboard URL is printed once at daemon startup and never explained in onboarding. New operators don't discover the dashboard.
-- **Resolution**: Tier 1 — add §"Web dashboard" between §"First build" and §"Discord channel".
-
-### U015 — No `docs/ONBOARDING.md` section for `factory chat`
-
-- **Severity**: high
-- **Tier**: 1
-- **Area**: docs
-- **Description**: The most natural ongoing-use surface (a REPL) has zero onboarding mention. New users who don't pick up Discord/Telegram never discover it.
-- **Resolution**: Tier 1 — add §"Chat" covering CLI, Discord, Telegram surfaces.
-
-### U016 — No `docs/WORKFLOWS.md` exists
-
-- **Severity**: high
-- **Tier**: 1
-- **Area**: docs
-- **Description**: No canonical "this is how you use factory5" doc. Four loops (one-shot autonomous, chat-driven, fix loop, resume after pause) are unspecified. No decision matrix for "when do I use which surface?".
-- **Resolution**: Tier 1 — write `docs/WORKFLOWS.md`.
-
-### U017 — No CLAUDE.md authoring guide
-
-- **Severity**: medium
-- **Tier**: 1
-- **Area**: docs
-- **Description**: factory consumes `<workspace>/<project>/CLAUDE.md` as the spec, but there's no doc explaining what makes a good spec. New users guess.
-- **Resolution**: Tier 1 — section in `docs/WORKFLOWS.md` (or separate `docs/AUTHORING-CLAUDE-MD.md` if it grows).
-
 ### U018 — CLI has no `--help` examples beyond Commander defaults
 
 - **Severity**: medium
@@ -220,4 +164,58 @@ Severity:
 
 ## Resolved
 
-(none yet)
+### U001 — packages/cli/README.md is stale
+
+- **Severity**: medium
+- **Tier**: 1
+- **Area**: docs / cli
+- **Description**: Has a "Phase" column from the Control era; missing rows for `factory spend`, `factory findings`, `factory questions cleanup` (all shipped); `factory logs` shown as "stub" but is planned-only today; `factory inspect` and `factory push` still listed as planned and may stay that way.
+- **Resolution**: Resolved 2026-05-02 — Tier 1 step 1.1, commit `d33635a`. Dropped Phase column; added `spend` / `findings list|show|backfill` / `questions cleanup` rows with per-command sections; removed `inspect` (never shipped) and `push` (ADR 0019 retired GitHub); reworded `logs` row to clarify it's a stub that prints a directory hint.
+
+### U002 — packages/channels/README.md is catastrophically stale
+
+- **Severity**: high
+- **Tier**: 1
+- **Area**: docs / channels
+- **Description**: Said _"`telegram` channel — future (Phase 5+)"_; _"`web` channel — future"_; _"`discord` channel — phase-4 (this release)"_. Telegram is fully shipped (ADR 0022); web is fully shipped (ADRs 0025, 0027); Discord is matured beyond phase-4. Doc misled any reader trying to understand the channel layer.
+- **Resolution**: Resolved 2026-05-02 — Tier 1 step 1.2, commit `c53f8d9`. Rewrote Status section to reflect what's shipped (`cli-rpc`, `discord`, `telegram` are all shipped; web UI is a Fastify mount, not a `ChannelPlugin`); added Telegram plugin section mirroring the Discord one; added "Web — not a `ChannelPlugin`" section that explicitly calls out the boundary.
+
+### U003 — apps/factory-web/README.md has minor staleness
+
+- **Severity**: low
+- **Tier**: 1
+- **Area**: docs / web
+- **Description**: Referenced "(wired in 9.3)" — phase-number scaffolding from Control era. Otherwise OK.
+- **Resolution**: Resolved 2026-05-02 — Tier 1 step 1.3, commit `30293ff`. Dropped the `(wired in 9.3)` parenthetical and reworded the Auth section to describe what `factory ui-token` does. Replaced the placeholder Routing section with a Pages table mapping URL → file → purpose for all ten SPA pages.
+
+### U014 — No `docs/ONBOARDING.md` section for the web UI
+
+- **Severity**: high
+- **Tier**: 1
+- **Area**: docs
+- **Description**: Dashboard URL was printed once at daemon startup and never explained in onboarding. New operators didn't discover the dashboard.
+- **Resolution**: Resolved 2026-05-02 — Tier 1 step 1.4, commit `0ffdd8d`. Added §5 "Web dashboard" with subsections covering open / recover URL / page tour / today's limitations; renumbered Discord / Telegram / multi-instance / backups / troubleshooting from §5–§9 to §6–§10 with inline §-reference updates; added two dashboard troubleshooting bullets and ADRs 0025 + 0027 to the Pointers section.
+
+### U015 — No `docs/ONBOARDING.md` section for `factory chat`
+
+- **Severity**: high
+- **Tier**: 1
+- **Area**: docs
+- **Description**: The most natural ongoing-use surface (a REPL) had zero onboarding mention. New users who didn't pick up Discord/Telegram never discovered it.
+- **Resolution**: Resolved 2026-05-02 — Tier 1 step 1.5, commit `010843b`. Added §6 "Chat — CLI / Discord / Telegram" with subsections for `factory chat` (sample transcript, `/quit`, 120 s timeout), Discord chat (mention → thread → `/build`), Telegram chat (DM-vs-group, reply-to-bot for pending questions), and the shared-Directive model that lets a conversation cross surfaces. Renumbered remaining sections by +1 with inline §-ref updates.
+
+### U016 — No `docs/WORKFLOWS.md` exists
+
+- **Severity**: high
+- **Tier**: 1
+- **Area**: docs
+- **Description**: No canonical "this is how you use factory5" doc. Four loops (one-shot autonomous, chat-driven, fix loop, resume after pause) were unspecified. No decision matrix for "when do I use which surface?".
+- **Resolution**: Resolved 2026-05-02 — Tier 1 step 1.6, commit `b813037`. Wrote `docs/WORKFLOWS.md` with §1 four canonical loops (each with a worked example), §2 surface decision matrix ("best for" + "avoid for" per surface), §3 CLAUDE.md authoring guide (see U017), and §4 see-also pointers. Added cross-references from `README.md`, `CLAUDE.md`, `docs/ARCHITECTURE.md`, and `docs/ONBOARDING.md` (4 of 4 anchor docs; the Phase 1 done-criterion required at least 3).
+
+### U017 — No CLAUDE.md authoring guide
+
+- **Severity**: medium
+- **Tier**: 1
+- **Area**: docs
+- **Description**: factory consumes `<workspace>/<project>/CLAUDE.md` as the spec, but there was no doc explaining what makes a good spec. New users guessed.
+- **Resolution**: Resolved 2026-05-02 — Tier 1 step 1.6, commit `b813037`. Folded into `docs/WORKFLOWS.md` §3 ("Authoring `CLAUDE.md` — what makes a good spec") with principles, anti-patterns, a worked 30-line example for a small CLI tool, and a brief "what the brain does with it" walkthrough mapping to the triage→architect→plan→assess→verify loop.
