@@ -107,10 +107,12 @@ Project state goes in `<workspace>/<project>/.factory/`. Never write to `~/.fact
 
 ## Pointers
 
-- `docs/ARCHITECTURE.md` — the system design (the _what_)
-- `docs/decisions/` — the ADRs (the _why_)
-- `docs/CONTRACTS.md` — exact data shapes
-- `docs/SKILLS.md`, `docs/AGENTS.md` — what skills/agents exist and when each is used
-- `docs/ONBOARDING.md` — clone-to-first-build walkthrough
+- [`.control/SPEC.md`](.control/SPEC.md) — canonical project spec (Control v2.0 single-file). Spec evolutions live in its git history; amend with `/spec-amend <slug>`.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the system design (the _what_)
+- [`docs/decisions/`](docs/decisions) — the ADRs (the _why_)
+- [`docs/CONTRACTS.md`](docs/CONTRACTS.md) — exact data shapes
+- [`docs/SKILLS.md`](docs/SKILLS.md), [`docs/AGENTS.md`](docs/AGENTS.md) — what skills/agents exist and when each is used
+- [`docs/ONBOARDING.md`](docs/ONBOARDING.md) — clone-to-first-build walkthrough
+- [`UPGRADE/`](UPGRADE) — current upgrade workspace (audit, roadmap, per-tier plans, log, issues)
 
 When in doubt, prefer reading these documents to spelunking the code. They exist precisely so future sessions don't drift.

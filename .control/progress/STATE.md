@@ -2,79 +2,100 @@
 
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
->
-> **This is the initial template.** On first install, fill in the project-specific
-> fields below. The "Current phase" stays as "not-yet-defined" until you complete
-> `/bootstrap` (or fill `.control/architecture/phase-plan.md` and scaffold Phase 1 manually).
 
-**Last updated:** <YYYY-MM-DD HH:MM UTC> by setup
-**Current phase:** not-yet-defined
-**Current step:** n/a (bootstrap -- no phase started)
-**Status:** needs-bootstrap
+**Last updated:** 2026-05-02 17:30 UTC by /bootstrap
+**Current phase:** 1 — doc-sweep
+**Current step:** 1.1 — Refresh `packages/cli/README.md`
+**Status:** ready
 
 ---
 
 ## Project spec
-**Canonical:** `.control/SPEC.md` (v2.0 single-file layout; not yet populated -- run `/bootstrap <spec-file>` or `/bootstrap` to scan)
+
+**Canonical:** `.control/SPEC.md` (v2.0 single-file layout)
 **Evolution:** `git log .control/SPEC.md` (and the `## Artifacts (chronological)` section in SPEC.md, populated by `/spec-amend <slug>`)
 **Role:** Source of truth for project content. When distilled docs (phase-plan, phase READMEs) disagree with the spec, the spec wins. Newer artifacts in SPEC.md's `## Artifacts` section win over conflicting content in the canonical sections above.
 
 ---
 
 ## Next action
-Run `/bootstrap <path-to-your-spec-file.md>` if you have a spec, OR `/bootstrap` (no args) to let Claude scan the codebase and produce a starter `.control/SPEC.md` through a guided questionnaire.
 
-After bootstrap populates everything, run `/session-start` to begin Phase 1.
+Open [`../phases/phase-1-doc-sweep/README.md`](../phases/phase-1-doc-sweep/README.md) and [`steps.md`](../phases/phase-1-doc-sweep/steps.md). Step 1.1 = refresh `packages/cli/README.md` per [`../../UPGRADE/plans/tier-1-doc-sweep.md`](../../UPGRADE/plans/tier-1-doc-sweep.md) §1.1. Drop the "Phase" column; add `spend` / `findings` / `questions cleanup` rows; re-evaluate `stub` / `planned` markers against actual `packages/cli/src/commands/`.
+
+Before starting Step 1.1: stage and commit pre-Phase-1 housekeeping (see "In-flight work" below).
 
 ---
 
 ## Git state
+
 - **Branch:** main
-- **Last commit:** <short-sha> -- chore: install Control framework
-- **Uncommitted changes:** none
-- **Last phase tag:** `protocol-initialised` (set by control-workflow init)
+- **Last commit:** `e94393e` — chore(install): install Control framework v2.2.1
+- **Uncommitted changes:** 3 modified + several untracked (see "In-flight work")
+- **Last phase tag:** `protocol-initialised` (set by control-workflow init at v2.2.1 reinstall)
 
 ---
 
 ## Open blockers
+
 - None
 
 ---
 
 ## In-flight work
-- None -- fresh install.
+
+Pre-Phase-1 housekeeping — three logical commits queued:
+
+1. **`docs: add UPGRADE workspace`** — 10 untracked files: `UPGRADE/{README,AUDIT,ROADMAP,LOG,ISSUES}.md`, `UPGRADE/plans/tier-{1..4}-*.md`, `UPGRADE/specs/README.md`. Created the upgrade workspace from the audit synthesis.
+2. **`docs: re-acknowledge Control framework after v2.2.1 reinstall`** — `M CLAUDE.md` (added Control framework section), `M UPGRADE/README.md` (Control orchestration line), `M .prettierignore` (`.control/` + `.claude/` excluded from project format). Plus `?? .claude/settings.json` from Control's installer (separate concern; user may bundle or commit separately).
+3. **`chore: bootstrap factory5 project docs (scanned from codebase)`** — this `/bootstrap` run: `M .control/SPEC.md`, `M .control/architecture/phase-plan.md`, `M .control/progress/STATE.md`, plus new `.control/phases/phase-1-doc-sweep/{README,steps}.md`, plus `M CLAUDE.md` (add SPEC + UPGRADE pointers).
+
+After committing these three, Step 1.1 can begin from a clean working tree.
 
 ---
 
 ## Test / eval status
-- **Last test run:** n/a (no tests yet)
+
+- **Last test run:** 2026-05-02 — 876 passed, 3 skipped (worker-sandbox Windows-only / Linux-only branches; `describe.skipIf`)
 - **Eval score** (agent phases only): n/a
-- **Regression tests:** n/a
+- **Regression tests:** unit + integration only; no eval harness
 
 ---
 
 ## Recent decisions (last 3 ADRs)
-- No ADRs yet. First ADR typically captures the tech-stack decision or project charter.
+
+- ADR 0028 — worker-sandbox-contract (per-spawn fs scoping; three Claude-Code-native primitives layered per-spawn)
+- ADR 0027 — web-ui-mutation-surface (`POST /api/v1/builds`, `POST /api/v1/pending-questions/:id/answer`, `PUT /api/v1/projects/:id/budget`)
+- ADR 0026 — pluggable-runtime-contract (assessor pluggable across Python / Node / Go / Rust; env-owning vs env-assuming provisioner; failure-mode taxonomy)
 
 ---
 
 ## Recently completed (last 5 steps)
-- Installed Control framework -- <YYYY-MM-DD> -- commit `<short-sha>`, tag `protocol-initialised`
+
+- Bootstrap (this `/bootstrap` run) — 2026-05-02 — uncommitted (will commit per "In-flight work" #3)
+- Control framework v2.2.1 reinstall + doc re-acknowledgement — 2026-05-02 — `e94393e` + uncommitted (will commit per "In-flight work" #2)
+- UPGRADE/ workspace creation — 2026-05-02 — uncommitted (will commit per "In-flight work" #1)
+- Docs consolidation (single ARCHITECTURE.md, drop build journal + resolved-issue tracker) — 2026-05-02 — `de17274`
+- Control framework v1 removal — 2026-05-02 — `f6fb28c`
 
 ---
 
 ## Attempts that didn't work (current step only)
-- None yet.
+
+- None yet — Step 1.1 not started.
 
 ---
 
 ## Environment snapshot
-- **Language / runtime:** n/a -- project stack not yet decided
-- **Key pinned deps:** n/a
-- **Model in use:** n/a
-- **Other:** n/a
+
+- **Language / runtime:** TypeScript on Node 20+ (currently running Node 22.22.2)
+- **Key pinned deps:** pnpm 9.12.0, tsup 8.5.1, vitest 2.1.9, prettier 3.8.3, eslint 9.39.4, better-sqlite3 (workspace), discord.js v14, grammy
+- **Model in use:** Claude Code (claude-opus-4-7[1m])
+- **Other:** Windows Server 2025 host
 
 ---
 
 ## Notes for next session
-Project just scaffolded with Control. Priority is running `/bootstrap` to populate the canonical spec at `.control/SPEC.md` plus all derived docs. Read `.control/PROJECT_PROTOCOL.md` at the root for the full framework reference.
+
+Phase 1 is doc-only — no live-LLM spend, no risk to production code. Most-felt UX gaps close in Phase 2 (channel parity) and Phase 3 (web UI live + complete). Tier ordering: 1 → 2 → 3+4 in parallel.
+
+Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions; this STATE.md is the operational cursor (overwritten at each `/session-end`).
