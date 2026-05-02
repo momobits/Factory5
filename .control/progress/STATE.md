@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-02 21:30 UTC by /phase-close
+**Last updated:** 2026-05-02 21:45 UTC by /session-end
 **Current phase:** 2 — channel-parity
 **Current step:** 2.1 — Wire Discord slash commands
-**Status:** ready
+**Status:** ready (phase 2 not started; clean handoff from phase 1 close)
 
 ---
 
@@ -27,9 +27,9 @@ Open [`../phases/phase-2-channel-parity/README.md`](../phases/phase-2-channel-pa
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `10e400a` — docs(1.8): tier-1 acceptance prep — mark U001-003/U014-017 resolved + fix orphan factory-inspect ref (the `chore(phase-1)` close commit will land on top of this when /phase-close finishes)
-- **Uncommitted changes:** Phase 2 scaffold + STATE.md + next.md + journal.md (about to be committed by /phase-close)
-- **Last phase tag:** `phase-1-doc-sweep-closed` (placed on commit `10e400a` by /phase-close; supersedes the legacy `phase-15-demand-driven-runoff-closed` tag from the removed v1 framework)
+- **Last commit:** `1384ae8` — chore(phase-1): close phase 1, kick off phase 2
+- **Uncommitted changes:** none (working tree clean)
+- **Last phase tag:** `phase-1-doc-sweep-closed` (annotated tag at commit `10e400a` — the last Phase 1 work commit; supersedes the legacy `phase-15-demand-driven-runoff-closed` from the removed v1 framework)
 
 ---
 
@@ -63,7 +63,7 @@ None. Phase 2 has not started yet.
 
 ## Recently completed (last 5 steps)
 
-- Phase 1 (doc-sweep) closed — tag `phase-1-doc-sweep-closed` on commit `10e400a` — 2026-05-02
+- Phase 1 (doc-sweep) closed + Phase 2 (channel-parity) scaffolded — close commit `1384ae8` (tag `phase-1-doc-sweep-closed` on `10e400a`) — 2026-05-02
 - Step 1.8 — tier-1 acceptance prep (mark U001-003/U014-017 resolved in UPGRADE/ISSUES.md; fix orphan factory-inspect ref in packages/logger/README.md) — 2026-05-02 — `10e400a`
 - Step 1.7 — reconcile `docs/SKILLS.md` + `docs/AGENTS.md` against current code (add `ask-user` skill row; update 4 agents' Tools + Default-skills columns) — 2026-05-02 — `e75b5dd`
 - Step 1.6 — write `docs/WORKFLOWS.md` (four canonical loops; surface decision matrix; CLAUDE.md authoring guide); cross-references from 4 anchor docs — 2026-05-02 — `b813037`
@@ -93,5 +93,7 @@ Phase 2 splits into ~2 sessions per the tier plan: **2a** = slash commands + `se
 Discord guild-vs-global slash-command scope decision: guild-scoped when `config.guildId` is set (instant register), global otherwise (1-hour propagation). Documented in tier-2 plan §"Risks + decisions".
 
 Phase 2 is the first phase that touches code (packages/channels, packages/brain, packages/cli, packages/state, packages/ipc). Live-smoke against a real Discord bot + Telegram bot is part of acceptance — confirm test bots are configured (`factory doctor`) before Step 2.1 starts.
+
+**Known hook bug:** `.claude/hooks/regenerate-next-md.ps1` reads STATE.md as CP-1252 but writes UTF-8, mangling em-dashes (`—` → `â€"`) and section signs (`§` → `Â§`) when the source contains those characters. Worked around at this session's /session-end by writing next.md manually after the hook ran. Worth a small fix during Phase 2 idle — open the script and ensure both the read and write specify UTF-8 explicitly (`Get-Content -Encoding utf8`, `Out-File -Encoding utf8`). The bash variant is presumably fine.
 
 Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions; this STATE.md is the operational cursor (overwritten at each `/session-end`).
