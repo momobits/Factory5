@@ -10,17 +10,17 @@ Agents are _roles_ in the build pipeline. Each agent has:
 
 > Initial agents inspired by `factory2/agents/` and the OmO Sisyphus/Hephaestus/Prometheus/Oracle pattern.
 
-| Agent          | Category    | Tools                               | Default skills                                              | Purpose                                                |
-| -------------- | ----------- | ----------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------ |
-| `triage`       | `quick`     | none (read-only classification)     | —                                                           | Classify a free-form directive into an `Intent`        |
-| `architect`    | `reasoning` | Read, Write, Glob, Grep             | `architect`, `documentation`, `brainstorming`               | Read CLAUDE.md → write `docs/knowledge/` wiki          |
-| `planner`      | `planning`  | Read, Glob, Grep                    | `progress-tracking`                                         | Decompose into a Task DAG                              |
-| `scaffolder`   | `planning`  | Read, Write, Edit, Bash, Glob       | `scaffolding`, `dependency-install`                         | Set up project skeleton, deps, git                     |
-| `builder`      | `deep`      | Read, Write, Edit, Bash, Glob, Grep | `tdd`, `progress-tracking`, `work-verification`             | Implement modules using strict TDD                     |
-| `reviewer`     | `reasoning` | Read, Write, Glob, Grep             | `code-review`                                               | Adversarial review — write shadow tests; never fix     |
-| `fixer`        | `reasoning` | Read, Write, Edit, Bash, Glob, Grep | `error-recovery`, `tdd`                                     | Fix specific findings by ID; respect existing patterns |
-| `investigator` | `reasoning` | Read, Bash, Glob, Grep              | `error-recovery`                                            | Diagnose novel problems without changing code          |
-| `verifier`     | `planning`  | Read, Bash, Glob, Grep              | `work-verification`, `integration-testing`, `documentation` | Run full verification checklist; generate docs         |
+| Agent          | Category    | Tools                                         | Default skills                                              | Purpose                                                |
+| -------------- | ----------- | --------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------ |
+| `triage`       | `quick`     | none (read-only classification)               | —                                                           | Classify a free-form directive into an `Intent`        |
+| `architect`    | `reasoning` | Read, Write, Glob, Grep                       | `architect`, `documentation`, `brainstorming`               | Read CLAUDE.md → write `docs/knowledge/` wiki          |
+| `planner`      | `planning`  | Read, Glob, Grep                              | `progress-tracking`                                         | Decompose into a Task DAG                              |
+| `scaffolder`   | `planning`  | Read, Write, Edit, Bash, Glob, ask_user       | `scaffolding`, `dependency-install`, `ask-user`             | Set up project skeleton, deps, git                     |
+| `builder`      | `deep`      | Read, Write, Edit, Bash, Glob, Grep, ask_user | `tdd`, `progress-tracking`, `work-verification`, `ask-user` | Implement modules using strict TDD                     |
+| `reviewer`     | `reasoning` | Read, Write, Glob, Grep                       | `code-review`                                               | Adversarial review — write shadow tests; never fix     |
+| `fixer`        | `reasoning` | Read, Write, Edit, Bash, Glob, Grep, ask_user | `error-recovery`, `tdd`, `ask-user`                         | Fix specific findings by ID; respect existing patterns |
+| `investigator` | `reasoning` | Read, Bash, Glob, Grep, ask_user              | `error-recovery`, `ask-user`                                | Diagnose novel problems without changing code          |
+| `verifier`     | `planning`  | Read, Bash, Glob, Grep                        | `work-verification`, `integration-testing`, `documentation` | Run full verification checklist; generate docs         |
 
 ## Adding an agent
 

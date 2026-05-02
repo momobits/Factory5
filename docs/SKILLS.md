@@ -6,19 +6,20 @@ Skill files live in [`../skills/`](../skills). Format: YAML frontmatter (`name`,
 
 > Initial skills ported from `factory2/skills/`. New skills follow the same shape.
 
-| Skill                 | Purpose                                                                                               | Used by                 |
-| --------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------- |
-| `architect`           | Design software architecture from a CLAUDE.md spec — produce concrete interfaces, patterns, decisions | `architect` agent       |
-| `brainstorming`       | Explore options before committing                                                                     | `architect`, `planner`  |
-| `code-review`         | Adversarial code review checklist                                                                     | `reviewer`              |
-| `dependency-install`  | Install + verify project dependencies                                                                 | `scaffolder`, `builder` |
-| `documentation`       | Produce README/architecture/API docs                                                                  | `verifier`, `architect` |
-| `error-recovery`      | Diagnose and recover from a failed step                                                               | `investigator`, `fixer` |
-| `integration-testing` | Write and run integration tests                                                                       | `builder`, `verifier`   |
-| `progress-tracking`   | Maintain BUILD.md findings + progress                                                                 | All agents              |
-| `scaffolding`         | Set up project structure, dependencies, git                                                           | `scaffolder`            |
-| `tdd`                 | Strict test-first development                                                                         | `builder`               |
-| `work-verification`   | Confirm work before claiming done                                                                     | All agents              |
+| Skill                 | Purpose                                                                                               | Used by                                          |
+| --------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `architect`           | Design software architecture from a CLAUDE.md spec — produce concrete interfaces, patterns, decisions | `architect` agent                                |
+| `ask-user`            | Heuristics for when to escalate via the `ask_user` MCP tool vs. guess and proceed (ADR 0024)          | `scaffolder`, `builder`, `fixer`, `investigator` |
+| `brainstorming`       | Explore options before committing                                                                     | `architect`, `planner`                           |
+| `code-review`         | Adversarial code review checklist                                                                     | `reviewer`                                       |
+| `dependency-install`  | Install + verify project dependencies                                                                 | `scaffolder`, `builder`                          |
+| `documentation`       | Produce README/architecture/API docs                                                                  | `verifier`, `architect`                          |
+| `error-recovery`      | Diagnose and recover from a failed step                                                               | `investigator`, `fixer`                          |
+| `integration-testing` | Write and run integration tests                                                                       | `builder`, `verifier`                            |
+| `progress-tracking`   | Maintain BUILD.md findings + progress                                                                 | All agents                                       |
+| `scaffolding`         | Set up project structure, dependencies, git                                                           | `scaffolder`                                     |
+| `tdd`                 | Strict test-first development                                                                         | `builder`                                        |
+| `work-verification`   | Confirm work before claiming done                                                                     | All agents                                       |
 
 ## Adding a skill
 

@@ -19,7 +19,7 @@ Bringing the user-facing docs into line with reality. Estimated **1 session**.
 - [x] Add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md`
 - [x] Write `docs/WORKFLOWS.md` — four canonical loops + decision matrix + CLAUDE.md authoring guide
 - [x] Reference `WORKFLOWS.md` from `README.md`, `CLAUDE.md`, `docs/ARCHITECTURE.md`, `docs/ONBOARDING.md`
-- [ ] Single-pass audit of `docs/SKILLS.md` + `docs/AGENTS.md` against current code
+- [x] Single-pass audit of `docs/SKILLS.md` + `docs/AGENTS.md` against current code
 
 Plan: [`plans/tier-1-doc-sweep.md`](plans/tier-1-doc-sweep.md)
 

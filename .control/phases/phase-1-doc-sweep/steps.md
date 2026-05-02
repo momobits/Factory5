@@ -6,7 +6,7 @@
 - [x] 1.4 — Add §"Web dashboard" to `docs/ONBOARDING.md` between §4 "First build" and §5 "Discord channel"
 - [x] 1.5 — Add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md`
 - [x] 1.6 — Write `docs/WORKFLOWS.md` — four canonical loops + decision matrix + CLAUDE.md authoring guide; cross-reference from `README.md`, `CLAUDE.md`, `docs/ARCHITECTURE.md`, `docs/ONBOARDING.md`
-- [ ] 1.7 — Single-pass audit of `docs/SKILLS.md` + `docs/AGENTS.md` against current code; reconcile any divergence
+- [x] 1.7 — Single-pass audit of `docs/SKILLS.md` + `docs/AGENTS.md` against current code; reconcile any divergence
 - [ ] 1.8 — `/phase-close` — tag `phase-1-doc-sweep-closed`; append session entry to [`../../../UPGRADE/LOG.md`](../../../UPGRADE/LOG.md); tick Tier 1 boxes in [`../../../UPGRADE/ROADMAP.md`](../../../UPGRADE/ROADMAP.md); scaffold Phase 2
 
 ## Step detail
