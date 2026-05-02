@@ -61,6 +61,7 @@ factory5/
 - [`docs/SKILLS.md`](docs/SKILLS.md) — skill catalog
 - [`docs/AGENTS.md`](docs/AGENTS.md) — agent role catalog
 - [`docs/ONBOARDING.md`](docs/ONBOARDING.md) — clone-to-first-build walkthrough
+- [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) — the four canonical loops + decision matrix + CLAUDE.md authoring guide
 
 ## Contributing / working on factory5
 

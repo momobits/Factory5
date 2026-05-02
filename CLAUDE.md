@@ -113,6 +113,7 @@ Project state goes in `<workspace>/<project>/.factory/`. Never write to `~/.fact
 - [`docs/CONTRACTS.md`](docs/CONTRACTS.md) — exact data shapes
 - [`docs/SKILLS.md`](docs/SKILLS.md), [`docs/AGENTS.md`](docs/AGENTS.md) — what skills/agents exist and when each is used
 - [`docs/ONBOARDING.md`](docs/ONBOARDING.md) — clone-to-first-build walkthrough
+- [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) — four canonical operator loops + surface decision matrix + CLAUDE.md authoring guide
 - [`UPGRADE/`](UPGRADE) — current upgrade workspace (audit, roadmap, per-tier plans, log, issues)
 
 When in doubt, prefer reading these documents to spelunking the code. They exist precisely so future sessions don't drift.

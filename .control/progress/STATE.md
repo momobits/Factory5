@@ -3,9 +3,9 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-02 20:15 UTC by step 1.5 commit
+**Last updated:** 2026-05-02 20:45 UTC by step 1.6 commit
 **Current phase:** 1 — doc-sweep
-**Current step:** 1.6 — Write `docs/WORKFLOWS.md`
+**Current step:** 1.7 — Audit `docs/SKILLS.md` + `docs/AGENTS.md` against current code
 **Status:** ready
 
 ---
@@ -20,7 +20,7 @@
 
 ## Next action
 
-Step 1.6 — write `docs/WORKFLOWS.md` per [`../../UPGRADE/plans/tier-1-doc-sweep.md`](../../UPGRADE/plans/tier-1-doc-sweep.md) §1.6 — the most important deliverable in this phase. Four sections: (§1) the four canonical loops (one-shot autonomous, chat-driven, iterative fix loop, resume-after-pause) with worked examples; (§2) decision matrix for which surface fits which task; (§3) CLAUDE.md authoring guide with a 30-line worked example; (§4) cross-references. Then add inbound links from `README.md`, `CLAUDE.md`, `docs/ARCHITECTURE.md`, and `docs/ONBOARDING.md`.
+Step 1.7 — single-pass audit of `docs/SKILLS.md` + `docs/AGENTS.md` against current code per [`../../UPGRADE/plans/tier-1-doc-sweep.md`](../../UPGRADE/plans/tier-1-doc-sweep.md) §1.7. For each skill listed in `SKILLS.md`, verify the corresponding `skills/<name>.md` exists. For each agent in `AGENTS.md`, verify it's referenced from `packages/brain/src/`. Update either doc to match code where they've drifted. Commit shape depends on outcome: `docs(1.7): reconcile SKILLS.md + AGENTS.md against current code` if changes; `docs(1.7): SKILLS.md + AGENTS.md verified current; no changes` if not.
 
 ---
 
@@ -63,11 +63,11 @@ None — pre-Phase-1 housekeeping committed (see "Recently completed"). Step 1.1
 
 ## Recently completed (last 5 steps)
 
-- Step 1.5 — add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md` (factory chat REPL with `/quit` and 120s timeout / U005; Discord mention→thread; Telegram DM + reply-to; shared `Directive` model); renumber sections from §6 onward (+1) and update inline §-refs on lines 17/18/71; add two chat-related troubleshooting bullets — 2026-05-02 — pending commit
-- Step 1.4 — add §"Web dashboard" to `docs/ONBOARDING.md` (open / recover URL / page tour / limitations); section renumber + inline §-ref updates — 2026-05-02 — `0ffdd8d`
+- Step 1.6 — write `docs/WORKFLOWS.md` (four canonical loops; surface decision matrix; CLAUDE.md authoring guide with 30-line worked example; see-also pointers); cross-references added from README.md, CLAUDE.md, docs/ARCHITECTURE.md, docs/ONBOARDING.md (4 of 4 anchor docs, exceeds the 3-doc done-criterion) — 2026-05-02 — pending commit
+- Step 1.5 — add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md`; section renumber + inline §-ref updates — 2026-05-02 — `010843b`
+- Step 1.4 — add §"Web dashboard" to `docs/ONBOARDING.md` (open / recover URL / page tour / limitations) — 2026-05-02 — `0ffdd8d`
 - Step 1.3 — refresh `apps/factory-web/README.md` (drop `(wired in 9.3)` phase ref; replace Routing stub with 10-page index) — 2026-05-02 — `30293ff`
-- Step 1.2 — refresh `packages/channels/README.md` (Status reflects what's shipped; new Telegram plugin + Web ≠ ChannelPlugin sections) — 2026-05-02 — `c53f8d9`
-- Step 1.1 — refresh `packages/cli/README.md` (drop Phase column; add spend/findings/questions cleanup rows) — 2026-05-02 — `d33635a`
+- Step 1.2 — refresh `packages/channels/README.md` (Status reflects what's shipped; Telegram plugin + Web ≠ ChannelPlugin sections) — 2026-05-02 — `c53f8d9`
 
 ---
 
