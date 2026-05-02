@@ -1,0 +1,94 @@
+# Roadmap — factory5 first-class upgrade
+
+Four tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small.
+
+## Status legend
+
+- `[ ]` not started
+- `[~]` in progress
+- `[x]` complete
+
+## Tier 1 — Doc + UX cleanup
+
+Bringing the user-facing docs into line with reality. Estimated **1 session**.
+
+- [ ] Fix `packages/cli/README.md` — drop "Phase" column, add `spend` / `findings` / `questions cleanup` rows, re-evaluate stub/planned markers
+- [ ] Fix `packages/channels/README.md` — Telegram + web no longer "future"; add Telegram and Web sections
+- [ ] Fix `apps/factory-web/README.md` — remove phase-number references, add page index
+- [ ] Add §"Web dashboard" to `docs/ONBOARDING.md`
+- [ ] Add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md`
+- [ ] Write `docs/WORKFLOWS.md` — four canonical loops + decision matrix + CLAUDE.md authoring guide
+- [ ] Reference `WORKFLOWS.md` from `README.md`, `CLAUDE.md`, `docs/ARCHITECTURE.md`, `docs/ONBOARDING.md`
+- [ ] Single-pass audit of `docs/SKILLS.md` + `docs/AGENTS.md` against current code
+
+Plan: [`plans/tier-1-doc-sweep.md`](plans/tier-1-doc-sweep.md)
+
+## Tier 2 — Channel parity
+
+Discord/Telegram only emit `intent=build` and `intent=chat` today. Bring them up to the brain's full eight-intent vocabulary. Estimated **2 sessions**.
+
+- [ ] Discord slash commands — `/factory status / spend / findings / resume / cancel / budget` (wire `applicationId`)
+- [ ] Discord embeds for status / findings / spend responses
+- [ ] Telegram bot commands — `setMyCommands` + matching parser
+- [ ] Telegram inline keyboard buttons on pending-question messages (Answer / Skip / Escalate)
+- [ ] Discord buttons on pending-question messages (same shape)
+- [ ] Add `factory cancel <directive-id>` — CLI command + IPC route + brain hook (kills worker, not just flips status)
+- [ ] Update triage prompt to classify chat across all 8 intents
+- [ ] Channel handlers re-route classified intents (e.g. `intent=status` from Telegram chat answers with status, not LLM chat)
+
+Plan: [`plans/tier-2-channel-parity.md`](plans/tier-2-channel-parity.md)
+
+## Tier 3 — Web UI live and complete
+
+Vanilla DOM-in-Astro → real Astro components + live updates + complete operating surface. Estimated **2-3 sessions**.
+
+- [ ] SSE on `/api/v1/directives/:id/stream` — events: `task.*`, `finding.created`, `spend.updated`, `log.line`
+- [ ] Wire `directives/detail.astro` to the SSE stream (live tasks, findings, spend, log tail)
+- [ ] Astro component library — `<Card>`, `<Table>`, `<EmptyState>`, `<Alert>`, `<Form>`, `<Layout>`
+- [ ] Convert all 9 pages to use components; retire `el()` from `lib/api.ts`
+- [ ] Add `/app/chat` page — mirror of `factory chat` in browser
+- [ ] Add cancel/pause buttons on directive detail
+- [ ] Add `/app/projects/new` — mirror of `factory init` for a single project
+- [ ] Spend page charts — sparkline per project + 30-day daily stacked bar
+- [ ] Mobile-responsive nav (hamburger drawer at narrow widths)
+- [ ] Explicit logout + connection-status indicator in header
+
+Plan: [`plans/tier-3-web-ui-live-and-complete.md`](plans/tier-3-web-ui-live-and-complete.md)
+
+## Tier 4 — CLI completion
+
+Polish. Estimated **1 session**.
+
+- [ ] `factory cancel <directive-id>` (shared with Tier 2)
+- [ ] `factory budget set <project> --max-usd <n> [--max-steps <n>]`
+- [ ] `factory project list / show <name> / delete <name>`
+- [ ] `factory ask "<question>"` — single-shot chat
+- [ ] Tab completion for bash/zsh/pwsh
+- [ ] Rich `--help` examples on every command (`addHelpText('after', ...)`)
+
+Plan: [`plans/tier-4-cli-completion.md`](plans/tier-4-cli-completion.md)
+
+## Out of scope (now)
+
+Items the audit raised that are deferred:
+
+- **Bash sandboxing** — defer-on-incident; ADR 0028 §4 still applies; no demand signal yet.
+- **Network egress scoping** — long-tail concern; wait for an egress-policy demand signal.
+- **Multi-user UI auth** — single-operator design is OK for now.
+- **Multi-tenant SaaS daemon** — out of charter.
+- **VS Code extension** — out of charter.
+- **Hosted "factory cloud"** — out of charter.
+
+These can be promoted to Tier 5+ if/when the demand signal arrives.
+
+## Dependencies between tiers
+
+| Item                                                   | Depends on                                                              |
+| ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Tier 2 channel parity (status/spend/findings handlers) | Tier 1 docs (so the in-channel responses can link to docs/WORKFLOWS.md) |
+| Tier 3 cancel button                                   | Tier 2 `factory cancel` shared code path                                |
+| Tier 3 SSE stream                                      | Independent (can ship before Tier 2)                                    |
+| Tier 4 CLI cancel                                      | Tier 2 brain hook (worker-kill plumbing)                                |
+| Tier 4 CLI budget                                      | Independent (already wired on web side)                                 |
+
+So Tier 1 → Tier 2 → Tier 3 + Tier 4 in parallel works. Tier 3 and Tier 4 share no critical code, so a session can pick either.

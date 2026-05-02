@@ -58,3 +58,9 @@ docs/api/
 .factory/
 
 notes.md
+
+# --- Control framework ---
+.control/snapshots/
+.control/.is-source-repo
+.claude/settings.local.json
+# --- /Control ---
