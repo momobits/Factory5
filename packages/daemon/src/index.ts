@@ -23,7 +23,13 @@ import { createLogger } from '@factory5/logger';
 import { closeDatabase, openDatabase, runMigrations, type Database } from '@factory5/state';
 
 import type { Directive, DirectiveLimits, Event, ProjectBudgetDefaults } from '@factory5/core';
-import { askUser, channelConfigFor, loadConfig } from '@factory5/brain';
+import {
+  askUser,
+  buildRegistryFromDisk,
+  channelConfigFor,
+  loadConfig,
+  triageDirective,
+} from '@factory5/brain';
 import {
   createChannelRegistry,
   createCliRpcChannel,
@@ -327,6 +333,33 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
           throw err;
         }
       };
+      // Phase 2.5 — classifyIntent closure for channel handlers. Built only
+      // when a provider registry is reachable (caller-supplied or buildable
+      // from `config.toml`). Failures here are logged but non-fatal — the
+      // channel registry just runs without classifyIntent and falls back to
+      // the legacy "every chat is intent=chat" path.
+      let classifyIntent:
+        | ((
+            text: string,
+          ) => Promise<{ intent: Directive['intent']; confidence: number; reasoning: string }>)
+        | undefined;
+      try {
+        const triageRegistry = opts.providerRegistry ?? (await buildRegistryFromDisk());
+        classifyIntent = async (text: string) => {
+          const result = await triageDirective(text, { registry: triageRegistry });
+          return {
+            intent: result.intent,
+            confidence: result.confidence,
+            reasoning: result.reasoning,
+          };
+        };
+      } catch (err) {
+        log.warn(
+          { err },
+          'daemon: provider registry unavailable — channel chat-routing disabled (legacy intent=chat fallback)',
+        );
+      }
+
       const registry = createChannelRegistry({
         log: createLogger('daemon.channels'),
         plugins,
@@ -343,6 +376,7 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
         resolveProjectPath: registryResolveProjectPath,
         resolveBuildLimits: registryResolveBuildLimits,
         setProjectBudget: registrySetProjectBudget,
+        ...(classifyIntent !== undefined ? { classifyIntent } : {}),
       });
       await registry.start();
       subsystems.push({ name: 'channels', stop: () => registry.stop() });

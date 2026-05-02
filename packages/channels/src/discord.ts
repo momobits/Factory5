@@ -67,11 +67,14 @@ import {
 } from 'discord.js';
 import { z } from 'zod';
 
+import { routeChatIntent, type ChatRoutedDispatch } from './chat-routing.js';
 import {
   buildFactorySlashCommand,
   dispatchSlashInteraction,
+  runChatRoutedDiscordCommand,
   type DiscordCommandContext,
 } from './discord-commands.js';
+import type { CommandHandlerContext } from './command-handlers.js';
 import type { ChannelContext, ChannelPlugin, SendResult } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -344,6 +347,7 @@ export class DiscordChannel implements ChannelPlugin {
   private resolveProjectPath: ChannelContext['resolveProjectPath'] | undefined;
   private resolveBuildLimits: ChannelContext['resolveBuildLimits'] | undefined;
   private setProjectBudget: ChannelContext['setProjectBudget'] | undefined;
+  private classifyIntent: ChannelContext['classifyIntent'] | undefined;
   private db: Database | undefined;
   private ownsDb = false;
   private messageHandler: ((msg: Message) => Promise<void>) | undefined;
@@ -361,6 +365,7 @@ export class DiscordChannel implements ChannelPlugin {
     this.resolveProjectPath = ctx.resolveProjectPath;
     this.resolveBuildLimits = ctx.resolveBuildLimits;
     this.setProjectBudget = ctx.setProjectBudget;
+    this.classifyIntent = ctx.classifyIntent;
     this.config = discordConfigSchema.parse(rawConfig);
 
     if (this.externalDb !== undefined) {
@@ -527,6 +532,17 @@ export class DiscordChannel implements ChannelPlugin {
 
     if (this.onInbound === undefined || this.db === undefined) return;
 
+    // Phase 2.5 — when the prefix-detector picked `chat`, ask the brain's
+    // triage to classify the free-form text. If it's actually a read-side
+    // intent (status/spend/findings/resume) or a chat-shaped build with a
+    // clear project token, run the matching command-handler and post the
+    // formatted reply directly. The legacy "create chat directive" path
+    // is the fallback.
+    if (intent === 'chat' && this.classifyIntent !== undefined) {
+      const dispatched = await this.maybeRouteChatIntent(message, text, threadOrRef);
+      if (dispatched) return;
+    }
+
     // For build intent, resolve project name to absolute workspace path
     // before enqueueing — parallels the Telegram change (issue I011).
     let payload: Record<string, unknown>;
@@ -653,6 +669,82 @@ export class DiscordChannel implements ChannelPlugin {
     // Fire-and-forget ack — failures here don't invalidate the answer.
     void message.reply(`(answered question ${row.id})`).catch((err: unknown) => {
       this.log?.warn({ err, questionId: row.id }, 'discord: answer ack failed');
+    });
+    return true;
+  }
+
+  /**
+   * Phase 2.5 — classify chat-shaped text and re-route it to a read-side
+   * command when triage is confident enough. Returns `true` if the
+   * message was handled (caller skips chat-directive creation).
+   *
+   * Failure modes are deliberately quiet: any throw from triage or
+   * command dispatch logs a warn and returns `false` so the legacy
+   * chat-directive path takes over.
+   */
+  private async maybeRouteChatIntent(
+    message: Message,
+    text: string,
+    channelRef: string,
+  ): Promise<boolean> {
+    if (
+      this.classifyIntent === undefined ||
+      this.db === undefined ||
+      this.log === undefined ||
+      this.onInbound === undefined
+    ) {
+      return false;
+    }
+    let classification;
+    try {
+      classification = await this.classifyIntent(text);
+    } catch (err) {
+      this.log.warn({ err, text: text.slice(0, 200) }, 'discord: classifyIntent failed');
+      return false;
+    }
+    const dispatch = routeChatIntent(classification, text);
+    if (dispatch === undefined) return false;
+
+    const handlerCtx: CommandHandlerContext = {
+      db: this.db,
+      log: this.log,
+      source: 'discord',
+      principal: message.author.id,
+      channelRef,
+      onInbound: this.onInbound,
+      resolveProjectPath: this.resolveProjectPath,
+      resolveBuildLimits: this.resolveBuildLimits,
+      setProjectBudget: this.setProjectBudget,
+    };
+
+    let embed;
+    try {
+      embed = await runChatRoutedDiscordCommand(
+        handlerCtx,
+        this.db,
+        dispatch as ChatRoutedDispatch,
+      );
+    } catch (err) {
+      this.log.warn(
+        { err, command: dispatch.command, intent: classification.intent },
+        'discord: chat-routed command threw — falling back to chat directive',
+      );
+      return false;
+    }
+    this.log.info(
+      {
+        intent: classification.intent,
+        confidence: classification.confidence,
+        command: dispatch.command,
+        userId: message.author.id,
+      },
+      'discord: chat re-routed to read-side command',
+    );
+    type Replyable = {
+      reply: (payload: { embeds: unknown[] }) => Promise<{ id: string }>;
+    };
+    void (message as unknown as Replyable).reply({ embeds: [embed] }).catch((err: unknown) => {
+      this.log?.warn({ err, command: dispatch.command }, 'discord: chat-routed reply failed');
     });
     return true;
   }

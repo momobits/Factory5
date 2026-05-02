@@ -11,11 +11,24 @@ import type {
   ChannelId,
   Directive,
   DirectiveLimits,
+  Intent,
   OutboundMessage,
   ProjectBudgetDefaults,
 } from '@factory5/core';
 import type { Logger } from '@factory5/logger';
 import type { ZodSchema } from 'zod';
+
+/**
+ * Triage classification surfaced to the channel handler (Phase 2.5). The
+ * brain's full {@link TriageResult} carries a `raw` model-text field for
+ * audit; this slim shape strips that down to what the channel actually
+ * routes on, so consumers don't pull the brain package in.
+ */
+export interface IntentClassification {
+  intent: Intent;
+  confidence: number;
+  reasoning: string;
+}
 
 export interface ChannelCapabilities {
   /** Channel can ingest messages (push directives in). */
@@ -92,6 +105,19 @@ export interface ChannelContext {
     name: string,
     defaults: ProjectBudgetDefaults,
   ) => Promise<{ projectId: string; defaults: ProjectBudgetDefaults }>;
+  /**
+   * Classify a free-form chat message into an {@link Intent} (Phase 2.5).
+   * The daemon binds this to the brain's `triageDirective` against the
+   * configured provider registry; the channel handler calls it BEFORE
+   * deciding whether to create a chat directive vs. dispatch a read-side
+   * command (`runStatus`/`runSpend`/`runFindings`/`runResume`).
+   *
+   * Optional — when unset, the channel handler skips classification and
+   * falls back to the legacy "every non-slash message becomes
+   * `intent=chat`" behaviour. Test rigs that don't wire a brain registry
+   * leave this undefined.
+   */
+  classifyIntent?: (text: string) => Promise<IntentClassification>;
 }
 
 /**

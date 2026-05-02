@@ -303,7 +303,10 @@ async function runSubcommand(
     case 'status':
       return embedStatus(ctx.db, await runStatus(handlerCtx, statusInput(interaction)));
     case 'spend':
-      return embedSpend(await runSpend(handlerCtx, spendInput(interaction)), interaction);
+      return embedSpend(
+        await runSpend(handlerCtx, spendInput(interaction)),
+        interaction.options.getString('project') ?? undefined,
+      );
     case 'findings':
       return embedFindings(await runFindings(handlerCtx, findingsInput(interaction)));
     case 'resume':
@@ -314,6 +317,47 @@ async function runSubcommand(
       return embedBudget(await runBudget(handlerCtx, budgetInput(interaction)));
     case 'build':
       return embedBuild(await runBuild(handlerCtx, buildInput(interaction)));
+  }
+}
+
+/**
+ * Phase 2.5 — run the chat-routed read-side command and return the
+ * Discord embed. Shared between slash dispatch and the inbound chat
+ * handler so both surfaces produce identical replies.
+ *
+ * The dispatch's `command` is one of `status` / `spend` / `findings` /
+ * `resume` / `build` (cancel and budget are explicit-only via slash);
+ * the matching `run<Cmd>` from `command-handlers.ts` produces typed
+ * data which the existing embed renderers format.
+ */
+export async function runChatRoutedDiscordCommand(
+  handlerCtx: CommandHandlerContext,
+  db: Database,
+  dispatch: { command: 'status' | 'spend' | 'findings' | 'resume' | 'build'; input: unknown },
+): Promise<EmbedBuilder> {
+  switch (dispatch.command) {
+    case 'status':
+      return embedStatus(
+        db,
+        await runStatus(handlerCtx, dispatch.input as Parameters<typeof runStatus>[1]),
+      );
+    case 'spend': {
+      const input = dispatch.input as Parameters<typeof runSpend>[1];
+      const projectFilter = input.project ?? undefined;
+      return embedSpend(await runSpend(handlerCtx, input), projectFilter);
+    }
+    case 'findings':
+      return embedFindings(
+        await runFindings(handlerCtx, dispatch.input as Parameters<typeof runFindings>[1]),
+      );
+    case 'resume':
+      return embedResume(
+        await runResume(handlerCtx, dispatch.input as Parameters<typeof runResume>[1]),
+      );
+    case 'build':
+      return embedBuild(
+        await runBuild(handlerCtx, dispatch.input as Parameters<typeof runBuild>[1]),
+      );
   }
 }
 
@@ -472,13 +516,9 @@ function embedStatus(db: Database, data: StatusData): EmbedBuilder {
     .setTimestamp();
 }
 
-function embedSpend(
-  result: CommandResult<SpendData>,
-  interaction: ChatInputCommandInteraction,
-): EmbedBuilder {
+function embedSpend(result: CommandResult<SpendData>, projectFilter?: string): EmbedBuilder {
   if (!result.ok) return errorEmbed('spend', result.message);
   const data = result.data;
-  const projectFilter = interaction.options.getString('project') ?? undefined;
   let body: string;
   switch (data.groupBy) {
     case 'project':

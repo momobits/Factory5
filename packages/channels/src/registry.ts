@@ -18,7 +18,7 @@ import type {
 } from '@factory5/core';
 import type { Logger } from '@factory5/logger';
 
-import type { ChannelPlugin, SendResult } from './types.js';
+import type { ChannelPlugin, IntentClassification, SendResult } from './types.js';
 
 export type ChannelStatus = 'ready' | 'starting' | 'failed' | 'disabled';
 
@@ -70,6 +70,16 @@ export interface ChannelRegistryOptions {
     name: string,
     defaults: ProjectBudgetDefaults,
   ) => Promise<{ projectId: string; defaults: ProjectBudgetDefaults }>;
+  /**
+   * Optional triage classifier (Phase 2.5). When set, channels can ask
+   * the brain to classify a free-form chat message before deciding
+   * whether to create a chat directive vs. dispatch a read-side
+   * command. Daemon binds this to a closure over `brain.triageDirective`
+   * + the configured provider registry. When unset (tests / standalone
+   * scripts), channels skip pre-classification and fall back to the
+   * legacy "every non-slash message becomes intent=chat" path.
+   */
+  classifyIntent?: (text: string) => Promise<IntentClassification>;
 }
 
 /**
@@ -91,6 +101,7 @@ export class ChannelRegistry implements ChannelRegistryView {
   private readonly resolveProjectPath: ChannelRegistryOptions['resolveProjectPath'];
   private readonly resolveBuildLimits: ChannelRegistryOptions['resolveBuildLimits'];
   private readonly setProjectBudget: ChannelRegistryOptions['setProjectBudget'];
+  private readonly classifyIntent: ChannelRegistryOptions['classifyIntent'];
 
   constructor(opts: ChannelRegistryOptions) {
     this.log = opts.log;
@@ -98,6 +109,7 @@ export class ChannelRegistry implements ChannelRegistryView {
     this.resolveProjectPath = opts.resolveProjectPath;
     this.resolveBuildLimits = opts.resolveBuildLimits;
     this.setProjectBudget = opts.setProjectBudget;
+    this.classifyIntent = opts.classifyIntent;
     this.configByPlugin = new Map(opts.plugins.map((p) => [p.plugin, p.config]));
     for (const { plugin } of opts.plugins) {
       this.entries.set(plugin.id, {
@@ -145,6 +157,7 @@ export class ChannelRegistry implements ChannelRegistryView {
             ...(this.setProjectBudget !== undefined
               ? { setProjectBudget: this.setProjectBudget }
               : {}),
+            ...(this.classifyIntent !== undefined ? { classifyIntent: this.classifyIntent } : {}),
           },
           validated,
         );

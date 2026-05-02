@@ -1018,3 +1018,291 @@ describe('DiscordChannel button + modal interaction', () => {
     await plugin.stop();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 2.5 — chat → read-side command re-routing
+// ---------------------------------------------------------------------------
+
+interface ReplyRecord {
+  embeds?: unknown[];
+  content?: string;
+}
+
+function captureReply(): {
+  spy: ReturnType<typeof vi.fn>;
+  records: ReplyRecord[];
+} {
+  const records: ReplyRecord[] = [];
+  const spy = vi.fn(async (payload: unknown) => {
+    if (typeof payload === 'string') {
+      records.push({ content: payload });
+    } else if (payload !== null && typeof payload === 'object') {
+      records.push(payload as ReplyRecord);
+    }
+    return { id: `reply-${records.length.toString()}` };
+  });
+  return { spy, records };
+}
+
+describe('DiscordChannel chat-routing (Phase 2.5)', () => {
+  it('chat → status: classifies as status, dispatches runStatus, no chat directive', async () => {
+    const stub = makeStubClient();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const reply = captureReply();
+    const plugin = createDiscordChannel({ clientFactory: () => stub.client, db });
+    await plugin.start(
+      {
+        log: createLogger('test.discord.routing'),
+        onInbound: (d) => inbounds.push(d),
+        classifyIntent: async () => ({
+          intent: 'status',
+          confidence: 0.9,
+          reasoning: 'state query',
+        }),
+      },
+      { token: 'x' },
+    );
+    stub.fireReady();
+    await stub.emit(
+      makeMessage({
+        id: 'm-status',
+        content: "<@bot-1> what's running?",
+        authorId: 'u1',
+        channelId: 'chan-1',
+        reply: reply.spy,
+      }),
+    );
+    expect(inbounds).toHaveLength(0);
+    expect(reply.spy).toHaveBeenCalledTimes(1);
+    expect(reply.records[0]?.embeds).toBeDefined();
+    expect(Array.isArray(reply.records[0]?.embeds)).toBe(true);
+    expect(reply.records[0]?.embeds).toHaveLength(1);
+    await plugin.stop();
+  });
+
+  it('chat → spend: status intent + spend keyword routes to runSpend', async () => {
+    const stub = makeStubClient();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const reply = captureReply();
+    const plugin = createDiscordChannel({ clientFactory: () => stub.client, db });
+    await plugin.start(
+      {
+        log: createLogger('test.discord.routing'),
+        onInbound: (d) => inbounds.push(d),
+        classifyIntent: async () => ({
+          intent: 'status',
+          confidence: 0.92,
+          reasoning: 'spend report',
+        }),
+      },
+      { token: 'x' },
+    );
+    stub.fireReady();
+    await stub.emit(
+      makeMessage({
+        id: 'm-spend',
+        content: '<@bot-1> show me the spend',
+        authorId: 'u1',
+        channelId: 'chan-1',
+        reply: reply.spy,
+      }),
+    );
+    expect(inbounds).toHaveLength(0);
+    expect(reply.spy).toHaveBeenCalledTimes(1);
+    // The embed title carries the group-by suffix.
+    const embed = (
+      reply.records[0]?.embeds?.[0] as { toJSON?: () => { title?: string } }
+    )?.toJSON?.();
+    expect(embed?.title).toMatch(/spend/i);
+    await plugin.stop();
+  });
+
+  it('chat → findings: status intent + findings keyword routes to runFindings', async () => {
+    const stub = makeStubClient();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const reply = captureReply();
+    const plugin = createDiscordChannel({ clientFactory: () => stub.client, db });
+    await plugin.start(
+      {
+        log: createLogger('test.discord.routing'),
+        onInbound: (d) => inbounds.push(d),
+        classifyIntent: async () => ({
+          intent: 'status',
+          confidence: 0.88,
+          reasoning: 'findings query',
+        }),
+      },
+      { token: 'x' },
+    );
+    stub.fireReady();
+    await stub.emit(
+      makeMessage({
+        id: 'm-findings',
+        content: '<@bot-1> any open findings?',
+        authorId: 'u1',
+        channelId: 'chan-1',
+        reply: reply.spy,
+      }),
+    );
+    expect(inbounds).toHaveLength(0);
+    expect(reply.spy).toHaveBeenCalledTimes(1);
+    const embed = (
+      reply.records[0]?.embeds?.[0] as { toJSON?: () => { title?: string } }
+    )?.toJSON?.();
+    expect(embed?.title).toMatch(/findings/i);
+    await plugin.stop();
+  });
+
+  it('chat → resume: classifies as resume, runResume creates a resume directive', async () => {
+    const stub = makeStubClient();
+    const db = freshDb();
+    // Seed a prior directive so runResume has something to resume.
+    const priorId = newId();
+    directivesQ.insert(db, {
+      id: priorId,
+      source: 'discord',
+      principal: 'u1',
+      channelRef: 'chan-1#prior',
+      intent: 'build',
+      payload: { project: 'mytool', projectPath: '/tmp/mytool' },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'blocked',
+    });
+
+    const inbounds: Directive[] = [];
+    const reply = captureReply();
+    const plugin = createDiscordChannel({ clientFactory: () => stub.client, db });
+    await plugin.start(
+      {
+        log: createLogger('test.discord.routing'),
+        onInbound: (d) => inbounds.push(d),
+        classifyIntent: async () => ({
+          intent: 'resume',
+          confidence: 0.93,
+          reasoning: 'resume verb + project',
+        }),
+      },
+      { token: 'x' },
+    );
+    stub.fireReady();
+    await stub.emit(
+      makeMessage({
+        id: 'm-resume',
+        content: '<@bot-1> resume mytool',
+        authorId: 'u1',
+        channelId: 'chan-1',
+        reply: reply.spy,
+      }),
+    );
+    // runResume creates a new directive — but it's a resume (intent=build with parentDirectiveId),
+    // not a free-form chat directive.
+    expect(inbounds).toHaveLength(1);
+    const created = inbounds[0]!;
+    expect(created.intent).toBe('build');
+    expect(created.parentDirectiveId).toBe(priorId);
+    expect((created.payload as { project: string }).project).toBe('mytool');
+    expect(reply.spy).toHaveBeenCalledTimes(1);
+    await plugin.stop();
+  });
+
+  it('chat fall-through: intent=fix creates the legacy chat directive', async () => {
+    const stub = makeStubClient();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const reply = captureReply();
+    const plugin = createDiscordChannel({ clientFactory: () => stub.client, db });
+    await plugin.start(
+      {
+        log: createLogger('test.discord.routing'),
+        onInbound: (d) => inbounds.push(d),
+        classifyIntent: async () => ({
+          intent: 'fix',
+          confidence: 0.85,
+          reasoning: 'named defect',
+        }),
+      },
+      { token: 'x' },
+    );
+    stub.fireReady();
+    await stub.emit(
+      makeMessage({
+        id: 'm-fix',
+        content: '<@bot-1> fix the login bug',
+        authorId: 'u1',
+        channelId: 'chan-1',
+        reply: reply.spy,
+      }),
+    );
+    expect(inbounds).toHaveLength(1);
+    expect(inbounds[0]?.intent).toBe('chat'); // detectIntent picked chat (no /build prefix)
+    // No reply embed for the chat-directive path.
+    expect(reply.spy).not.toHaveBeenCalled();
+    await plugin.stop();
+  });
+
+  it('classifyIntent throws → falls through to chat directive', async () => {
+    const stub = makeStubClient();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const reply = captureReply();
+    const plugin = createDiscordChannel({ clientFactory: () => stub.client, db });
+    await plugin.start(
+      {
+        log: createLogger('test.discord.routing'),
+        onInbound: (d) => inbounds.push(d),
+        classifyIntent: async () => {
+          throw new Error('triage offline');
+        },
+      },
+      { token: 'x' },
+    );
+    stub.fireReady();
+    await stub.emit(
+      makeMessage({
+        id: 'm-throw',
+        content: '<@bot-1> what is happening',
+        authorId: 'u1',
+        channelId: 'chan-1',
+        reply: reply.spy,
+      }),
+    );
+    expect(inbounds).toHaveLength(1);
+    expect(inbounds[0]?.intent).toBe('chat');
+    expect(reply.spy).not.toHaveBeenCalled();
+    await plugin.stop();
+  });
+
+  it('classifyIntent unset (legacy) → existing chat-directive path runs', async () => {
+    const stub = makeStubClient();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const reply = captureReply();
+    const plugin = createDiscordChannel({ clientFactory: () => stub.client, db });
+    await plugin.start(
+      {
+        log: createLogger('test.discord.routing'),
+        onInbound: (d) => inbounds.push(d),
+        // classifyIntent intentionally omitted
+      },
+      { token: 'x' },
+    );
+    stub.fireReady();
+    await stub.emit(
+      makeMessage({
+        id: 'm-legacy',
+        content: '<@bot-1> what is happening',
+        authorId: 'u1',
+        channelId: 'chan-1',
+        reply: reply.spy,
+      }),
+    );
+    expect(inbounds).toHaveLength(1);
+    expect(inbounds[0]?.intent).toBe('chat');
+    expect(reply.spy).not.toHaveBeenCalled();
+    await plugin.stop();
+  });
+});

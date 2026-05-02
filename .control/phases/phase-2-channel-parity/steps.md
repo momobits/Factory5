@@ -4,7 +4,7 @@
 - [x] 2.2 — Wire Telegram `setMyCommands` + matching parser; extract a transport-agnostic `command-handlers.ts` shared with Discord
 - [x] 2.3 — Pending-question button affordances on both surfaces (Discord `ActionRowBuilder` "Answer / Skip / Escalate"; Telegram inline keyboards via `reply_markup`)
 - [x] 2.4 — Ship `factory cancel <directive-id>` — brain `AbortController` propagation through the pool; `cancelDirective` state helper; `POST /directives/:id/cancel` IPC route; CLI command; worker SIGTERM-then-SIGKILL discipline
-- [ ] 2.5 — Triage classifies chat across 8 intents; channel handlers re-route reads (`status`/`spend`/`findings`) to `command-handlers.ts` instead of creating chat directives
+- [x] 2.5 — Triage classifies chat across 8 intents; channel handlers re-route reads (`status`/`spend`/`findings`) to `command-handlers.ts` instead of creating chat directives
 - [ ] 2.6 — (Optional, defer-on-friction) Increase `factory chat` REPL turn timeout (cheap path: bump `TURN_TIMEOUT_MS` to 600s; better: stream partial daemon-side progress)
 - [ ] 2.7 — `/phase-close` — tag `phase-2-channel-parity-closed`; append session entry to [`../../../UPGRADE/LOG.md`](../../../UPGRADE/LOG.md); tick Tier 2 boxes in [`../../../UPGRADE/ROADMAP.md`](../../../UPGRADE/ROADMAP.md); scaffold Phase 3
 

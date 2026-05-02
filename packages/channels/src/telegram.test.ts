@@ -1761,5 +1761,274 @@ describe('TelegramChannel callback_query handler (Phase 2.3)', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Phase 2.5 — chat → read-side command re-routing
+// ---------------------------------------------------------------------------
+
+describe('TelegramChannel chat-routing (Phase 2.5)', () => {
+  it('chat → status: classifies as status, dispatches runStatus, no chat directive', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram.routing'),
+        onInbound: (d) => inbounds.push(d),
+        classifyIntent: async () => ({
+          intent: 'status',
+          confidence: 0.9,
+          reasoning: 'state query',
+        }),
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 100,
+      message: makeMessage({
+        messageId: 100,
+        text: "what's running?",
+        chatId: 12345,
+        fromId: 12345,
+      }),
+    });
+    expect(inbounds).toHaveLength(0);
+    await vi.waitFor(() => expect(api.sent.length).toBe(1), { timeout: 200 });
+    expect(api.sent[0]!.text).toMatch(/factory status/i);
+    await plugin.stop();
+  });
+
+  it('chat → spend: status intent + spend keyword routes to runSpend', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram.routing'),
+        onInbound: (d) => inbounds.push(d),
+        classifyIntent: async () => ({
+          intent: 'status',
+          confidence: 0.92,
+          reasoning: 'spend report',
+        }),
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 101,
+      message: makeMessage({
+        messageId: 101,
+        text: 'show me the spend',
+        chatId: 12345,
+        fromId: 12345,
+      }),
+    });
+    expect(inbounds).toHaveLength(0);
+    await vi.waitFor(() => expect(api.sent.length).toBe(1), { timeout: 200 });
+    expect(api.sent[0]!.text).toMatch(/factory spend/i);
+    await plugin.stop();
+  });
+
+  it('chat → findings: status intent + findings keyword routes to runFindings', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram.routing'),
+        onInbound: (d) => inbounds.push(d),
+        classifyIntent: async () => ({
+          intent: 'status',
+          confidence: 0.88,
+          reasoning: 'findings query',
+        }),
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 102,
+      message: makeMessage({
+        messageId: 102,
+        text: 'any open findings?',
+        chatId: 12345,
+        fromId: 12345,
+      }),
+    });
+    expect(inbounds).toHaveLength(0);
+    await vi.waitFor(() => expect(api.sent.length).toBe(1), { timeout: 200 });
+    expect(api.sent[0]!.text).toMatch(/factory findings/i);
+    await plugin.stop();
+  });
+
+  it('chat → resume: classifies as resume, runResume creates a resume directive', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const priorId = newId();
+    directivesQ.insert(db, {
+      id: priorId,
+      source: 'telegram',
+      principal: '12345',
+      channelRef: '12345#prior',
+      intent: 'build',
+      payload: { project: 'mytool', projectPath: '/tmp/mytool' },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'blocked',
+    });
+
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram.routing'),
+        onInbound: (d) => inbounds.push(d),
+        classifyIntent: async () => ({
+          intent: 'resume',
+          confidence: 0.93,
+          reasoning: 'resume verb + project',
+        }),
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 103,
+      message: makeMessage({
+        messageId: 103,
+        text: 'resume mytool',
+        chatId: 12345,
+        fromId: 12345,
+      }),
+    });
+    expect(inbounds).toHaveLength(1);
+    const created = inbounds[0]!;
+    expect(created.intent).toBe('build');
+    expect(created.parentDirectiveId).toBe(priorId);
+    await vi.waitFor(() => expect(api.sent.length).toBe(1), { timeout: 200 });
+    expect(api.sent[0]!.text).toMatch(/factory resume/i);
+    await plugin.stop();
+  });
+
+  it('chat fall-through: intent=fix creates the legacy chat directive', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram.routing'),
+        onInbound: (d) => inbounds.push(d),
+        classifyIntent: async () => ({
+          intent: 'fix',
+          confidence: 0.85,
+          reasoning: 'named defect',
+        }),
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 104,
+      message: makeMessage({
+        messageId: 104,
+        text: 'fix the login bug',
+        chatId: 12345,
+        fromId: 12345,
+      }),
+    });
+    expect(inbounds).toHaveLength(1);
+    expect(inbounds[0]?.intent).toBe('chat');
+    // No reply for the chat-directive path.
+    expect(api.sent).toHaveLength(0);
+    await plugin.stop();
+  });
+
+  it('classifyIntent throws → falls through to chat directive', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram.routing'),
+        onInbound: (d) => inbounds.push(d),
+        classifyIntent: async () => {
+          throw new Error('triage offline');
+        },
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 105,
+      message: makeMessage({
+        messageId: 105,
+        text: 'what is happening',
+        chatId: 12345,
+        fromId: 12345,
+      }),
+    });
+    expect(inbounds).toHaveLength(1);
+    expect(inbounds[0]?.intent).toBe('chat');
+    expect(api.sent).toHaveLength(0);
+    await plugin.stop();
+  });
+
+  it('classifyIntent unset (legacy) → existing chat-directive path runs', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram.routing'),
+        onInbound: (d) => inbounds.push(d),
+        // classifyIntent intentionally omitted
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 106,
+      message: makeMessage({
+        messageId: 106,
+        text: 'what is happening',
+        chatId: 12345,
+        fromId: 12345,
+      }),
+    });
+    expect(inbounds).toHaveLength(1);
+    expect(inbounds[0]?.intent).toBe('chat');
+    expect(api.sent).toHaveLength(0);
+    await plugin.stop();
+  });
+});
+
 // Silence unused-var warnings for `createLogger` import when tree-shaken.
 void createLogger;

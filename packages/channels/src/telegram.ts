@@ -57,6 +57,7 @@ import type { Logger } from '@factory5/logger';
 import { openDatabase, pendingQuestions, type Database } from '@factory5/state';
 import { z } from 'zod';
 
+import { routeChatIntent } from './chat-routing.js';
 import { readQuestionMetadata } from './discord.js';
 import { FACTORY_SUBCOMMANDS, type FactorySubcommand } from './discord-commands.js';
 import {
@@ -553,6 +554,7 @@ export class TelegramChannel implements ChannelPlugin {
   private resolveProjectPath: ChannelContext['resolveProjectPath'] | undefined;
   private resolveBuildLimits: ChannelContext['resolveBuildLimits'] | undefined;
   private setProjectBudget: ChannelContext['setProjectBudget'] | undefined;
+  private classifyIntent: ChannelContext['classifyIntent'] | undefined;
   private db: Database | undefined;
   private ownsDb = false;
   private abortController: AbortController | undefined;
@@ -572,6 +574,7 @@ export class TelegramChannel implements ChannelPlugin {
     this.resolveProjectPath = ctx.resolveProjectPath;
     this.resolveBuildLimits = ctx.resolveBuildLimits;
     this.setProjectBudget = ctx.setProjectBudget;
+    this.classifyIntent = ctx.classifyIntent;
     this.config = telegramConfigSchema.parse(rawConfig);
 
     if (this.externalDb !== undefined) {
@@ -778,9 +781,16 @@ export class TelegramChannel implements ChannelPlugin {
       return;
     }
 
-    // Fallback: chat-intent for any non-slash text. Phase 2.5 will route
-    // chat-classified-as-status / spend / findings through the shared
-    // handlers too; today the brain's triage handles the chat directive.
+    // Phase 2.5 — classify free-form text and re-route read-side intents
+    // (status/spend/findings/resume) to the shared command-handlers. The
+    // legacy chat-directive path (below) is the fallback when triage
+    // isn't wired or returns nothing actionable.
+    if (this.classifyIntent !== undefined) {
+      const dispatched = await this.maybeRouteChatIntent(message, strippedText);
+      if (dispatched) return;
+    }
+
+    // Fallback: chat-intent for any non-slash text.
     const principal =
       message.from !== undefined ? String(message.from.id) : `chat:${String(message.chat.id)}`;
     const channelRef = telegramChannelRefFor(message);
@@ -923,6 +933,108 @@ export class TelegramChannel implements ChannelPlugin {
         return formatBuildReply(await runBuild(ctx, input));
       }
     }
+  }
+
+  /**
+   * Phase 2.5 — classify chat-shaped text and re-route to a read-side
+   * command when triage is confident. Returns `true` if dispatched
+   * (caller skips chat-directive creation). Quiet-fail on triage or
+   * dispatch errors so the legacy path stays as a fallback.
+   */
+  private async maybeRouteChatIntent(message: TelegramMessage, text: string): Promise<boolean> {
+    if (
+      this.classifyIntent === undefined ||
+      this.db === undefined ||
+      this.api === undefined ||
+      this.log === undefined ||
+      this.onInbound === undefined
+    ) {
+      return false;
+    }
+    let classification;
+    try {
+      classification = await this.classifyIntent(text);
+    } catch (err) {
+      this.log.warn({ err, text: text.slice(0, 200) }, 'telegram: classifyIntent failed');
+      return false;
+    }
+    const dispatch = routeChatIntent(classification, text);
+    if (dispatch === undefined) return false;
+
+    const principal =
+      message.from !== undefined ? String(message.from.id) : `chat:${String(message.chat.id)}`;
+    const channelRef = telegramChannelRefFor(message);
+    const ctx: CommandHandlerContext = {
+      db: this.db,
+      log: this.log,
+      source: 'telegram',
+      principal,
+      channelRef,
+      onInbound: this.onInbound,
+      resolveProjectPath: this.resolveProjectPath,
+      resolveBuildLimits: this.resolveBuildLimits,
+      setProjectBudget: this.setProjectBudget,
+    };
+
+    let reply: TelegramReply;
+    try {
+      switch (dispatch.command) {
+        case 'status':
+          reply = formatStatusReply(
+            await runStatus(ctx, dispatch.input as Parameters<typeof runStatus>[1]),
+          );
+          break;
+        case 'spend':
+          reply = formatSpendReply(
+            await runSpend(ctx, dispatch.input as Parameters<typeof runSpend>[1]),
+          );
+          break;
+        case 'findings':
+          reply = formatFindingsReply(
+            await runFindings(ctx, dispatch.input as Parameters<typeof runFindings>[1]),
+          );
+          break;
+        case 'resume':
+          reply = formatResumeReply(
+            await runResume(ctx, dispatch.input as Parameters<typeof runResume>[1]),
+          );
+          break;
+        case 'build':
+          reply = formatBuildReply(
+            await runBuild(ctx, dispatch.input as Parameters<typeof runBuild>[1]),
+          );
+          break;
+      }
+    } catch (err) {
+      this.log.warn(
+        { err, command: dispatch.command, intent: classification.intent },
+        'telegram: chat-routed command threw — falling back to chat directive',
+      );
+      return false;
+    }
+    this.log.info(
+      {
+        intent: classification.intent,
+        confidence: classification.confidence,
+        command: dispatch.command,
+        chatId: message.chat.id,
+      },
+      'telegram: chat re-routed to read-side command',
+    );
+    void this.api
+      .sendMessage({
+        chatId: message.chat.id,
+        text: reply.text,
+        replyToMessageId: message.message_id,
+        ...(reply.parseMode !== undefined ? { parseMode: reply.parseMode } : {}),
+      })
+      .catch((err: unknown) => {
+        this.log?.warn(
+          { err, command: dispatch.command, chatId: message.chat.id },
+          'telegram: chat-routed reply send failed',
+        );
+      });
+    return true;
   }
 
   /**
