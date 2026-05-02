@@ -4,7 +4,7 @@
 - [x] 1.2 — Refresh `packages/channels/README.md` — rewrite Status section (Telegram + web no longer "future"), add Telegram plugin section, add Web channel section, clarify Web ≠ ChannelPlugin
 - [x] 1.3 — Refresh `apps/factory-web/README.md` — remove phase-number references, add page index
 - [x] 1.4 — Add §"Web dashboard" to `docs/ONBOARDING.md` between §4 "First build" and §5 "Discord channel"
-- [ ] 1.5 — Add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md`
+- [x] 1.5 — Add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md`
 - [ ] 1.6 — Write `docs/WORKFLOWS.md` — four canonical loops + decision matrix + CLAUDE.md authoring guide; cross-reference from `README.md`, `CLAUDE.md`, `docs/ARCHITECTURE.md`, `docs/ONBOARDING.md`
 - [ ] 1.7 — Single-pass audit of `docs/SKILLS.md` + `docs/AGENTS.md` against current code; reconcile any divergence
 - [ ] 1.8 — `/phase-close` — tag `phase-1-doc-sweep-closed`; append session entry to [`../../../UPGRADE/LOG.md`](../../../UPGRADE/LOG.md); tick Tier 1 boxes in [`../../../UPGRADE/ROADMAP.md`](../../../UPGRADE/ROADMAP.md); scaffold Phase 2

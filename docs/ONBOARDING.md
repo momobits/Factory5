@@ -14,8 +14,8 @@ If you only read one section, read [§3 "Configure your instance"](#3-configure-
 - **Git**, obviously.
 - **Python 3.11+** if you plan to have factory build Python projects — the assessor uses `venv`.
 - For the optional channels:
-  - **A Discord application** if you want the Discord channel (§6).
-  - **A Telegram bot** if you want the Telegram channel (§7).
+  - **A Discord application** if you want the Discord channel (§7).
+  - **A Telegram bot** if you want the Telegram channel (§8).
 
 ---
 
@@ -68,7 +68,7 @@ Open `.factory/config.toml` and fill in:
 - **`[categories.*]`** — leave defaults unless you have a specific reason to change which model handles which category.
 - **`[budget.defaults]`** — optional ceilings. Leave commented to start (unlimited). Recommendation: `maxUsd = 5.0` is a reasonable early-stage guardrail.
 
-The channel sections (`[channels.discord]`, `[channels.telegram]`) are optional — skip them if you don't want those channels. See §6 and §7 for walkthroughs.
+The channel sections (`[channels.discord]`, `[channels.telegram]`) are optional — skip them if you don't want those channels. See §7 and §8 for walkthroughs.
 
 ### 3.4 Validate
 
@@ -172,11 +172,63 @@ The build form **refuses to create new projects** — the project must already e
 
 ---
 
-## 6. Optional — Discord channel
+## 6. Chat — CLI / Discord / Telegram
+
+Once you've at least one channel set up, you can hold a conversation with factory across any of them. Every channel writes the same `Directive` shape into SQLite (see `docs/CONTRACTS.md`); the brain treats a CLI-originated message identically to a Discord- or Telegram-originated one.
+
+### 6.1 `factory chat` (CLI REPL)
+
+The lightest-weight surface — interactive REPL backed by the running daemon.
+
+```bash
+factory chat
+# factory chat — session chat-01k0…ulid
+#   autonomy: chat
+#   type /quit to exit.
+#
+# you> build me a tiny CLI tool that prints the current weather
+# bot> Sure — I'll need the workspace name. Want it under …?
+# you> /quit
+```
+
+Mechanics: the REPL writes an `intent=chat` directive per line you type, rings the daemon's doorbell, and polls `outbound_messages` for replies addressed to its session id. `/quit` (or `/exit`, or Ctrl-D) ends the session. Refuses to start when no daemon is running (exit 2).
+
+The per-turn ceiling is **120 seconds** — if the brain doesn't reply within that window the turn times out and the REPL prompts again. Tracked as [`U005`](../UPGRADE/ISSUES.md) in the upgrade roadmap; Tier 2 (channel parity) or Tier 4 (CLI completion) may extend it.
+
+### 6.2 Discord chat
+
+`@`-mention the bot in any text channel the bot can see — that opens a fresh thread (factory uses one thread per directive so concurrent builds don't interleave). Subsequent messages in the thread feed the same conversation:
+
+- If the brain has an open `pending_questions` row tied to that thread, your reply is recorded as the answer (the bot acks `(answered question <id>)`).
+- Otherwise your reply becomes a new `intent=chat` directive in the same thread.
+
+Prefix the mention with `/build <name>` to switch from chat to a build directive in one shot:
+
+```
+@FactoryBot /build hello-world
+```
+
+The bot responds in the auto-spawned thread.
+
+### 6.3 Telegram chat
+
+Open a DM with your bot — every non-bot message in a private chat is treated as inbound. In groups / supergroups the bot only listens to messages that either `@<botUsername>`-mention it or use Telegram's reply-to feature on one of its messages.
+
+To answer a pending question, **reply to the bot's question message** with Telegram's reply-to feature. The plugin prefers the exact-bot-message-id match (it stamps `pending_questions.bot_message_id` on each outbound), so even when several questions are open in the same chat your reply pins to the right one.
+
+`/build <name>` works the same way as Discord — the leading prefix switches to `intent=build`. (Telegram renders `/build` as a native command, so the bot picks it up regardless of mention syntax.)
+
+### 6.4 Shared model
+
+Every surface — CLI, Discord, Telegram, and the web UI from §5 — writes a `Directive` row through the same `directives.insert` path and rings the same `directive.new` doorbell. The brain doesn't care which surface originated the message; it routes by `intent` (the eight-intent vocabulary documented in `docs/CONTRACTS.md`) and replies via `outbound_messages` rows that the originating channel's plugin (or the SPA's polling fetch) picks up. This means you can start a conversation in `factory chat`, leave the room, and follow up from your phone via Discord or Telegram on the same directive.
+
+---
+
+## 7. Optional — Discord channel
 
 If you want to drive builds and receive replies via Discord:
 
-### 6.1 Create the Discord application
+### 7.1 Create the Discord application
 
 1. Go to <https://discord.com/developers/applications>.
 2. **New Application** → give it a name (e.g. `Factory5 Bot`).
@@ -184,7 +236,7 @@ If you want to drive builds and receive replies via Discord:
 4. **Bot** tab → **Add Bot** → **Copy Token**. Store this — it's your `token`.
 5. Under **Bot** → enable **Message Content Intent** (factory needs to read message contents).
 
-### 6.2 Invite the bot
+### 7.2 Invite the bot
 
 **OAuth2 → URL Generator** → check scopes:
 
@@ -200,7 +252,7 @@ And permissions:
 
 Copy the generated URL, open it in a browser, and authorize the bot into your guild (server).
 
-### 6.3 Record the config
+### 7.3 Record the config
 
 With developer mode enabled in Discord (Settings → Advanced → Developer Mode), right-click your guild and "Copy Server ID" → that's `guildId`. Right-click a channel and "Copy Channel ID" → that's `defaultChannelId`.
 
@@ -216,15 +268,15 @@ defaultChannelId = "<paste-your-channel-id>"
 
 Run `factory doctor` — you should see `Checking Discord (channel)` with `rest: ok` and `login: ok`. Then `@`-mention the bot from your guild with `/build <name>` and watch the directive flow through.
 
-### 6.4 Security note
+### 7.4 Security note
 
 The Discord token gives full bot-identity access. Keep `.factory/config.toml` out of git (already enforced by `.gitignore`). If you ever leak it, regenerate via the Discord developer portal.
 
 ---
 
-## 7. Optional — Telegram channel
+## 8. Optional — Telegram channel
 
-### 7.1 Create the bot via @BotFather
+### 8.1 Create the bot via @BotFather
 
 1. In Telegram, open a chat with [@BotFather](https://t.me/BotFather).
 2. Send `/newbot`. Follow the prompts:
@@ -232,7 +284,7 @@ The Discord token gives full bot-identity access. Keep `.factory/config.toml` ou
    - Username (must end in `bot`, e.g. `your_factory5_bot`).
 3. BotFather replies with a token in the format `<digits>:<alphanumeric-35>`. Copy it — that's `botToken`.
 
-### 7.2 Get your test chat-id
+### 8.2 Get your test chat-id
 
 You need a chat-id factory can send kickoff messages to during `factory doctor` and the live-smoke script.
 
@@ -246,7 +298,7 @@ You need a chat-id factory can send kickoff messages to during `factory doctor` 
 
 4. In the JSON response, look for `"chat":{"id":<number>}` — that's your `testChatId`.
 
-### 7.3 Record the config
+### 8.3 Record the config
 
 Uncomment `[channels.telegram]` in `.factory/config.toml`:
 
@@ -261,7 +313,7 @@ testChatId     = <paste-your-chat-id-as-integer>
 
 Run `factory doctor` — you should see `Checking Telegram (channel)` with `getMe: ok` and your bot's `@username`.
 
-### 7.4 Live smoke
+### 8.4 Live smoke
 
 To prove the round-trip works end-to-end:
 
@@ -273,13 +325,13 @@ The script sends a kickoff to your `testChatId`, waits up to 60 seconds for you 
 
 ---
 
-## 8. Multiple factory instances
+## 9. Multiple factory instances
 
 If you want several factories running in parallel (e.g. a `primary` for daily work and a separate `client-acme` with its own bot + workspace), you create **multiple instance directories** — one per factory.
 
 Each instance lives at its own path; factory uses cwd-walk to figure out which one you're in (ADR 0023).
 
-### 8.1 Create the second instance
+### 9.1 Create the second instance
 
 Pick a path, create `.factory/`, copy the template:
 
@@ -291,7 +343,7 @@ cp <path-to-repo>/config.example.toml .factory/config.toml
 # edit .factory/config.toml — different workspace, different bot tokens, etc.
 ```
 
-### 8.2 Use it by `cd`-ing
+### 9.2 Use it by `cd`-ing
 
 ```bash
 cd ~/factory-instances/client-acme
@@ -308,7 +360,7 @@ factory spend                # operates on the primary instance's db
 
 No env var, no flag. The physical cwd tells factory which instance you're using.
 
-### 8.3 Daemons on different ports
+### 9.3 Daemons on different ports
 
 If you want the factoryd daemon running for each instance in parallel, they need to bind to different ports (default is `127.0.0.1:25295`). Add `[daemon]` with a unique `port` to each instance's config:
 
@@ -319,7 +371,7 @@ port = 25296   # primary uses 25295 (default); this one uses 25296
 
 The CLI client and the daemon both read this port from config at startup.
 
-### 8.4 Escape hatch
+### 9.4 Escape hatch
 
 If you ever need factory to ignore cwd-walk (e.g. running inside a CI container with a specific mount), set `FACTORY5_DATA_DIR` explicitly:
 
@@ -331,7 +383,7 @@ That overrides everything.
 
 ---
 
-## 9. Backups
+## 10. Backups
 
 `.factory/factory.db` is your cumulative state — directive history, spend, findings, pending questions. Back it up on whatever cadence matches how much history you'd regret losing.
 
@@ -339,7 +391,7 @@ The config file is harmless to lose (you can regenerate it from the template + t
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 - **`factory doctor` says `claude-cli: NOT AVAILABLE`** — install Claude Code from <https://claude.com/claude-code> or set `providers.claudeCliPath` in config.
 - **Discord probe says `login: FAILED`** — wrong token, Message Content Intent off, or bot was deleted. Regenerate from the Discord developer portal.
@@ -349,6 +401,8 @@ The config file is harmless to lose (you can regenerate it from the template + t
 - **Two factories fighting over the same port** — both bound to default `127.0.0.1:25295`. Give one an alternate `[daemon].port` in config.
 - **Dashboard URL says `UI_DISABLED`** — the daemon was started without a UI auth token. Restart `factoryd` (the token is minted on startup); confirm `apps/factory-web/dist/` exists, otherwise `pnpm --filter factory-web build` first.
 - **Dashboard token rejected (401 in browser DevTools)** — the daemon was restarted since the URL was issued. Run `factory ui-token` for the live one, or paste a fresh URL from the daemon's stdout.
+- **`factory chat` says `no running daemon`** — start it with `factory daemon start` (or `pnpm factoryd` for foreground / live logs) and re-run.
+- **Discord thread doesn't auto-answer your reply** — make sure you're posting inside the thread the bot opened, not the parent channel; the matcher keys on `channelRef` ending in `#<threadId>`.
 
 ---
 
