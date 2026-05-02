@@ -49,11 +49,13 @@ function freshDb(): ReturnType<typeof openDatabase> {
 }
 
 interface StubTelegramApi extends TelegramApi {
-  sent: Array<{ chatId: number; text: string; replyToMessageId?: number }>;
+  sent: Array<{ chatId: number; text: string; replyToMessageId?: number; parseMode?: string }>;
   updateQueue: ReadonlyArray<TelegramUpdate>[];
   getUpdatesCalls: Array<{ offset?: number; timeoutSec: number }>;
+  setMyCommandsCalls: Array<{ commands: ReadonlyArray<{ command: string; description: string }> }>;
   failNextGet?: Error;
   failSend?: Error;
+  failSetMyCommands?: Error;
 }
 
 function makeStubApi(identity: TelegramBotIdentity = BOT_IDENTITY): StubTelegramApi {
@@ -61,6 +63,7 @@ function makeStubApi(identity: TelegramBotIdentity = BOT_IDENTITY): StubTelegram
     sent: [],
     updateQueue: [],
     getUpdatesCalls: [],
+    setMyCommandsCalls: [],
     async getMe() {
       return identity;
     },
@@ -86,14 +89,20 @@ function makeStubApi(identity: TelegramBotIdentity = BOT_IDENTITY): StubTelegram
         signal.addEventListener('abort', onAbort, { once: true });
       });
     },
-    async sendMessage({ chatId, text, replyToMessageId }) {
+    async sendMessage({ chatId, text, replyToMessageId, parseMode }) {
       if (api.failSend !== undefined) throw api.failSend;
       api.sent.push({
         chatId,
         text,
         ...(replyToMessageId !== undefined ? { replyToMessageId } : {}),
+        ...(parseMode !== undefined ? { parseMode } : {}),
       });
       return { message_id: api.sent.length };
+    },
+    async setMyCommands({ commands }) {
+      if (api.failSetMyCommands !== undefined) throw api.failSetMyCommands;
+      api.setMyCommandsCalls.push({ commands });
+      return true;
     },
   };
   return api;
@@ -1038,6 +1047,342 @@ describe('TelegramChannel polling loop', () => {
     await plugin.stop();
     // At least two getUpdates calls: the success + the error.
     expect(api.getUpdatesCalls.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Slash-command dispatch (Phase 2.2)
+// ---------------------------------------------------------------------------
+
+describe('TelegramChannel — setMyCommands on start', () => {
+  it('registers the seven factory commands when the API supports it', async () => {
+    const api = makeStubApi();
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake' },
+    );
+    expect(api.setMyCommandsCalls).toHaveLength(1);
+    const call = api.setMyCommandsCalls[0]!;
+    const names = call.commands.map((c) => c.command).sort();
+    expect(names).toEqual(['budget', 'build', 'cancel', 'findings', 'resume', 'spend', 'status']);
+    await plugin.stop();
+  });
+
+  it('does not abort start() when setMyCommands fails', async () => {
+    const api = makeStubApi();
+    api.failSetMyCommands = new Error('sim: telegram bad request');
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake' },
+    );
+    // Plugin still started — slash commands work via the parser even when the
+    // BotFather menu is stale.
+    await plugin.stop();
+  });
+});
+
+describe('TelegramChannel — /factory slash commands', () => {
+  it('/status emits an HTML reply with project + recent-directive sections', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    // Seed a directive + a project so the reply has content to render.
+    const dId = newId();
+    directivesQ.insert(db, {
+      id: dId,
+      source: 'telegram',
+      principal: '111',
+      channelRef: '111#1',
+      intent: 'build',
+      payload: { project: 'demo' },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'running',
+    });
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: (d) => inbounds.push(d) },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 1,
+      message: makeMessage({
+        messageId: 100,
+        text: '/status',
+        chatId: 111,
+        fromId: 111,
+      }),
+    });
+    // No directive enqueued for a read command.
+    expect(inbounds).toHaveLength(0);
+    // Wait for the fire-and-forget reply.
+    await vi.waitFor(() => expect(api.sent.length).toBe(1), { timeout: 200 });
+    const sent = api.sent[0]!;
+    expect(sent.parseMode).toBe('HTML');
+    expect(sent.text).toContain('factory status');
+    expect(sent.text).toContain(dId.slice(-8));
+    await plugin.stop();
+  });
+
+  it('/build enqueues a directive AND posts a confirmation reply', async () => {
+    const api = makeStubApi();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram'),
+        onInbound: (d) => inbounds.push(d),
+        resolveProjectPath: async (n) => `/work/${n}`,
+        resolveBuildLimits: async (n) => (n === 'demo' ? { maxUsd: 5 } : undefined),
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 2,
+      message: makeMessage({
+        messageId: 200,
+        text: '/build demo -- a sample CLI in Python',
+        chatId: 111,
+        fromId: 111,
+      }),
+    });
+    expect(inbounds).toHaveLength(1);
+    const d = inbounds[0]!;
+    expect(d.intent).toBe('build');
+    expect(d.autonomy).toBe('autonomous');
+    expect(d.source).toBe('telegram');
+    const payload = d.payload as Record<string, unknown>;
+    expect(payload['project']).toBe('demo');
+    expect(payload['projectPath']).toBe('/work/demo');
+    expect(payload['spec']).toBe('a sample CLI in Python');
+    expect(d.limits).toEqual({ maxUsd: 5 });
+    await vi.waitFor(() => expect(api.sent.length).toBe(1), { timeout: 200 });
+    expect(api.sent[0]!.text).toContain('factory build — queued');
+    expect(api.sent[0]!.text).toContain('demo');
+    await plugin.stop();
+  });
+
+  it('/build with --autonomy and --max-usd flags overrides defaults', async () => {
+    const api = makeStubApi();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram'),
+        onInbound: (d) => inbounds.push(d),
+        resolveProjectPath: async (n) => `/work/${n}`,
+        // Daemon-bound limits would say 999, but the explicit flag should win.
+        resolveBuildLimits: async () => ({ maxUsd: 999, maxSteps: 999 }),
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 3,
+      message: makeMessage({
+        messageId: 201,
+        text: '/build demo --autonomy assisted --language node --max-usd 2.5 --max-steps 50',
+        chatId: 111,
+        fromId: 111,
+      }),
+    });
+    expect(inbounds).toHaveLength(1);
+    const d = inbounds[0]!;
+    expect(d.autonomy).toBe('assisted');
+    expect(d.limits).toEqual({ maxUsd: 2.5, maxSteps: 50 });
+    const payload = d.payload as Record<string, unknown>;
+    expect(payload['language']).toBe('node');
+    await plugin.stop();
+  });
+
+  it('/cancel marks a running directive blocked + replies', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    const dId = newId();
+    directivesQ.insert(db, {
+      id: dId,
+      source: 'telegram',
+      principal: '111',
+      channelRef: '111#1',
+      intent: 'build',
+      payload: {},
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'running',
+    });
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: (d) => inbounds.push(d) },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 4,
+      message: makeMessage({
+        messageId: 300,
+        text: `/cancel ${dId} just stopping it`,
+        chatId: 111,
+        fromId: 111,
+      }),
+    });
+    // No new directive — cancel is a state mutation, not a directive insertion.
+    expect(inbounds).toHaveLength(0);
+    const updated = directivesQ.getById(db, dId)!;
+    expect(updated.status).toBe('blocked');
+    expect(updated.blockedReason).toBe('just stopping it');
+    await vi.waitFor(() => expect(api.sent.length).toBe(1), { timeout: 200 });
+    expect(api.sent[0]!.text).toContain('factory cancel');
+    expect(api.sent[0]!.text).toContain(dId.slice(-8));
+    await plugin.stop();
+  });
+
+  it('/budget invokes setProjectBudget and replies with the persisted defaults', async () => {
+    const api = makeStubApi();
+    const db = freshDb();
+    let captured: { name: string; defaults: { maxUsd?: number; maxSteps?: number } } | undefined;
+    const setProjectBudget = async (
+      name: string,
+      defaults: { maxUsd?: number; maxSteps?: number },
+    ): Promise<{ projectId: string; defaults: { maxUsd?: number; maxSteps?: number } }> => {
+      captured = { name, defaults };
+      return { projectId: newId(), defaults };
+    };
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db,
+    });
+    await plugin.start(
+      {
+        log: createLogger('test.telegram'),
+        onInbound: () => undefined,
+        setProjectBudget,
+      },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 5,
+      message: makeMessage({
+        messageId: 400,
+        text: '/budget demo --max-usd 7 --max-steps 200',
+        chatId: 111,
+        fromId: 111,
+      }),
+    });
+    expect(captured).toEqual({ name: 'demo', defaults: { maxUsd: 7, maxSteps: 200 } });
+    await vi.waitFor(() => expect(api.sent.length).toBe(1), { timeout: 200 });
+    expect(api.sent[0]!.text).toContain('factory budget — updated');
+    await plugin.stop();
+  });
+
+  it('/budget without a project replies with usage', async () => {
+    const api = makeStubApi();
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: () => undefined },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 6,
+      message: makeMessage({
+        messageId: 401,
+        text: '/budget',
+        chatId: 111,
+        fromId: 111,
+      }),
+    });
+    await vi.waitFor(() => expect(api.sent.length).toBe(1), { timeout: 200 });
+    expect(api.sent[0]!.text).toContain('factory budget:');
+    expect(api.sent[0]!.text).toContain('--max-usd');
+    await plugin.stop();
+  });
+
+  it('an unknown slash command falls through to chat-intent', async () => {
+    const api = makeStubApi();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: (d) => inbounds.push(d) },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 7,
+      message: makeMessage({
+        messageId: 500,
+        text: '/nonsense some args',
+        chatId: 111,
+        fromId: 111,
+      }),
+    });
+    // Falls through to chat-intent.
+    expect(inbounds).toHaveLength(1);
+    expect(inbounds[0]!.intent).toBe('chat');
+    expect(api.sent).toHaveLength(0);
+    await plugin.stop();
+  });
+
+  it('handles `/<cmd>@bot` form for groups (Telegram suffixes the bot username)', async () => {
+    const api = makeStubApi();
+    const inbounds: Directive[] = [];
+    const plugin = createTelegramChannel({
+      apiFactory: () => api,
+      autoPoll: false,
+      db: freshDb(),
+    });
+    await plugin.start(
+      { log: createLogger('test.telegram'), onInbound: (d) => inbounds.push(d) },
+      { botToken: 'fake' },
+    );
+    await plugin._simulateUpdate({
+      update_id: 8,
+      message: makeMessage({
+        messageId: 600,
+        // Mention starts at offset 7 (after the 7-char `/status` prefix);
+        // `@Factory5TestBot` is 16 chars long.
+        text: '/status@Factory5TestBot',
+        chatId: -1001,
+        chatType: 'supergroup',
+        fromId: 7,
+        entities: [{ type: 'mention', offset: 7, length: 16 }],
+      }),
+    });
+    expect(inbounds).toHaveLength(0);
+    await vi.waitFor(() => expect(api.sent.length).toBe(1), { timeout: 200 });
+    expect(api.sent[0]!.text).toContain('factory status');
+    await plugin.stop();
   });
 });
 

@@ -48,8 +48,8 @@
 
 import {
   newId,
+  type AutonomyMode,
   type Directive,
-  type DirectiveLimits,
   type Intent,
   type OutboundMessage,
 } from '@factory5/core';
@@ -57,6 +57,34 @@ import type { Logger } from '@factory5/logger';
 import { openDatabase, pendingQuestions, type Database } from '@factory5/state';
 import { z } from 'zod';
 
+import { FACTORY_SUBCOMMANDS, type FactorySubcommand } from './discord-commands.js';
+import {
+  PROJECT_LANGUAGES,
+  runBudget,
+  runBuild,
+  runCancel,
+  runFindings,
+  runResume,
+  runSpend,
+  runStatus,
+  type BudgetData,
+  type BuildData,
+  type BuildInput,
+  type CancelData,
+  type CancelInput,
+  type CommandHandlerContext,
+  type CommandResult,
+  type FindingsData,
+  type FindingsInput,
+  type ProjectLanguage,
+  type ResumeData,
+  type ResumeInput,
+  type SpendData,
+  type SpendInput,
+  type StatusData,
+  type StatusInput,
+  type BudgetInput,
+} from './command-handlers.js';
 import type { ChannelContext, ChannelPlugin, SendResult } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -143,6 +171,17 @@ export interface TelegramBotIdentity {
 }
 
 /**
+ * One entry in the bot's BotFather command list — what `setMyCommands`
+ * registers and `/` autocomplete shows the operator. `command` is the
+ * lowercase command name without the leading slash; `description` shows
+ * up next to it in the menu.
+ */
+export interface TelegramBotCommandSpec {
+  command: string;
+  description: string;
+}
+
+/**
  * Minimal contract the plugin uses against the Bot API. The default
  * implementation wraps `fetch`; tests supply a stub that queues updates
  * in-memory and records outbound calls.
@@ -159,7 +198,20 @@ export interface TelegramApi {
     chatId: number;
     text: string;
     replyToMessageId?: number;
+    /**
+     * Telegram's `parse_mode`. `HTML` is the safer of the two formatting
+     * modes — only `<`, `>`, `&` need escaping inside text — so the slash
+     * dispatcher uses it for tabular replies. `MarkdownV2` is supported
+     * by the API but not used by this plugin yet.
+     */
+    parseMode?: 'HTML' | 'MarkdownV2';
   }): Promise<{ message_id: number }>;
+  /**
+   * Register the bot's command list (Phase 2.2). Optional in the contract
+   * so test stubs can omit it; the plugin treats `undefined` as "skip
+   * registration on start". The default HTTP impl always provides it.
+   */
+  setMyCommands?: (opts: { commands: ReadonlyArray<TelegramBotCommandSpec> }) => Promise<true>;
 }
 
 export type TelegramApiFactory = (botToken: string) => TelegramApi;
@@ -238,9 +290,10 @@ export function defaultTelegramApiFactory(botToken: string): TelegramApi {
         networkBudgetMs,
       );
     },
-    async sendMessage({ chatId, text, replyToMessageId }) {
+    async sendMessage({ chatId, text, replyToMessageId, parseMode }) {
       const params: Record<string, unknown> = { chat_id: chatId, text };
       if (replyToMessageId !== undefined) params['reply_to_message_id'] = replyToMessageId;
+      if (parseMode !== undefined) params['parse_mode'] = parseMode;
       return callTelegram<{ message_id: number }>(
         botToken,
         'sendMessage',
@@ -248,6 +301,9 @@ export function defaultTelegramApiFactory(botToken: string): TelegramApi {
         undefined,
         10_000,
       );
+    },
+    async setMyCommands({ commands }) {
+      return callTelegram<true>(botToken, 'setMyCommands', { commands }, undefined, 10_000);
     },
   };
 }
@@ -389,6 +445,7 @@ export class TelegramChannel implements ChannelPlugin {
   private onInbound: ChannelContext['onInbound'] | undefined;
   private resolveProjectPath: ChannelContext['resolveProjectPath'] | undefined;
   private resolveBuildLimits: ChannelContext['resolveBuildLimits'] | undefined;
+  private setProjectBudget: ChannelContext['setProjectBudget'] | undefined;
   private db: Database | undefined;
   private ownsDb = false;
   private abortController: AbortController | undefined;
@@ -407,6 +464,7 @@ export class TelegramChannel implements ChannelPlugin {
     this.onInbound = ctx.onInbound;
     this.resolveProjectPath = ctx.resolveProjectPath;
     this.resolveBuildLimits = ctx.resolveBuildLimits;
+    this.setProjectBudget = ctx.setProjectBudget;
     this.config = telegramConfigSchema.parse(rawConfig);
 
     if (this.externalDb !== undefined) {
@@ -422,6 +480,26 @@ export class TelegramChannel implements ChannelPlugin {
       { username: this.botIdentity.username, botId: this.botIdentity.id },
       'telegram: identity verified',
     );
+
+    // Phase 2.2 — register the bot's BotFather command list. Tests with
+    // stubs that omit `setMyCommands` skip silently; the default HTTP
+    // factory always provides it. Failures here are logged but do not
+    // abort start() — the inbound parser still recognises the seven
+    // commands even if the `/` autocomplete menu is stale.
+    if (this.api.setMyCommands !== undefined) {
+      try {
+        await this.api.setMyCommands({ commands: FACTORY_TELEGRAM_COMMANDS });
+        this.log.info(
+          { count: FACTORY_TELEGRAM_COMMANDS.length },
+          'telegram: setMyCommands registered',
+        );
+      } catch (err) {
+        this.log.error(
+          { err },
+          'telegram: setMyCommands failed; `/` menu will be stale until next start',
+        );
+      }
+    }
 
     this.abortController = new AbortController();
     if (this.autoPoll) {
@@ -565,72 +643,35 @@ export class TelegramChannel implements ChannelPlugin {
     // Reply to a bot message with an open pending question ⇒ answer path.
     if (await this.maybeAnswerPendingQuestion(message, strippedText)) return;
 
-    const intent = this.detectIntent(strippedText);
+    // Phase 2.2 — slash-command dispatch. Recognises the seven
+    // FACTORY_SUBCOMMANDS shared with Discord (`/status`, `/spend`,
+    // `/findings`, `/resume`, `/cancel`, `/budget`, `/build`). When the
+    // text is a known command the shared handler runs and the bot replies
+    // directly via `sendMessage` — the brain isn't involved for read
+    // commands. `/build` enqueues a directive via `runBuild` (same shape
+    // as the legacy parser produced) AND emits a confirmation reply.
+    const slash = parseSlashCommand(strippedText);
+    if (slash !== undefined) {
+      await this.dispatchSlashCommand(message, slash.cmd, slash.argsText);
+      return;
+    }
+
+    // Fallback: chat-intent for any non-slash text. Phase 2.5 will route
+    // chat-classified-as-status / spend / findings through the shared
+    // handlers too; today the brain's triage handles the chat directive.
     const principal =
       message.from !== undefined ? String(message.from.id) : `chat:${String(message.chat.id)}`;
     const channelRef = telegramChannelRefFor(message);
-
-    // For build intent, resolve the project name to an absolute workspace
-    // path up-front so the brain's architect finds `<projectPath>/CLAUDE.md`
-    // on first try (issue I011). Fall back to the raw-name payload only
-    // when the resolver is unwired — tests and standalone scripts that
-    // construct the channel without the daemon pass through the old shape.
-    let payload: Record<string, unknown>;
-    let resolvedProjectName: string | undefined;
-    if (intent === 'build') {
-      const buildPayload = this.parseBuildPayload(strippedText);
-      const projectName = buildPayload['project'];
-      if (typeof projectName === 'string') resolvedProjectName = projectName;
-      if (typeof projectName === 'string' && this.resolveProjectPath !== undefined) {
-        try {
-          const projectPath = await this.resolveProjectPath(projectName);
-          payload = { ...buildPayload, projectPath };
-        } catch (err) {
-          this.log.warn(
-            { err, projectName },
-            'telegram: resolveProjectPath failed — falling back to raw name',
-          );
-          payload = buildPayload;
-        }
-      } else {
-        payload = buildPayload;
-      }
-    } else {
-      payload = { text: strippedText };
-    }
-
-    // Three-tier budget resolution for inbound /build (issue I009 fix).
-    // The daemon binds `resolveBuildLimits` to a closure that merges the
-    // project's `metadata.budgetDefaults` with the instance config's
-    // `[budget.defaults]`. When the resolver is unwired (tests / standalone
-    // scripts), the directive carries no `limits` — the pre-fix path.
-    let limits: DirectiveLimits | undefined;
-    if (
-      intent === 'build' &&
-      resolvedProjectName !== undefined &&
-      this.resolveBuildLimits !== undefined
-    ) {
-      try {
-        limits = await this.resolveBuildLimits(resolvedProjectName);
-      } catch (err) {
-        this.log.warn(
-          { err, projectName: resolvedProjectName },
-          'telegram: resolveBuildLimits failed — directive will run uncapped',
-        );
-      }
-    }
-
     const directive: Directive = {
       id: newId(),
       source: 'telegram',
       principal,
       channelRef,
-      intent,
-      payload,
-      autonomy: intent === 'build' ? 'autonomous' : 'chat',
+      intent: 'chat' satisfies Intent,
+      payload: { text: strippedText },
+      autonomy: 'chat',
       createdAt: new Date().toISOString(),
       status: 'pending',
-      ...(limits !== undefined ? { limits } : {}),
     };
 
     try {
@@ -638,7 +679,7 @@ export class TelegramChannel implements ChannelPlugin {
       this.log.info(
         {
           directiveId: directive.id,
-          intent,
+          intent: directive.intent,
           channelRef,
           principal,
           chatType: message.chat.type,
@@ -647,6 +688,118 @@ export class TelegramChannel implements ChannelPlugin {
       );
     } catch (err) {
       this.log.error({ err, directiveId: directive.id }, 'telegram: onInbound threw');
+    }
+  }
+
+  // ---- slash-command dispatch (Phase 2.2) ----
+
+  /**
+   * Run a shared command handler against the message and post the
+   * formatted reply back to the chat. Read commands (`status`, `spend`,
+   * `findings`) use HTML mode with `<pre>` blocks for tables; mutation
+   * commands (`build`, `resume`, `cancel`, `budget`) use plain text.
+   *
+   * Failure paths are uniform: anything thrown by the handler becomes a
+   * `factory <cmd>: error: <message>` plain-text reply. The shared
+   * handler's structured `CommandResult.ok = false` failures (NOT_FOUND,
+   * AMBIGUOUS, INVALID_INPUT, …) are formatted the same way — no need
+   * for the transport to branch on `code` today.
+   */
+  private async dispatchSlashCommand(
+    message: TelegramMessage,
+    cmd: FactorySubcommand,
+    argsText: string,
+  ): Promise<void> {
+    if (
+      this.db === undefined ||
+      this.log === undefined ||
+      this.api === undefined ||
+      this.onInbound === undefined
+    ) {
+      return;
+    }
+    const principal =
+      message.from !== undefined ? String(message.from.id) : `chat:${String(message.chat.id)}`;
+    const channelRef = telegramChannelRefFor(message);
+    const ctx: CommandHandlerContext = {
+      db: this.db,
+      log: this.log,
+      source: 'telegram',
+      principal,
+      channelRef,
+      onInbound: this.onInbound,
+      resolveProjectPath: this.resolveProjectPath,
+      resolveBuildLimits: this.resolveBuildLimits,
+      setProjectBudget: this.setProjectBudget,
+    };
+
+    let reply: TelegramReply;
+    try {
+      reply = await this.runCommand(ctx, cmd, argsText);
+    } catch (err) {
+      this.log.error(
+        { err, cmd, chatId: message.chat.id, principal },
+        'telegram: slash handler threw',
+      );
+      reply = {
+        text: `factory ${cmd}: error: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+
+    void this.api
+      .sendMessage({
+        chatId: message.chat.id,
+        text: reply.text,
+        replyToMessageId: message.message_id,
+        ...(reply.parseMode !== undefined ? { parseMode: reply.parseMode } : {}),
+      })
+      .catch((err: unknown) => {
+        this.log?.warn({ err, cmd, chatId: message.chat.id }, 'telegram: slash reply send failed');
+      });
+  }
+
+  private async runCommand(
+    ctx: CommandHandlerContext,
+    cmd: FactorySubcommand,
+    argsText: string,
+  ): Promise<TelegramReply> {
+    switch (cmd) {
+      case 'status':
+        return formatStatusReply(await runStatus(ctx, parseStatusArgs(argsText)));
+      case 'spend':
+        return formatSpendReply(await runSpend(ctx, parseSpendArgs(argsText)));
+      case 'findings':
+        return formatFindingsReply(await runFindings(ctx, parseFindingsArgs(argsText)));
+      case 'resume': {
+        const input = parseResumeArgs(argsText);
+        if (input === undefined) return usageReply('resume', '/resume <project>');
+        return formatResumeReply(await runResume(ctx, input));
+      }
+      case 'cancel': {
+        const input = parseCancelArgs(argsText);
+        if (input === undefined) return usageReply('cancel', '/cancel <directive-id> [reason]');
+        return formatCancelReply(await runCancel(ctx, input));
+      }
+      case 'budget': {
+        const input = parseBudgetArgs(argsText);
+        if (input === undefined) {
+          return usageReply(
+            'budget',
+            '/budget <project> [--max-usd N] [--max-steps M]  (omit both to clear)',
+          );
+        }
+        return formatBudgetReply(await runBudget(ctx, input));
+      }
+      case 'build': {
+        const input = parseBuildArgs(argsText);
+        if (input === undefined) {
+          return usageReply(
+            'build',
+            '/build <project> [-- <spec>] [--autonomy chat|assisted|autonomous] [--language python|node|go|rust] [--max-usd N] [--max-steps M]',
+          );
+        }
+        return formatBuildReply(await runBuild(ctx, input));
+      }
     }
   }
 
@@ -734,26 +887,6 @@ export class TelegramChannel implements ChannelPlugin {
     return true;
   }
 
-  private detectIntent(text: string): Intent {
-    const prefix = this.config?.buildPrefix ?? '/build';
-    const trimmed = text.trim();
-    if (trimmed.toLowerCase().startsWith(prefix.toLowerCase())) return 'build';
-    return 'chat';
-  }
-
-  private parseBuildPayload(text: string): Record<string, unknown> {
-    const prefix = this.config?.buildPrefix ?? '/build';
-    const payloadText = text.slice(prefix.length).trim();
-    const sepIdx = payloadText.indexOf(' -- ');
-    const project = sepIdx < 0 ? payloadText : payloadText.slice(0, sepIdx).trim();
-    const spec = sepIdx < 0 ? undefined : payloadText.slice(sepIdx + 4).trim();
-    const out: Record<string, unknown> = {};
-    if (project.length > 0) out['project'] = project;
-    if (spec !== undefined && spec.length > 0) out['spec'] = spec;
-    out['text'] = text;
-    return out;
-  }
-
   /** Test helper: feed an update through the handler path directly. */
   async _simulateUpdate(update: TelegramUpdate): Promise<void> {
     await this.handleUpdate(update);
@@ -773,3 +906,476 @@ export function createTelegramChannel(opts?: TelegramChannelOptions): TelegramCh
 // Re-export a precise Zod type alias so consumers can statically refer to
 // the validated config (mirrors discord.ts).
 export type { TelegramConfig as TelegramPluginConfig };
+
+// ---------------------------------------------------------------------------
+// Slash-command support (Phase 2.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Telegram BotFather command list — registered via `setMyCommands` on
+ * `start()` so the bot's `/` autocomplete shows the operator the same
+ * vocabulary as Discord's `/factory` slash menu. Telegram caps each
+ * description at 256 chars; ours stay well under.
+ */
+export const FACTORY_TELEGRAM_COMMANDS: ReadonlyArray<TelegramBotCommandSpec> = [
+  { command: 'status', description: 'list active and recent directives' },
+  { command: 'spend', description: 'cross-session spend rollup' },
+  { command: 'findings', description: 'list registry findings' },
+  { command: 'resume', description: 'resume a stopped build — /resume <project>' },
+  { command: 'cancel', description: 'cancel a directive — /cancel <id> [reason]' },
+  {
+    command: 'budget',
+    description: 'set project budget — /budget <project> [--max-usd N --max-steps M]',
+  },
+  { command: 'build', description: 'kick off a build — /build <project> [-- <spec>]' },
+];
+
+/** Reply payload returned by the Telegram-side formatter. */
+interface TelegramReply {
+  text: string;
+  parseMode?: 'HTML';
+}
+
+/**
+ * Recognise `/<cmd>[@bot] [args]`. Returns `undefined` when the text is
+ * not a slash command or `<cmd>` is not one of the seven we handle —
+ * the caller falls through to the chat-intent path.
+ */
+export function parseSlashCommand(
+  text: string,
+): { cmd: FactorySubcommand; argsText: string } | undefined {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('/')) return undefined;
+  const match = /^\/(\w+)(?:@\S+)?(?:\s+([\s\S]*))?$/.exec(trimmed);
+  if (match === null) return undefined;
+  const cmd = match[1]!.toLowerCase();
+  const argsText = match[2] ?? '';
+  if (!(FACTORY_SUBCOMMANDS as readonly string[]).includes(cmd)) return undefined;
+  return { cmd: cmd as FactorySubcommand, argsText };
+}
+
+/**
+ * Tokenise `[--key value]... [positional...] [-- rest]` into a
+ * structured `ParsedFlags`. The literal `--` token (alone) splits flags
+ * from a free-form trailing payload — we use this for `/build <p> --
+ * <spec>`. A flag without a value is recorded as the empty string.
+ */
+interface ParsedFlags {
+  positional: string[];
+  flags: Record<string, string>;
+  rest?: string;
+}
+
+export function parseFlags(text: string): ParsedFlags {
+  const tokens = text
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length > 0);
+  const positional: string[] = [];
+  const flags: Record<string, string> = {};
+  let i = 0;
+  while (i < tokens.length) {
+    const t = tokens[i]!;
+    if (t === '--') {
+      const rest = tokens.slice(i + 1).join(' ');
+      return rest.length > 0 ? { positional, flags, rest } : { positional, flags };
+    }
+    if (t.startsWith('--')) {
+      const key = t.slice(2);
+      const next = tokens[i + 1];
+      if (next === undefined || next === '--' || next.startsWith('--')) {
+        flags[key] = '';
+        i += 1;
+      } else {
+        flags[key] = next;
+        i += 2;
+      }
+    } else {
+      positional.push(t);
+      i += 1;
+    }
+  }
+  return { positional, flags };
+}
+
+// ---- per-command argument parsers ----
+
+function parseStatusArgs(text: string): StatusInput {
+  const { positional, flags } = parseFlags(text);
+  const raw = flags['limit'] ?? positional[0];
+  if (raw === undefined) return {};
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n)) return {};
+  return { limit: n };
+}
+
+function parseSpendArgs(text: string): SpendInput {
+  const { flags } = parseFlags(text);
+  const groupBy = flags['group-by'];
+  const project = flags['project'];
+  return {
+    ...(groupBy !== undefined && groupBy.length > 0 ? { groupBy } : {}),
+    ...(project !== undefined && project.length > 0 ? { project } : {}),
+  };
+}
+
+function parseFindingsArgs(text: string): FindingsInput {
+  const { flags } = parseFlags(text);
+  return {
+    ...(flags['project'] !== undefined && flags['project'].length > 0
+      ? { project: flags['project'] }
+      : {}),
+    ...(flags['severity'] !== undefined && flags['severity'].length > 0
+      ? { severity: flags['severity'] }
+      : {}),
+    ...(flags['status'] !== undefined && flags['status'].length > 0
+      ? { status: flags['status'] }
+      : {}),
+  };
+}
+
+function parseResumeArgs(text: string): ResumeInput | undefined {
+  const { positional } = parseFlags(text);
+  const project = positional[0];
+  if (project === undefined || project.length === 0) return undefined;
+  return { project };
+}
+
+function parseCancelArgs(text: string): CancelInput | undefined {
+  const { positional } = parseFlags(text);
+  const directiveId = positional[0];
+  if (directiveId === undefined || directiveId.length === 0) return undefined;
+  const reason = positional.slice(1).join(' ').trim();
+  return reason.length > 0 ? { directiveId, reason } : { directiveId };
+}
+
+function parseBudgetArgs(text: string): BudgetInput | undefined {
+  const { positional, flags } = parseFlags(text);
+  const project = positional[0];
+  if (project === undefined || project.length === 0) return undefined;
+  const maxUsd = flags['max-usd'] !== undefined ? Number.parseFloat(flags['max-usd']) : undefined;
+  const maxSteps =
+    flags['max-steps'] !== undefined ? Number.parseInt(flags['max-steps'], 10) : undefined;
+  return {
+    project,
+    ...(maxUsd !== undefined && Number.isFinite(maxUsd) && maxUsd > 0 ? { maxUsd } : {}),
+    ...(maxSteps !== undefined && Number.isFinite(maxSteps) && maxSteps > 0 ? { maxSteps } : {}),
+  };
+}
+
+function parseBuildArgs(text: string): BuildInput | undefined {
+  const { positional, flags, rest } = parseFlags(text);
+  const project = positional[0];
+  if (project === undefined || project.length === 0) return undefined;
+  // `--spec` flag wins over `-- <rest>` separator (operator chose the form).
+  const spec = flags['spec'] !== undefined && flags['spec'].length > 0 ? flags['spec'] : rest;
+  const autonomyRaw = flags['autonomy'];
+  const autonomy =
+    autonomyRaw === 'chat' || autonomyRaw === 'assisted' || autonomyRaw === 'autonomous'
+      ? (autonomyRaw as AutonomyMode)
+      : undefined;
+  const languageRaw = flags['language'];
+  const language = isLanguageString(languageRaw) ? languageRaw : undefined;
+  const maxUsd = flags['max-usd'] !== undefined ? Number.parseFloat(flags['max-usd']) : undefined;
+  const maxSteps =
+    flags['max-steps'] !== undefined ? Number.parseInt(flags['max-steps'], 10) : undefined;
+  return {
+    project,
+    ...(spec !== undefined && spec.length > 0 ? { spec } : {}),
+    ...(autonomy !== undefined ? { autonomy } : {}),
+    ...(language !== undefined ? { language } : {}),
+    ...(maxUsd !== undefined && Number.isFinite(maxUsd) && maxUsd > 0 ? { maxUsd } : {}),
+    ...(maxSteps !== undefined && Number.isFinite(maxSteps) && maxSteps > 0 ? { maxSteps } : {}),
+  };
+}
+
+function isLanguageString(value: string | undefined): value is ProjectLanguage {
+  return value !== undefined && (PROJECT_LANGUAGES as readonly string[]).includes(value);
+}
+
+// ---- per-command formatters (Telegram replies) ----
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function preBlock(content: string): string {
+  return `<pre>${escapeHtml(content)}</pre>`;
+}
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return `${s.slice(0, max - 1)}…`;
+}
+
+function firstLine(s: string): string {
+  const nl = s.indexOf('\n');
+  return nl < 0 ? s : s.slice(0, nl);
+}
+
+function truncatePath(p: string): string {
+  if (p.length <= 56) return p;
+  const sepIdx = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+  if (sepIdx < 0) return truncate(p, 56);
+  const tail = p.slice(sepIdx);
+  const headBudget = Math.max(8, 56 - tail.length - 3);
+  return `${p.slice(0, headBudget)}…${tail}`;
+}
+
+function usageReply(cmd: FactorySubcommand, usage: string): TelegramReply {
+  return { text: `factory ${cmd}: ${usage}` };
+}
+
+function formatStatusReply(data: StatusData): TelegramReply {
+  const sections: string[] = ['<b>factory status</b>'];
+
+  if (data.projects.length === 0) {
+    sections.push('<b>Projects</b> — <i>(none registered)</i>');
+  } else {
+    const lines: string[] = [];
+    for (const p of data.projects.slice(0, 8)) {
+      lines.push(
+        `• <code>${escapeHtml(p.name)}</code> — ${escapeHtml(p.status)} — ${escapeHtml(truncatePath(p.workspacePath))}`,
+      );
+    }
+    if (data.projects.length > 8) {
+      lines.push(`<i>…and ${(data.projects.length - 8).toString()} more</i>`);
+    }
+    sections.push(`<b>Projects</b> (${data.projects.length.toString()})\n${lines.join('\n')}`);
+  }
+
+  if (data.recent.length === 0) {
+    sections.push('<b>Recent directives</b> — <i>(none yet)</i>');
+  } else {
+    const tableLines: string[] = [];
+    tableLines.push(
+      `${'id'.padEnd(8)}  ${'status'.padEnd(8)}  ${'intent'.padEnd(11)}  ${'spent'.padStart(9)}  created`,
+    );
+    for (const e of data.recent) {
+      const d = e.directive;
+      tableLines.push(
+        `${d.id.slice(-8)}  ${d.status.padEnd(8)}  ${d.intent.padEnd(11)}  ${`$${e.spendUsd.toFixed(4)}`.padStart(9)}  ${d.createdAt.slice(0, 19)}Z`,
+      );
+    }
+    sections.push(
+      `<b>Recent directives</b> (${data.recent.length.toString()})\n${preBlock(tableLines.join('\n'))}`,
+    );
+  }
+
+  return { text: sections.join('\n\n'), parseMode: 'HTML' };
+}
+
+function formatSpendReply(result: CommandResult<SpendData>): TelegramReply {
+  if (!result.ok) return { text: `factory spend: ${result.message}` };
+  const data = result.data;
+  const tableLines: string[] = [];
+  switch (data.groupBy) {
+    case 'project':
+      renderSpendProjectRows(data.rows, tableLines);
+      break;
+    case 'directive':
+      renderSpendDirectiveRows(data.rows, tableLines);
+      break;
+    case 'day':
+      renderSpendDayRows(data.rows, tableLines);
+      break;
+    case 'model':
+      renderSpendModelRows(data.rows, tableLines);
+      break;
+  }
+  const heading = `<b>factory spend</b> (group-by ${data.groupBy})`;
+  if (tableLines.length === 0) {
+    return { text: `${heading}\n\n<i>(no spend recorded)</i>`, parseMode: 'HTML' };
+  }
+  return { text: `${heading}\n\n${preBlock(tableLines.join('\n'))}`, parseMode: 'HTML' };
+}
+
+function renderSpendProjectRows(
+  rows: ReadonlyArray<{
+    display: string;
+    directiveCount: number;
+    callCount: number;
+    totalUsd: number;
+  }>,
+  out: string[],
+): void {
+  if (rows.length === 0) return;
+  out.push(
+    `${'project'.padEnd(28)}  ${'dirs'.padStart(5)}  ${'calls'.padStart(6)}  ${'spent'.padStart(11)}`,
+  );
+  let totalUsd = 0;
+  let totalCalls = 0;
+  for (const r of rows) {
+    const display = truncate(r.display, 28);
+    out.push(
+      `${display.padEnd(28)}  ${String(r.directiveCount).padStart(5)}  ${String(r.callCount).padStart(6)}  ${`$${r.totalUsd.toFixed(4)}`.padStart(11)}`,
+    );
+    totalUsd += r.totalUsd;
+    totalCalls += r.callCount;
+  }
+  out.push(
+    `${'TOTAL'.padEnd(28)}  ${''.padStart(5)}  ${String(totalCalls).padStart(6)}  ${`$${totalUsd.toFixed(4)}`.padStart(11)}`,
+  );
+}
+
+function renderSpendDirectiveRows(
+  rows: ReadonlyArray<{
+    directiveId: string;
+    projectId: string | null;
+    projectName: string | null;
+    callCount: number;
+    totalUsd: number;
+    lastCalledAt: string;
+  }>,
+  out: string[],
+): void {
+  if (rows.length === 0) return;
+  out.push(
+    `${'directive'.padEnd(8)}  ${'project'.padEnd(20)}  ${'calls'.padStart(6)}  ${'spent'.padStart(11)}  last`,
+  );
+  for (const r of rows) {
+    const projLabel = r.projectName ?? '(unassigned)';
+    const projId = r.projectId !== null ? r.projectId.slice(-4) : '----';
+    const proj = truncate(`${projLabel} (…${projId})`, 20);
+    out.push(
+      `${r.directiveId.slice(-8).padEnd(8)}  ${proj.padEnd(20)}  ${String(r.callCount).padStart(6)}  ${`$${r.totalUsd.toFixed(4)}`.padStart(11)}  ${r.lastCalledAt.slice(0, 19)}Z`,
+    );
+  }
+}
+
+function renderSpendDayRows(
+  rows: ReadonlyArray<{ date: string; callCount: number; totalUsd: number }>,
+  out: string[],
+): void {
+  if (rows.length === 0) return;
+  out.push(`${'date'.padEnd(11)}  ${'calls'.padStart(6)}  ${'spent'.padStart(11)}`);
+  let totalUsd = 0;
+  let totalCalls = 0;
+  for (const r of rows) {
+    out.push(
+      `${r.date.padEnd(11)}  ${String(r.callCount).padStart(6)}  ${`$${r.totalUsd.toFixed(4)}`.padStart(11)}`,
+    );
+    totalUsd += r.totalUsd;
+    totalCalls += r.callCount;
+  }
+  out.push(
+    `${'TOTAL'.padEnd(11)}  ${String(totalCalls).padStart(6)}  ${`$${totalUsd.toFixed(4)}`.padStart(11)}`,
+  );
+}
+
+function renderSpendModelRows(
+  rows: ReadonlyArray<{
+    provider: string;
+    model: string;
+    callCount: number;
+    totalUsd: number;
+  }>,
+  out: string[],
+): void {
+  if (rows.length === 0) return;
+  out.push(`${'provider/model'.padEnd(36)}  ${'calls'.padStart(6)}  ${'spent'.padStart(11)}`);
+  for (const r of rows) {
+    const label = truncate(`${r.provider}/${r.model}`, 36);
+    out.push(
+      `${label.padEnd(36)}  ${String(r.callCount).padStart(6)}  ${`$${r.totalUsd.toFixed(4)}`.padStart(11)}`,
+    );
+  }
+}
+
+function formatFindingsReply(result: CommandResult<FindingsData>): TelegramReply {
+  if (!result.ok) return { text: `factory findings: ${result.message}` };
+  const { rows, filters } = result.data;
+  const filterParts: string[] = [`status=${filters.status}`];
+  if (filters.severity !== undefined) filterParts.push(`severity=${filters.severity}`);
+  if (filters.project !== undefined) filterParts.push(`project=${filters.project}`);
+  const heading = `<b>factory findings</b> (${filterParts.join(', ')})`;
+  if (rows.length === 0) {
+    return { text: `${heading}\n\n<i>(no findings match)</i>`, parseMode: 'HTML' };
+  }
+  const tableLines: string[] = [];
+  tableLines.push(
+    `${'project'.padEnd(20)}  ${'id'.padEnd(6)}  ${'sev'.padEnd(8)}  ${'status'.padEnd(8)}  source         description`,
+  );
+  for (const e of rows) {
+    const project = truncate(e.projectId.slice(-12), 20);
+    const sev = e.finding.advisory === true ? `[adv]${e.finding.severity}` : e.finding.severity;
+    const desc = truncate(firstLine(e.finding.description), 60);
+    tableLines.push(
+      `${project.padEnd(20)}  ${e.finding.id.padEnd(6)}  ${sev.padEnd(8)}  ${e.finding.status.padEnd(8)}  ${e.finding.source.padEnd(13)}  ${desc}`,
+    );
+  }
+  tableLines.push(`(${rows.length.toString()} finding${rows.length === 1 ? '' : 's'})`);
+  return { text: `${heading}\n\n${preBlock(tableLines.join('\n'))}`, parseMode: 'HTML' };
+}
+
+function formatResumeReply(result: CommandResult<ResumeData>): TelegramReply {
+  if (!result.ok) return { text: `factory resume: ${result.message}` };
+  const d = result.data;
+  return {
+    text: [
+      `factory resume — queued`,
+      `Project: ${d.project}`,
+      `Path: ${truncatePath(d.projectPath)}`,
+      `Resuming from: ${d.priorId.slice(-8)} (${d.priorStatus})`,
+      `New directive: ${d.newDirectiveId.slice(-8)}`,
+      ``,
+      `The daemon will claim it shortly.`,
+    ].join('\n'),
+  };
+}
+
+function formatCancelReply(result: CommandResult<CancelData>): TelegramReply {
+  if (!result.ok) return { text: `factory cancel: ${result.message}` };
+  const d = result.data;
+  return {
+    text: [
+      `factory cancel — directive marked blocked`,
+      `Directive: ${d.directiveId.slice(-8)}`,
+      `Was: ${d.prevStatus}`,
+      `Reason: ${d.reason}`,
+      ``,
+      `(Phase 2.4 will additionally kill running workers within 10 s.)`,
+    ].join('\n'),
+  };
+}
+
+function formatBudgetReply(result: CommandResult<BudgetData>): TelegramReply {
+  if (!result.ok) return { text: `factory budget: ${result.message}` };
+  const d = result.data;
+  const lines: string[] = [
+    `factory budget — updated`,
+    `Project: ${d.project} (…${d.projectId.slice(-4)})`,
+  ];
+  if (d.defaults.maxUsd === undefined && d.defaults.maxSteps === undefined) {
+    lines.push(`Budget: cleared — directives now run uncapped from this project tier.`);
+  } else {
+    const parts: string[] = [];
+    if (d.defaults.maxUsd !== undefined) parts.push(`max-usd $${d.defaults.maxUsd.toFixed(2)}`);
+    if (d.defaults.maxSteps !== undefined)
+      parts.push(`max-steps ${d.defaults.maxSteps.toString()}`);
+    lines.push(`Budget: ${parts.join(' · ')}`);
+  }
+  return { text: lines.join('\n') };
+}
+
+function formatBuildReply(d: BuildData): TelegramReply {
+  const lines: string[] = [
+    `factory build — queued`,
+    `Project: ${d.project}`,
+    `Path: ${d.projectPath !== undefined ? truncatePath(d.projectPath) : '(unresolved — daemon will retry)'}`,
+    `Directive: ${d.directiveId.slice(-8)}`,
+    `Autonomy: ${d.autonomy}`,
+  ];
+  if (d.language !== undefined) lines.push(`Language: ${d.language}`);
+  if (d.limits !== undefined) {
+    const parts: string[] = [];
+    if (d.limits.maxUsd !== undefined) parts.push(`max-usd $${d.limits.maxUsd.toFixed(2)}`);
+    if (d.limits.maxSteps !== undefined) parts.push(`max-steps ${d.limits.maxSteps.toString()}`);
+    lines.push(`Limits: ${parts.join(' · ')}`);
+  }
+  if (d.spec !== undefined && d.spec.length > 0) {
+    lines.push(``, `Spec: ${truncate(d.spec, 800)}`);
+  }
+  lines.push(``, `The daemon will claim it shortly.`);
+  return { text: lines.join('\n') };
+}

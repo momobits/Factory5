@@ -12,12 +12,9 @@
  *   - `/factory budget`    — set per-project budget defaults
  *   - `/factory build`     — kick off a build directive
  *
- * Read commands (status / spend / findings) hit SQLite directly — no LLM
- * round-trip — via the same query helpers the CLI and Web UI use. Mutations
- * (build / resume / budget / cancel) re-use the existing channel-context
- * callbacks (`onInbound`, `resolveProjectPath`, `resolveBuildLimits`,
- * `setProjectBudget`) so the slash path is structurally identical to a
- * `messageCreate`-driven `/build` — same insert, same daemon claim loop.
+ * After step 2.2 each handler is a thin wrapper around the transport-agnostic
+ * `command-handlers.ts` module — Telegram dispatches through the same
+ * `runStatus` / `runSpend` / etc. so the two surfaces never drift.
  *
  * Registration: definitions are emitted as a single top-level `factory`
  * command with seven subcommands. The discord plugin calls
@@ -25,37 +22,15 @@
  * on `Events.ClientReady`; guild-scoped when `config.guildId` is set
  * (instant register), global otherwise (~1 hour propagation).
  *
- * Dispatch: the plugin registers an `interactionCreate` listener that
- * routes any `factory` chat-input interaction through
- * {@link dispatchSlashInteraction}. Handlers respond via
- * `interaction.editReply()` after a `deferReply()` so a slow read
- * (large registry) doesn't blow Discord's three-second window.
+ * Dispatch: the plugin registers an `interactionCreate` listener that routes
+ * any `factory` chat-input interaction through {@link dispatchSlashInteraction}.
+ * Handlers respond via `interaction.editReply()` after a `deferReply()` so a
+ * slow read (large registry) doesn't blow Discord's three-second window.
  */
 
-import {
-  type AutonomyMode,
-  type Directive,
-  type DirectiveLimits,
-  directiveSchema,
-  newId,
-  type Intent,
-  type ProjectBudgetDefaults,
-} from '@factory5/core';
+import { type AutonomyMode } from '@factory5/core';
 import type { Logger } from '@factory5/logger';
-import {
-  directives as directivesQ,
-  findingsRegistry,
-  modelUsage,
-  projects as projectsQ,
-  spend as spendQ,
-  type Database,
-  type FindingsRegistryEntry,
-  type PerDaySpend,
-  type PerDirectiveSpend,
-  type PerModelSpend,
-  type PerProjectSpend,
-  MarkBlockedError,
-} from '@factory5/state';
+import { type Database, type FindingsRegistryEntry, spend as spendQ } from '@factory5/state';
 import {
   EmbedBuilder,
   SlashCommandBuilder,
@@ -63,7 +38,29 @@ import {
   type RESTPostAPIApplicationCommandsJSONBody,
 } from 'discord.js';
 
-import { SetProjectBudgetError, type ChannelContext } from './types.js';
+import {
+  FINDING_SEVERITIES,
+  FINDING_STATUSES,
+  PROJECT_LANGUAGES,
+  runBudget,
+  runBuild,
+  runCancel,
+  runFindings,
+  runResume,
+  runSpend,
+  runStatus,
+  SPEND_GROUPS,
+  type BudgetData,
+  type BuildData,
+  type CancelData,
+  type CommandHandlerContext,
+  type CommandResult,
+  type FindingsData,
+  type ResumeData,
+  type SpendData,
+  type StatusData,
+} from './command-handlers.js';
+import type { ChannelContext } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Subcommand inventory
@@ -80,11 +77,7 @@ export const FACTORY_SUBCOMMANDS = [
 ] as const;
 export type FactorySubcommand = (typeof FACTORY_SUBCOMMANDS)[number];
 
-const SPEND_GROUPS = ['project', 'directive', 'day', 'model'] as const;
-const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
-const FINDING_STATUSES = ['OPEN', 'FIXED', 'VERIFIED', 'WONTFIX'] as const;
 const AUTONOMY_MODES = ['chat', 'assisted', 'autonomous'] as const;
-const LANGUAGES = ['python', 'node', 'go', 'rust'] as const;
 
 // ---------------------------------------------------------------------------
 // Embed colors
@@ -151,7 +144,7 @@ export function buildFactorySlashCommand(): RESTPostAPIApplicationCommandsJSONBo
         o
           .setName('severity')
           .setDescription('filter by severity')
-          .addChoices(...SEVERITIES.map((sv) => ({ name: sv, value: sv }))),
+          .addChoices(...FINDING_SEVERITIES.map((sv) => ({ name: sv, value: sv }))),
       )
       .addStringOption((o) =>
         o
@@ -211,7 +204,7 @@ export function buildFactorySlashCommand(): RESTPostAPIApplicationCommandsJSONBo
         o
           .setName('language')
           .setDescription('assessor runtime')
-          .addChoices(...LANGUAGES.map((l) => ({ name: l, value: l }))),
+          .addChoices(...PROJECT_LANGUAGES.map((l) => ({ name: l, value: l }))),
       )
       .addNumberOption((o) =>
         o.setName('max-usd').setDescription('hard USD ceiling').setMinValue(0.01),
@@ -225,8 +218,8 @@ export function buildFactorySlashCommand(): RESTPostAPIApplicationCommandsJSONBo
 }
 
 // ---------------------------------------------------------------------------
-// Per-interaction context — a subset of ChannelContext plus the live DB and
-// the invoking user. The Discord plugin builds this once per interaction.
+// Per-interaction context — superset of CommandHandlerContext with the
+// Discord-specific allow-list. The plugin builds this once per interaction.
 // ---------------------------------------------------------------------------
 
 export interface DiscordCommandContext {
@@ -292,11 +285,11 @@ export async function dispatchSlashInteraction(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     ctx.log.error({ err, sub, userId: interaction.user.id }, 'discord-commands: handler threw');
-    const errorEmbed = new EmbedBuilder()
+    const errEmbed = new EmbedBuilder()
       .setColor(COLOR_ERROR)
       .setTitle(`/factory ${sub} — error`)
       .setDescription(`\`${truncateForEmbed(message, 1900)}\``);
-    await interaction.editReply({ embeds: [errorEmbed] });
+    await interaction.editReply({ embeds: [errEmbed] });
   }
 }
 
@@ -305,64 +298,172 @@ async function runSubcommand(
   interaction: ChatInputCommandInteraction,
   sub: FactorySubcommand,
 ): Promise<EmbedBuilder> {
+  const handlerCtx = toHandlerContext(ctx);
   switch (sub) {
     case 'status':
-      return handleStatus(ctx, interaction);
+      return embedStatus(ctx.db, await runStatus(handlerCtx, statusInput(interaction)));
     case 'spend':
-      return handleSpend(ctx, interaction);
+      return embedSpend(await runSpend(handlerCtx, spendInput(interaction)), interaction);
     case 'findings':
-      return handleFindings(ctx, interaction);
+      return embedFindings(await runFindings(handlerCtx, findingsInput(interaction)));
     case 'resume':
-      return handleResume(ctx, interaction);
+      return embedResume(await runResume(handlerCtx, resumeInput(interaction)));
     case 'cancel':
-      return handleCancel(ctx, interaction);
+      return embedCancel(await runCancel(handlerCtx, cancelInput(interaction)));
     case 'budget':
-      return handleBudget(ctx, interaction);
+      return embedBudget(await runBudget(handlerCtx, budgetInput(interaction)));
     case 'build':
-      return handleBuild(ctx, interaction);
+      return embedBuild(await runBuild(handlerCtx, buildInput(interaction)));
   }
 }
 
+function toHandlerContext(ctx: DiscordCommandContext): CommandHandlerContext {
+  return {
+    db: ctx.db,
+    log: ctx.log,
+    source: 'discord',
+    principal: ctx.user.id,
+    channelRef: `discord-slash-${Date.now().toString()}`,
+    onInbound: ctx.onInbound,
+    resolveProjectPath: ctx.resolveProjectPath,
+    resolveBuildLimits: ctx.resolveBuildLimits,
+    setProjectBudget: ctx.setProjectBudget,
+  };
+}
+
 // ---------------------------------------------------------------------------
-// /factory status
+// Interaction → input adapters
 // ---------------------------------------------------------------------------
 
-export async function handleStatus(
-  ctx: DiscordCommandContext,
-  interaction: ChatInputCommandInteraction,
-): Promise<EmbedBuilder> {
-  const limit = interaction.options.getInteger('limit') ?? 10;
-  const recent = directivesQ.listRecent(ctx.db, limit);
-  const projects = projectsQ.listAll(ctx.db);
+function statusInput(interaction: ChatInputCommandInteraction): { limit?: number } {
+  const limit = interaction.options.getInteger('limit') ?? undefined;
+  return limit !== undefined ? { limit } : {};
+}
 
+function spendInput(interaction: ChatInputCommandInteraction): {
+  groupBy?: string;
+  project?: string;
+} {
+  const groupBy = interaction.options.getString('group-by') ?? undefined;
+  const project = interaction.options.getString('project') ?? undefined;
+  return {
+    ...(groupBy !== undefined ? { groupBy } : {}),
+    ...(project !== undefined && project.length > 0 ? { project } : {}),
+  };
+}
+
+function findingsInput(interaction: ChatInputCommandInteraction): {
+  project?: string;
+  severity?: string;
+  status?: string;
+} {
+  const project = interaction.options.getString('project') ?? undefined;
+  const severity = interaction.options.getString('severity') ?? undefined;
+  const status = interaction.options.getString('status') ?? undefined;
+  return {
+    ...(project !== undefined && project.length > 0 ? { project } : {}),
+    ...(severity !== undefined ? { severity } : {}),
+    ...(status !== undefined ? { status } : {}),
+  };
+}
+
+function resumeInput(interaction: ChatInputCommandInteraction): { project: string } {
+  return { project: interaction.options.getString('project', true) };
+}
+
+function cancelInput(interaction: ChatInputCommandInteraction): {
+  directiveId: string;
+  reason?: string;
+} {
+  const directiveId = interaction.options.getString('directive-id', true);
+  const reason = interaction.options.getString('reason') ?? undefined;
+  return reason !== undefined ? { directiveId, reason } : { directiveId };
+}
+
+function budgetInput(interaction: ChatInputCommandInteraction): {
+  project: string;
+  maxUsd?: number;
+  maxSteps?: number;
+} {
+  const project = interaction.options.getString('project', true);
+  const maxUsd = interaction.options.getNumber('max-usd') ?? undefined;
+  const maxSteps = interaction.options.getInteger('max-steps') ?? undefined;
+  return {
+    project,
+    ...(maxUsd !== undefined ? { maxUsd } : {}),
+    ...(maxSteps !== undefined ? { maxSteps } : {}),
+  };
+}
+
+function buildInput(interaction: ChatInputCommandInteraction): {
+  project: string;
+  spec?: string;
+  autonomy?: AutonomyMode;
+  language?: 'python' | 'node' | 'go' | 'rust';
+  maxUsd?: number;
+  maxSteps?: number;
+} {
+  const project = interaction.options.getString('project', true);
+  const spec = interaction.options.getString('spec') ?? undefined;
+  const autonomy = (interaction.options.getString('autonomy') ?? undefined) as
+    | AutonomyMode
+    | undefined;
+  const language = (interaction.options.getString('language') ?? undefined) as
+    | 'python'
+    | 'node'
+    | 'go'
+    | 'rust'
+    | undefined;
+  const maxUsd = interaction.options.getNumber('max-usd') ?? undefined;
+  const maxSteps = interaction.options.getInteger('max-steps') ?? undefined;
+  return {
+    project,
+    ...(spec !== undefined && spec.length > 0 ? { spec } : {}),
+    ...(autonomy !== undefined ? { autonomy } : {}),
+    ...(language !== undefined ? { language } : {}),
+    ...(maxUsd !== undefined ? { maxUsd } : {}),
+    ...(maxSteps !== undefined ? { maxSteps } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Result → embed renderers
+// ---------------------------------------------------------------------------
+
+function embedStatus(db: Database, data: StatusData): EmbedBuilder {
   const sections: string[] = [];
 
-  if (projects.length === 0) {
+  if (data.projects.length === 0) {
     sections.push('**Projects** — _(none registered)_');
   } else {
-    const lines = projects
+    const lines = data.projects
       .slice(0, 8)
       .map((p) => `• \`${p.name}\` — ${p.status} — ${truncatePath(p.workspacePath)}`);
-    if (projects.length > 8) lines.push(`_…and ${projects.length - 8} more_`);
-    sections.push(`**Projects** (${projects.length})`, lines.join('\n'));
+    if (data.projects.length > 8) lines.push(`_…and ${data.projects.length - 8} more_`);
+    sections.push(`**Projects** (${data.projects.length})`, lines.join('\n'));
   }
 
-  if (recent.length === 0) {
+  if (data.recent.length === 0) {
     sections.push('**Recent directives** — _(none yet)_');
   } else {
     const lines: string[] = ['```'];
     lines.push(
       `${'id'.padEnd(8)}  ${'status'.padEnd(8)}  ${'intent'.padEnd(11)}  ${'spent'.padStart(9)}  created`,
     );
-    for (const d of recent) {
-      const cost = modelUsage.totalCostForDirective(ctx.db, d.id);
+    for (const e of data.recent) {
+      const d = e.directive;
       lines.push(
-        `${d.id.slice(-8)}  ${d.status.padEnd(8)}  ${d.intent.padEnd(11)}  ${`$${cost.toFixed(4)}`.padStart(9)}  ${d.createdAt.slice(0, 19)}Z`,
+        `${d.id.slice(-8)}  ${d.status.padEnd(8)}  ${d.intent.padEnd(11)}  ${`$${e.spendUsd.toFixed(4)}`.padStart(9)}  ${d.createdAt.slice(0, 19)}Z`,
       );
     }
     lines.push('```');
-    sections.push(`**Recent directives** (${recent.length})`, lines.join('\n'));
+    sections.push(`**Recent directives** (${data.recent.length})`, lines.join('\n'));
   }
+
+  // The handler context already produced the data; `db` is unused here but
+  // kept in the signature to keep the call site aligned with the other
+  // renderers (status takes a DB read for spend; future expansion may want it).
+  void db;
 
   return new EmbedBuilder()
     .setColor(COLOR_INFO)
@@ -371,77 +472,147 @@ export async function handleStatus(
     .setTimestamp();
 }
 
-// ---------------------------------------------------------------------------
-// /factory spend
-// ---------------------------------------------------------------------------
-
-export async function handleSpend(
-  ctx: DiscordCommandContext,
+function embedSpend(
+  result: CommandResult<SpendData>,
   interaction: ChatInputCommandInteraction,
-): Promise<EmbedBuilder> {
-  const groupRaw = interaction.options.getString('group-by') ?? 'project';
-  if (!(SPEND_GROUPS as readonly string[]).includes(groupRaw)) {
-    return errorEmbed(
-      'spend',
-      `invalid --group-by "${groupRaw}" (expected: ${SPEND_GROUPS.join(' | ')})`,
-    );
-  }
-  const group = groupRaw as (typeof SPEND_GROUPS)[number];
-
-  const projectArg = interaction.options.getString('project') ?? undefined;
-  const filter: { projectId?: string } = {};
-  if (projectArg !== undefined && projectArg.length > 0) {
-    const matches = projectsQ.findByName(ctx.db, projectArg);
-    if (matches.length === 0) {
-      return errorEmbed('spend', `no project matches \`${projectArg}\``);
-    }
-    if (matches.length > 1) {
-      const lines = matches.map(
-        (p) => `• \`${p.name}\` — ${p.id} — ${truncatePath(p.workspacePath)}`,
-      );
-      return errorEmbed(
-        'spend',
-        `\`${projectArg}\` is ambiguous (${matches.length} projects):\n${lines.join('\n')}`,
-      );
-    }
-    const only = matches[0]!;
-    filter.projectId = only.id;
-  }
-
+): EmbedBuilder {
+  if (!result.ok) return errorEmbed('spend', result.message);
+  const data = result.data;
+  const projectFilter = interaction.options.getString('project') ?? undefined;
   let body: string;
-  switch (group) {
-    case 'project': {
-      const rows = spendQ.perProject(ctx.db, filter).slice(0, 15);
-      body = renderSpendProject(rows);
+  switch (data.groupBy) {
+    case 'project':
+      body = renderSpendProject(data.rows);
       break;
-    }
-    case 'directive': {
-      const rows = spendQ.perDirective(ctx.db, filter).slice(0, 15);
-      body = renderSpendDirective(rows);
+    case 'directive':
+      body = renderSpendDirective(data.rows);
       break;
-    }
-    case 'day': {
-      const rows = spendQ.perDay(ctx.db, filter).slice(0, 15);
-      body = renderSpendDay(rows);
+    case 'day':
+      body = renderSpendDay(data.rows);
       break;
-    }
-    case 'model': {
-      const rows = spendQ.perModel(ctx.db, filter).slice(0, 15);
-      body = renderSpendModel(rows);
+    case 'model':
+      body = renderSpendModel(data.rows);
       break;
-    }
   }
-
   const titleSuffix =
-    projectArg !== undefined && projectArg.length > 0 ? ` — project=${projectArg}` : '';
+    projectFilter !== undefined && projectFilter.length > 0 ? ` — project=${projectFilter}` : '';
   return new EmbedBuilder()
     .setColor(COLOR_INFO)
-    .setTitle(`factory spend (group-by ${group})${titleSuffix}`)
+    .setTitle(`factory spend (group-by ${data.groupBy})${titleSuffix}`)
     .setDescription(body)
     .setTimestamp();
 }
 
-function renderSpendProject(rows: PerProjectSpend[]): string {
+function embedFindings(result: CommandResult<FindingsData>): EmbedBuilder {
+  if (!result.ok) return errorEmbed('findings', result.message);
+  const { rows, filters } = result.data;
+  const titleParts: string[] = [`status=${filters.status}`];
+  if (filters.severity !== undefined) titleParts.push(`severity=${filters.severity}`);
+  if (filters.project !== undefined) titleParts.push(`project=${filters.project}`);
+  return new EmbedBuilder()
+    .setColor(rows.length === 0 ? COLOR_OK : COLOR_INFO)
+    .setTitle(`factory findings (${titleParts.join(', ')})`)
+    .setDescription(renderFindings(rows))
+    .setTimestamp();
+}
+
+function embedResume(result: CommandResult<ResumeData>): EmbedBuilder {
+  if (!result.ok) return errorEmbed('resume', result.message);
+  const data = result.data;
+  return new EmbedBuilder()
+    .setColor(COLOR_OK)
+    .setTitle('factory resume — queued')
+    .setDescription(
+      [
+        `**Project:** \`${data.project}\``,
+        `**Path:** \`${truncatePath(data.projectPath)}\``,
+        `**Resuming from:** \`${data.priorId.slice(-8)}\` (${data.priorStatus})`,
+        `**New directive:** \`${data.newDirectiveId.slice(-8)}\``,
+        '',
+        '_The daemon will claim it shortly._',
+      ].join('\n'),
+    )
+    .setTimestamp();
+}
+
+function embedCancel(result: CommandResult<CancelData>): EmbedBuilder {
+  if (!result.ok) return errorEmbed('cancel', result.message);
+  const data = result.data;
+  return new EmbedBuilder()
+    .setColor(COLOR_WARN)
+    .setTitle('factory cancel — directive marked blocked')
+    .setDescription(
+      [
+        `**Directive:** \`${data.directiveId.slice(-8)}\``,
+        `**Was:** ${data.prevStatus}`,
+        `**Reason:** ${data.reason}`,
+        '',
+        '_2.1 marks the row blocked. Step 2.4 will additionally kill running workers within 10 s._',
+      ].join('\n'),
+    )
+    .setTimestamp();
+}
+
+function embedBudget(result: CommandResult<BudgetData>): EmbedBuilder {
+  if (!result.ok) return errorEmbed('budget', result.message);
+  const data = result.data;
+  const lines: string[] = [`**Project:** \`${data.project}\` (\`…${data.projectId.slice(-4)}\`)`];
+  const persisted = data.defaults;
+  if (persisted.maxUsd === undefined && persisted.maxSteps === undefined) {
+    lines.push('**Budget:** _cleared_ — directives now run uncapped from this project tier.');
+  } else {
+    const parts: string[] = [];
+    if (persisted.maxUsd !== undefined) parts.push(`max-usd \`$${persisted.maxUsd.toFixed(2)}\``);
+    if (persisted.maxSteps !== undefined)
+      parts.push(`max-steps \`${persisted.maxSteps.toString()}\``);
+    lines.push(`**Budget:** ${parts.join(' · ')}`);
+  }
+  return new EmbedBuilder()
+    .setColor(COLOR_OK)
+    .setTitle('factory budget — updated')
+    .setDescription(lines.join('\n'))
+    .setTimestamp();
+}
+
+function embedBuild(data: BuildData): EmbedBuilder {
+  const lines: string[] = [
+    `**Project:** \`${data.project}\``,
+    `**Path:** \`${data.projectPath !== undefined ? truncatePath(data.projectPath) : '(unresolved — daemon will retry)'}\``,
+    `**Directive:** \`${data.directiveId.slice(-8)}\``,
+    `**Autonomy:** ${data.autonomy}`,
+  ];
+  if (data.language !== undefined) lines.push(`**Language:** ${data.language}`);
+  if (data.limits !== undefined) {
+    const parts: string[] = [];
+    if (data.limits.maxUsd !== undefined)
+      parts.push(`max-usd \`$${data.limits.maxUsd.toFixed(2)}\``);
+    if (data.limits.maxSteps !== undefined)
+      parts.push(`max-steps \`${data.limits.maxSteps.toString()}\``);
+    lines.push(`**Limits:** ${parts.join(' · ')}`);
+  }
+  if (data.spec !== undefined && data.spec.length > 0) {
+    lines.push('', `**Spec:** ${truncate(data.spec, 1500)}`);
+  }
+  lines.push('', '_The daemon will claim it shortly._');
+  return new EmbedBuilder()
+    .setColor(COLOR_OK)
+    .setTitle('factory build — queued')
+    .setDescription(lines.join('\n'))
+    .setTimestamp();
+}
+
+// ---------------------------------------------------------------------------
+// Spend / findings table renderers
+// ---------------------------------------------------------------------------
+
+function renderSpendProject(
+  rows: ReadonlyArray<{
+    display: string;
+    directiveCount: number;
+    callCount: number;
+    totalUsd: number;
+  }>,
+): string {
   if (rows.length === 0) return '_(no spend recorded)_';
   const lines = ['```'];
   lines.push(
@@ -464,7 +635,16 @@ function renderSpendProject(rows: PerProjectSpend[]): string {
   return lines.join('\n');
 }
 
-function renderSpendDirective(rows: PerDirectiveSpend[]): string {
+function renderSpendDirective(
+  rows: ReadonlyArray<{
+    directiveId: string;
+    projectId: string | null;
+    projectName: string | null;
+    callCount: number;
+    totalUsd: number;
+    lastCalledAt: string;
+  }>,
+): string {
   if (rows.length === 0) return '_(no spend recorded)_';
   const lines = ['```'];
   lines.push(
@@ -480,7 +660,9 @@ function renderSpendDirective(rows: PerDirectiveSpend[]): string {
   return lines.join('\n');
 }
 
-function renderSpendDay(rows: PerDaySpend[]): string {
+function renderSpendDay(
+  rows: ReadonlyArray<{ date: string; callCount: number; totalUsd: number }>,
+): string {
   if (rows.length === 0) return '_(no spend recorded)_';
   const lines = ['```'];
   lines.push(`${'date'.padEnd(11)}  ${'calls'.padStart(6)}  ${'spent'.padStart(11)}`);
@@ -500,7 +682,9 @@ function renderSpendDay(rows: PerDaySpend[]): string {
   return lines.join('\n');
 }
 
-function renderSpendModel(rows: PerModelSpend[]): string {
+function renderSpendModel(
+  rows: ReadonlyArray<{ provider: string; model: string; callCount: number; totalUsd: number }>,
+): string {
   if (rows.length === 0) return '_(no spend recorded)_';
   const lines = ['```'];
   lines.push(`${'provider/model'.padEnd(36)}  ${'calls'.padStart(6)}  ${'spent'.padStart(11)}`);
@@ -514,45 +698,7 @@ function renderSpendModel(rows: PerModelSpend[]): string {
   return lines.join('\n');
 }
 
-// ---------------------------------------------------------------------------
-// /factory findings
-// ---------------------------------------------------------------------------
-
-export async function handleFindings(
-  ctx: DiscordCommandContext,
-  interaction: ChatInputCommandInteraction,
-): Promise<EmbedBuilder> {
-  const project = interaction.options.getString('project') ?? undefined;
-  const severity = interaction.options.getString('severity') ?? undefined;
-  const status = interaction.options.getString('status') ?? 'OPEN';
-
-  // The CLI defaults to blocking-only; mirror that here so a Discord operator
-  // sees the same default as `factory findings list`.
-  const filter: Parameters<typeof findingsRegistry.list>[1] = {
-    advisory: false,
-    limit: 25,
-    status: status as 'OPEN' | 'FIXED' | 'VERIFIED' | 'WONTFIX',
-    ...(severity !== undefined
-      ? { severity: severity as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' }
-      : {}),
-    ...(project !== undefined && project.length > 0 ? { project } : {}),
-  };
-
-  const rows = findingsRegistry.list(ctx.db, filter);
-  const body = renderFindings(rows);
-
-  const titleParts: string[] = [`status=${status}`];
-  if (severity !== undefined) titleParts.push(`severity=${severity}`);
-  if (project !== undefined && project.length > 0) titleParts.push(`project=${project}`);
-
-  return new EmbedBuilder()
-    .setColor(rows.length === 0 ? COLOR_OK : COLOR_INFO)
-    .setTitle(`factory findings (${titleParts.join(', ')})`)
-    .setDescription(body)
-    .setTimestamp();
-}
-
-function renderFindings(rows: FindingsRegistryEntry[]): string {
+function renderFindings(rows: ReadonlyArray<FindingsRegistryEntry>): string {
   if (rows.length === 0) return '_(no findings match)_';
   const lines = ['```'];
   lines.push(
@@ -572,348 +718,7 @@ function renderFindings(rows: FindingsRegistryEntry[]): string {
 }
 
 // ---------------------------------------------------------------------------
-// /factory resume
-// ---------------------------------------------------------------------------
-
-export async function handleResume(
-  ctx: DiscordCommandContext,
-  interaction: ChatInputCommandInteraction,
-): Promise<EmbedBuilder> {
-  const project = interaction.options.getString('project', true);
-
-  // Match the CLI resume's "find prior directive" logic. We don't run inline
-  // (channels never run the brain inline) — we just enqueue a fresh
-  // resume-shaped directive and let the daemon claim it.
-  const recent = directivesQ.listRecent(ctx.db, 200);
-  const namedProjects = projectsQ.findByName(ctx.db, project);
-  const projectRow = namedProjects[0];
-
-  const prior = findPriorMatch(recent, project, projectRow?.workspacePath);
-  if (prior === undefined) {
-    return errorEmbed(
-      'resume',
-      `no prior directive found for \`${project}\`. Try \`/factory build project:${project}\` to start fresh.`,
-    );
-  }
-
-  const priorPayload =
-    typeof prior.payload === 'object' && prior.payload !== null
-      ? (prior.payload as Record<string, unknown>)
-      : undefined;
-  const projectPath =
-    (priorPayload?.['projectPath'] as string | undefined) ?? projectRow?.workspacePath;
-
-  if (typeof projectPath !== 'string' || projectPath.length === 0) {
-    return errorEmbed(
-      'resume',
-      `prior directive ${prior.id.slice(-8)} has no projectPath; resume needs an absolute path.`,
-    );
-  }
-
-  const inheritedProjectId = prior.projectId ?? projectRow?.id;
-  const priorLanguage = priorPayload?.['language'];
-  const carriedLanguage =
-    priorLanguage === 'python' ||
-    priorLanguage === 'node' ||
-    priorLanguage === 'go' ||
-    priorLanguage === 'rust'
-      ? priorLanguage
-      : undefined;
-
-  const directive = directiveSchema.parse({
-    id: newId(),
-    source: 'discord',
-    principal: ctx.user.id,
-    channelRef: `discord-resume-${Date.now().toString()}`,
-    intent: 'build' satisfies Intent,
-    payload: {
-      project,
-      projectPath,
-      resumeFrom: prior.id,
-      ...(carriedLanguage !== undefined ? { language: carriedLanguage } : {}),
-    },
-    autonomy: 'assisted' satisfies AutonomyMode,
-    createdAt: new Date().toISOString(),
-    status: 'pending' as const,
-    parentDirectiveId: prior.id,
-    ...(inheritedProjectId !== undefined ? { projectId: inheritedProjectId } : {}),
-  });
-
-  await ctx.onInbound(directive);
-  ctx.log.info(
-    { directiveId: directive.id, parentId: prior.id, project },
-    'discord-commands: resume directive enqueued',
-  );
-
-  return new EmbedBuilder()
-    .setColor(COLOR_OK)
-    .setTitle('factory resume — queued')
-    .setDescription(
-      [
-        `**Project:** \`${project}\``,
-        `**Path:** \`${truncatePath(projectPath)}\``,
-        `**Resuming from:** \`${prior.id.slice(-8)}\` (${prior.status})`,
-        `**New directive:** \`${directive.id.slice(-8)}\``,
-        '',
-        '_The daemon will claim it shortly._',
-      ].join('\n'),
-    )
-    .setTimestamp();
-}
-
-function findPriorMatch(
-  recent: readonly Directive[],
-  name: string,
-  projectPath: string | undefined,
-): Directive | undefined {
-  const nameLower = name.toLowerCase();
-  const pathLower = projectPath?.toLowerCase();
-  // Same priority as cli/resume.ts: running > blocked > claimed/pending > terminal.
-  const sorted = [...recent].sort((a, b) => priority(a) - priority(b));
-  for (const d of sorted) {
-    if (typeof d.payload !== 'object' || d.payload === null) continue;
-    const p = d.payload as Record<string, unknown>;
-    const projectName = typeof p['project'] === 'string' ? p['project'].toLowerCase() : undefined;
-    const dirPath =
-      typeof p['projectPath'] === 'string' ? p['projectPath'].toLowerCase() : undefined;
-    if (projectName === nameLower) return d;
-    if (pathLower !== undefined && dirPath === pathLower) return d;
-  }
-  return undefined;
-}
-
-function priority(d: Directive): number {
-  if (d.status === 'running') return 0;
-  if (d.status === 'blocked') return 1;
-  if (d.status === 'claimed' || d.status === 'pending') return 2;
-  return 3;
-}
-
-// ---------------------------------------------------------------------------
-// /factory cancel
-// ---------------------------------------------------------------------------
-
-export async function handleCancel(
-  ctx: DiscordCommandContext,
-  interaction: ChatInputCommandInteraction,
-): Promise<EmbedBuilder> {
-  const directiveId = interaction.options.getString('directive-id', true);
-  const reason = interaction.options.getString('reason') ?? 'cancelled via Discord slash command';
-
-  // Accept either a full ULID or the trailing 8-char suffix that
-  // /factory status renders. Suffix lookup walks the recent list — bounded
-  // to 200 to keep the query cheap.
-  const resolvedId = resolveDirectiveId(ctx.db, directiveId);
-  if (resolvedId === undefined) {
-    return errorEmbed('cancel', `no directive matches \`${directiveId}\``);
-  }
-  if (resolvedId === 'AMBIGUOUS') {
-    return errorEmbed(
-      'cancel',
-      `\`${directiveId}\` is ambiguous (suffix matches multiple). Pass the full 26-char ULID.`,
-    );
-  }
-
-  try {
-    const updated = directivesQ.markBlocked(ctx.db, resolvedId, reason);
-    ctx.log.info(
-      { directiveId: resolvedId, reason, userId: ctx.user.id },
-      'discord-commands: directive cancelled (markBlocked)',
-    );
-    return new EmbedBuilder()
-      .setColor(COLOR_WARN)
-      .setTitle('factory cancel — directive marked blocked')
-      .setDescription(
-        [
-          `**Directive:** \`${resolvedId.slice(-8)}\``,
-          `**Was:** ${updated.status === 'blocked' ? 'flipped to' : updated.status}`,
-          `**Reason:** ${reason}`,
-          '',
-          '_2.1 marks the row blocked. Step 2.4 will additionally kill running workers within 10 s._',
-        ].join('\n'),
-      )
-      .setTimestamp();
-  } catch (err) {
-    if (err instanceof MarkBlockedError) {
-      if (err.code === 'NOT_FOUND') {
-        return errorEmbed('cancel', `directive \`${resolvedId}\` not found`);
-      }
-      return errorEmbed('cancel', err.message);
-    }
-    throw err;
-  }
-}
-
-function resolveDirectiveId(db: Database, raw: string): string | 'AMBIGUOUS' | undefined {
-  // Full 26-char ULID — try direct fetch first.
-  if (raw.length === 26) {
-    const direct = directivesQ.getById(db, raw);
-    if (direct !== undefined) return direct.id;
-  }
-  // Suffix — walk recent directives.
-  const recent = directivesQ.listRecent(db, 200);
-  const matches = recent.filter((d) => d.id.endsWith(raw));
-  if (matches.length === 0) return undefined;
-  if (matches.length > 1) return 'AMBIGUOUS';
-  return matches[0]!.id;
-}
-
-// ---------------------------------------------------------------------------
-// /factory budget
-// ---------------------------------------------------------------------------
-
-export async function handleBudget(
-  ctx: DiscordCommandContext,
-  interaction: ChatInputCommandInteraction,
-): Promise<EmbedBuilder> {
-  if (ctx.setProjectBudget === undefined) {
-    return errorEmbed(
-      'budget',
-      'budget mutation is not wired (no daemon binding). This is expected in test/standalone mode.',
-    );
-  }
-
-  const project = interaction.options.getString('project', true);
-  const maxUsd = interaction.options.getNumber('max-usd') ?? undefined;
-  const maxSteps = interaction.options.getInteger('max-steps') ?? undefined;
-
-  const defaults: ProjectBudgetDefaults = {
-    ...(maxUsd !== undefined ? { maxUsd } : {}),
-    ...(maxSteps !== undefined ? { maxSteps } : {}),
-  };
-
-  try {
-    const result = await ctx.setProjectBudget(project, defaults);
-    ctx.log.info(
-      { projectId: result.projectId, defaults, userId: ctx.user.id },
-      'discord-commands: project budget updated',
-    );
-    const lines: string[] = [`**Project:** \`${project}\` (\`…${result.projectId.slice(-4)}\`)`];
-    const persisted = result.defaults;
-    if (persisted.maxUsd === undefined && persisted.maxSteps === undefined) {
-      lines.push('**Budget:** _cleared_ — directives now run uncapped from this project tier.');
-    } else {
-      const parts: string[] = [];
-      if (persisted.maxUsd !== undefined) parts.push(`max-usd \`$${persisted.maxUsd.toFixed(2)}\``);
-      if (persisted.maxSteps !== undefined)
-        parts.push(`max-steps \`${persisted.maxSteps.toString()}\``);
-      lines.push(`**Budget:** ${parts.join(' · ')}`);
-    }
-    return new EmbedBuilder()
-      .setColor(COLOR_OK)
-      .setTitle('factory budget — updated')
-      .setDescription(lines.join('\n'))
-      .setTimestamp();
-  } catch (err) {
-    if (err instanceof SetProjectBudgetError) {
-      return errorEmbed('budget', err.message);
-    }
-    throw err;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// /factory build
-// ---------------------------------------------------------------------------
-
-export async function handleBuild(
-  ctx: DiscordCommandContext,
-  interaction: ChatInputCommandInteraction,
-): Promise<EmbedBuilder> {
-  const project = interaction.options.getString('project', true);
-  const spec = interaction.options.getString('spec') ?? undefined;
-  const autonomyRaw = interaction.options.getString('autonomy') ?? 'autonomous';
-  const language = interaction.options.getString('language') ?? undefined;
-  const maxUsdFlag = interaction.options.getNumber('max-usd') ?? undefined;
-  const maxStepsFlag = interaction.options.getInteger('max-steps') ?? undefined;
-
-  const autonomy = autonomyRaw as AutonomyMode;
-
-  // Mirror the messageCreate `/build` path: resolve project → absolute
-  // path; resolve limits via the daemon's three-tier helper. Slash flags
-  // override the project tier (parallels CLI flags).
-  let projectPath: string | undefined;
-  if (ctx.resolveProjectPath !== undefined) {
-    try {
-      projectPath = await ctx.resolveProjectPath(project);
-    } catch (err) {
-      ctx.log.warn(
-        { err, project },
-        'discord-commands: resolveProjectPath failed — directive will carry raw name',
-      );
-    }
-  }
-
-  let limits: DirectiveLimits | undefined;
-  if (maxUsdFlag !== undefined || maxStepsFlag !== undefined) {
-    limits = {
-      ...(maxUsdFlag !== undefined ? { maxUsd: maxUsdFlag } : {}),
-      ...(maxStepsFlag !== undefined ? { maxSteps: maxStepsFlag } : {}),
-    };
-  } else if (ctx.resolveBuildLimits !== undefined) {
-    try {
-      limits = await ctx.resolveBuildLimits(project);
-    } catch (err) {
-      ctx.log.warn(
-        { err, project },
-        'discord-commands: resolveBuildLimits failed — directive will run uncapped',
-      );
-    }
-  }
-
-  const payload: Record<string, unknown> = {
-    project,
-    ...(projectPath !== undefined ? { projectPath } : {}),
-    ...(spec !== undefined && spec.length > 0 ? { spec } : {}),
-    ...(language !== undefined ? { language } : {}),
-  };
-
-  const directive = directiveSchema.parse({
-    id: newId(),
-    source: 'discord',
-    principal: ctx.user.id,
-    channelRef: `discord-slash-${Date.now().toString()}`,
-    intent: 'build' satisfies Intent,
-    payload,
-    autonomy,
-    createdAt: new Date().toISOString(),
-    status: 'pending' as const,
-    ...(limits !== undefined ? { limits } : {}),
-  });
-
-  await ctx.onInbound(directive);
-  ctx.log.info(
-    { directiveId: directive.id, project, autonomy },
-    'discord-commands: build directive enqueued',
-  );
-
-  const lines: string[] = [
-    `**Project:** \`${project}\``,
-    `**Path:** \`${projectPath !== undefined ? truncatePath(projectPath) : '(unresolved — daemon will retry)'}\``,
-    `**Directive:** \`${directive.id.slice(-8)}\``,
-    `**Autonomy:** ${autonomy}`,
-  ];
-  if (language !== undefined) lines.push(`**Language:** ${language}`);
-  if (limits !== undefined) {
-    const parts: string[] = [];
-    if (limits.maxUsd !== undefined) parts.push(`max-usd \`$${limits.maxUsd.toFixed(2)}\``);
-    if (limits.maxSteps !== undefined) parts.push(`max-steps \`${limits.maxSteps.toString()}\``);
-    lines.push(`**Limits:** ${parts.join(' · ')}`);
-  }
-  if (spec !== undefined && spec.length > 0) {
-    lines.push('', `**Spec:** ${truncate(spec, 1500)}`);
-  }
-  lines.push('', '_The daemon will claim it shortly._');
-
-  return new EmbedBuilder()
-    .setColor(COLOR_OK)
-    .setTitle('factory build — queued')
-    .setDescription(lines.join('\n'))
-    .setTimestamp();
-}
-
-// ---------------------------------------------------------------------------
-// Render helpers
+// Generic helpers
 // ---------------------------------------------------------------------------
 
 function errorEmbed(sub: FactorySubcommand, message: string): EmbedBuilder {

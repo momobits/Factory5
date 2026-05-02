@@ -305,7 +305,11 @@ describe('Telegram round-trip — supergroup', () => {
       const payload = d.payload as Record<string, unknown>;
       expect(payload['project']).toBe('greeter');
       expect(payload['spec']).toBe('say hello');
-      expect(payload['text']).toBe('/build greeter -- say hello');
+      // Phase 2.2 — `payload.text` was a defensive raw-message snapshot
+      // emitted by the legacy `parseBuildPayload`. The slash dispatcher's
+      // shared `runBuild` produces a structured payload (project + spec
+      // + projectPath + language) and the brain doesn't read `text` for
+      // build directives anywhere; assertion dropped.
     } finally {
       await stopHarness(h);
     }

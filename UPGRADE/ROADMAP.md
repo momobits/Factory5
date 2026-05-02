@@ -29,7 +29,7 @@ Discord/Telegram only emit `intent=build` and `intent=chat` today. Bring them up
 
 - [x] Discord slash commands — `/factory status / spend / findings / resume / cancel / budget / build` (registers `factory` slash, wires `interactionCreate` dispatch)
 - [x] Discord embeds for status / findings / spend responses
-- [ ] Telegram bot commands — `setMyCommands` + matching parser
+- [x] Telegram bot commands — `setMyCommands` + matching parser (shared `command-handlers.ts` with Discord)
 - [ ] Telegram inline keyboard buttons on pending-question messages (Answer / Skip / Escalate)
 - [ ] Discord buttons on pending-question messages (same shape)
 - [ ] Add `factory cancel <directive-id>` — CLI command + IPC route + brain hook (kills worker, not just flips status)
