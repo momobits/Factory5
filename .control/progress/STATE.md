@@ -3,9 +3,9 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-02 21:00 UTC by step 1.7 commit
-**Current phase:** 1 — doc-sweep
-**Current step:** 1.8 — `/phase-close` — tag `phase-1-doc-sweep-closed`, append to UPGRADE/LOG.md, scaffold Phase 2
+**Last updated:** 2026-05-02 21:30 UTC by /phase-close
+**Current phase:** 2 — channel-parity
+**Current step:** 2.1 — Wire Discord slash commands
 **Status:** ready
 
 ---
@@ -20,16 +20,16 @@
 
 ## Next action
 
-Step 1.8 — phase close. Run `/phase-close` to verify all done-criteria from [`../phases/phase-1-doc-sweep/README.md`](../phases/phase-1-doc-sweep/README.md), tag `phase-1-doc-sweep-closed`, append a session-end entry to [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md), confirm Tier 1 is fully ticked in [`../../UPGRADE/ROADMAP.md`](../../UPGRADE/ROADMAP.md), and scaffold Phase 2 (channel parity) under `.control/phases/phase-2-channel-parity/`. Final gates check (`pnpm build / test / lint / format:check`) before tagging.
+Open [`../phases/phase-2-channel-parity/README.md`](../phases/phase-2-channel-parity/README.md) and [`steps.md`](../phases/phase-2-channel-parity/steps.md). Step **2.1 = wire Discord slash commands** per [`../../UPGRADE/plans/tier-2-channel-parity.md`](../../UPGRADE/plans/tier-2-channel-parity.md) §2.1. New file `packages/channels/src/discord-commands.ts` (definitions + handlers); edit `packages/channels/src/discord.ts` to call `client.application.commands.set(commandList, guildId?)` on `Events.ClientReady` and register an `interactionCreate` listener. Embed-formatted responses; no LLM for the read commands (`status`/`spend`/`findings`).
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `cc35dd2` — chore(install): bootstrap factory5 project docs (scanned from codebase)
-- **Uncommitted changes:** none (working tree clean)
-- **Last phase tag:** `phase-15-demand-driven-runoff-closed` (legacy — leftover from the removed v1 Control framework; first new tag will be `phase-1-doc-sweep-closed`)
+- **Last commit:** `10e400a` — docs(1.8): tier-1 acceptance prep — mark U001-003/U014-017 resolved + fix orphan factory-inspect ref (the `chore(phase-1)` close commit will land on top of this when /phase-close finishes)
+- **Uncommitted changes:** Phase 2 scaffold + STATE.md + next.md + journal.md (about to be committed by /phase-close)
+- **Last phase tag:** `phase-1-doc-sweep-closed` (placed on commit `10e400a` by /phase-close; supersedes the legacy `phase-15-demand-driven-runoff-closed` tag from the removed v1 framework)
 
 ---
 
@@ -41,7 +41,7 @@ Step 1.8 — phase close. Run `/phase-close` to verify all done-criteria from [`
 
 ## In-flight work
 
-None — pre-Phase-1 housekeeping committed (see "Recently completed"). Step 1.1 can begin from the clean working tree.
+None. Phase 2 has not started yet.
 
 ---
 
@@ -63,17 +63,17 @@ None — pre-Phase-1 housekeeping committed (see "Recently completed"). Step 1.1
 
 ## Recently completed (last 5 steps)
 
-- Step 1.7 — reconcile `docs/SKILLS.md` + `docs/AGENTS.md` against current code (add `ask-user` skill row to SKILLS.md; update `scaffolder`/`builder`/`fixer`/`investigator` Tools + Default-skills columns in AGENTS.md to reflect ASK_USER_MCP_TOOL + `ask-user` skill from registry.ts) — 2026-05-02 — pending commit
-- Step 1.6 — write `docs/WORKFLOWS.md` (four canonical loops; surface decision matrix; CLAUDE.md authoring guide); cross-references added from README.md, CLAUDE.md, docs/ARCHITECTURE.md, docs/ONBOARDING.md — 2026-05-02 — `b813037`
-- Step 1.5 — add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md`; section renumber + inline §-ref updates — 2026-05-02 — `010843b`
-- Step 1.4 — add §"Web dashboard" to `docs/ONBOARDING.md` — 2026-05-02 — `0ffdd8d`
-- Step 1.3 — refresh `apps/factory-web/README.md` (drop `(wired in 9.3)` phase ref; replace Routing stub with 10-page index) — 2026-05-02 — `30293ff`
+- Phase 1 (doc-sweep) closed — tag `phase-1-doc-sweep-closed` on commit `10e400a` — 2026-05-02
+- Step 1.8 — tier-1 acceptance prep (mark U001-003/U014-017 resolved in UPGRADE/ISSUES.md; fix orphan factory-inspect ref in packages/logger/README.md) — 2026-05-02 — `10e400a`
+- Step 1.7 — reconcile `docs/SKILLS.md` + `docs/AGENTS.md` against current code (add `ask-user` skill row; update 4 agents' Tools + Default-skills columns) — 2026-05-02 — `e75b5dd`
+- Step 1.6 — write `docs/WORKFLOWS.md` (four canonical loops; surface decision matrix; CLAUDE.md authoring guide); cross-references from 4 anchor docs — 2026-05-02 — `b813037`
+- Step 1.5 — add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md` — 2026-05-02 — `010843b`
 
 ---
 
 ## Attempts that didn't work (current step only)
 
-- None yet — Step 1.1 not started.
+- None yet — Step 2.1 not started.
 
 ---
 
@@ -88,6 +88,10 @@ None — pre-Phase-1 housekeeping committed (see "Recently completed"). Step 1.1
 
 ## Notes for next session
 
-Phase 1 is doc-only — no live-LLM spend, no risk to production code. Most-felt UX gaps close in Phase 2 (channel parity) and Phase 3 (web UI live + complete). Tier ordering: 1 → 2 → 3+4 in parallel.
+Phase 2 splits into ~2 sessions per the tier plan: **2a** = slash commands + `setMyCommands` + button affordances (steps 2.1-2.3); **2b** = `factory cancel` plumbing + 8-intent triage classification (steps 2.4-2.5). Step 2.6 (`factory chat` per-turn timeout) is optional — defer to Phase 3 if the streaming-progress path wins.
+
+Discord guild-vs-global slash-command scope decision: guild-scoped when `config.guildId` is set (instant register), global otherwise (1-hour propagation). Documented in tier-2 plan §"Risks + decisions".
+
+Phase 2 is the first phase that touches code (packages/channels, packages/brain, packages/cli, packages/state, packages/ipc). Live-smoke against a real Discord bot + Telegram bot is part of acceptance — confirm test bots are configured (`factory doctor`) before Step 2.1 starts.
 
 Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions; this STATE.md is the operational cursor (overwritten at each `/session-end`).
