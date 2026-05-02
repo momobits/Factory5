@@ -3,9 +3,9 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-02 19:25 UTC by step 1.3 commit
+**Last updated:** 2026-05-02 19:50 UTC by step 1.4 commit
 **Current phase:** 1 — doc-sweep
-**Current step:** 1.4 — Add §"Web dashboard" to `docs/ONBOARDING.md`
+**Current step:** 1.5 — Add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md`
 **Status:** ready
 
 ---
@@ -20,7 +20,7 @@
 
 ## Next action
 
-Step 1.4 — add §"Web dashboard" to `docs/ONBOARDING.md` per [`../../UPGRADE/plans/tier-1-doc-sweep.md`](../../UPGRADE/plans/tier-1-doc-sweep.md) §1.4. Insert between §4 "First build" and §5 "Optional — Discord channel". Cover what the dashboard is (read + write surface for directives / projects / questions / spend / findings), how to open it (factoryd's stdout `ui:` line; token capture from `?t=`), how to recover with `factory ui-token`, a tour of the ten pages, and the today-limitation that detail pages don't refresh live (Tier 3 will add SSE).
+Step 1.5 — add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md` per [`../../UPGRADE/plans/tier-1-doc-sweep.md`](../../UPGRADE/plans/tier-1-doc-sweep.md) §1.5. Insert as the next section after §5 "Web dashboard" (so it becomes §6, and Discord/Telegram channel walkthroughs renumber from §6/§7 → §7/§8). Cover `factory chat` REPL (`/quit`, 120s per-turn timeout — issue U005), Discord chat (mention → thread → /build prefix), Telegram chat (DM or group reply-to), and the shared model (every channel writes the same `Directive` shape).
 
 ---
 
@@ -63,11 +63,11 @@ None — pre-Phase-1 housekeeping committed (see "Recently completed"). Step 1.1
 
 ## Recently completed (last 5 steps)
 
-- Step 1.3 — refresh `apps/factory-web/README.md` (drop the `(wired in 9.3)` phase reference; replace stub Routing section with a 10-page index that maps URL → file → purpose; explain the query-string `detail.astro` choice) — 2026-05-02 — pending commit
-- Step 1.2 — refresh `packages/channels/README.md` (Status reflects what's shipped; new Telegram plugin + Web ≠ ChannelPlugin sections; Adding-a-channel verified) — 2026-05-02 — `c53f8d9`
-- Step 1.1 — refresh `packages/cli/README.md` (drop Phase column; add spend/findings/questions cleanup rows; remove `inspect`/`push`; reword `logs` stub) — 2026-05-02 — `d33635a`
+- Step 1.4 — add §"Web dashboard" to `docs/ONBOARDING.md` (open / recover URL / page tour / today-limitations); renumber §5→§6 Discord, §6→§7 Telegram, §7→§8 multi-instance, §8→§9 backups, §9→§10 troubleshooting; update inline §-refs on lines 17/18/71; add ADR 0025/0027 to Pointers — 2026-05-02 — pending commit
+- Step 1.3 — refresh `apps/factory-web/README.md` (drop `(wired in 9.3)` phase ref; replace Routing stub with 10-page index URL→file→purpose; explain query-string `detail.astro` choice) — 2026-05-02 — `30293ff`
+- Step 1.2 — refresh `packages/channels/README.md` (Status reflects what's shipped; new Telegram plugin + Web ≠ ChannelPlugin sections) — 2026-05-02 — `c53f8d9`
+- Step 1.1 — refresh `packages/cli/README.md` (drop Phase column; add spend/findings/questions cleanup rows) — 2026-05-02 — `d33635a`
 - Reconcile STATE.md + Phase 1 README to actual git state (drift fix) — 2026-05-02 — `91541a9`
-- Bootstrap factory5 project docs (scanned from codebase) — 2026-05-02 — `cc35dd2`
 
 ---
 
