@@ -1,6 +1,6 @@
 # Phase 1 — doc-sweep
 
-**Dependencies:** none (project at rest at `protocol-initialised` tag from Control v2.2.1 install)
+**Dependencies:** none (project at rest on `main` at commit `cc35dd2` — Control v2.2.1 install + bootstrap landed)
 **Estimated duration:** ~1 session
 
 ## Goal
@@ -51,7 +51,7 @@ All must be verified before `/phase-close` advances:
 
 ## Rollback plan
 
-If Phase 1 needs to be undone: `git reset --hard protocol-initialised` (the install-time tag from Control v2.2.1). No external state to clean up — Phase 1 is doc-only, no schema changes, no code, no live-LLM spend.
+If Phase 1 needs to be undone: `git reset --hard cc35dd2` (the bootstrap commit — last commit before any Phase 1 work). The Control v2.2.1 installer did not place a `protocol-initialised` tag in this repo, so the rollback target is the bare SHA. No external state to clean up — Phase 1 is doc-only, no schema changes, no code, no live-LLM spend.
 
 ## ADRs decided in this phase
 

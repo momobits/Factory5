@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-02 17:30 UTC by /bootstrap
+**Last updated:** 2026-05-02 18:30 UTC by /session-start (drift reconciliation)
 **Current phase:** 1 — doc-sweep
 **Current step:** 1.1 — Refresh `packages/cli/README.md`
 **Status:** ready
@@ -22,16 +22,14 @@
 
 Open [`../phases/phase-1-doc-sweep/README.md`](../phases/phase-1-doc-sweep/README.md) and [`steps.md`](../phases/phase-1-doc-sweep/steps.md). Step 1.1 = refresh `packages/cli/README.md` per [`../../UPGRADE/plans/tier-1-doc-sweep.md`](../../UPGRADE/plans/tier-1-doc-sweep.md) §1.1. Drop the "Phase" column; add `spend` / `findings` / `questions cleanup` rows; re-evaluate `stub` / `planned` markers against actual `packages/cli/src/commands/`.
 
-Before starting Step 1.1: stage and commit pre-Phase-1 housekeeping (see "In-flight work" below).
-
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `e94393e` — chore(install): install Control framework v2.2.1
-- **Uncommitted changes:** 3 modified + several untracked (see "In-flight work")
-- **Last phase tag:** `protocol-initialised` (set by control-workflow init at v2.2.1 reinstall)
+- **Last commit:** `cc35dd2` — chore(install): bootstrap factory5 project docs (scanned from codebase)
+- **Uncommitted changes:** none (working tree clean)
+- **Last phase tag:** `phase-15-demand-driven-runoff-closed` (legacy — leftover from the removed v1 Control framework; first new tag will be `phase-1-doc-sweep-closed`)
 
 ---
 
@@ -43,13 +41,7 @@ Before starting Step 1.1: stage and commit pre-Phase-1 housekeeping (see "In-fli
 
 ## In-flight work
 
-Pre-Phase-1 housekeeping — three logical commits queued:
-
-1. **`docs: add UPGRADE workspace`** — 10 untracked files: `UPGRADE/{README,AUDIT,ROADMAP,LOG,ISSUES}.md`, `UPGRADE/plans/tier-{1..4}-*.md`, `UPGRADE/specs/README.md`. Created the upgrade workspace from the audit synthesis.
-2. **`docs: re-acknowledge Control framework after v2.2.1 reinstall`** — `M CLAUDE.md` (added Control framework section), `M UPGRADE/README.md` (Control orchestration line), `M .prettierignore` (`.control/` + `.claude/` excluded from project format). Plus `?? .claude/settings.json` from Control's installer (separate concern; user may bundle or commit separately).
-3. **`chore: bootstrap factory5 project docs (scanned from codebase)`** — this `/bootstrap` run: `M .control/SPEC.md`, `M .control/architecture/phase-plan.md`, `M .control/progress/STATE.md`, plus new `.control/phases/phase-1-doc-sweep/{README,steps}.md`, plus `M CLAUDE.md` (add SPEC + UPGRADE pointers).
-
-After committing these three, Step 1.1 can begin from a clean working tree.
+None — pre-Phase-1 housekeeping committed (see "Recently completed"). Step 1.1 can begin from the clean working tree.
 
 ---
 
@@ -71,9 +63,9 @@ After committing these three, Step 1.1 can begin from a clean working tree.
 
 ## Recently completed (last 5 steps)
 
-- Bootstrap (this `/bootstrap` run) — 2026-05-02 — uncommitted (will commit per "In-flight work" #3)
-- Control framework v2.2.1 reinstall + doc re-acknowledgement — 2026-05-02 — `e94393e` + uncommitted (will commit per "In-flight work" #2)
-- UPGRADE/ workspace creation — 2026-05-02 — uncommitted (will commit per "In-flight work" #1)
+- Bootstrap factory5 project docs (scanned from codebase) — 2026-05-02 — `cc35dd2`
+- Re-acknowledge Control v2.2.1 in project docs (CLAUDE.md, UPGRADE/README.md, .prettierignore, .claude/settings.json) — 2026-05-02 — `f84476e`
+- Install Control framework v2.2.1 (also landed UPGRADE/ workspace files in same commit) — 2026-05-02 — `e94393e`
 - Docs consolidation (single ARCHITECTURE.md, drop build journal + resolved-issue tracker) — 2026-05-02 — `de17274`
 - Control framework v1 removal — 2026-05-02 — `f6fb28c`
 
