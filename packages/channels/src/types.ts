@@ -7,7 +7,13 @@
  * from `outbound_messages` and sent via the channel's `send` method.
  */
 
-import type { ChannelId, Directive, DirectiveLimits, OutboundMessage } from '@factory5/core';
+import type {
+  ChannelId,
+  Directive,
+  DirectiveLimits,
+  OutboundMessage,
+  ProjectBudgetDefaults,
+} from '@factory5/core';
 import type { Logger } from '@factory5/logger';
 import type { ZodSchema } from 'zod';
 
@@ -62,6 +68,48 @@ export interface ChannelContext {
    * directives with no `limits` (the pre-fix behaviour).
    */
   resolveBuildLimits?: (name: string) => Promise<DirectiveLimits | undefined>;
+  /**
+   * Set per-project budget defaults from a channel surface (Discord
+   * `/factory budget`, Telegram `/budget` once 2.2 ships). The daemon
+   * binds this to a closure that:
+   *
+   *   1. Resolves the project by name via `projectsQ.findByName` (most
+   *      recently touched wins on duplicates per ADR 0021).
+   *   2. Calls `wiki.updateProjectMetadata` to write
+   *      `metadata.budgetDefaults = defaults` (or clears it when
+   *      `defaults` has neither field set, per ADR 0027 §4 PUT semantics).
+   *   3. Returns the resolved project id and the persisted defaults so
+   *      the caller can render a confirmation.
+   *
+   * Throws {@link SetProjectBudgetError} on lookup / corruption failures
+   * so handlers can surface a structured error to the operator.
+   *
+   * Optional because tests / standalone scripts wire the registry without
+   * the daemon. When unset, the budget command path returns an "unwired"
+   * error rather than partially writing state.
+   */
+  setProjectBudget?: (
+    name: string,
+    defaults: ProjectBudgetDefaults,
+  ) => Promise<{ projectId: string; defaults: ProjectBudgetDefaults }>;
+}
+
+/**
+ * Thrown by {@link ChannelContext.setProjectBudget} to give handlers a
+ * stable shape for surfacing the failure mode (no project, ambiguous
+ * name, missing identity file, corrupt identity file). The daemon's
+ * binding maps `wiki` errors onto these codes.
+ */
+export class SetProjectBudgetError extends Error {
+  readonly code: 'NOT_FOUND' | 'AMBIGUOUS' | 'PATH_UNREADABLE' | 'METADATA_CORRUPT';
+  constructor(
+    code: 'NOT_FOUND' | 'AMBIGUOUS' | 'PATH_UNREADABLE' | 'METADATA_CORRUPT',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'SetProjectBudgetError';
+    this.code = code;
+  }
 }
 
 export interface SendResult {

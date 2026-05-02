@@ -22,13 +22,14 @@ import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import { closeDatabase, openDatabase, runMigrations, type Database } from '@factory5/state';
 
-import type { Directive, DirectiveLimits, Event } from '@factory5/core';
+import type { Directive, DirectiveLimits, Event, ProjectBudgetDefaults } from '@factory5/core';
 import { askUser, channelConfigFor, loadConfig } from '@factory5/brain';
 import {
   createChannelRegistry,
   createCliRpcChannel,
   createDiscordChannel,
   createTelegramChannel,
+  SetProjectBudgetError,
   type ChannelPlugin,
   type ChannelRegistry,
 } from '@factory5/channels';
@@ -49,8 +50,11 @@ import {
   budgetDefaultsFromProjectMeta,
   defaultWorkspace,
   loadOrCreateProjectMetadata,
+  ProjectMetadataCorruptError,
+  ProjectMetadataNotFoundError,
   resolveDirectiveLimits,
   resolveProjectPath,
+  updateProjectMetadata,
 } from '@factory5/wiki';
 
 import { startBrainSupervisor } from './brain-supervisor.js';
@@ -284,6 +288,45 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
           return undefined;
         }
       };
+      // Per-project budget mutator surfaced to channels (Discord
+      // `/factory budget`, Telegram `/budget` once 2.2 ships). Resolves
+      // the project by name (most-recently-touched wins on ties per
+      // ADR 0021), writes `metadata.budgetDefaults` via
+      // `updateProjectMetadata`, and maps wiki errors onto the stable
+      // `SetProjectBudgetError` codes.
+      const dbHandle = db as NonNullable<typeof db>;
+      const registrySetProjectBudget = async (
+        name: string,
+        defaults: ProjectBudgetDefaults,
+      ): Promise<{ projectId: string; defaults: ProjectBudgetDefaults }> => {
+        const matches = projectsQ.findByName(dbHandle, name);
+        if (matches.length === 0) {
+          throw new SetProjectBudgetError('NOT_FOUND', `no project named "${name}"`);
+        }
+        if (matches.length > 1) {
+          throw new SetProjectBudgetError(
+            'AMBIGUOUS',
+            `${matches.length.toString()} projects share the name "${name}" — disambiguate via the Web UI (per ADR 0021)`,
+          );
+        }
+        const project = matches[0]!;
+        try {
+          const updated = await updateProjectMetadata(project.workspacePath, (meta) => ({
+            ...meta,
+            metadata: { ...meta.metadata, budgetDefaults: defaults },
+          }));
+          const persistedDefaults = budgetDefaultsFromProjectMeta(updated) ?? {};
+          return { projectId: project.id, defaults: persistedDefaults };
+        } catch (err) {
+          if (err instanceof ProjectMetadataNotFoundError) {
+            throw new SetProjectBudgetError('PATH_UNREADABLE', err.message);
+          }
+          if (err instanceof ProjectMetadataCorruptError) {
+            throw new SetProjectBudgetError('METADATA_CORRUPT', err.message);
+          }
+          throw err;
+        }
+      };
       const registry = createChannelRegistry({
         log: createLogger('daemon.channels'),
         plugins,
@@ -299,6 +342,7 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
         },
         resolveProjectPath: registryResolveProjectPath,
         resolveBuildLimits: registryResolveBuildLimits,
+        setProjectBudget: registrySetProjectBudget,
       });
       await registry.start();
       subsystems.push({ name: 'channels', stop: () => registry.stop() });

@@ -9,7 +9,13 @@
  * `/status` surfaces them without taking the whole daemon down.
  */
 
-import type { ChannelId, Directive, DirectiveLimits, OutboundMessage } from '@factory5/core';
+import type {
+  ChannelId,
+  Directive,
+  DirectiveLimits,
+  OutboundMessage,
+  ProjectBudgetDefaults,
+} from '@factory5/core';
 import type { Logger } from '@factory5/logger';
 
 import type { ChannelPlugin, SendResult } from './types.js';
@@ -51,6 +57,19 @@ export interface ChannelRegistryOptions {
    * inbound `/build` directives carry no `limits` — the pre-fix path.
    */
   resolveBuildLimits?: (name: string) => Promise<DirectiveLimits | undefined>;
+  /**
+   * Optional per-project budget mutator. Threaded through to each
+   * plugin's `ChannelContext` so chat surfaces (Discord
+   * `/factory budget`, Telegram once 2.2 ships) can write
+   * `metadata.budgetDefaults`. The daemon binds this to a closure over
+   * `wiki.updateProjectMetadata`. When unset (tests / standalone scripts),
+   * the slash-command path returns an "unwired" error rather than
+   * partially writing state.
+   */
+  setProjectBudget?: (
+    name: string,
+    defaults: ProjectBudgetDefaults,
+  ) => Promise<{ projectId: string; defaults: ProjectBudgetDefaults }>;
 }
 
 /**
@@ -71,12 +90,14 @@ export class ChannelRegistry implements ChannelRegistryView {
   private readonly configByPlugin: Map<ChannelPlugin, unknown>;
   private readonly resolveProjectPath: ChannelRegistryOptions['resolveProjectPath'];
   private readonly resolveBuildLimits: ChannelRegistryOptions['resolveBuildLimits'];
+  private readonly setProjectBudget: ChannelRegistryOptions['setProjectBudget'];
 
   constructor(opts: ChannelRegistryOptions) {
     this.log = opts.log;
     this.onInbound = opts.onInbound;
     this.resolveProjectPath = opts.resolveProjectPath;
     this.resolveBuildLimits = opts.resolveBuildLimits;
+    this.setProjectBudget = opts.setProjectBudget;
     this.configByPlugin = new Map(opts.plugins.map((p) => [p.plugin, p.config]));
     for (const { plugin } of opts.plugins) {
       this.entries.set(plugin.id, {
@@ -120,6 +141,9 @@ export class ChannelRegistry implements ChannelRegistryView {
               : {}),
             ...(this.resolveBuildLimits !== undefined
               ? { resolveBuildLimits: this.resolveBuildLimits }
+              : {}),
+            ...(this.setProjectBudget !== undefined
+              ? { setProjectBudget: this.setProjectBudget }
               : {}),
           },
           validated,

@@ -1,6 +1,6 @@
 # Phase 2 Steps
 
-- [ ] 2.1 — Wire Discord slash commands (`/factory status / spend / findings / resume / cancel / budget / build`); register guild-scoped when `config.guildId` set, global otherwise; embed-formatted responses; no LLM for reads
+- [x] 2.1 — Wire Discord slash commands (`/factory status / spend / findings / resume / cancel / budget / build`); register guild-scoped when `config.guildId` set, global otherwise; embed-formatted responses; no LLM for reads
 - [ ] 2.2 — Wire Telegram `setMyCommands` + matching parser; extract a transport-agnostic `command-handlers.ts` shared with Discord
 - [ ] 2.3 — Pending-question button affordances on both surfaces (Discord `ActionRowBuilder` "Answer / Skip / Escalate"; Telegram inline keyboards via `reply_markup`)
 - [ ] 2.4 — Ship `factory cancel <directive-id>` — brain `AbortController` propagation through the pool; `cancelDirective` state helper; `POST /directives/:id/cancel` IPC route; CLI command; worker SIGTERM-then-SIGKILL discipline

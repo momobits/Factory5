@@ -6,6 +6,7 @@
 
 export * from './cli-rpc.js';
 export * from './discord.js';
+export * from './discord-commands.js';
 export * from './registry.js';
 export * from './telegram.js';
 export * from './types.js';

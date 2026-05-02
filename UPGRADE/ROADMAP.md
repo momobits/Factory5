@@ -27,8 +27,8 @@ Plan: [`plans/tier-1-doc-sweep.md`](plans/tier-1-doc-sweep.md)
 
 Discord/Telegram only emit `intent=build` and `intent=chat` today. Bring them up to the brain's full eight-intent vocabulary. Estimated **2 sessions**.
 
-- [ ] Discord slash commands — `/factory status / spend / findings / resume / cancel / budget` (wire `applicationId`)
-- [ ] Discord embeds for status / findings / spend responses
+- [x] Discord slash commands — `/factory status / spend / findings / resume / cancel / budget / build` (registers `factory` slash, wires `interactionCreate` dispatch)
+- [x] Discord embeds for status / findings / spend responses
 - [ ] Telegram bot commands — `setMyCommands` + matching parser
 - [ ] Telegram inline keyboard buttons on pending-question messages (Answer / Skip / Escalate)
 - [ ] Discord buttons on pending-question messages (same shape)

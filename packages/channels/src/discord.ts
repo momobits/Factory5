@@ -50,12 +50,20 @@ import {
   Client,
   Events,
   GatewayIntentBits,
+  type ChatInputCommandInteraction,
+  type Interaction,
   type Message,
+  type RESTPostAPIApplicationCommandsJSONBody,
   type TextBasedChannel,
   type ThreadChannel,
 } from 'discord.js';
 import { z } from 'zod';
 
+import {
+  buildFactorySlashCommand,
+  dispatchSlashInteraction,
+  type DiscordCommandContext,
+} from './discord-commands.js';
 import type { ChannelContext, ChannelPlugin, SendResult } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -65,7 +73,13 @@ import type { ChannelContext, ChannelPlugin, SendResult } from './types.js';
 export const discordConfigSchema = z.object({
   /** Bot token (required). Stored in `config.toml` under `[channels.discord]`. */
   token: z.string().min(1, 'channels.discord.token is required'),
-  /** Discord application id — used by future slash-command wiring. */
+  /**
+   * Discord application id — kept for completeness; the
+   * `/factory` slash command is registered via
+   * `client.application.commands.set()` after `Events.ClientReady`,
+   * which reads the application from the live client rather than
+   * this id, so the field is no longer load-bearing for registration.
+   */
   applicationId: z.string().min(1).optional(),
   /** Restrict the bot to a single guild. */
   guildId: z.string().min(1).optional(),
@@ -79,6 +93,14 @@ export const discordConfigSchema = z.object({
    * `intent=build`. Default `/build`.
    */
   buildPrefix: z.string().default('/build'),
+  /**
+   * Skip slash-command registration on `ClientReady`. Set this when the
+   * commands are managed out-of-band (e.g. a dedicated registrar script,
+   * or when running multiple Discord plugin instances against the same
+   * bot — registration is a global write so only one instance should do
+   * it). Default `false` — registration runs unless suppressed.
+   */
+  skipSlashRegistration: z.boolean().default(false),
 });
 
 export type DiscordConfig = z.infer<typeof discordConfigSchema>;
@@ -91,16 +113,43 @@ export type DiscordConfig = z.infer<typeof discordConfigSchema>;
  * A minimal contract the channel uses against discord.js. Most real usage
  * satisfies this via the stock `Client`; tests pass a stub that records
  * events and exposes a `simulateMessage` helper.
+ *
+ * Slash-command bits (`application`, `on('interactionCreate', …)`) are
+ * optional — the message-only path remains intact even when a stub
+ * doesn't implement them. `start()` skips slash registration / dispatch
+ * when the surface is absent.
  */
 export interface DiscordClientLike {
   user: { id: string; tag: string } | null;
   once(event: typeof Events.ClientReady, listener: () => void): void;
   on(event: 'messageCreate', listener: (msg: Message) => void | Promise<void>): void;
+  on(
+    event: 'interactionCreate',
+    listener: (interaction: Interaction) => void | Promise<void>,
+  ): void;
   off(event: 'messageCreate', listener: (msg: Message) => void | Promise<void>): void;
+  off(
+    event: 'interactionCreate',
+    listener: (interaction: Interaction) => void | Promise<void>,
+  ): void;
   login(token: string): Promise<string>;
   destroy(): Promise<void>;
   channels: {
     fetch(id: string): Promise<TextBasedChannel | ThreadChannel | null>;
+  };
+  /**
+   * The application surface used to register slash commands. discord.js
+   * populates `client.application` after `Events.ClientReady`. Optional
+   * here so test stubs can omit it; the plugin treats `undefined` as
+   * "skip slash registration / dispatch".
+   */
+  application?: {
+    commands: {
+      set(
+        commands: ReadonlyArray<RESTPostAPIApplicationCommandsJSONBody>,
+        guildId?: string,
+      ): Promise<unknown>;
+    };
   };
 }
 
@@ -194,9 +243,11 @@ export class DiscordChannel implements ChannelPlugin {
   private onInbound: ChannelContext['onInbound'] | undefined;
   private resolveProjectPath: ChannelContext['resolveProjectPath'] | undefined;
   private resolveBuildLimits: ChannelContext['resolveBuildLimits'] | undefined;
+  private setProjectBudget: ChannelContext['setProjectBudget'] | undefined;
   private db: Database | undefined;
   private ownsDb = false;
   private messageHandler: ((msg: Message) => Promise<void>) | undefined;
+  private interactionHandler: ((interaction: Interaction) => Promise<void>) | undefined;
   private ready = false;
 
   constructor(opts: DiscordChannelOptions = {}) {
@@ -209,6 +260,7 @@ export class DiscordChannel implements ChannelPlugin {
     this.onInbound = ctx.onInbound;
     this.resolveProjectPath = ctx.resolveProjectPath;
     this.resolveBuildLimits = ctx.resolveBuildLimits;
+    this.setProjectBudget = ctx.setProjectBudget;
     this.config = discordConfigSchema.parse(rawConfig);
 
     if (this.externalDb !== undefined) {
@@ -232,8 +284,41 @@ export class DiscordChannel implements ChannelPlugin {
     this.messageHandler = handler;
     client.on('messageCreate', handler);
 
+    // Slash-command dispatch — registered before login so any interactions
+    // arriving while ready races resolve cleanly. Tests whose stub omits
+    // `interactionCreate` support naturally skip this leg.
+    const interactionHandler = async (interaction: Interaction): Promise<void> =>
+      this.handleInteraction(interaction);
+    this.interactionHandler = interactionHandler;
+    client.on('interactionCreate', interactionHandler);
+
     await client.login(this.config.token);
     await readyPromise;
+
+    // Slash-command registration. `client.application` is populated after
+    // `Events.ClientReady`; if the live shape doesn't include it (test
+    // stub) or `skipSlashRegistration` is set, we leave registration to
+    // the operator (or a dedicated registrar script).
+    if (this.config.skipSlashRegistration !== true && client.application !== undefined) {
+      try {
+        const command = buildFactorySlashCommand();
+        await client.application.commands.set([command], this.config.guildId);
+        this.log?.info(
+          {
+            scope: this.config.guildId !== undefined ? 'guild' : 'global',
+            guildId: this.config.guildId ?? null,
+          },
+          'discord: registered /factory slash command',
+        );
+      } catch (err) {
+        // Don't fail start() — message-path inbound still works without
+        // slash. Log loudly so operators see the registration error.
+        this.log?.error(
+          { err, guildId: this.config.guildId ?? null },
+          'discord: slash-command registration failed; /factory will not work until next start',
+        );
+      }
+    }
 
     this.log?.info(
       { userTag: client.user?.tag ?? '(unknown)', guildId: this.config.guildId ?? '(any)' },
@@ -244,6 +329,9 @@ export class DiscordChannel implements ChannelPlugin {
   async stop(): Promise<void> {
     if (this.client !== undefined && this.messageHandler !== undefined) {
       this.client.off('messageCreate', this.messageHandler);
+    }
+    if (this.client !== undefined && this.interactionHandler !== undefined) {
+      this.client.off('interactionCreate', this.interactionHandler);
     }
     if (this.client !== undefined) {
       try {
@@ -257,6 +345,8 @@ export class DiscordChannel implements ChannelPlugin {
     }
     this.client = undefined;
     this.db = undefined;
+    this.messageHandler = undefined;
+    this.interactionHandler = undefined;
     this.ready = false;
     this.log?.info('discord: stopped');
   }
@@ -514,6 +604,39 @@ export class DiscordChannel implements ChannelPlugin {
   /** Testing helper: drive a message through the handler directly. */
   async _simulateMessage(message: Message): Promise<void> {
     await this.handleMessage(message);
+  }
+
+  /** Testing helper: drive a slash interaction through the dispatcher. */
+  async _simulateInteraction(interaction: Interaction): Promise<void> {
+    await this.handleInteraction(interaction);
+  }
+
+  // ---- slash-command dispatch ----
+
+  /**
+   * Routes any `interactionCreate` event. Non-chat-input interactions
+   * (buttons, modals, autocomplete) fall through silently — Phase 2 step
+   * 2.3 wires button affordances; this step handles slash commands only.
+   */
+  private async handleInteraction(interaction: Interaction): Promise<void> {
+    if (!interaction.isChatInputCommand()) return;
+    if (this.db === undefined || this.log === undefined || this.onInbound === undefined) {
+      return;
+    }
+    const config = this.config;
+    if (config === undefined) return;
+    const ctx: DiscordCommandContext = {
+      db: this.db,
+      log: this.log,
+      user: { id: interaction.user.id, tag: interaction.user.tag },
+      guildId: interaction.guildId ?? undefined,
+      onInbound: this.onInbound,
+      resolveProjectPath: this.resolveProjectPath,
+      resolveBuildLimits: this.resolveBuildLimits,
+      setProjectBudget: this.setProjectBudget,
+      allowedUserIds: config.allowedUserIds,
+    };
+    await dispatchSlashInteraction(ctx, interaction as ChatInputCommandInteraction);
   }
 }
 
