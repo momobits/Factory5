@@ -6,10 +6,8 @@ import type { Migration } from './index.js';
  *
  * The per-project file remains the source of truth; this table is a
  * derived aggregate that `factory findings list|show` queries against
- * without walking the filesystem. Phase 6a step 6a.1 — see
- * `.control/phases/phase-6a-findings-registry/steps.md` for the full
- * design, and ADR 0018 for the `advisory` flag that Phase 6c shipped
- * onto the `Finding` schema and that this table propagates.
+ * without walking the filesystem. See ADR 0018 for the `advisory` flag
+ * that this table propagates.
  *
  * Dedup strategy: a project re-raised with the same F-ID is an update,
  * not an insert. `PRIMARY KEY (project_id, finding_id)` enforces that,
