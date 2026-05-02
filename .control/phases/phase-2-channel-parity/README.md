@@ -60,4 +60,4 @@ If Phase 2 needs to be undone: `git reset --hard phase-1-doc-sweep-closed`. No e
 One-line reason per item. Copy forward into the next phase's
 "Why this phase exists" section when it activates. -->
 
-- <item> — <one-line reason for deferral>
+- Step 2.6 — `factory chat` per-turn timeout (cheap path: bump `TURN_TIMEOUT_MS` to 600s; better path: stream partial daemon-side progress). Deferred to Phase 3 because the streaming/SSE work that ships with the web-UI uplift naturally subsumes the better path; landing the 120s→600s bump now would be a throwaway change that's reverted as soon as streaming arrives.
