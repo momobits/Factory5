@@ -3,9 +3,9 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-02 18:30 UTC by /session-start (drift reconciliation)
+**Last updated:** 2026-05-02 18:45 UTC by step 1.1 commit
 **Current phase:** 1 — doc-sweep
-**Current step:** 1.1 — Refresh `packages/cli/README.md`
+**Current step:** 1.2 — Refresh `packages/channels/README.md`
 **Status:** ready
 
 ---
@@ -20,7 +20,7 @@
 
 ## Next action
 
-Open [`../phases/phase-1-doc-sweep/README.md`](../phases/phase-1-doc-sweep/README.md) and [`steps.md`](../phases/phase-1-doc-sweep/steps.md). Step 1.1 = refresh `packages/cli/README.md` per [`../../UPGRADE/plans/tier-1-doc-sweep.md`](../../UPGRADE/plans/tier-1-doc-sweep.md) §1.1. Drop the "Phase" column; add `spend` / `findings` / `questions cleanup` rows; re-evaluate `stub` / `planned` markers against actual `packages/cli/src/commands/`.
+Step 1.2 — refresh `packages/channels/README.md` per [`../../UPGRADE/plans/tier-1-doc-sweep.md`](../../UPGRADE/plans/tier-1-doc-sweep.md) §1.2. Rewrite the Status section (Telegram + web no longer "future" — ADRs 0022, 0025, 0027); add a Telegram plugin section (config schema, capabilities, smoke script); add a Web channel section that explicitly calls out web is **not** a `ChannelPlugin` (it's a Fastify mount). Move "Adding a channel" to the bottom and verify the steps still match current code.
 
 ---
 
@@ -63,11 +63,11 @@ None — pre-Phase-1 housekeeping committed (see "Recently completed"). Step 1.1
 
 ## Recently completed (last 5 steps)
 
+- Step 1.1 — refresh `packages/cli/README.md` (drop Phase column; add spend/findings/questions cleanup rows; remove `inspect`/`push`; reword `logs` stub) — 2026-05-02 — pending commit
+- Reconcile STATE.md + Phase 1 README to actual git state (drift fix) — 2026-05-02 — `91541a9`
 - Bootstrap factory5 project docs (scanned from codebase) — 2026-05-02 — `cc35dd2`
 - Re-acknowledge Control v2.2.1 in project docs (CLAUDE.md, UPGRADE/README.md, .prettierignore, .claude/settings.json) — 2026-05-02 — `f84476e`
 - Install Control framework v2.2.1 (also landed UPGRADE/ workspace files in same commit) — 2026-05-02 — `e94393e`
-- Docs consolidation (single ARCHITECTURE.md, drop build journal + resolved-issue tracker) — 2026-05-02 — `de17274`
-- Control framework v1 removal — 2026-05-02 — `f6fb28c`
 
 ---
 

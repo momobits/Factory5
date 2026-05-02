@@ -4,22 +4,23 @@ Commander-based CLI. Used by the `factory` binary in `apps/factory`.
 
 ## Subcommands
 
-| Command                                                           | Phase | Status   | Purpose                                                                       |
-| ----------------------------------------------------------------- | ----- | -------- | ----------------------------------------------------------------------------- |
-| `factory --version`                                               | 0     | **done** | Print version                                                                 |
-| `factory answer <questionId> [text...]`                           | 4     | **done** | Close a pending `askUser`/`escalate_blocked` question                         |
-| `factory build <project> [--autonomy … --concurrency … --inline]` | 1–3   | **done** | Delegates to factoryd if running, else inline                                 |
-| `factory chat [--autonomy …]`                                     | 3     | **done** | Interactive REPL against factoryd (daemon must be up)                         |
-| `factory daemon start\|stop\|status\|restart`                     | 3     | **done** | Lifecycle; refuses duplicate starts via pidfile                               |
-| `factory directive mark-blocked <id> [--reason …]`                | 5     | **done** | Flip a stuck `running` directive to `blocked` (manual recovery)               |
-| `factory doctor [--skip-call] [--skip-discord]`                   | 1/4   | **done** | Provider probe + triage round-trip + optional Discord reachability probe      |
-| `factory init [--discord-token … --discord-application-id … ...]` | 1/4   | **done** | Writes `config.toml`; populates `[channels.discord]` when `--discord-*` given |
-| `factory resume <project>`                                        | 2     | **done** | Resume the most recent build for a project                                    |
-| `factory status [--limit N]`                                      | 1     | **done** | Projects + recent directives + per-directive spend                            |
-| `factory ui-token [--token-only]`                                 | 13    | **done** | Print the dashboard URL with the live `FACTORY5_UI_TOKEN`                     |
-| `factory logs [--component] [--directive] [--follow]`             | 3+    | stub     | Tail logs across components                                                   |
-| `factory inspect <directiveId>`                                   | 3+    | planned  | Stitch all logs/state for a directive                                         |
-| `factory push <project>`                                          | 5     | planned  | Push completed project to GitHub                                              |
+| Command                                                                         | Status   | Purpose                                                                       |
+| ------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------- |
+| `factory --version`                                                             | **done** | Print version                                                                 |
+| `factory answer <questionId> [text...]`                                         | **done** | Close a pending `askUser`/`escalate_blocked` question                         |
+| `factory build <project> [--autonomy … --concurrency … --inline]`               | **done** | Delegates to factoryd if running, else inline                                 |
+| `factory chat [--autonomy …]`                                                   | **done** | Interactive REPL against factoryd (daemon must be up)                         |
+| `factory daemon start\|stop\|status\|restart`                                   | **done** | Lifecycle; refuses duplicate starts via pidfile                               |
+| `factory directive mark-blocked <id> [--reason …]`                              | **done** | Flip a stuck `running` directive to `blocked` (manual recovery)               |
+| `factory doctor [--skip-call] [--skip-discord]`                                 | **done** | Provider probe + triage round-trip + optional Discord reachability probe      |
+| `factory findings list\|show\|backfill`                                         | **done** | Cross-project findings registry — list, show one, backfill from workspaces    |
+| `factory init [--discord-token … --discord-application-id … ...]`               | **done** | Writes `config.toml`; populates `[channels.discord]` when `--discord-*` given |
+| `factory questions cleanup [--since <iso-date>] [--dry-run]`                    | **done** | Mark un-answered questions on terminated directives as answered (sweep)       |
+| `factory resume <project>`                                                      | **done** | Resume the most recent build for a project                                    |
+| `factory spend [--group-by project\|directive\|day\|model] [--since/--until …]` | **done** | Cross-session spend dashboard — per-project / -directive / -day / -model      |
+| `factory status [--limit N]`                                                    | **done** | Projects + recent directives + per-directive spend                            |
+| `factory ui-token [--token-only]`                                               | **done** | Print the dashboard URL with the live `FACTORY5_UI_TOKEN`                     |
+| `factory logs [--component] [--directive] [--follow]`                           | stub     | Placeholder — prints a hint pointing at `~/.factory5/logs/`                   |
 
 ## `factory build <project>`
 
@@ -118,6 +119,53 @@ When the SPA bundle hasn't been built (`pnpm --filter factory-web build`), the p
 `--token-only` prints just the bare token, useful for piping into env vars or `curl -H "Authorization: Bearer $(factory ui-token --token-only)"`.
 
 Exit codes: `0` on success, `2` if no daemon is running, `3` if the daemon is running CLI-only (no UI bundle), `1` on any other failure.
+
+## `factory spend`
+
+Cross-session spend dashboard reading the LLM-call rollup tables in `@factory5/state`. Four group-by modes — `project` (default), `directive`, `day`, `model` — each renders a table with a `TOTAL` line. NDJSON via `--json` emits one row per line with no totals row (derive with `jq 'map(.totalUsd) | add'`).
+
+```
+$ factory spend --group-by day --since 7d
+DATE        N_CALL    SPENT
+2026-04-26      12  $0.0432
+…
+TOTAL  84 calls  $0.3210
+```
+
+Window flags: `--since` and `--until` accept either a relative duration (`7d`, `24h`, `30m`) or an ISO8601 date / datetime. `--project <ref>` resolves a project by full ULID, exact name, or unique ULID suffix; ambiguous refs error rather than silently picking one. `--limit` defaults to 50, capped at 1000.
+
+Exit codes: `0` on success (an empty result set is success, not error), `2` on invalid input (bad `--group-by`, malformed `--since` / `--until`, or unknown / ambiguous `--project`).
+
+## `factory findings list|show|backfill`
+
+Cross-project findings registry surface — `findings_registry` table per ADR 0021; advisory-vs-blocking gating per ADR 0018.
+
+`factory findings list` defaults to `OPEN` blocking findings. Filter with `--severity LOW|MEDIUM|HIGH|CRITICAL`, `--status OPEN|FIXED|VERIFIED|WONTFIX|all`, `--project <name-or-glob>` (glob accepts `*` and `?`), `--advisory` / `--blocking` (ADR 0018 — advisory findings don't gate). `--limit` defaults to 50, capped at 1000. `--json` emits NDJSON.
+
+```
+$ factory findings list --severity HIGH
+project   id    severity  status  source        target              description
+my-cli    F003  HIGH      OPEN    test-failure  tests/auth.test.ts  Login flow regression …
+```
+
+`factory findings show <id>` accepts either `<project>/<id>` or a bare `<id>` (the latter must be unambiguous across projects — multi-project matches print a disambiguation list and exit 2). Renders Description + Resolution as wrapped blocks; `--json` emits one JSON object.
+
+`factory findings backfill` walks `<workspace>/<project>/.factory/findings.json` one level deep and upserts every finding into the registry. Idempotent on `(project_id, finding_id)`. `--workspace <path>` overrides the default `~/factory5-workspace`. `--dry-run` reports what would change without writing. Projects without `.factory/project.json` (ADR 0021) are skipped — the operator must run `factory build` once in that project to claim identity. Exit `1` if any per-project errors surfaced; `2` if the workspace itself isn't readable.
+
+## `factory questions cleanup`
+
+Sweep `pending_questions` rows whose parent directive ended in a terminal state (`complete` / `failed` / `blocked`). These are escalations the operator never replied to — by the time anyone does, the brain has long since moved on, so the row is just noise on `factory status` and on the dashboard's open-questions view. The sweep marks them as answered with a synthetic note (rather than deleting) to preserve forensic value.
+
+```
+$ factory questions cleanup --since 2026-04-01 --dry-run
+Found 4 orphaned question(s):
+  01K0…  directive=01K0… (failed, discord)  created=2026-04-12T…
+    "Should we use Postgres or SQLite for the …"
+…
+Dry run — no rows written. Re-run without --dry-run to mark them answered.
+```
+
+Works whether or not factoryd is running (straight SQL). `--since <iso-date>` restricts the sweep to rows created strictly before that ISO-8601 date / datetime. Exit `0` on success (including empty sweeps), `2` on malformed `--since`, `1` on any other failure.
 
 ## API
 

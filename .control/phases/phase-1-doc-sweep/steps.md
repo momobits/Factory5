@@ -1,6 +1,6 @@
 # Phase 1 Steps
 
-- [ ] 1.1 — Refresh `packages/cli/README.md` — drop "Phase" column, add `spend` / `findings` / `questions cleanup` rows, re-evaluate `stub` / `planned` markers
+- [x] 1.1 — Refresh `packages/cli/README.md` — drop "Phase" column, add `spend` / `findings` / `questions cleanup` rows, re-evaluate `stub` / `planned` markers
 - [ ] 1.2 — Refresh `packages/channels/README.md` — rewrite Status section (Telegram + web no longer "future"), add Telegram plugin section, add Web channel section, clarify Web ≠ ChannelPlugin
 - [ ] 1.3 — Refresh `apps/factory-web/README.md` — remove phase-number references, add page index
 - [ ] 1.4 — Add §"Web dashboard" to `docs/ONBOARDING.md` between §4 "First build" and §5 "Discord channel"
