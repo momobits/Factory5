@@ -1,8 +1,6 @@
 # @factory5/assessor
 
-Ground-truth project assessment. **No LLM ever runs in this package** — that's the point. Agents can't game an assessor that uses real subprocesses and real file checks.
-
-> This is factory's moat. Inherited from factory2. See `CompleteArchitecture.md` §2.
+Ground-truth project assessment. **No LLM ever runs in this package** — that's the point. Agents can't game an assessor that uses real subprocesses and real file checks. This is factory's moat, inherited from factory2.
 
 ## What it checks
 

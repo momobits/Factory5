@@ -4,10 +4,8 @@
 
 ## Before touching code
 
-1. **Read [`CompleteArchitecture.md`](CompleteArchitecture.md)** — the canonical design.
-2. **Read [`docs/PROGRESS.md`](docs/PROGRESS.md)** — what has been built and what's next. Every session updates this at the end.
-3. **Skim [`docs/decisions/`](docs/decisions)** — the ADRs are the _why_. If your work contradicts an ADR, write a new ADR that supersedes it; don't silently disagree in code.
-4. **Skim [`docs/issues/INDEX.md`](docs/issues/INDEX.md)** — open work items. Pick from here when not directed.
+1. **Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** — the canonical system design.
+2. **Skim [`docs/decisions/`](docs/decisions)** — the ADRs are the _why_. If your work contradicts an ADR, write a new ADR that supersedes it; don't silently disagree in code.
 
 ## Non-negotiable rules
 
@@ -30,8 +28,6 @@ A "session" ends when you stop or hand off. Run through this:
 - [ ] `pnpm format:check` is clean
 - [ ] If `core` types changed: regenerate or hand-update `docs/CONTRACTS.md`
 - [ ] If you made a significant decision: add an ADR under `docs/decisions/`
-- [ ] If you closed an issue: update `docs/issues/INDEX.md` and the issue file's frontmatter
-- [ ] **Append a new section to `docs/PROGRESS.md`** with: date, what was done, what was decided, what's next
 - [ ] If a package's API changed: update its `README.md`
 
 ## Conventions
@@ -82,11 +78,10 @@ Project state goes in `<workspace>/<project>/.factory/`. Never write to `~/.fact
 
 ## Pointers
 
-- `CompleteArchitecture.md` — the snapshot at scaffold; the _what_
-- `docs/ARCHITECTURE.md` — current; mirrors the snapshot but evolves
-- `docs/PROGRESS.md` — _when_ and _what next_
-- `docs/decisions/` — _why_
+- `docs/ARCHITECTURE.md` — the system design (the _what_)
+- `docs/decisions/` — the ADRs (the _why_)
 - `docs/CONTRACTS.md` — exact data shapes
 - `docs/SKILLS.md`, `docs/AGENTS.md` — what skills/agents exist and when each is used
+- `docs/ONBOARDING.md` — clone-to-first-build walkthrough
 
 When in doubt, prefer reading these documents to spelunking the code. They exist precisely so future sessions don't drift.

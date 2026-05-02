@@ -297,8 +297,6 @@ The config file is harmless to lose (you can regenerate it from the template + t
 
 ## Pointers
 
-- `CompleteArchitecture.md` — the canonical design at scaffold time.
-- `docs/ARCHITECTURE.md` — the evolved architecture (mirrors the snapshot).
-- `docs/PROGRESS.md` — session-by-session history.
-- `docs/decisions/` — ADRs. Start with [0004 (routing)](decisions/0004-category-based-model-routing.md), [0020 (budget)](decisions/0020-pre-call-budget-enforcement.md), [0021 (project identity)](decisions/0021-first-class-project-identity.md), [0023 (storage layout)](decisions/0023-repo-local-instance-and-cwd-walk.md).
-- `docs/Phase7_Progress.md` — where budget enforcement, spend dashboard, and the Telegram channel came from.
+- `docs/ARCHITECTURE.md` — system design.
+- `docs/decisions/` — ADRs. Start with [0004 (routing)](decisions/0004-category-based-model-routing.md), [0020 (budget)](decisions/0020-pre-call-budget-enforcement.md), [0021 (project identity)](decisions/0021-first-class-project-identity.md), [0023 (storage layout)](decisions/0023-repo-local-instance-and-cwd-walk.md), [0026 (pluggable runtimes)](decisions/0026-pluggable-runtime-contract.md), [0028 (worker sandbox)](decisions/0028-worker-sandbox-contract.md).
+- `docs/CONTRACTS.md` — exact data shapes.

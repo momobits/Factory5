@@ -1,7 +1,7 @@
 import type { Migration } from './index.js';
 
 /**
- * Initial schema. Creates every table referenced in CompleteArchitecture.md §6.
+ * Initial schema. Creates every table referenced in `docs/ARCHITECTURE.md` (Storage / IPC sections).
  *
  * Conventions:
  *  - All IDs are TEXT (ULIDs from `@factory5/core`).

@@ -1,5 +1,0 @@
-  ▎ Read CLAUDE.md, then docs/PROGRESS.md, then docs/ARCHITECTURE.md. The Phase 0 scaffold is verified — pnpm install, 
-  ▎ build, test, lint all passed; both factory --version and factoryd --version work. Proceed with Phase 1 as described in 
-  ▎ PROGRESS.md "Next session" section: wire factory build <project> end-to-end inline. Start with the first provider
-  ▎ implementation (@factory5/providers/claude-cli — subprocess to claude -p, capture and parse output, record usage), then 
-  ▎ move down the Phase 1 list. Update PROGRESS.md as you go and add an ADR for any non-obvious choice.

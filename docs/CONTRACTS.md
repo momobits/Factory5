@@ -24,9 +24,8 @@ How much human-in-the-loop the brain expects:
 type ChannelId = 'cli' | 'discord' | 'telegram';
 ```
 
-Where a directive originated. Drives reply routing. `telegram` is a
-forward scaffold for Phase 7c; `cli` and `discord` are live. (`'github'`
-and `'webhook'` were retired by ADR 0019.)
+Where a directive originated. Drives reply routing. All three are live;
+`'github'` and `'webhook'` were retired by ADR 0019.
 
 ## `Intent`
 
@@ -214,4 +213,4 @@ When `packages/core/src/types.ts` changes:
 1. Update this file with the new shape
 2. Bump the relevant Zod schema in `packages/core/src/schemas.ts`
 3. Run `pnpm test` — schema tests guard backward compatibility within a major version
-4. If the change is breaking, add an ADR and a migration note in `docs/PROGRESS.md`
+4. If the change is breaking, add an ADR under `docs/decisions/`
