@@ -35,7 +35,8 @@ pnpm factoryd
 SPA catches `?t=<token>` from the initial URL, stores it in
 `sessionStorage['factory5.ui-token']`, and sends `Authorization: Bearer
 <token>` on every `/api/v1/*` fetch. Recover a lost token with
-`factory ui-token` (wired in 9.3).
+`factory ui-token` — it queries the running daemon over the loopback
+`/ui-token` IPC route and prints the dashboard URL with the live bearer.
 
 ## TypeScript config divergence
 
@@ -46,6 +47,21 @@ incompatible with the Node-target base config used by `packages/` and the
 other apps. Strictness settings still match (`strict`, `noUncheckedIndexedAccess`,
 etc. — Astro's preset ships them on).
 
-## Routing
+## Pages
 
-File-based under `src/pages/`. See ADR 0025 §4 for the full tree.
+File-based routing under `src/pages/` (ADR 0025 §4). The ten SPA pages today:
+
+| URL path                          | File                      | Purpose                                                                                     |
+| --------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------- |
+| `/app/`                           | `index.astro`             | Overview — recent directives, open question count, spend headline                           |
+| `/app/build/`                     | `build.astro`             | New build form — picks project, sets autonomy / budget, POSTs `/api/v1/builds`              |
+| `/app/directives/`                | `directives/index.astro`  | Paged directive list with status filter                                                     |
+| `/app/directives/detail/?id=<id>` | `directives/detail.astro` | Directive detail — inflight tasks, open pending questions, spend + call-count rollup        |
+| `/app/projects/`                  | `projects/index.astro`    | Project registry list (most-recently-touched first)                                         |
+| `/app/projects/detail/?id=<id>`   | `projects/detail.astro`   | Project detail with budget-defaults editor (PUT `/api/v1/projects/:id/budget`, ADR 0027)    |
+| `/app/questions/`                 | `questions/index.astro`   | Pending-question list — `open` / `answered` / `all` scopes                                  |
+| `/app/questions/detail/?id=<id>`  | `questions/detail.astro`  | Question detail with answer form (POST `/api/v1/pending-questions/:id/answer`, ADR 0027 §2) |
+| `/app/spend/`                     | `spend/index.astro`       | Spend dashboard — per-project / -directive / -day / -model rollups                          |
+| `/app/findings/`                  | `findings/index.astro`    | Cross-project findings list with severity / status filters                                  |
+
+The detail pages read their id from a query string (`?id=<…>`) rather than using Astro's `[id].astro` dynamic-route convention. That keeps the prod build a static set of HTML files that `@fastify/static` can serve without route-rewrite logic. List and detail pages share the `src/lib/api.ts` envelope wrapper for every `/api/v1/*` call (token attach, error unwrap, redirect-to-token-form on 401).

@@ -14,7 +14,7 @@ Bringing the user-facing docs into line with reality. Estimated **1 session**.
 
 - [x] Fix `packages/cli/README.md` — drop "Phase" column, add `spend` / `findings` / `questions cleanup` rows, re-evaluate stub/planned markers
 - [x] Fix `packages/channels/README.md` — Telegram + web no longer "future"; add Telegram and Web sections
-- [ ] Fix `apps/factory-web/README.md` — remove phase-number references, add page index
+- [x] Fix `apps/factory-web/README.md` — remove phase-number references, add page index
 - [ ] Add §"Web dashboard" to `docs/ONBOARDING.md`
 - [ ] Add §"Chat — CLI / Discord / Telegram" to `docs/ONBOARDING.md`
 - [ ] Write `docs/WORKFLOWS.md` — four canonical loops + decision matrix + CLAUDE.md authoring guide
