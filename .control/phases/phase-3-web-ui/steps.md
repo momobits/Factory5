@@ -5,12 +5,18 @@
 - [x] 3.3 — Astro component library — `<Card>`, `<Table>`, `<EmptyState>`, `<Alert>`, `<Form>`, `<PageShell>`; consistent prop conventions; documented in `apps/factory-web/src/components/README.md`
 - [x] 3.4 — Convert all 10 pages to use components; retire `el()` (and `loadInto()`) from `lib/api.ts`; matching tests / smoke
 - [x] 3.5 — Add `/app/chat` page — mirror of `factory chat` in browser; reuses Phase 2's `command-handlers.ts` for read-side dispatch; live token streaming
-- [ ] 3.6 — Cancel + pause buttons on directive detail — calls Phase 2's `POST /directives/:id/cancel` route; pause is a status flip via existing route
+- [x] 3.6 — Cancel button on directive detail — POST `/api/v1/directives/:id/cancel` (new SPA-namespace alias of Phase 2's CLI route, gated by `requireUiAuth`). Pause deferred — see follow-up bullet at the end of this list.
 - [ ] 3.7 — Add `/app/projects/new` — mirror of `factory init <project>` for a single project; same shape as the chat-side build kickoff
 - [ ] 3.8 — Spend page charts — sparkline per project + 30-day daily stacked bar; vanilla SVG (no chart-lib dep)
 - [ ] 3.9 — Mobile-responsive nav — hamburger drawer at narrow widths (≤768px); primary actions reachable in two taps at 375px
 - [ ] 3.10 — Explicit logout + connection-status indicator in header — clears session token; "Connected" / "Disconnected" / "Reconnecting" pip backed by a heartbeat
 - [ ] 3.11 — `/phase-close` — tag `phase-3-web-ui-closed`; append session entry to [`../../../UPGRADE/LOG.md`](../../../UPGRADE/LOG.md); tick Tier 3 boxes in [`../../../UPGRADE/ROADMAP.md`](../../../UPGRADE/ROADMAP.md); scaffold Phase 4
+
+### Deferred follow-ups (no acceptance dependency for any 3.x step; land any time before `/phase-close`)
+
+- [ ] 3.x — Pause primitive on directive detail. Deferred at 3.6 per Decision 2 = option C: cancel solves the primary operator-pain case (a build going wrong needs to die, not pause-then-think). Pause is the kind of feature worth designing once a real workflow demands it. When a workflow signal lands, choose between Option A (extend `directivesQ.status` with a `paused`/resume pair + brain claim-loop skip + 2 routes + 2 buttons) and Option B (reuse `markBlocked` with `blockedReason: 'paused-by-operator'`).
+- [ ] 3.x — PageShell adoption + Dashboard `<style is:global>` migration. Wire `<PageShell title=…>` across all 11 pages (10 pre-3.5 + chat); remove Dashboard's inner `<h2>{title}</h2>`; convert Dashboard's primitives (`.cards`, `.empty`, `.err`, `.filter-form`, `.btn*`, `.alert*`, `.form-*`, `table`/`th`/`td` base) to `<style is:global>` so slot-level elements pick them up. Self-contained ~1 commit.
+- [ ] 3.x — Pre-3.5 baseline live-smoke. Open a real browser to `/app/directives/detail?id=…` AND `/app/chat` during a real factoryd build to verify SSE event fidelity end-to-end. The 3.6 cancel acceptance smoke covers the detail page condition; chat page is a 30-second click-test layered on top. This is the last gate before promoting ADR 0029 (directive-stream protocol) from gated to accepted. Pin as part of phase-3 acceptance; not a per-step blocker.
 
 ## Step detail
 
