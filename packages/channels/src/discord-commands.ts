@@ -41,6 +41,7 @@ import {
 import {
   FINDING_SEVERITIES,
   FINDING_STATUSES,
+  makeProjectNameLookup,
   PROJECT_LANGUAGES,
   runBudget,
   runBuild,
@@ -490,14 +491,16 @@ function embedStatus(db: Database, data: StatusData): EmbedBuilder {
   if (data.recent.length === 0) {
     sections.push('**Recent directives** — _(none yet)_');
   } else {
+    const projectNameOf = makeProjectNameLookup(data.projects);
     const lines: string[] = ['```'];
     lines.push(
-      `${'id'.padEnd(8)}  ${'status'.padEnd(8)}  ${'intent'.padEnd(11)}  ${'spent'.padStart(9)}  created`,
+      `${'id'.padEnd(8)}  ${'project'.padEnd(14)}  ${'status'.padEnd(8)}  ${'intent'.padEnd(11)}  ${'spent'.padStart(9)}  created`,
     );
     for (const e of data.recent) {
       const d = e.directive;
+      const proj = truncate(projectNameOf(d.projectId), 14).padEnd(14);
       lines.push(
-        `${d.id.slice(-8)}  ${d.status.padEnd(8)}  ${d.intent.padEnd(11)}  ${`$${e.spendUsd.toFixed(4)}`.padStart(9)}  ${d.createdAt.slice(0, 19)}Z`,
+        `${d.id.slice(-8)}  ${proj}  ${d.status.padEnd(8)}  ${d.intent.padEnd(11)}  ${`$${e.spendUsd.toFixed(4)}`.padStart(9)}  ${d.createdAt.slice(0, 19)}Z`,
       );
     }
     lines.push('```');

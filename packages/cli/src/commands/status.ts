@@ -49,10 +49,19 @@ export function registerStatusCommand(program: Command): void {
         if (all.length === 0) {
           stdout.write('  (no directives yet)\n');
         } else {
+          const projectNameById = new Map<string, string>();
+          for (const p of projects) projectNameById.set(p.id, p.name);
           for (const d of all) {
             const cost = modelUsage.totalCostForDirective(db, d.id);
+            const projName =
+              d.projectId !== undefined && projectNameById.has(d.projectId)
+                ? projectNameById.get(d.projectId)!
+                : '-';
+            const projCol = (projName.length > 14 ? `${projName.slice(0, 13)}…` : projName).padEnd(
+              14,
+            );
             stdout.write(
-              `  ${d.id}  ${d.status.padEnd(8)} ${d.intent.padEnd(12)} ${d.createdAt}  $${cost.toFixed(4)}\n`,
+              `  ${d.id}  ${projCol}  ${d.status.padEnd(8)} ${d.intent.padEnd(12)} ${d.createdAt}  $${cost.toFixed(4)}\n`,
             );
           }
         }

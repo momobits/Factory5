@@ -131,6 +131,20 @@ export type FindingSeverity = (typeof FINDING_SEVERITIES)[number];
 export const PROJECT_LANGUAGES = ['python', 'node', 'go', 'rust'] as const;
 export type ProjectLanguage = (typeof PROJECT_LANGUAGES)[number];
 
+/**
+ * Build a fast id→name lookup for the rendering side. Returns `'-'` when the
+ * directive has no `projectId` (legacy rows pre-migration-006, or directives
+ * that never resolved to a project) or when the id doesn't match anything in
+ * the supplied list.
+ */
+export function makeProjectNameLookup(
+  projects: ReadonlyArray<Project>,
+): (id: string | undefined) => string {
+  const byId = new Map<string, string>();
+  for (const p of projects) byId.set(p.id, p.name);
+  return (id) => (id !== undefined && byId.has(id) ? byId.get(id)! : '-');
+}
+
 // ---------------------------------------------------------------------------
 // /factory status
 // ---------------------------------------------------------------------------

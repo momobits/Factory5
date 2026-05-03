@@ -61,6 +61,7 @@ import { routeChatIntent } from './chat-routing.js';
 import { readQuestionMetadata } from './discord.js';
 import { FACTORY_SUBCOMMANDS, type FactorySubcommand } from './discord-commands.js';
 import {
+  makeProjectNameLookup,
   PROJECT_LANGUAGES,
   runBudget,
   runBuild,
@@ -1480,14 +1481,16 @@ function formatStatusReply(data: StatusData): TelegramReply {
   if (data.recent.length === 0) {
     sections.push('<b>Recent directives</b> — <i>(none yet)</i>');
   } else {
+    const projectNameOf = makeProjectNameLookup(data.projects);
     const tableLines: string[] = [];
     tableLines.push(
-      `${'id'.padEnd(8)}  ${'status'.padEnd(8)}  ${'intent'.padEnd(11)}  ${'spent'.padStart(9)}  created`,
+      `${'id'.padEnd(8)}  ${'project'.padEnd(14)}  ${'status'.padEnd(8)}  ${'intent'.padEnd(11)}  ${'spent'.padStart(9)}  created`,
     );
     for (const e of data.recent) {
       const d = e.directive;
+      const proj = truncate(projectNameOf(d.projectId), 14).padEnd(14);
       tableLines.push(
-        `${d.id.slice(-8)}  ${d.status.padEnd(8)}  ${d.intent.padEnd(11)}  ${`$${e.spendUsd.toFixed(4)}`.padStart(9)}  ${d.createdAt.slice(0, 19)}Z`,
+        `${d.id.slice(-8)}  ${proj}  ${d.status.padEnd(8)}  ${d.intent.padEnd(11)}  ${`$${e.spendUsd.toFixed(4)}`.padStart(9)}  ${d.createdAt.slice(0, 19)}Z`,
       );
     }
     sections.push(
