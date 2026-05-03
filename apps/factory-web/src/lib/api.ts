@@ -116,45 +116,6 @@ export async function apiPut<TReq, TRes = unknown>(path: string, body: TReq): Pr
   });
 }
 
-/**
- * Fetch a path and invoke `render` with the response, or surface the error in
- * `mount` with a friendly message. Centralises the captureTokenFromUrl +
- * token-missing + try/catch that every page would otherwise duplicate.
- */
-export function loadInto<T>(
-  mount: HTMLElement,
-  path: string,
-  render: (data: T, mount: HTMLElement) => void,
-): void {
-  captureTokenFromUrl();
-  if (getToken() === null) {
-    mount.innerHTML = '';
-    mount.textContent = 'No UI token present. Reopen the URL logged by factoryd.';
-    return;
-  }
-  mount.textContent = 'Loading…';
-  apiFetch<T>(path)
-    .then((data) => {
-      mount.innerHTML = '';
-      render(data, mount);
-    })
-    .catch((err: unknown) => {
-      mount.innerHTML = '';
-      if (err instanceof NoTokenError) {
-        mount.textContent = err.message;
-      } else if (err instanceof ApiError) {
-        const pre = document.createElement('pre');
-        pre.className = 'err';
-        pre.textContent = `API error ${String(err.status)} (${err.code}): ${err.message}`;
-        mount.appendChild(pre);
-      } else if (err instanceof Error) {
-        mount.textContent = `Fetch failed: ${err.message}`;
-      } else {
-        mount.textContent = 'Unknown error';
-      }
-    });
-}
-
 // ---------------------------------------------------------------------------
 // SSE stream client — `apiStream(path, callbacks)`
 // ---------------------------------------------------------------------------
@@ -335,21 +296,6 @@ export function apiStream(path: string, callbacks: StreamCallbacks): StreamHandl
     },
     state: () => state,
   };
-}
-
-export function el(
-  tag: string,
-  attrs: Record<string, string> = {},
-  ...children: (string | Node)[]
-): HTMLElement {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    e.setAttribute(k, v);
-  }
-  for (const c of children) {
-    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
-  }
-  return e;
 }
 
 export function fmtUsd(n: number): string {

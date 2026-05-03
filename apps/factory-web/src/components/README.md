@@ -2,15 +2,32 @@
 
 The factory5 Astro component library. Eight server-rendered components
 covering the dashboard's structural surface — cards, tables, alerts,
-forms, page shells. Page-conversion (3.4) wires every page in
-`apps/factory-web/src/pages/` through these and retires the inline
-`el(...)` DOM-creation pattern from `lib/api.ts`.
+forms, page shells. Step 3.4 wired every page in
+`apps/factory-web/src/pages/` through these and retired the inline
+`el(...)` + `loadInto(...)` helpers from `lib/api.ts`.
 
-> **3.3 status — library only.** No page in `pages/` consumes these yet;
-> page-conversion is gated on step 3.4. The visual is unchanged
-> meanwhile because each component duplicates the matching CSS from
-> `layouts/Dashboard.astro` (scoped, so no global conflict). The
-> Dashboard-level CSS is gutted as part of 3.4.
+> **3.4 status — fully consumed by every page in `pages/`.** Each
+> component owns its scoped CSS via Astro's `<style>` block; the
+> `id?` / `loading?` extensions on `<Card>` and `<Table>` (added
+> during 3.4) cover the runtime-fetched-data pattern where the page's
+> `<script>` populates a server-rendered placeholder by `id`.
+>
+> **Note on `Dashboard.astro` CSS.** The dashboard layout's class-based
+> styles (`.cards`, `.card`, `.empty`, `.err`, `.btn*`, `.alert*`,
+> `.form-*`, `table`/`th`/`td`) survive the conversion intentionally
+> — Astro's scoped CSS does not propagate the layout's
+> `data-astro-cid-*` attribute to slot content, so those rules already
+> only matched elements rendered directly inside `Dashboard.astro`'s
+> own template (the `<header class="shell">` chrome and the inner
+> `<h2>`). Pruning them would not visually regress anything because
+> they were not applying to slot content; leaving them in place keeps
+> the door open for a future `<style is:global>` adoption that would
+> let the layout actually style slot-level `<div class="cards">`,
+> `<p class="err">`, etc. without per-page repetition. `<PageShell>`
+> adoption likewise sits as deferred sugar — Dashboard's inner `<h2>`
+> still owns the page title; PageShell can be wired across all pages
+> in a focused follow-up step alongside removing that `<h2>` and
+> shifting Dashboard styles to `is:global`.
 
 ## Conventions
 
@@ -198,16 +215,20 @@ page wraps content in `<PageShell title="…">` instead of relying on
 </Dashboard>
 ```
 
-## Migration map (3.4)
+## Migration map (3.4 — done)
 
-| Today                                                   | After 3.4                           |
-| ------------------------------------------------------- | ----------------------------------- |
-| `el('div', { class: 'card' }, …)`                       | `<Card title=… value=… />`          |
-| `<table><thead>…<tbody>…`                               | `<Table columns=… rows=… />`        |
-| `<p class="empty">None</p>`                             | `<EmptyState title=… body=… />`     |
-| `el('div', { class: 'alert alert--conflict' }, …)`      | `<Alert kind="conflict" title=… />` |
-| `el('form', { class: 'form' }, …)` with `<button>` etc. | `<Form>` + `<Field>` + `<Submit>`   |
-| `<Dashboard title="…">` (title in chrome)               | `<Dashboard><PageShell title="…">`  |
+| Pre-3.4                                                 | Post-3.4                                                                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `el('div', { class: 'card' }, …)`                       | `<Card title=… value=… id?=… />`                                                                              |
+| `<table><thead>…<tbody>…`                               | `<Table columns=… rows=… loading? id?/>`                                                                      |
+| `<p class="empty">None</p>`                             | `<EmptyState title=… body=… />` (or single `<td colspan class="empty">` row inside a `<Table>`)               |
+| `el('div', { class: 'alert alert--conflict' }, …)`      | `<Alert kind="conflict" title=… />` (hidden placeholder + script populates inner `h4`/`p` for dynamic alerts) |
+| `el('form', { class: 'form' }, …)` with `<button>` etc. | `<Form>` + `<Field>` + `<Submit>`                                                                             |
+| `<Dashboard title="…">` (title in chrome)               | `<Dashboard title="…">` — `<PageShell>` adoption deferred (see status note above)                             |
 
-After every page is converted, `lib/api.ts` retires the `el()` helper
-(it survives 3.3 because pages still use it).
+`lib/api.ts` retired the `el()` and `loadInto()` helpers in 3.4's
+final commit. The single in-page `el()` definition that survives
+lives at the top of `pages/directives/detail.astro`'s `<script>`
+block — that page's render path rebuilds the entire mount on every
+SSE event, and a per-page DOM helper is the natural endpoint for
+that pattern.
