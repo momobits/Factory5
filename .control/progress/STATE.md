@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-03 13:11 UTC by /session-end (post step 3.3 — Astro component library shipped after 3.2 SSE FE wiring)
+**Last updated:** 2026-05-03 13:27 UTC by reconcile commit (catches "Last commit" up to `4466078` post-3.3 session-end; third occurrence — see commit body)
 **Current phase:** 3 — web-ui
 **Current step:** 3.4 — convert all 9 pages to use components; retire `el()` (next; steps 3.2 + 3.3 closed this session)
 **Status:** ready (clean working tree; SSE FE wiring + component library both shipped, all four pnpm gates green)
@@ -27,7 +27,7 @@ Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). S
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `94b8b71` — feat(3.3): astro component library — Card / Table / EmptyState / Alert / Form / PageShell
+- **Last commit:** `4466078` — docs(state): session end for step 3.3
 - **Uncommitted changes:** none (working tree clean)
 - **Last phase tag:** `phase-2-channel-parity-closed` (annotated tag at commit `081b832`)
 
@@ -65,10 +65,10 @@ Steps 3.2 and 3.3 did not promote new ADRs — the SSE protocol shape is still p
 
 ## Recently completed (last 5 steps)
 
+- State reconcile — `docs(state)`: reconcile STATE.md last-commit pointer to current HEAD (catches "Last commit" up to `4466078` — the post-3.3 session-end commit; third occurrence of this self-reference drift after `cce7065` / `db61baf`, flagged for `/session-end` skill fix) — 2026-05-03 — `db61baf` (prior reconcile; new SHA backfilled by next /session-end)
 - Step 3.3 — `feat(3.3)`: Astro component library — eight server-rendered components under `apps/factory-web/src/components/` (Card / Table / EmptyState / Alert / Form / Field / Submit / PageShell) with typed Props interfaces, scoped CSS mirroring Dashboard.astro's `color-mix(currentColor)` palette, and a README documenting each component + the 3.4 migration map. Library-only — no page consumes them yet. — 2026-05-03 — `94b8b71`
 - Step 3.2 — `feat(3.2)`: wire directive detail page to SSE stream — new `apiStream<T>(path, callbacks)` helper in `apps/factory-web/src/lib/api.ts` (token-auth via `?t=` query param, Zod-validated against `directiveStreamEventSchema`, six-state connection machine: connecting → live → reconnecting → polling | disconnected → completed, 5 s polling fallback when EventSource gives up). `directives/detail.astro` rewritten: incremental `Map<taskId, Task>` render, atomic spend swap, log tail panel rendered only after the first `log.line` arrives, connection-state pip in the header. New `./sse` sub-export on `@factory5/ipc` keeps undici / logger out of the FE bundle (multi-entry tsup build emits `dist/sse.js` + `dist/sse.d.ts`). `apps/factory-web` now depends on `@factory5/ipc` workspace:*. — 2026-05-03 — `998e7d8`
 - State reconcile — `docs(state)`: reconcile STATE.md last-commit pointer to current HEAD (post-session-end pointer drift surfaced at session start, same pattern as `cce7065`) — 2026-05-03 — `db61baf`
-- Session-end docs — `docs(state)`: session end for step 3.1 (STATE.md / journal / next.md updated by `/session-end`) — 2026-05-03 — `15bbad3`
 - Step 3.1 — `feat(3.1)`: SSE on `/api/v1/directives/:id/stream` — spec, six Zod event schemas, `DirectiveStreamHub` (subscribe / emit / closeDirective / shutdown), Fastify route via `reply.hijack()` with header-or-`?t=` auth, backfill on connect, 15 s heartbeats, cleanup on disconnect, brain emission threaded through `BrainOptions.emitDirectiveEvent`. — 2026-05-03 — `772f9f3`
 
 ---
