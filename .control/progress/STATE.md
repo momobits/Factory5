@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-03 09:15 UTC by /session-end (post-phase-2 docs polish)
+**Last updated:** 2026-05-03 09:45 UTC by /session-start (reconcile last-commit pointer to actual HEAD)
 **Current phase:** 3 — web-ui
 **Current step:** 3.1 — SSE on `/api/v1/directives/:id/stream` (next; phase 2 closed)
 **Status:** ready (clean working tree; phase 2 tag landed; ONBOARDING PATH-setup gap closed)
@@ -27,7 +27,7 @@ Open [`../phases/phase-3-web-ui/README.md`](../phases/phase-3-web-ui/README.md) 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `f7c78ce` — docs(2): document factory/factoryd PATH setup in ONBOARDING
+- **Last commit:** `733ce5a` — docs(state): session end for step 3.1
 - **Uncommitted changes:** none (working tree clean)
 - **Last phase tag:** `phase-2-channel-parity-closed` (annotated tag at commit `081b832`)
 
