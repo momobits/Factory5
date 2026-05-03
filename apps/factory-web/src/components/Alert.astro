@@ -1,0 +1,58 @@
+---
+/**
+ * Status banner for inline messages. Three kinds — `info` (neutral),
+ * `success` (green tint), `conflict` (red tint, for 4xx form errors
+ * and conflicts). Title is required; `body` is optional; arbitrary
+ * additional content (links, lists, code blocks) goes through the
+ * default slot. Replaces the `el('div', { class: 'alert alert--…' })`
+ * pattern in `pages/build.astro` etc.
+ */
+interface Props {
+  kind: 'info' | 'success' | 'conflict';
+  title: string;
+  body?: string;
+}
+
+const { kind, title, body } = Astro.props;
+---
+
+<div class:list={['alert', `alert--${kind}`]} role={kind === 'conflict' ? 'alert' : 'status'}>
+  <h4>{title}</h4>
+  {body !== undefined && <p>{body}</p>}
+  <slot />
+</div>
+
+<style>
+  .alert {
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+    background: color-mix(in srgb, currentColor 5%, transparent);
+    font-size: 0.9rem;
+    max-width: 36rem;
+  }
+  .alert h4 {
+    margin: 0 0 0.25rem 0;
+    font-size: 0.95rem;
+  }
+  .alert p {
+    margin: 0.25rem 0;
+  }
+  .alert :global(pre) {
+    margin: 0.5rem 0 0 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+  }
+  .alert--conflict {
+    border-color: color-mix(in srgb, #c24 50%, transparent);
+    background: color-mix(in srgb, #c24 8%, transparent);
+  }
+  .alert--success {
+    border-color: color-mix(in srgb, #2a8 55%, transparent);
+    background: color-mix(in srgb, #2a8 8%, transparent);
+  }
+  .alert--info {
+    border-color: color-mix(in srgb, currentColor 25%, transparent);
+    background: color-mix(in srgb, currentColor 6%, transparent);
+  }
+</style>

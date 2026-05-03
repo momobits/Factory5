@@ -1,0 +1,145 @@
+---
+/**
+ * Single labeled form field — wraps an `<input>`, `<select>`, or
+ * `<textarea>` with the dashboard's label / hint / focus-ring
+ * conventions. The `name` prop is reused as the `id`, so a page
+ * script can `document.getElementById(name)` to read the value at
+ * submit time.
+ *
+ * Use `type='select'` with `options` for a dropdown; `type='textarea'`
+ * with `rows` for a multi-line input; otherwise a text/number/email
+ * input.
+ */
+interface SelectOption {
+  value: string;
+  label: string;
+}
+
+interface Props {
+  name: string;
+  label: string;
+  type?: 'text' | 'number' | 'email' | 'password' | 'select' | 'textarea';
+  value?: string | number;
+  required?: boolean;
+  hint?: string;
+  options?: SelectOption[];
+  placeholder?: string;
+  /** Textarea-only: number of visible rows. Defaults to 6. */
+  rows?: number;
+  /** Number-input-only: HTML `step` attribute. */
+  step?: string;
+  /** Number-input-only: HTML `min` attribute. */
+  min?: string;
+  /** Number-input-only: HTML `max` attribute. */
+  max?: string;
+  /** Optional explicit `id` — defaults to `name`. */
+  id?: string;
+}
+
+const {
+  name,
+  label,
+  type = 'text',
+  value,
+  required = false,
+  hint,
+  options,
+  placeholder,
+  rows = 6,
+  step,
+  min,
+  max,
+  id,
+} = Astro.props;
+
+const fieldId = id ?? name;
+---
+
+<div class="form-field">
+  <label for={fieldId}>
+    {label}
+    {required && <span class="required" aria-label="required">*</span>}
+  </label>
+  {
+    type === 'select' ? (
+      <select id={fieldId} name={name} required={required}>
+        {options?.map((o) => (
+          <option value={o.value} selected={value !== undefined && String(value) === o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    ) : type === 'textarea' ? (
+      <textarea
+        id={fieldId}
+        name={name}
+        required={required}
+        placeholder={placeholder}
+        rows={rows}
+        set:html={value !== undefined ? String(value) : ''}
+      />
+    ) : (
+      <input
+        id={fieldId}
+        name={name}
+        type={type}
+        value={value}
+        required={required}
+        placeholder={placeholder}
+        step={step}
+        min={min}
+        max={max}
+      />
+    )
+  }
+  {hint !== undefined && <p class="hint">{hint}</p>}
+</div>
+
+<style>
+  .form-field {
+    display: grid;
+    gap: 0.25rem;
+  }
+  .form-field label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  .form-field .required {
+    color: #c24;
+    margin-left: 0.15rem;
+  }
+  .form-field input,
+  .form-field select,
+  .form-field textarea {
+    font: inherit;
+    font-size: 0.9rem;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, currentColor 3%, transparent);
+    color: inherit;
+    color-scheme: inherit;
+  }
+  .form-field input[type='number'] {
+    font-variant-numeric: tabular-nums;
+  }
+  .form-field input:focus,
+  .form-field select:focus,
+  .form-field textarea:focus {
+    outline: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+    outline-offset: -1px;
+    background: color-mix(in srgb, currentColor 5%, transparent);
+  }
+  .form-field textarea {
+    min-height: 7rem;
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    line-height: 1.45;
+  }
+  .form-field .hint {
+    font-size: 0.8rem;
+    color: color-mix(in srgb, currentColor 60%, transparent);
+    margin: 0;
+  }
+</style>

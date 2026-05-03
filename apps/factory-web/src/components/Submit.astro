@@ -1,0 +1,65 @@
+---
+/**
+ * Submit / action button. `variant` picks the visual treatment:
+ * - `primary` (default) — filled accent
+ * - `default` — neutral outline
+ * - `danger` — red outline (for cancel / delete actions)
+ *
+ * Always renders as `type="submit"`; for non-submit actions, use a
+ * raw `<button>` directly — the form's submit semantics are why
+ * this primitive exists.
+ */
+interface Props {
+  label: string;
+  variant?: 'primary' | 'default' | 'danger';
+  disabled?: boolean;
+  /** Optional explicit `id` so a page script can re-label / re-disable. */
+  id?: string;
+}
+
+const { label, variant = 'primary', disabled = false, id } = Astro.props;
+---
+
+<button
+  type="submit"
+  class:list={['btn', variant !== 'default' && `btn-${variant}`]}
+  disabled={disabled}
+  id={id}
+>
+  {label}
+</button>
+
+<style>
+  .btn {
+    font: inherit;
+    font-size: 0.9rem;
+    padding: 0.45rem 1rem;
+    border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, currentColor 4%, transparent);
+    color: inherit;
+    cursor: pointer;
+  }
+  .btn:hover:not(:disabled) {
+    background: color-mix(in srgb, currentColor 10%, transparent);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: color-mix(in srgb, currentColor 85%, transparent);
+    color: Canvas;
+    border-color: transparent;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: color-mix(in srgb, currentColor 95%, transparent);
+  }
+  .btn-danger {
+    border-color: color-mix(in srgb, #c24 50%, transparent);
+    color: #c24;
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: color-mix(in srgb, #c24 8%, transparent);
+  }
+</style>

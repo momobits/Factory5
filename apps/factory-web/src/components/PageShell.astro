@@ -1,0 +1,46 @@
+---
+/**
+ * Per-page shell. `Dashboard.astro` owns the global chrome (header,
+ * nav). `<PageShell>` lives inside Dashboard's slot and provides the
+ * page's title + optional one-line description + body slot. After 3.4
+ * lands, every page wraps its content in `<PageShell title="…">`
+ * instead of relying on the `Dashboard.astro` title prop.
+ */
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<header class="page-header">
+  <h2>{title}</h2>
+  {description !== undefined && <p class="page-description">{description}</p>}
+</header>
+<div class="page-body">
+  <slot />
+</div>
+
+<style>
+  .page-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 1rem;
+  }
+  .page-header h2 {
+    margin: 0;
+  }
+  .page-description {
+    margin: 0;
+    color: color-mix(in srgb, currentColor 65%, transparent);
+    font-size: 0.9rem;
+    max-width: 48rem;
+  }
+  .page-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+</style>

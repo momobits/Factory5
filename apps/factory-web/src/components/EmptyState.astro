@@ -1,0 +1,66 @@
+---
+/**
+ * Friendlier replacement for "None" or "No items" prose when a
+ * dashboard list lands empty for an actionable reason. Includes
+ * a primary CTA so the operator has a single click to make
+ * progress (e.g., "Run `factory init` first").
+ */
+interface CtaLink {
+  label: string;
+  href: string;
+}
+
+interface Props {
+  title: string;
+  body: string;
+  cta?: CtaLink;
+}
+
+const { title, body, cta } = Astro.props;
+---
+
+<div class="empty-state">
+  <h3>{title}</h3>
+  <p>{body}</p>
+  {
+    cta !== undefined && (
+      <a class="empty-state-cta" href={cta.href}>
+        {cta.label}
+      </a>
+    )
+  }
+</div>
+
+<style>
+  .empty-state {
+    padding: 1.5rem;
+    border: 1px dashed color-mix(in srgb, currentColor 18%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, currentColor 3%, transparent);
+    max-width: 36rem;
+    text-align: left;
+  }
+  .empty-state h3 {
+    margin: 0 0 0.4rem 0;
+    font-size: 1rem;
+  }
+  .empty-state p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: color-mix(in srgb, currentColor 70%, transparent);
+  }
+  .empty-state-cta {
+    display: inline-block;
+    margin-top: 0.85rem;
+    font-size: 0.9rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 4px;
+    background: color-mix(in srgb, currentColor 85%, transparent);
+    color: Canvas;
+    text-decoration: none;
+    border: 1px solid transparent;
+  }
+  .empty-state-cta:hover {
+    background: color-mix(in srgb, currentColor 95%, transparent);
+  }
+</style>

@@ -1,0 +1,114 @@
+---
+/**
+ * Generic data table. Caller supplies a `columns` array (key + label +
+ * optional alignment) and a `rows` array of records. Cells render as
+ * `String(row[col.key] ?? '')` by default; pages that need richer per-
+ * cell rendering can pre-stringify into the row object before passing.
+ *
+ * Replaces the inline `<table><thead>…</thead><tbody>…</tbody></table>`
+ * scaffolding repeated in every list page (directives, projects,
+ * questions, findings, spend).
+ */
+export interface TableColumn {
+  key: string;
+  label: string;
+  align?: 'left' | 'right' | 'center';
+  /** Explicit width (any CSS length). Use sparingly — most cols flex. */
+  width?: string;
+  /** Apply `font-variant-numeric: tabular-nums` to the column body. */
+  numeric?: boolean;
+}
+
+interface Props {
+  columns: TableColumn[];
+  rows: Record<string, unknown>[];
+  /** Shown when `rows` is empty. Defaults to "None". */
+  emptyMessage?: string;
+  /** Optional caption above the table. */
+  caption?: string;
+}
+
+const { columns, rows, emptyMessage = 'None', caption } = Astro.props;
+
+function renderCell(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  return String(value);
+}
+---
+
+{
+  rows.length === 0 ? (
+    <p class="empty">{emptyMessage}</p>
+  ) : (
+    <table>
+      {caption !== undefined && <caption>{caption}</caption>}
+      <thead>
+        <tr>
+          {columns.map((col) => (
+            <th
+              class:list={[col.align !== undefined && `align-${col.align}`]}
+              style={col.width !== undefined ? `width: ${col.width};` : undefined}
+            >
+              {col.label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr>
+            {columns.map((col) => (
+              <td
+                class:list={[
+                  col.align !== undefined && `align-${col.align}`,
+                  col.numeric === true && 'num',
+                ]}
+              >
+                {renderCell(row[col.key])}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+<style>
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  caption {
+    text-align: left;
+    font-size: 0.85rem;
+    color: color-mix(in srgb, currentColor 60%, transparent);
+    margin-bottom: 0.4rem;
+  }
+  th,
+  td {
+    text-align: left;
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  }
+  th {
+    font-weight: 600;
+    background: color-mix(in srgb, currentColor 4%, transparent);
+  }
+  td.num,
+  th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .align-right {
+    text-align: right;
+  }
+  .align-center {
+    text-align: center;
+  }
+  .empty {
+    color: color-mix(in srgb, currentColor 60%, transparent);
+    font-style: italic;
+  }
+</style>

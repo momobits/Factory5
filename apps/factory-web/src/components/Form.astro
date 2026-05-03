@@ -1,0 +1,58 @@
+---
+/**
+ * `<form>` wrapper applying the dashboard's standard form CSS — grid
+ * layout, max-width, focus rings. Use with `<Field>` and `<Submit>`
+ * for the typical dashboard form. The default slot is the form's
+ * fields + actions; the page's `<script>` wires the submit handler
+ * (Astro components are server-rendered, so a button-driven submit
+ * stays a client concern).
+ *
+ * `wide` removes the 36rem max-width for forms that need to span the
+ * page (e.g., a CLAUDE.md textarea).
+ */
+interface Props {
+  /** Optional `id` so a page script can `document.getElementById(id)` it. */
+  id?: string;
+  /** Optional native `action` URL — usually unused (we POST via apiPost). */
+  action?: string;
+  /** Native form method. Defaults to `POST`. */
+  method?: 'get' | 'post' | 'GET' | 'POST';
+  /** Drop the 36rem max-width (use full page width). */
+  wide?: boolean;
+}
+
+const { id, action, method = 'POST', wide = false } = Astro.props;
+---
+
+<form
+  class:list={['form', wide && 'wide']}
+  id={id}
+  action={action}
+  method={method}
+>
+  <slot />
+</form>
+
+<style>
+  form.form {
+    display: grid;
+    gap: 1rem;
+    max-width: 36rem;
+    margin-top: 1rem;
+  }
+  form.form.wide {
+    max-width: none;
+  }
+  /* Two-column row helper for paired fields (e.g., language + autonomy). */
+  form.form :global(.form-row) {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr 1fr;
+  }
+  form.form :global(.form-actions) {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+</style>

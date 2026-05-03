@@ -44,7 +44,7 @@ Vanilla DOM-in-Astro → real Astro components + live updates + complete operati
 
 - [x] SSE on `/api/v1/directives/:id/stream` — events: `task.*`, `finding.created`, `spend.updated`, `log.line`
 - [x] Wire `directives/detail.astro` to the SSE stream (live tasks, findings, spend, log tail)
-- [ ] Astro component library — `<Card>`, `<Table>`, `<EmptyState>`, `<Alert>`, `<Form>`, `<Layout>`
+- [x] Astro component library — `<Card>`, `<Table>`, `<EmptyState>`, `<Alert>`, `<Form>`, `<PageShell>`
 - [ ] Convert all 9 pages to use components; retire `el()` from `lib/api.ts`
 - [ ] Add `/app/chat` page — mirror of `factory chat` in browser
 - [ ] Add cancel/pause buttons on directive detail
