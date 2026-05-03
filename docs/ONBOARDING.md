@@ -76,7 +76,7 @@ The channel sections (`[channels.discord]`, `[channels.telegram]`) are optional 
 pnpm exec node apps/factory/dist/main.js doctor
 ```
 
-Or, once factory5 is on your `$PATH`:
+Or, once factory5 is on your `$PATH` (see §3.5):
 
 ```bash
 factory doctor
@@ -90,6 +90,43 @@ factory doctor
 - A quick triage call round-trips successfully.
 
 A clean `factory doctor` run means your instance is configured end-to-end.
+
+### 3.5 Putting `factory` and `factoryd` on your `$PATH`
+
+The compiled binaries live at `apps/factory/dist/main.js` and `apps/factoryd/dist/main.js`. The rest of this doc shows commands as `factory <cmd>` / `factoryd` — that only works after one of the three options below.
+
+**Option A — pnpm dev scripts (zero install).** From the repo root:
+
+```bash
+pnpm factory <cmd>     # e.g. pnpm factory daemon stop
+pnpm factoryd          # foreground daemon, live logs
+```
+
+Defined in the root `package.json`; runs via `tsx` against the TypeScript sources — no `pnpm build` required. Only works inside the repo directory.
+
+**Option B — link the binaries globally.** Once, after `pnpm build`:
+
+```bash
+pnpm -F factory link --global
+pnpm -F factoryd link --global
+```
+
+`factory` and `factoryd` are then on `$PATH` from any directory. Re-run `pnpm -F factory build` whenever the CLI source changes — there is no live-reload after the link.
+
+(npm equivalent: `cd apps/factory && npm link && cd ../factoryd && npm link`.)
+
+On Windows, the link writes a `.cmd` shim into your global bin (`%APPDATA%\npm` for npm or `pnpm config get global-bin-dir` for pnpm). Confirm with `where factory` (cmd) or `Get-Command factory` (PowerShell). If the binary isn't found, add the global-bin directory to your `Path`.
+
+**Option C — explicit shell wrapper.** If you'd rather not pollute the global pnpm/npm namespace, add to your shell profile (PowerShell `$PROFILE`, `~/.bashrc`, etc.):
+
+```powershell
+function factory  { pnpm --silent --dir 'G:\path\to\factory5' factory  $args }
+function factoryd { pnpm --silent --dir 'G:\path\to\factory5' factoryd $args }
+```
+
+Replace the path with your repo location. Same ergonomics as B but survives `git clean` and stays in your shell config under version control.
+
+After any of A/B/C, every `factory <cmd>` example throughout this doc works as written.
 
 ---
 
