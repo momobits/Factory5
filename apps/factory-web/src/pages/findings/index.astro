@@ -1,5 +1,6 @@
 ---
 import Dashboard from '../../layouts/Dashboard.astro';
+import Table from '../../components/Table.astro';
 ---
 
 <Dashboard title="Findings">
@@ -39,10 +40,32 @@ import Dashboard from '../../layouts/Dashboard.astro';
     <button type="submit">Apply</button>
   </form>
 
-  <div id="mount">Loading…</div>
+  <p id="error" class="err" hidden></p>
+  <p id="findings-count"></p>
+  <Table
+    id="findings-table"
+    columns={[
+      { key: 'updated', label: 'Updated' },
+      { key: 'id', label: 'Id' },
+      { key: 'severity', label: 'Severity' },
+      { key: 'status', label: 'Status' },
+      { key: 'source', label: 'Source' },
+      { key: 'target', label: 'Target' },
+      { key: 'description', label: 'Description' },
+      { key: 'advisory', label: 'Advisory' },
+    ]}
+    rows={[]}
+    loading
+  />
 
   <script>
-    import { loadInto, el } from '../../lib/api';
+    import {
+      apiFetch,
+      captureTokenFromUrl,
+      getToken,
+      NoTokenError,
+      ApiError,
+    } from '../../lib/api';
 
     interface Finding {
       id: string;
@@ -65,54 +88,52 @@ import Dashboard from '../../layouts/Dashboard.astro';
       items: Entry[];
     }
 
-    function render(resp: ListResp, mount: HTMLElement): void {
+    const showError = (message: string): void => {
+      const err = document.getElementById('error');
+      if (err === null) return;
+      err.textContent = message;
+      err.hidden = false;
+    };
+
+    const renderRows = (resp: ListResp): void => {
+      const tbody = document.querySelector('#findings-table tbody');
+      const countEl = document.getElementById('findings-count');
+      if (tbody === null) return;
+      tbody.innerHTML = '';
+      if (countEl !== null) countEl.textContent = `${String(resp.items.length)} findings`;
       if (resp.items.length === 0) {
-        mount.appendChild(el('p', { class: 'empty' }, 'No findings match.'));
+        const colCount = document.querySelectorAll('#findings-table thead th').length;
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = colCount;
+        td.className = 'empty';
+        td.textContent = 'No findings match.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
         return;
       }
-      mount.appendChild(el('p', {}, `${String(resp.items.length)} findings`));
-      const tbl = el(
-        'table',
-        {},
-        el(
-          'thead',
-          {},
-          el(
-            'tr',
-            {},
-            el('th', {}, 'Updated'),
-            el('th', {}, 'Id'),
-            el('th', {}, 'Severity'),
-            el('th', {}, 'Status'),
-            el('th', {}, 'Source'),
-            el('th', {}, 'Target'),
-            el('th', {}, 'Description'),
-            el('th', {}, 'Advisory'),
-          ),
-        ),
-      );
-      const tb = el('tbody', {});
       for (const e of resp.items) {
-        tb.appendChild(
-          el(
-            'tr',
-            {},
-            el('td', {}, e.updatedAt.slice(0, 19).replace('T', ' ')),
-            el('td', {}, e.finding.id),
-            el('td', {}, e.finding.severity),
-            el('td', {}, e.finding.status),
-            el('td', {}, e.finding.source),
-            el('td', {}, e.finding.target),
-            el('td', {}, e.finding.description),
-            el('td', {}, e.finding.advisory === true ? 'advisory' : ''),
-          ),
-        );
+        const tr = document.createElement('tr');
+        const cells = [
+          e.updatedAt.slice(0, 19).replace('T', ' '),
+          e.finding.id,
+          e.finding.severity,
+          e.finding.status,
+          e.finding.source,
+          e.finding.target,
+          e.finding.description,
+          e.finding.advisory === true ? 'advisory' : '',
+        ];
+        for (const cell of cells) {
+          const td = document.createElement('td');
+          td.textContent = cell;
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
       }
-      tbl.appendChild(tb);
-      mount.appendChild(tbl);
-    }
+    };
 
-    function mountPath(): string {
+    const mountPath = (): string => {
       const params = new URLSearchParams(window.location.search);
       const qs: string[] = [];
       for (const key of ['severity', 'status', 'project', 'advisory']) {
@@ -121,11 +142,27 @@ import Dashboard from '../../layouts/Dashboard.astro';
       }
       qs.push('limit=500');
       return `/api/v1/findings?${qs.join('&')}`;
-    }
+    };
 
-    const mount = document.getElementById('mount');
-    if (mount === null) throw new Error('mount missing');
-    loadInto<ListResp>(mount, mountPath(), render);
+    captureTokenFromUrl();
+
+    if (getToken() === null) {
+      showError('No UI token present. Reopen the URL logged by factoryd.');
+    } else {
+      apiFetch<ListResp>(mountPath())
+        .then(renderRows)
+        .catch((err: unknown) => {
+          if (err instanceof NoTokenError) {
+            showError(err.message);
+          } else if (err instanceof ApiError) {
+            showError(`API error ${String(err.status)} (${err.code}): ${err.message}`);
+          } else if (err instanceof Error) {
+            showError(`Fetch failed: ${err.message}`);
+          } else {
+            showError('Unknown error');
+          }
+        });
+    }
 
     const form = document.getElementById('filter') as HTMLFormElement | null;
     if (form !== null) {

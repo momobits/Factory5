@@ -22,13 +22,22 @@ export interface TableColumn {
 interface Props {
   columns: TableColumn[];
   rows: Record<string, unknown>[];
-  /** Shown when `rows` is empty. Defaults to "None". */
+  /** Shown when `rows` is empty (and `loading` is not set). Defaults to "None". */
   emptyMessage?: string;
   /** Optional caption above the table. */
   caption?: string;
+  /**
+   * When true, render the table chrome (caption + thead) with a single
+   * "Loading…" row in tbody instead of falling back to `emptyMessage`.
+   * Use for runtime-fetched pages — the page's `<script>` then queries
+   * `#${id} tbody` and replaces its contents on apiFetch resolution.
+   */
+  loading?: boolean;
+  /** Optional id forwarded to the `<table>` element for script targeting. */
+  id?: string;
 }
 
-const { columns, rows, emptyMessage = 'None', caption } = Astro.props;
+const { columns, rows, emptyMessage = 'None', caption, loading = false, id } = Astro.props;
 
 function renderCell(value: unknown): string {
   if (value === null || value === undefined) return '';
@@ -37,10 +46,10 @@ function renderCell(value: unknown): string {
 ---
 
 {
-  rows.length === 0 ? (
+  rows.length === 0 && !loading ? (
     <p class="empty">{emptyMessage}</p>
   ) : (
-    <table>
+    <table id={id}>
       {caption !== undefined && <caption>{caption}</caption>}
       <thead>
         <tr>
@@ -55,20 +64,28 @@ function renderCell(value: unknown): string {
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
+        {loading ? (
           <tr>
-            {columns.map((col) => (
-              <td
-                class:list={[
-                  col.align !== undefined && `align-${col.align}`,
-                  col.numeric === true && 'num',
-                ]}
-              >
-                {renderCell(row[col.key])}
-              </td>
-            ))}
+            <td colspan={columns.length} class="empty">
+              Loading…
+            </td>
           </tr>
-        ))}
+        ) : (
+          rows.map((row) => (
+            <tr>
+              {columns.map((col) => (
+                <td
+                  class:list={[
+                    col.align !== undefined && `align-${col.align}`,
+                    col.numeric === true && 'num',
+                  ]}
+                >
+                  {renderCell(row[col.key])}
+                </td>
+              ))}
+            </tr>
+          ))
+        )}
       </tbody>
     </table>
   )

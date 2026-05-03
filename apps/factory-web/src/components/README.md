@@ -61,7 +61,7 @@ const cell = document.querySelector('#card-spend-today .value');
 if (cell !== null) cell.textContent = `$${todaySpend.toFixed(2)}`;
 ```
 
-### `<Table columns rows emptyMessage? caption?/>`
+### `<Table columns rows emptyMessage? caption? loading? id?/>`
 
 Generic data table. `columns` is `{ key, label, align?, width?, numeric? }[]`;
 `rows` is `Record<string, unknown>[]` indexed by `col.key`. Renders
@@ -81,10 +81,33 @@ Generic data table. `columns` is `{ key, label, align?, width?, numeric? }[]`;
 />
 ```
 
-For runtime-fetched data, render the table with `rows={[]}` server-side
-and append `<tr>` rows from the client `<script>` after `apiFetch`. (3.4
-introduces a Solid/Preact island helper for fully-reactive cases —
-chat / directive detail.)
+For runtime-fetched data, render the table with `rows={[]} loading id="…"`
+server-side — the table chrome (caption + thead) appears immediately
+with a single "Loading…" row in tbody — and have the page's `<script>`
+replace `tbody` contents on `apiFetch` resolution:
+
+```astro
+<Table id="findings-table" columns={…} rows={[]} loading />
+```
+
+```ts
+const tbody = document.querySelector('#findings-table tbody');
+if (tbody !== null) {
+  tbody.innerHTML = '';
+  for (const row of resp.items) {
+    const tr = document.createElement('tr');
+    // …append <td> per column…
+    tbody.appendChild(tr);
+  }
+}
+```
+
+For empty results from the fetch, the script writes a single
+`<tr><td colspan="N" class="empty">No findings match.</td></tr>` row
+into the same tbody so the column headers stay visible.
+
+(3.4 leaves a Solid/Preact island helper for fully-reactive cases —
+chat / directive detail — to a later step if it becomes necessary.)
 
 ### `<EmptyState title body cta?/>`
 
