@@ -4,7 +4,7 @@
 - [x] 3.2 — Wire `directives/detail.astro` to the SSE stream — replace polling with EventSource; live tasks, findings, spend, log tail; polling fallback for SSE-stripped proxies
 - [x] 3.3 — Astro component library — `<Card>`, `<Table>`, `<EmptyState>`, `<Alert>`, `<Form>`, `<PageShell>`; consistent prop conventions; documented in `apps/factory-web/src/components/README.md`
 - [x] 3.4 — Convert all 10 pages to use components; retire `el()` (and `loadInto()`) from `lib/api.ts`; matching tests / smoke
-- [ ] 3.5 — Add `/app/chat` page — mirror of `factory chat` in browser; reuses Phase 2's `command-handlers.ts` for read-side dispatch; live token streaming
+- [x] 3.5 — Add `/app/chat` page — mirror of `factory chat` in browser; reuses Phase 2's `command-handlers.ts` for read-side dispatch; live token streaming
 - [ ] 3.6 — Cancel + pause buttons on directive detail — calls Phase 2's `POST /directives/:id/cancel` route; pause is a status flip via existing route
 - [ ] 3.7 — Add `/app/projects/new` — mirror of `factory init <project>` for a single project; same shape as the chat-side build kickoff
 - [ ] 3.8 — Spend page charts — sparkline per project + 30-day daily stacked bar; vanilla SVG (no chart-lib dep)

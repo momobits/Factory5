@@ -232,3 +232,48 @@ lives at the top of `pages/directives/detail.astro`'s `<script>`
 block — that page's render path rebuilds the entire mount on every
 SSE event, and a per-page DOM helper is the natural endpoint for
 that pattern.
+
+## Patterns introduced by `/app/chat` (3.5)
+
+The chat page (`pages/chat.astro`) is a second site where the
+component library can't carry the load — bubble layouts, hand-rolled
+markdown, and an `apiStream` subscription that resets per turn don't
+fit the static-component shape. Patterns worth surfacing for the
+next streaming-page author:
+
+- **Bubble layout.** Two side-aligned variants (`bubble--user` right,
+  `bubble--factory` left) plus full-width `bubble--system` /
+  `bubble--error` rows. Each bubble carries a `bubble-meta` strip
+  (who-said-it + optional `bubble-annotation` like `via stream` or
+  `direct`). Same `color-mix(currentColor)` palette + semantic
+  accents (`#c24` for errors) the rest of the dashboard uses.
+- **Auto-scroll-pin.** Mirrors the log-tail pattern in
+  `pages/directives/detail.astro` lines 284-336 — a `pinned` flag
+  defaulting to `true`, scroll listener flips it on the messages
+  container's `scrollHeight - scrollTop - clientHeight < 4`
+  threshold, a "Resume scroll" pip surfaces via `.chat-shell.paused`
+  and snaps back on click.
+- **Hand-rolled markdown.** ~30 LOC covering fenced code (extracted
+  first to survive HTML escape), inline code, bold, italic,
+  paragraphs from blank lines, line-breaks from single newlines.
+  No new dep. User text never markdown-renders (textContent only) —
+  same trust boundary stance as the rest of the dashboard.
+- **`/cmd` shortcut path.** Page parses the first non-whitespace
+  token of the composer; if it starts with `/<word>`, dispatches
+  client-side to existing `/api/v1/{status,spend,findings}` GETs
+  rather than minting a chat directive. Bubble lands annotated
+  `direct` so the operator can tell stream-vs-direct at a glance.
+  Unknown commands surface as inline `bubble--error` pointing at
+  the supported set.
+- **Per-turn stream lifecycle.** Each user message closes any
+  prior `apiStream` handle, opens a fresh one against the new
+  directive's SSE path, and listens for `log.line` events filtered
+  by `component === 'brain.chat'`. `directive.completed` and
+  `astro:before-swap` both close the stream so a navigation away
+  doesn't leak an `EventSource`.
+
+A future streaming-page (e.g. a /app/build kickoff that watches
+findings flow live) can follow the same shape without needing a
+component-library extension. If two pages converge on the same
+bubble or markdown helper, the right move is to lift it into a
+component then — premature lifting before that's the case.
