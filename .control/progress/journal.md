@@ -2,6 +2,17 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-03 — Phase 2 closed (tag `phase-2-channel-parity-closed` on `081b832`); Phase 3 kicked off
+
+- Steps 2.3, 2.4, 2.5 all shipped through prior-session work; Step 2.6 deferred to Phase 3 (folded into SSE streaming).
+- This session: completed live-smoke checklist for `/phase-close` — Discord+Telegram slash command surfaces verified, free-form chat re-routing verified on both, `factory cancel` IPC route paths verified (NOT_FOUND/ALREADY_TERMINAL/OK), CLI exit codes 0/2/3 verified.
+- Out-of-step UX fix: `fix(2.2): show project name in /status output` (`081b832`) — operator complaint that the recent-directives table showed only directive IDs, not which project they belonged to. Added a project column to Discord embed, Telegram HTML reply, and CLI table; new shared `makeProjectNameLookup` helper.
+- Tag annotated with full phase-2 shipping summary.
+- Phase 3 scaffold landed: `.control/phases/phase-3-web-ui/{README.md, steps.md}` with carry-forward of Step 2.6 in "Why this phase exists".
+- Synthetic smoke directive remains in DB (id `01KQPDMQE6QTQZ3QMDD69019YK`, status=failed/cancelled). `packages/state/smoke-cleanup.mjs` available if user wants to reap; permission-gated via Bash settings.
+- Gates: build / test (175 channels, 82 cli, full workspace ≥ 938) / lint / format:check all green.
+- Next: Step 3.1 — SSE on `/api/v1/directives/:id/stream`.
+
 ## 2026-05-02 — Phase 2 session 2a — slash + setMyCommands
 
 - Step range 2.1-2.2 across `8ea8e4a..22e0e54` (2 commits + this session-end).

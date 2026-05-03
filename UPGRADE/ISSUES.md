@@ -24,15 +24,6 @@ Severity:
 
 ## Open
 
-### U004 — `factory cancel` does not exist; `mark-blocked` is the workaround
-
-- **Severity**: high
-- **Tier**: 2 (brain hook + IPC route + CLI command)
-- **Area**: cli / brain
-- **Description**: A running build can only be stopped via `factory directive mark-blocked <id>`, which flips the directive status to `blocked` but does not signal the worker pool to abort tasks. Workers continue burning budget until they finish or hit their own limits.
-- **Hypothesis**: Add `POST /directives/:id/cancel` IPC route; brain calls existing AbortSignal plumbing on the worker pool to cancel in-flight tasks; status flips to `failed` with `blocked_reason: 'cancelled'`. CLI gets a thin wrapper.
-- **Resolution**: Tier 2 / Tier 4 (shared code path).
-
 ### U005 — `factory chat` REPL turn timeout is 120 s
 
 - **Severity**: medium
@@ -86,32 +77,6 @@ Severity:
 - **Hypothesis**: Optional `localStorage` mode; add `factory ui-token --rotate` to invalidate prior sessions; add a "Connected to factory5" strip in header.
 - **Resolution**: Tier 3.
 
-### U011 — Discord plugin schema reserves `applicationId` for slash commands but never wires them
-
-- **Severity**: high
-- **Tier**: 2
-- **Area**: channels / discord
-- **Description**: `packages/channels/src/discord.ts:69` — `applicationId` is in the config schema with comment _"used by future slash-command wiring"_. Today the field is read but never used. Discord users see only `@bot /build` mentions, not native slash-command autocomplete.
-- **Hypothesis**: On `ClientReady`, call `client.application.commands.set([...])` with the slash-command list; add a `interactionCreate` listener that dispatches by command name.
-- **Resolution**: Tier 2 — wire `/factory status / spend / findings / resume / cancel / budget`.
-
-### U012 — Telegram does not call setMyCommands
-
-- **Severity**: high
-- **Tier**: 2
-- **Area**: channels / telegram
-- **Description**: Telegram supports a bot-command menu via the `setMyCommands` API. factory5's Telegram plugin doesn't call it. The Telegram `/` autocomplete shows nothing for the bot.
-- **Hypothesis**: On `start()`, call `setMyCommands` with the same command list as Discord. Add a parser branch for `/cmd args` (in addition to the existing `/build` parser).
-- **Resolution**: Tier 2.
-
-### U013 — No inline-keyboard / button affordances for pending-question UX
-
-- **Severity**: medium
-- **Tier**: 2
-- **Area**: channels / discord / telegram
-- **Description**: Pending-question round-trip is plain text on both Discord and Telegram. Discord supports buttons; Telegram supports inline keyboards. _"Answer / Skip / Escalate"_ buttons would be a meaningful UX upgrade.
-- **Resolution**: Tier 2 — add buttons on the pending-question outbound messages.
-
 ### U018 — CLI has no `--help` examples beyond Commander defaults
 
 - **Severity**: medium
@@ -152,15 +117,6 @@ Severity:
 - **Area**: web
 - **Description**: `apps/factory-web/src/lib/api.ts:158` — `e.setAttribute(k, v)` is called with raw values from object spreads. Text content is safe (uses `createTextNode`), but attributes are not escaped. Today the only attribute values come from server-trusted strings, so practical risk is low. Still: not a robust pattern.
 - **Resolution**: Tier 3 — `el()` is retired in favor of components; risk goes away.
-
-### U023 — Brain triage routes channel chat to `intent=chat` rather than the eight-intent vocabulary
-
-- **Severity**: high
-- **Tier**: 2
-- **Area**: brain / channels
-- **Description**: The brain understands `build / fix / review / investigate / chat / status / resume / cancel`. Today, channel-originated chat (Discord thread reply, Telegram DM) becomes `intent=chat` regardless of content. A user asking _"what's the budget?"_ in Telegram gets a chat-intent LLM round-trip rather than a structured status response.
-- **Hypothesis**: Update the triage prompt to classify across all 8 intents; channel handlers re-route the directive when the intent isn't chat (e.g. classified `intent=status` → status handler answers without LLM).
-- **Resolution**: Tier 2.
 
 ## Resolved
 
@@ -219,3 +175,43 @@ Severity:
 - **Area**: docs
 - **Description**: factory consumes `<workspace>/<project>/CLAUDE.md` as the spec, but there was no doc explaining what makes a good spec. New users guessed.
 - **Resolution**: Resolved 2026-05-02 — Tier 1 step 1.6, commit `b813037`. Folded into `docs/WORKFLOWS.md` §3 ("Authoring `CLAUDE.md` — what makes a good spec") with principles, anti-patterns, a worked 30-line example for a small CLI tool, and a brief "what the brain does with it" walkthrough mapping to the triage→architect→plan→assess→verify loop.
+
+### U004 — `factory cancel` does not exist; `mark-blocked` is the workaround
+
+- **Severity**: high
+- **Tier**: 2 (brain hook + IPC route + CLI command)
+- **Area**: cli / brain
+- **Description**: A running build can only be stopped via `factory directive mark-blocked <id>`, which flips the directive status to `blocked` but does not signal the worker pool to abort tasks. Workers continue burning budget until they finish or hit their own limits.
+- **Resolution**: Resolved 2026-05-02 — Tier 2 step 2.4, commit `67fb998`. Shipped `factory cancel <id>` end-to-end: state-side `cancelDirective` flips the row to `failed` with `blocked_reason = 'cancelled'`, brain registers a per-directive `AbortController` registered at claim time and fired by the daemon's new `POST /directives/:id/cancel` route, the existing pool→worker→provider abort plumbing kills the `claude -p` subprocess (SIGTERM-then-SIGKILL with a 5 s grace), and the worker's worktree cleanup gained a `cancelled` outcome that removes the worktree without merging. CLI is IPC-first with a DB-direct fallback when the daemon's down. `factory directive mark-blocked` docstring updated to call out the distinction.
+
+### U011 — Discord plugin schema reserves `applicationId` for slash commands but never wires them
+
+- **Severity**: high
+- **Tier**: 2
+- **Area**: channels / discord
+- **Description**: `packages/channels/src/discord.ts:69` — `applicationId` is in the config schema with comment _"used by future slash-command wiring"_. Today the field is read but never used. Discord users see only `@bot /build` mentions, not native slash-command autocomplete.
+- **Resolution**: Resolved 2026-05-02 — Tier 2 step 2.1, commit `8ea8e4a`. `client.application.commands.set([factorySlashCommand], guildId?)` runs on `Events.ClientReady`; guild-scoped when `config.guildId` is set, global otherwise. `interactionCreate` dispatches the seven subcommands (`status / spend / findings / resume / cancel / budget / build`) via the shared `runSubcommand` → `embed<Cmd>` pipeline that 2.2 then split into `command-handlers.ts`.
+
+### U012 — Telegram does not call setMyCommands
+
+- **Severity**: high
+- **Tier**: 2
+- **Area**: channels / telegram
+- **Description**: Telegram supports a bot-command menu via the `setMyCommands` API. factory5's Telegram plugin doesn't call it. The Telegram `/` autocomplete shows nothing for the bot.
+- **Resolution**: Resolved 2026-05-02 — Tier 2 step 2.2, commit `22e0e54`. `start()` calls `setMyCommands` with the seven-command list shared with Discord (`FACTORY_TELEGRAM_COMMANDS`); the parser dispatches `/cmd args` through the new transport-agnostic `command-handlers.ts` module so Discord and Telegram can never drift. HTML `<pre>` tables for tabular replies (status, spend, findings).
+
+### U013 — No inline-keyboard / button affordances for pending-question UX
+
+- **Severity**: medium
+- **Tier**: 2
+- **Area**: channels / discord / telegram
+- **Description**: Pending-question round-trip is plain text on both Discord and Telegram. Discord supports buttons; Telegram supports inline keyboards. _"Answer / Skip / Escalate"_ buttons would be a meaningful UX upgrade.
+- **Resolution**: Resolved 2026-05-02 — Tier 2 step 2.3, commit `682afd3`. Brain already stamps `metadata: { kind: 'ask_user', questionId }` on `ask_user` outbounds; channel `send()` reads the metadata and attaches buttons (`ActionRowBuilder` for Discord, `reply_markup.inline_keyboard` for Telegram). Discord Answer button opens a `ModalBuilder`; modal submit records the operator-typed text. Telegram poll loop widens `allowed_updates` to `['message','callback_query']`; Skip/Escalate write synthetic answers; Answer fires `answerCallbackQuery` directing the operator to use Telegram's native Reply feature (existing reply path then routes the answer). The legacy thread-reply / reply-to-bot answer path is preserved as a fallback.
+
+### U023 — Brain triage routes channel chat to `intent=chat` rather than the eight-intent vocabulary
+
+- **Severity**: high
+- **Tier**: 2
+- **Area**: brain / channels
+- **Description**: The brain understands `build / fix / review / investigate / chat / status / resume / cancel`. Today, channel-originated chat (Discord thread reply, Telegram DM) becomes `intent=chat` regardless of content. A user asking _"what's the budget?"_ in Telegram gets a chat-intent LLM round-trip rather than a structured status response.
+- **Resolution**: Resolved 2026-05-02 — Tier 2 step 2.5, commit `72c45e3`. Triage prompt expanded with 8-intent guidance, ten worked examples, and the `<0.7` confidence floor for non-chat. New `ChannelContext.classifyIntent` callback bound by the daemon to `brain.triageDirective`. Channel handlers (Discord + Telegram) call `routeChatIntent` which maps `status` (+ keyword pass for spend/findings) → `runStatus`/`runSpend`/`runFindings`, and `resume` (+ project token extract) → `runResume`. `cancel` stays explicit-only (needs a ULID); `build`/`fix`/`review`/`investigate`/`chat` fall through to the legacy chat-directive path. Intent enum kept at 8 to avoid a SQLite CHECK-constraint migration; the channel-side keyword sub-router picks spend vs findings within `intent=status`.

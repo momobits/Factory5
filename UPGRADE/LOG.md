@@ -6,6 +6,47 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-03 — Phase 2 (channel-parity) closed; Phase 3 (web-ui) kicked off
+
+Phase 2 shipped end-to-end this session run. Steps 2.3 (pending-question button affordances), 2.4 (`factory cancel` kills workers), 2.5 (8-intent triage + channel re-routing) all landed; 2.6 deferred to Phase 3 (folded into the SSE work). Plus an out-of-step fix that caught a UX gap once channels went live: `/status` output across CLI, Discord, and Telegram now includes a project column so operators can tell which directive belongs to which project.
+
+**Live-smoke run (this session):**
+
+- Discord `/factory status / spend / findings` — embeds render correctly with new project column.
+- Telegram `/status / spend / findings` — HTML replies render correctly with new project column.
+- Discord chat re-routing — `@Factory what's running right now?` classifies as `intent=status` (confidence 0.98), dispatches to status command. Message-handler gate (require @-mention or in-thread) is correct Discord etiquette and does not block phase close.
+- Telegram chat re-routing — free-form text in private chat classifies as `intent=status` (confidence 0.98), dispatches to status command.
+- `factory cancel` IPC route paths (NOT_FOUND 404 / ALREADY_TERMINAL 409 / OK 200) verified via synthetic running-directive in DB; CLI exit codes 0/2/3 verified end-to-end.
+- Discord registers `/factory` slash guild-scoped at `1495163534433325171` (bot `Factory#5957`).
+- Telegram registers `setMyCommands` with 7 entries (bot `Factory5_bot`).
+- Build/test/lint/format all green.
+
+**Skipped (intentionally — no live build available):**
+
+- Pending-question button affordances live-smoke. Covered by 18 Discord + 19 Telegram unit tests.
+- `factory cancel` killing a real worker subprocess. Covered by 30 unit tests across pool / registry / state / daemon / CLI.
+
+**Issues closed:** U004, U011, U012, U013, U023.
+
+**Notable artifacts produced:**
+
+- Tag `phase-2-channel-parity-closed` (annotated, on `081b832`) with full shipping summary.
+- Phase 3 scaffold: `.control/phases/phase-3-web-ui/{README.md, steps.md}`. Carry-forward for Step 2.6 lands in Phase 3's "Why this phase exists" section.
+- Phase 2's `command-handlers.ts` is the cross-surface reuse anchor — Phase 3's `/app/chat` page can call into it for read-side dispatch.
+
+**Decisions / judgement calls during Phase 2 worth recording (no new ADR):**
+
+- `OutboundMessage.metadata.questionId` (option A) chosen over inferred lookup by directiveId (option B) for Step 2.3 — explicit signal beats inferred.
+- Per-directive `AbortController` registry in `packages/brain/src/cancellation.ts` for Step 2.4 — bridges parent abort + operator cancel into a single combined signal.
+- SIGTERM-then-SIGKILL with 5 s grace via `softKill` helper (Step 2.4) — preferable to immediate SIGKILL for clean Claude subprocess shutdown.
+- Intent enum kept at 8 (not extended) — avoids a SQLite CHECK-constraint migration; channel-side keyword sub-router picks spend vs findings within `intent=status`.
+
+**What's next:**
+
+Phase 3 (web-ui). Step 3.1 = SSE on `/api/v1/directives/:id/stream` per [`plans/tier-3-web-ui-live-and-complete.md`](plans/tier-3-web-ui-live-and-complete.md) §3.1. Carries the 2.6 streaming benefit for `factory chat` along with it.
+
+---
+
 ## 2026-05-02 — Tier 2 session 2a — Discord slash + Telegram setMyCommands
 
 Closed Phase 2 steps 2.1 and 2.2 — the "structural" half of channel parity. Both Discord and Telegram now expose the brain's eight-intent vocabulary as a native chat surface (slash commands on Discord, `/` autocomplete + `/<cmd>` parser on Telegram); the two transports dispatch through a shared `command-handlers.ts` so future tweaks land in one place.
