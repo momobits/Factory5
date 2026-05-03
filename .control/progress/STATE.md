@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-03 12:15 UTC by drift reconcile (post-session-end pointer drift surfaced at session start)
+**Last updated:** 2026-05-03 13:11 UTC by /session-end (post step 3.3 — Astro component library shipped after 3.2 SSE FE wiring)
 **Current phase:** 3 — web-ui
-**Current step:** 3.2 — wire `directives/detail.astro` to the SSE stream (next; step 3.1 closed)
-**Status:** ready (clean working tree; SSE backend infrastructure complete with brain emission wired)
+**Current step:** 3.4 — convert all 9 pages to use components; retire `el()` (next; steps 3.2 + 3.3 closed this session)
+**Status:** ready (clean working tree; SSE FE wiring + component library both shipped, all four pnpm gates green)
 
 ---
 
@@ -20,14 +20,14 @@
 
 ## Next action
 
-Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). Step **3.2 = wire `apps/factory-web/src/pages/directives/detail.astro` to the SSE stream** per [`../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md`](../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md) §3.2. Replace the existing one-shot `loadInto<Detail>` polling with an EventSource subscription that incrementally renders task / spend / completion events as they arrive. Add an `apiStream<T>(path)` helper to `apps/factory-web/src/lib/api.ts` that wraps EventSource with token-auth (`?t=<UI_TOKEN>` query param) and reconnect. UX: connection-state pip ("Live" / "Reconnecting" / "Disconnected"), auto-scroll log tail with pause-on-user-scroll, on `directive.completed` stop showing the live indicator and surface the final status. Acceptance: open detail in a second browser tab during a live build and see updates without F5; EventSource reconnects on transient disconnect; polling fallback exercised under a stub that strips SSE.
+Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). Step **3.4 = convert every page in `apps/factory-web/src/pages/` to consume the component library** shipped in 3.3 per [`../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md`](../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md) §3.4. Retire `el()` from `apps/factory-web/src/lib/api.ts` once every page is converted. Suggested order (simple → complex): `index.astro` (overview cards → `<Card>`), `findings/index.astro`, `projects/index.astro`, `questions/index.astro`, `spend/index.astro`, `directives/index.astro`, `projects/detail.astro`, `questions/detail.astro`, `build.astro` (forms → `<Form>` + `<Field>` + `<Submit>`), `directives/detail.astro` (live SSE — last; the live-event render path is the trickiest because tasks Map + log tail + connection pip stay JS-driven inside the component shell). After every page is migrated, gut the matching CSS from `layouts/Dashboard.astro` (the per-component scoped CSS replaces it). Acceptance: every page in `pages/` uses the new components; `el()` is gone from `lib/api.ts`; visual regression on each page is identical or better; all four `pnpm` gates green; manual smoke against a real factoryd shows every page renders + functions identically.
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `15bbad3` — docs(state): session end for step 3.1
+- **Last commit:** `94b8b71` — feat(3.3): astro component library — Card / Table / EmptyState / Alert / Form / PageShell
 - **Uncommitted changes:** none (working tree clean)
 - **Last phase tag:** `phase-2-channel-parity-closed` (annotated tag at commit `081b832`)
 
@@ -41,13 +41,13 @@ Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). S
 
 ## In-flight work
 
-None. Step 3.1 closed cleanly with all four `pnpm` gates green and the matching `- [x]` flipped in `.control/phases/phase-3-web-ui/steps.md` + `UPGRADE/ROADMAP.md`. The `directive-stream-route.test.ts` "client disconnect" case takes ~4 s (waiting for Node's socket close handler to fire) — not a flake, just a slow path; no follow-up needed unless the suite gets noticeably slower.
+None. Steps 3.2 and 3.3 both closed cleanly; all four `pnpm` gates green at every commit. The component library (3.3) is shipped but **not yet consumed by any page** — that's 3.4's job. Until 3.4 lands, each component duplicates the matching CSS from `layouts/Dashboard.astro` under Astro's auto-scoping; the Dashboard-level CSS is gutted as part of 3.4 once every page has migrated. The drift between `Dashboard.astro` global CSS and the new scoped component CSS is intentional for the duration of the 3.3 → 3.4 transition.
 
 ---
 
 ## Test / eval status
 
-- **Last test run:** 2026-05-03 — full workspace passes (1040 tests across 76 files; +29 from prior baseline: 14 new SSE schemas in `@factory5/ipc` + 15 new SSE route end-to-end tests in `@factory5/daemon`). Daemon now at 152/152, brain at 93/93, channels still 175/175, cli 82/82. All four `pnpm` gates green: build / test / lint / format:check.
+- **Last test run:** 2026-05-03 — full workspace passes (1040 tests across 73 files, +0 from prior baseline — neither 3.2 nor 3.3 added test files; the SSE FE wiring relies on the existing 152 daemon SSE-route tests for wire shape, and `factory-web` has no vitest harness yet). All four `pnpm` gates green: build / test / lint / format:check.
 - **Eval score** (agent phases only): n/a
 - **Regression tests:** unit + integration only; no eval harness
 
@@ -59,30 +59,30 @@ None. Step 3.1 closed cleanly with all four `pnpm` gates green and the matching 
 - ADR 0027 — web-ui-mutation-surface (`POST /api/v1/builds`, `POST /api/v1/pending-questions/:id/answer`, `PUT /api/v1/projects/:id/budget`)
 - ADR 0026 — pluggable-runtime-contract (assessor pluggable across Python / Node / Go / Rust; env-owning vs env-assuming provisioner; failure-mode taxonomy)
 
-Step 3.1 did not promote a new ADR — the SSE protocol shape is pinned in `UPGRADE/specs/sse-directive-stream.md`; promotion to **ADR 0029 — directive-stream protocol** is deferred until 3.2 ships and the FE consumer validates the wire contract end-to-end.
+Steps 3.2 and 3.3 did not promote new ADRs — the SSE protocol shape is still pinned in `UPGRADE/specs/sse-directive-stream.md` (promotion to **ADR 0029 — directive-stream protocol** is gated on the FE consumer being smoke-tested end-to-end against a real factoryd, which lands in 3.4 once the detail page conversion + manual smoke close the loop). The component library is too small for an ADR — the migration map in `apps/factory-web/src/components/README.md` documents its conventions.
 
 ---
 
 ## Recently completed (last 5 steps)
 
+- Step 3.3 — `feat(3.3)`: Astro component library — eight server-rendered components under `apps/factory-web/src/components/` (Card / Table / EmptyState / Alert / Form / Field / Submit / PageShell) with typed Props interfaces, scoped CSS mirroring Dashboard.astro's `color-mix(currentColor)` palette, and a README documenting each component + the 3.4 migration map. Library-only — no page consumes them yet. — 2026-05-03 — `94b8b71`
+- Step 3.2 — `feat(3.2)`: wire directive detail page to SSE stream — new `apiStream<T>(path, callbacks)` helper in `apps/factory-web/src/lib/api.ts` (token-auth via `?t=` query param, Zod-validated against `directiveStreamEventSchema`, six-state connection machine: connecting → live → reconnecting → polling | disconnected → completed, 5 s polling fallback when EventSource gives up). `directives/detail.astro` rewritten: incremental `Map<taskId, Task>` render, atomic spend swap, log tail panel rendered only after the first `log.line` arrives, connection-state pip in the header. New `./sse` sub-export on `@factory5/ipc` keeps undici / logger out of the FE bundle (multi-entry tsup build emits `dist/sse.js` + `dist/sse.d.ts`). `apps/factory-web` now depends on `@factory5/ipc` workspace:*. — 2026-05-03 — `998e7d8`
+- State reconcile — `docs(state)`: reconcile STATE.md last-commit pointer to current HEAD (post-session-end pointer drift surfaced at session start, same pattern as `cce7065`) — 2026-05-03 — `db61baf`
 - Session-end docs — `docs(state)`: session end for step 3.1 (STATE.md / journal / next.md updated by `/session-end`) — 2026-05-03 — `15bbad3`
-- Step 3.1 — `feat(3.1)`: SSE on `/api/v1/directives/:id/stream` — spec, six Zod event schemas (`task.started` / `task.completed` / `finding.created` / `spend.updated` / `log.line` / `directive.completed`), `DirectiveStreamHub` (subscribe / emit / closeDirective / shutdown), Fastify route via `reply.hijack()` with header-or-`?t=` auth, backfill on connect, 15 s heartbeats, cleanup on disconnect, brain emission threaded through `BrainOptions.emitDirectiveEvent` → serve → inline → loop+pool. `finding.created` and `log.line` emission deferred. — 2026-05-03 — `772f9f3`
-- State reconcile — `docs(state)`: reconcile STATE.md last-commit pointer to current HEAD (closed the post-session-end self-reference drift surfaced at the start of this session) — 2026-05-03 — `cce7065`
-- Post-phase-2 docs polish — `docs(2)`: documented `factory`/`factoryd` PATH setup in `docs/ONBOARDING.md` §3.5 (three options: pnpm dev scripts / `pnpm link --global` / shell-wrapper functions) — 2026-05-03 — `f7c78ce`
-- Phase 2 closed (`chore(phase-2): close phase 2, kick off phase 3`); tag `phase-2-channel-parity-closed` on `081b832`; Phase 3 scaffolded — 2026-05-03 — `384d2d3`
+- Step 3.1 — `feat(3.1)`: SSE on `/api/v1/directives/:id/stream` — spec, six Zod event schemas, `DirectiveStreamHub` (subscribe / emit / closeDirective / shutdown), Fastify route via `reply.hijack()` with header-or-`?t=` auth, backfill on connect, 15 s heartbeats, cleanup on disconnect, brain emission threaded through `BrainOptions.emitDirectiveEvent`. — 2026-05-03 — `772f9f3`
 
 ---
 
 ## Attempts that didn't work (current step only)
 
-- None yet — Step 3.2 not started.
+- None yet — Step 3.4 not started.
 
 ---
 
 ## Environment snapshot
 
 - **Language / runtime:** TypeScript on Node 20+ (currently running Node 22.22.2)
-- **Key pinned deps:** pnpm 9.12.0, tsup 8.5.1, vitest 2.1.9, prettier 3.8.3, eslint 9.39.4, better-sqlite3 (workspace), discord.js v14, grammy, fastify (workspace)
+- **Key pinned deps:** pnpm 9.12.0, tsup 8.5.1, vitest 2.1.9, prettier 3.8.3, eslint 9.39.4, better-sqlite3 (workspace), discord.js v14, grammy, fastify (workspace), Astro 5.x
 - **Model in use:** Claude Code (claude-opus-4-7[1m])
 - **Other:** Windows Server 2025 host
 
@@ -90,27 +90,41 @@ Step 3.1 did not promote a new ADR — the SSE protocol shape is pinned in `UPGR
 
 ## Notes for next session
 
-Step 3.1 shipped the backend half of the live-updates uplift. Step 3.2 wires the front-end. Two anchor files: `apps/factory-web/src/lib/api.ts` (new `apiStream<T>(path)` helper) and `apps/factory-web/src/pages/directives/detail.astro` (replace `loadInto<Detail>` with EventSource subscription).
+Step 3.4 is the longest sub-step in Phase 3 — converting every page in `apps/factory-web/src/pages/` to consume the component library shipped in 3.3 and retiring `el()` from `apps/factory-web/src/lib/api.ts`. There are 10 page files (the audit said 9 pre-build.astro; current state is 10):
 
-**Step 3.2 design notes:**
+- `index.astro` (Overview — 5 metric cards + intro paragraph)
+- `build.astro` (the heavy form — primary candidate for `<Form>` + `<Field>` + `<Submit>`)
+- `directives/index.astro`, `directives/detail.astro`
+- `findings/index.astro`
+- `projects/index.astro`, `projects/detail.astro`
+- `questions/index.astro`, `questions/detail.astro`
+- `spend/index.astro`
 
-- **Auth.** EventSource cannot set custom headers, so `apiStream` must append `?t=<UI_TOKEN>` to the URL. The token already lives in `apps/factory-web/src/lib/api.ts` (the existing `apiFetch`/`apiPost` paths read it). Strip the token from `history.replaceState` after the initial page load so it doesn't appear in browser history.
-- **Reconnect.** The browser's EventSource auto-reconnects on transient disconnect. Wrap it so `apiStream` emits a "Reconnecting" connection-state to the page.
-- **Render.** Detail page tracks `Map<taskId, Task>` for live tasks; on `task.started` insert; on `task.completed` flip status + finishedAt; on `spend.updated` rewrite the spend line; on `directive.completed` stop showing the live indicator and surface the final status prominently. Keep a polling fallback (every 5 s `apiFetch('/api/v1/directives/:id')`) for browsers behind an SSE-stripping proxy — only used when the EventSource fires `error` and `readyState === CLOSED` repeatedly.
-- **Spend page.** `/app/spend/index.astro` should also subscribe (per-directive or one-shot reconnect) so spend rolls up live. Out-of-scope for 3.2 if 3.2 stays focused on `directive/detail`; pencil it in for 3.8 (spend page charts).
+**Suggested order (simple → complex):**
 
-**Step 3.1 deferred work that 3.2 may want to wire:**
+1. `index.astro` — 5 cards. Replace the `card()` helper closure with five `<Card>` invocations server-side (the totals are fetched at runtime, so the value is filled by the `<script>`; either render placeholders and set `.value` from the script, OR fetch in the frontmatter via SSR — but SSR needs the daemon up at build time and we don't want that, so client-side fill is the right call).
+2. `findings/index.astro`, `projects/index.astro`, `questions/index.astro`, `spend/index.astro` — each is a list/table page. Replace the inline `<table>` building with `<Table columns rows>` rendered with `rows={[]}` server-side; the script queries `tbody` and appends rows. Empty states swap to `<EmptyState>`.
+3. `directives/index.astro`, `projects/detail.astro`, `questions/detail.astro` — same shape but with deeper detail.
+4. `build.astro` — convert the form to `<Form>` + `<Field>` + `<Submit>`. The submit handler stays in the page's `<script>` (queries field values by id and posts via `apiPost`).
+5. `directives/detail.astro` — last, because it just got rewritten in 3.2 and the live SSE render path stays JS-driven. The conversion here is mostly: header replaced with `<PageShell title="…">` shell + the existing live-event render path still runs in `<script>`.
 
-- **`finding.created` brain emission.** Tier-3 plan calls for it; spec carries the shape; route forwards it. The cheapest place is `pool.ts` after a task finishes — emit one `finding.created` per entry in `outcome.result.findingsRaised` (look up the registry row by id for the body fields). Self-contained (~20 LOC). 3.2 may need it for the "findings list grows live" UX, or it can defer to a 3.x sub-step.
-- **`log.line` forwarder.** Selective pino-stream tap that filters by directive correlation id. More invasive — a Pino transport or a custom serializer. Defer to a separate sub-step (or skip entirely for 3.x; the page can show task-level log via the existing `BUILD.md` poll).
+**`el()` retirement:** After every page is converted, delete the `el()` export from `apps/factory-web/src/lib/api.ts` and grep for any straggler imports. The DOM-creation pattern within `<script>` blocks moves to `document.createElement` + `setAttribute` + `textContent` / `appendChild` directly (or a per-page helper if the page genuinely needs a wrapper).
 
-**Carried forward from Phase 2 (Step 2.6 — `factory chat` per-turn timeout):** infrastructure now in place via 3.1's SSE route. Full resolution lands in step 3.5 when the `/app/chat` page routes chat directives through this stream — until then the 120 s false-timeout could still bite a chat directive that takes longer than 120 s for the first turn. Not a regression vs prior state; the cheap-path bump remains an option if 3.5 slips.
+**Dashboard.astro CSS prune:** Once every page is converted, the duplicated CSS in `layouts/Dashboard.astro` (`.card`, `.cards`, `form.form`, `.form-field`, `.btn`, `.alert`, table styles, `.empty`) can be removed — the per-component scoped CSS replaces it. Keep `.shell`, `header.shell`, `main.shell`, `a.link`, and the chrome / table-base styles in Dashboard since those aren't owned by a single component.
 
-**Pre-2026-05-03 baseline live-smoke (carried into Phase 3):** Discord+Telegram slash command surfaces are live-verified. Free-form chat re-routing verified. `factory cancel` IPC route paths verified end-to-end. SSE route is unit/integration-tested only — full live-smoke (open a real browser to `/app/directives/detail?id=…` while a build runs) lands with 3.2.
+**Acceptance smoke:** Run `pnpm --filter factory-web build` after each page conversion to catch typecheck regressions early. Manual smoke against a real factoryd (open every page in a browser) for the final acceptance — there's no FE vitest harness yet to automate this.
 
-**Loose ends from prior session (still open; not blocking 3.2):**
+**Optional Solid/Preact island:** Per the tier-3 plan, _"Solid/Preact island per page is optional"_. The detail page's live-event render is a candidate (state + reactivity), but the current vanilla approach works and the Astro design intent is islands-only-where-needed. Defer the island decision until 3.5 (chat) genuinely requires reactive state.
+
+**Carried forward from Phase 2 (Step 2.6 — `factory chat` per-turn timeout):** infrastructure now in place via 3.1's SSE route. Full resolution lands in step 3.5 when the `/app/chat` page routes chat directives through this stream.
+
+**Step 3.1 deferred work (still open):** `finding.created` brain emission and `log.line` forwarder. The FE now has the listener wiring in place via 3.2; emission is still deferred. Either land in a 3.x sub-step or defer to a follow-up tier — neither blocks 3.4.
+
+**Pre-2026-05-03 baseline live-smoke (carried into Phase 3):** Discord+Telegram slash command surfaces are live-verified. Free-form chat re-routing verified. `factory cancel` IPC route paths verified end-to-end. SSE route is unit/integration-tested only — full live-smoke (open a real browser to `/app/directives/detail?id=…` while a build runs) is now testable since 3.2 wired the FE; pin this as part of 3.4's acceptance.
+
+**Loose ends from prior sessions (still open; not blocking 3.4):**
 
 - Synthetic smoke directive in DB (`01KQPDMQE6QTQZ3QMDD69019YK`, status=failed/cancelled) plus a synthetic project (`demo-project`) and its linked directive. Reap with `cd packages/state && node smoke-cleanup.mjs` if you want a clean `factory status`.
-- factoryd PID 32436 from prior session still running. `factory daemon stop` shuts it down.
+- factoryd PID 32436 from prior session may still be running. `factory daemon stop` shuts it down.
 
 Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions; this STATE.md is the operational cursor (overwritten at each `/session-end`).
