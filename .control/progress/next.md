@@ -1,7 +1,7 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-03T15:10:39Z by
-> `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-03T16:16:21Z by
+> `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
 
@@ -16,46 +16,35 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). Step **3.6 = cancel + pause buttons on directive detail** per [`../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md`](../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md) §3.3 (the upgrade-plan numbering lags the phase numbering; tier-3 §3.3 = phase step 3.6 because 3.4 page-conversion + 3.5 chat slotted in between). Cancel is straightforward in shape but has a route-prefix decision to resolve first: Phase 2.4 mounted the cancel route at `/directives/:id/cancel` (no `/api/v1/` prefix) per `packages/daemon/src/server.ts:410`, but the SPA's Bearer-gated namespace is `/api/v1/*` (see how 3.5 mounted `POST /api/v1/chat/messages`). Either (a) move/alias the cancel route to `/api/v1/directives/:id/cancel` and apply `requireUiAuth` (matches the SPA convention; verify CLI `packages/cli/src/commands/cancel.ts` doesn't hit the route directly before moving — Discord/Telegram channel handlers reach cancel via `runCancel` in `command-handlers.ts`, not via HTTP), or (b) keep the existing prefix and have the FE call the existing path with whatever auth gate is already there. After that decision, the FE work is: visible-only-when-`running`-or-`pending`, calls `apiPost`, disables on click, shows "Cancelling..." until SSE reports `directive.completed`. Pause is a separate open design decision — STATE.md "Notes for next session" surfaces three options (extend `directivesQ` status enum / reuse `markBlocked` / defer pause). File pointers: edit `apps/factory-web/src/pages/directives/detail.astro` (the live SSE render path that already owns the page chrome) for the button + handler; edit `packages/daemon/src/server.ts` to land the route move if option (a). Acceptance: click cancel during a build, see status flip to `failed` within a few seconds, see workers terminate (live-smoke against a real factoryd).
-
+Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). Step **3.7 = `/app/projects/new` — mirror of `factory init <project>` for a single project** per [`../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md`](../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md) §3.7. Form mirrors `factory init`'s flags (language picker, optional `CLAUDE.md` upload, `--max-usd` / `--max-steps` budgets). On submit, scaffold the project via the existing init path; the new project shows up in `/app/projects` and is kickoff-able from `/app/build`. File pointers: new page at `apps/factory-web/src/pages/projects/new.astro` (modeled on `apps/factory-web/src/pages/build.astro`'s `<Form>` + `<Field>` + `<Submit>` shape from 3.4 commit `58d4584`); reuse the daemon's existing project-init route or add a new `POST /api/v1/projects` route gated by `requireUiAuth` (mirrors the 3.6 cancel-route pattern in `packages/daemon/src/server.ts`). Acceptance: form submit creates `<workspace>/<project>/.factory/project.json` end-to-end, project appears at `/app/projects`, and a follow-up build directive succeeds against it. Frontend-design skill required before authoring per saved feedback. Before starting 3.7, consider whether to slot the **operator-pinned live-smoke** in first — it covers 3.6 acceptance + the chat page + ADR 0029 promotion gate in one factoryd-up window (see "3.x backlog" below).
 
 ## Notes for next session
 
-Step 3.6 is the cancel + pause buttons on directive detail. Per [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md) line 8 and [`../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md`](../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md) §3.3 (numbering shift: tier-3 plan §3.3 = phase step 3.6).
+Step 3.7 is the `/app/projects/new` page — browser mirror of `factory init <project>`. Per [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md) line 9 and [`../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md`](../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md) §3.7.
 
-**Cancel — straightforward:**
+**Two design decisions to resolve before code, in order:**
 
-1. **`apps/factory-web/src/pages/directives/detail.astro`** — add a "Cancel build" button to the page header (visible only when `effectiveStatus()` returns `running` or `pending`). On click: disable the button, change its text to "Cancelling…", call `apiPost('/api/v1/directives/' + encodeURIComponent(directiveId) + '/cancel', {})`. The existing SSE subscription will land `directive.completed` with `status: 'failed'` and `blockedReason: 'cancelled'` (or whatever `cancelDirective` writes) — the page's existing `applyEvent` handler reflects the status flip without further work.
-2. **Verify the route prefix** — `packages/daemon/src/server.ts:410` currently mounts the cancel route at `/directives/:id/cancel` (no `/api/v1/` prefix), distinct from where the FE expects to call it. Either: (a) move/alias the route to `/api/v1/directives/:id/cancel` and apply `requireUiAuth` (matches the rest of the SPA's surface and how 3.5's chat route is mounted); (b) keep the existing prefix and add a separate worker-token-style auth gate. Recommendation: (a) — the cancel route is operator-facing and belongs in the same UI-token-gated namespace.
+1. **Live-smoke first?** All five SSE event types now flow end-to-end (3.1b shipped `finding.created` emission this session); both detail-page and chat-page consumers are wired; 3.6's cancel button needs a single live-smoke against a running factoryd to close acceptance. The smoke also unblocks ADR 0029 promotion. Doing it before 3.7 means 3.7 is built on a verified base; doing it after means a longer rollback path if the smoke surfaces a wire issue. **Recommendation:** smoke first — kick off `factory build <project>`, open `/app/directives/detail?id=<id>`, click cancel, watch worker terminate; click-test `/app/chat` in the same window. ~5 minutes of operator time. If clean: promote ADR 0029, then start 3.7. If issues surface: fix before 3.7.
 
-**Pause — needs a small design decision before code:**
+2. **3.7 form-submit route — reuse or add?** The existing daemon may already have a project-init route (used by the CLI's `factory init`); if so, the FE can call it directly. If not, a new `POST /api/v1/projects` route gated by `requireUiAuth` mirrors the 3.6 cancel pattern (one shared handler, two route prefixes — CLI-facing + SPA-facing). Grep `packages/daemon/src/server.ts` and `packages/cli/src/commands/init.ts` to confirm before designing. The pattern is the same as 3.6's: extract a closure-scoped helper, register it under both prefixes when the CLI hits it via HTTP, register it under just `/api/v1/*` if the CLI uses a non-HTTP path.
 
-Phase-3 steps.md frames pause as "a status flip via existing route" but no pause primitive exists today. Three options:
+**File pointers for 3.7:**
 
-- **Option A — extend `directivesQ` with a pause/resume status pair.** Adds two new directive states (`paused` + a path back to `running` via resume); migration adds them to the CHECK constraint. Brain claim loop must skip `paused` directives. Most invasive but cleanest semantics.
-- **Option B — reuse `markBlocked` as the pause primitive.** `markBlocked` already moves a directive to `blocked` with a free-text `blockedReason`; pause becomes a marker like `blockedReason: 'paused-by-operator'`. Resume is a status flip back to `running` (or re-claim via a new doorbell ring). Cheaper but conflates two semantically different things in one column.
-- **Option C — defer pause to a 3.x follow-up; ship cancel only under 3.6.** Pause is a soft requirement; cancel is the primary operator escape hatch. Lets 3.6 close in one focused commit and avoids a sticky design call mid-step.
+- New page: `apps/factory-web/src/pages/projects/new.astro` — modeled on `apps/factory-web/src/pages/build.astro`'s `<Form>` + `<Field>` + `<Submit>` shape (3.4 commit `58d4584`). Fields: project name (required), language picker (`python` / `node` / `go` / `rust` / `(use server default)`), optional `CLAUDE.md` textarea, optional `--max-usd` / `--max-steps` numeric inputs. On submit: `apiPost('/api/v1/projects', ...)`, redirect to `/app/projects/detail?id=<new-id>` on success or surface inline `<Alert kind="conflict">` on failure (same hidden-Alert-placeholder pattern used by build.astro).
+- Form schema: `packages/ipc/src/schemas.ts` — add `apiV1CreateProjectRequestSchema` + `apiV1CreateProjectResponseSchema`. Mirror the existing `apiV1CreateBuildRequestSchema` shape.
+- Daemon route: `packages/daemon/src/server.ts` — new `POST /api/v1/projects` (and possibly `/projects` for CLI parity). The handler delegates to whatever `factory init` runs server-side today (likely a function in `@factory5/wiki` or `@factory5/state`).
+- CLI parity check: `packages/cli/src/commands/init.ts` — confirm whether init goes through HTTP or DB-direct, mirroring how the 3.6 cancel-route audit confirmed CLI cancel uses HTTP via `cancelDirective` daemon-client.
+- Frontend-design skill required before authoring per saved feedback.
 
-Recommendation: **Option C** unless an operator reports needing pause. The phase-3-web-ui/steps.md line conflates them; in practice cancel solves the operator-pain case (a build going wrong needs to die, not pause-then-think). Pause is the kind of feature that's worth designing once a real workflow demands it.
+**Acceptance:** form submit at `/app/projects/new` creates `<workspace>/<project>/.factory/project.json` and the matching DB row; the project appears in `/app/projects`; a follow-up build directive at `/app/build` succeeds against the new project end-to-end (live-smoke against a real factoryd).
 
-**Operational reminders for 3.6 acceptance:**
+**3.x backlog still open (no 3.7 acceptance dependency, in `phase-3-web-ui/steps.md` "Deferred follow-ups"):**
 
-- **Live-smoke required.** Cancel during a real build needs verifying end-to-end: kick off `factory build <project>` in one terminal, open `/app/directives/detail?id=<id>` in the browser during the run, click cancel, watch tasks terminate. The SSE FE consumer is structurally complete since 3.2 + 3.5; this is the pre-3.5-pinned smoke that's been carried forward.
-- **Cancel route auth move (option a above)** — if we move `/directives/:id/cancel` to `/api/v1/*`, that's a contract shift for any non-FE caller. Discord/Telegram channel handlers reach the cancel path through `runCancel` in `command-handlers.ts` (not via HTTP); the only external caller of the route is `packages/cli/src/commands/cancel.ts` (verify by grep before moving). If CLI hits it, both must move together.
+- **PageShell + Dashboard `<style is:global>` migration** — 11-page structural sweep. **Land in a session where you can spot-check pages in a browser as they convert** — autonomous-only is the wrong fit because the layout's scoped-CSS rules (`.cards`, `.empty`, `.err`, `.btn*`, `.alert*`, `.form-*`, table-base) are currently inert against slot content; flipping to global will start applying them, which can shift layouts the component-level scoped CSS isn't compensating for. Self-contained ~1 commit when run by hand.
+- **Pause primitive** — design when a workflow signal demands it. Option A (status-enum extension) vs Option B (`markBlocked` reuse) vs longer-term-defer.
+- **Pre-3.5 baseline live-smoke against running factoryd** — gates ADR 0029 promotion. Combined with the 3.6 cancel acceptance smoke into one factoryd-up window per Decision 1's recommendation above.
 
-**3.x backlog still open (no 3.6 acceptance dependency):**
-
-- PageShell + Dashboard `<style is:global>` follow-up — wire `<PageShell title=…>` across all 11 pages (10 pre-3.5 + chat), remove Dashboard's inner `<h2>{title}</h2>`, convert Dashboard's primitives (`.cards`, `.empty`, `.err`, `.filter-form`, `.btn*`, `.alert*`, `.form-*`, table-base) to `<style is:global>` so slot-level elements actually pick up the styling. Self-contained ~1 commit.
-- `finding.created` brain emission — small follow-up to commit `10efe20`'s `log.line` work; one event per entry in `outcome.result.findingsRaised` from `packages/brain/src/pool.ts`. Same `emitLogLine`-style helper pattern (e.g. `emitFindingCreated`).
-- Pre-3.5 baseline live-smoke — open a real browser to `/app/directives/detail?id=…` AND `/app/chat` during a build run to verify SSE event fidelity. Pin as part of phase-3 acceptance; not a 3.6 blocker.
-
-**3.5 design discoveries to remember (also recorded in `apps/factory-web/src/components/README.md` "Patterns introduced by /app/chat" section):**
-
-1. The chat page is the second site (after `directives/detail.astro`) where the static-component library can't carry the load — bubble layouts, hand-rolled markdown, and per-turn `apiStream` lifecycle don't fit static-component shape. The component library README documents these patterns inline rather than promoting them to components prematurely. Lift to a shared component only when a third site emerges.
-2. The `/cmd` shortcut path uses the existing `/api/v1/{status,spend,findings}` GET endpoints client-side rather than a new chat-cmd route on the daemon. This keeps the operator surface in lockstep across Discord/Telegram (which dispatch via `command-handlers.ts` server-side) and the web (which dispatches via fetch client-side); both surfaces hit the same SQL queries underneath, so behavior stays consistent.
-3. `apiStream` close-on-`directive.completed` makes per-turn lifecycle straightforward — each user message closes any prior stream, opens a fresh one against the new directive, and listens for log.line events filtered by `component === 'brain.chat'`. `astro:before-swap` teardown prevents leaked EventSources across page navigation.
-
-**Loose ends from prior sessions (still open; not blocking 3.6):**
+**Loose ends from prior sessions (still open; not blocking 3.7):**
 
 - Synthetic smoke directive in DB (`01KQPDMQE6QTQZ3QMDD69019YK`, status=failed/cancelled) plus a synthetic project (`demo-project`) and its linked directive. Reap with `cd packages/state && node smoke-cleanup.mjs` if you want a clean `factory status`.
 - factoryd PID 32436 from prior session may still be running. `factory daemon stop` shuts it down.
