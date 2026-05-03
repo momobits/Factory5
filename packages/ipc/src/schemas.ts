@@ -551,6 +551,48 @@ export const apiV1FindingsListResponseSchema = z.object({
 export type ApiV1FindingsListResponse = z.infer<typeof apiV1FindingsListResponseSchema>;
 
 // -----------------------------------------------------------------------------
+// POST /api/v1/chat/messages  (web UI, Phase 3 / step 3.5)
+// -----------------------------------------------------------------------------
+
+/**
+ * Request body for posting a chat message from the web UI. The route
+ * mints an `intent=chat` directive on the brain's standard chat path —
+ * the same minting shape Discord/Telegram inbound takes — and returns
+ * the directive id so the SPA can subscribe to its SSE stream for the
+ * streamed reply.
+ *
+ *   - `message` — non-empty user text. Hard upper bound at 8 KB to keep
+ *     malformed requests cheap to reject; real chat messages cap at a
+ *     few hundred chars in practice. The bound is generous so the SPA
+ *     never has to validate length client-side.
+ *   - `conversationId` — optional ULID linking this turn to a prior
+ *     directive. Reserved for future "resume the conversation thread"
+ *     wiring; the 3.5 surface stores it on the new directive's payload
+ *     but does not yet read it (each post mints a fresh top-level
+ *     directive). Kept in the schema so the SPA can start passing it
+ *     opportunistically without a contract churn.
+ */
+export const apiV1ChatMessageRequestSchema = z.object({
+  message: z.string().min(1).max(8192),
+  conversationId: ulidSchema.optional(),
+});
+export type ApiV1ChatMessageRequest = z.infer<typeof apiV1ChatMessageRequestSchema>;
+
+/**
+ * Response shape for `POST /api/v1/chat/messages`. The directive's `id`
+ * is the SPA's subscription handle: the chat page opens an EventSource
+ * on `/api/v1/directives/<id>/stream` and renders one bubble per
+ * `log.line` event tagged with `component: 'brain.chat'` (emitted by
+ * the brain's chat-path log-line wiring shipped in step 3.5 commit 1).
+ * `directive.completed` closes the conversation back to "type your
+ * next message" on the SPA.
+ */
+export const apiV1ChatMessageResponseSchema = z.object({
+  directive: directiveSchema,
+});
+export type ApiV1ChatMessageResponse = z.infer<typeof apiV1ChatMessageResponseSchema>;
+
+// -----------------------------------------------------------------------------
 // Error envelope (returned with non-2xx responses)
 // -----------------------------------------------------------------------------
 

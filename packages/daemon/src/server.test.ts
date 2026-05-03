@@ -2088,6 +2088,199 @@ describe('IPC server — POST /api/v1/builds (ADR 0027, sub-step 11.3)', () => {
   });
 });
 
+describe('IPC server — POST /api/v1/chat/messages (Phase 3 / step 3.5)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  const UI_TOKEN = 'ui-secret-chat';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  it('returns 401 without bearer', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/chat/messages',
+      payload: { message: 'hi' },
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns 503 UI_DISABLED when uiAuthToken is not configured', async () => {
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: undefined });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/chat/messages',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { message: 'hi' },
+    });
+    expect(res.statusCode).toBe(503);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('UI_DISABLED');
+    await app.close();
+  });
+
+  it('returns 400 SCHEMA_VALIDATION_FAILED on missing message', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/chat/messages',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('returns 400 SCHEMA_VALIDATION_FAILED on empty message', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/chat/messages',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { message: '' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('returns 400 SCHEMA_VALIDATION_FAILED on message exceeding 8 KB', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/chat/messages',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { message: 'x'.repeat(8193) },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('returns 400 SCHEMA_VALIDATION_FAILED on malformed conversationId', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/chat/messages',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { message: 'hi', conversationId: 'not-a-ulid' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('happy path: mints a chat directive, persists it, and rings the doorbell', async () => {
+    let rung: { directiveId: string; reason: string } | undefined;
+    doorbell.on('directive.new', (payload) => {
+      rung = payload;
+    });
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/chat/messages',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { message: "what's the status of the project?" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: {
+        id: string;
+        source: string;
+        principal: string;
+        intent: string;
+        autonomy: string;
+        status: string;
+        payload: { text: string; conversationId?: string };
+      };
+    };
+    expect(body.directive.intent).toBe('chat');
+    expect(body.directive.autonomy).toBe('chat');
+    expect(body.directive.status).toBe('pending');
+    expect(body.directive.source).toBe('cli');
+    expect(body.directive.principal).toBe('web-ui');
+    expect(body.directive.payload.text).toBe("what's the status of the project?");
+    expect(body.directive.payload.conversationId).toBeUndefined();
+    expect(body.directive.id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+
+    // Persisted in SQLite.
+    const persisted = directivesQ.getById(db, body.directive.id);
+    expect(persisted?.intent).toBe('chat');
+    expect(persisted?.status).toBe('pending');
+
+    // Doorbell rang so the brain's claim loop wakes up.
+    expect(rung).toEqual({ directiveId: body.directive.id, reason: 'new' });
+    await app.close();
+  });
+
+  it('happy path with conversationId: stores it on the directive payload', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const conversationId = newId();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/chat/messages',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { message: 'follow-up question', conversationId },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { payload: { text: string; conversationId?: string } };
+    };
+    expect(body.directive.payload.conversationId).toBe(conversationId);
+    expect(body.directive.payload.text).toBe('follow-up question');
+    await app.close();
+  });
+
+  it('channelRef carries the request id so multi-tab sessions stay distinct', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/chat/messages',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { message: 'one' },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/chat/messages',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { message: 'two' },
+    });
+    const a = first.json() as { directive: { id: string; channelRef: string } };
+    const b = second.json() as { directive: { id: string; channelRef: string } };
+    expect(a.directive.channelRef).toMatch(/^web-ui-/);
+    expect(b.directive.channelRef).toMatch(/^web-ui-/);
+    expect(a.directive.channelRef).not.toBe(b.directive.channelRef);
+    expect(a.directive.id).not.toBe(b.directive.id);
+    await app.close();
+  });
+});
+
 describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.4)', () => {
   let db: Database;
   let doorbell: Doorbell;

@@ -39,6 +39,8 @@ import { directiveSchema, newId } from '@factory5/core';
 import {
   apiV1AnswerPendingQuestionRequestSchema,
   apiV1AnswerPendingQuestionResponseSchema,
+  apiV1ChatMessageRequestSchema,
+  apiV1ChatMessageResponseSchema,
   apiV1CreateBuildRequestSchema,
   apiV1CreateBuildResponseSchema,
   apiV1DirectiveDetailResponseSchema,
@@ -68,6 +70,7 @@ import {
   workerAskUserRequestSchema,
   workerAskUserResponseSchema,
   type ApiV1AnswerPendingQuestionResponse,
+  type ApiV1ChatMessageResponse,
   type ApiV1CreateBuildResponse,
   type ApiV1DirectiveDetailResponse,
   type ApiV1DirectivesListResponse,
@@ -980,6 +983,46 @@ function registerRoutes(
         maxSteps: persistedDefaults.maxSteps,
       },
       'ipc: /api/v1/projects/:id/budget — defaults updated',
+    );
+    reply.send(resp);
+  });
+
+  // ----- POST /api/v1/chat/messages (Phase 3 / step 3.5) -----
+  // Mints an `intent=chat` directive on the brain's standard chat path
+  // (same minting shape Discord/Telegram inbound takes); returns the
+  // directive id so the SPA can subscribe to its SSE stream for the
+  // streamed reply. The brain emits one `log.line` event per agent turn
+  // (step 3.5 commit 1) — the chat page renders one bubble per event.
+  //
+  // `source: 'cli'` mirrors POST /api/v1/builds: the web UI is a
+  // loopback surface, not a distinct ChannelId. `principal: 'web-ui'`
+  // distinguishes web-minted from CLI-minted in the audit log without
+  // expanding the channel-id enum.
+  app.post('/api/v1/chat/messages', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const body = apiV1ChatMessageRequestSchema.parse(request.body);
+
+    const directive = directiveSchema.parse({
+      id: newId(),
+      source: 'cli',
+      principal: 'web-ui',
+      channelRef: `web-ui-${request.id}`,
+      intent: 'chat',
+      payload: {
+        text: body.message,
+        ...(body.conversationId !== undefined ? { conversationId: body.conversationId } : {}),
+      },
+      autonomy: 'chat',
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+    });
+    directivesQ.insert(opts.db, directive);
+    opts.doorbell.emit('directive.new', { directiveId: directive.id, reason: 'new' });
+
+    const resp: ApiV1ChatMessageResponse = apiV1ChatMessageResponseSchema.parse({ directive });
+    ipcLog.info(
+      { reqId: request.id, directiveId: directive.id, messageLen: body.message.length },
+      'ipc: /api/v1/chat/messages — directive minted',
     );
     reply.send(resp);
   });
