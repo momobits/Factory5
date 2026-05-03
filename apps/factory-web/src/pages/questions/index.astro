@@ -1,5 +1,6 @@
 ---
 import Dashboard from '../../layouts/Dashboard.astro';
+import Table from '../../components/Table.astro';
 ---
 
 <Dashboard title="Pending questions">
@@ -19,10 +20,29 @@ import Dashboard from '../../layouts/Dashboard.astro';
     <button type="submit">Apply</button>
   </form>
 
-  <div id="mount">Loading…</div>
+  <p id="error" class="err" hidden></p>
+  <p id="questions-count"></p>
+  <Table
+    id="questions-table"
+    columns={[
+      { key: 'created', label: 'Created' },
+      { key: 'question', label: 'Question' },
+      { key: 'channel', label: 'Channel' },
+      { key: 'directive', label: 'Directive' },
+      { key: 'answer', label: 'Answer' },
+    ]}
+    rows={[]}
+    loading
+  />
 
   <script>
-    import { loadInto, el } from '../../lib/api';
+    import {
+      apiFetch,
+      captureTokenFromUrl,
+      getToken,
+      NoTokenError,
+      ApiError,
+    } from '../../lib/api';
 
     interface PendingQuestion {
       id: string;
@@ -39,78 +59,93 @@ import Dashboard from '../../layouts/Dashboard.astro';
       status: string;
     }
 
-    function render(resp: ListResp, mount: HTMLElement): void {
-      mount.appendChild(
-        el('p', {}, `${String(resp.items.length)} of ${String(resp.total)} (status: ${resp.status})`),
-      );
+    const showError = (message: string): void => {
+      const err = document.getElementById('error');
+      if (err === null) return;
+      err.textContent = message;
+      err.hidden = false;
+    };
+
+    const renderQuestions = (resp: ListResp): void => {
+      const tbody = document.querySelector('#questions-table tbody');
+      const countEl = document.getElementById('questions-count');
+      if (tbody === null) return;
+      if (countEl !== null) {
+        countEl.textContent = `${String(resp.items.length)} of ${String(resp.total)} (status: ${resp.status})`;
+      }
+      tbody.innerHTML = '';
       if (resp.items.length === 0) {
-        mount.appendChild(el('p', { class: 'empty' }, 'Nothing pending.'));
+        const colCount = document.querySelectorAll('#questions-table thead th').length;
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = colCount;
+        td.className = 'empty';
+        td.textContent = 'Nothing pending.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
         return;
       }
-      const table = el(
-        'table',
-        {},
-        el(
-          'thead',
-          {},
-          el(
-            'tr',
-            {},
-            el('th', {}, 'Created'),
-            el('th', {}, 'Question'),
-            el('th', {}, 'Channel'),
-            el('th', {}, 'Directive'),
-            el('th', {}, 'Answer'),
-          ),
-        ),
-      );
-      const tbody = el('tbody', {});
       for (const q of resp.items) {
-        tbody.appendChild(
-          el(
-            'tr',
-            {},
-            el('td', {}, q.createdAt.slice(0, 19).replace('T', ' ')),
-            el(
-              'td',
-              {},
-              el(
-                'a',
-                { href: `/app/questions/detail?id=${encodeURIComponent(q.id)}`, class: 'link' },
-                q.question,
-              ),
-            ),
-            el('td', {}, q.channel),
-            el(
-              'td',
-              {},
-              el(
-                'a',
-                {
-                  href: `/app/directives/detail?id=${encodeURIComponent(q.directiveId)}`,
-                  class: 'link',
-                },
-                q.directiveId.slice(-8),
-              ),
-            ),
-            el('td', {}, q.answer ?? ''),
-          ),
-        );
-      }
-      table.appendChild(tbody);
-      mount.appendChild(table);
-    }
+        const tr = document.createElement('tr');
 
-    function mountPath(): string {
+        const createdTd = document.createElement('td');
+        createdTd.textContent = q.createdAt.slice(0, 19).replace('T', ' ');
+        tr.appendChild(createdTd);
+
+        const questionTd = document.createElement('td');
+        const questionA = document.createElement('a');
+        questionA.href = `/app/questions/detail?id=${encodeURIComponent(q.id)}`;
+        questionA.className = 'link';
+        questionA.textContent = q.question;
+        questionTd.appendChild(questionA);
+        tr.appendChild(questionTd);
+
+        const channelTd = document.createElement('td');
+        channelTd.textContent = q.channel;
+        tr.appendChild(channelTd);
+
+        const directiveTd = document.createElement('td');
+        const directiveA = document.createElement('a');
+        directiveA.href = `/app/directives/detail?id=${encodeURIComponent(q.directiveId)}`;
+        directiveA.className = 'link';
+        directiveA.textContent = q.directiveId.slice(-8);
+        directiveTd.appendChild(directiveA);
+        tr.appendChild(directiveTd);
+
+        const answerTd = document.createElement('td');
+        answerTd.textContent = q.answer ?? '';
+        tr.appendChild(answerTd);
+
+        tbody.appendChild(tr);
+      }
+    };
+
+    const mountPath = (): string => {
       const params = new URLSearchParams(window.location.search);
       const status = params.get('status') ?? 'open';
       const limit = params.get('limit') ?? '50';
       return `/api/v1/pending-questions?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(limit)}`;
-    }
+    };
 
-    const mount = document.getElementById('mount');
-    if (mount === null) throw new Error('mount missing');
-    loadInto<ListResp>(mount, mountPath(), render);
+    captureTokenFromUrl();
+
+    if (getToken() === null) {
+      showError('No UI token present. Reopen the URL logged by factoryd.');
+    } else {
+      apiFetch<ListResp>(mountPath())
+        .then(renderQuestions)
+        .catch((err: unknown) => {
+          if (err instanceof NoTokenError) {
+            showError(err.message);
+          } else if (err instanceof ApiError) {
+            showError(`API error ${String(err.status)} (${err.code}): ${err.message}`);
+          } else if (err instanceof Error) {
+            showError(`Fetch failed: ${err.message}`);
+          } else {
+            showError('Unknown error');
+          }
+        });
+    }
 
     const form = document.getElementById('filter') as HTMLFormElement | null;
     if (form !== null) {

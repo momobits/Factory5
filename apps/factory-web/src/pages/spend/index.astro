@@ -1,5 +1,6 @@
 ---
 import Dashboard from '../../layouts/Dashboard.astro';
+import Table from '../../components/Table.astro';
 ---
 
 <Dashboard title="Spend">
@@ -19,10 +20,78 @@ import Dashboard from '../../layouts/Dashboard.astro';
     <button type="submit">Apply</button>
   </form>
 
-  <div id="mount">Loading…</div>
+  <p id="error" class="err" hidden></p>
+
+  <h3 style="margin-top: 1.5rem;">
+    Per project (<span id="spend-perproject-count">…</span>)
+  </h3>
+  <Table
+    id="spend-perproject"
+    columns={[
+      { key: 'project', label: 'Project' },
+      { key: 'directives', label: 'Directives', numeric: true },
+      { key: 'calls', label: 'Calls', numeric: true },
+      { key: 'total', label: 'Total', numeric: true },
+    ]}
+    rows={[]}
+    loading
+  />
+
+  <h3 style="margin-top: 1.5rem;">
+    Per day (<span id="spend-perday-count">…</span>)
+  </h3>
+  <Table
+    id="spend-perday"
+    columns={[
+      { key: 'date', label: 'Date' },
+      { key: 'calls', label: 'Calls', numeric: true },
+      { key: 'total', label: 'Total', numeric: true },
+    ]}
+    rows={[]}
+    loading
+  />
+
+  <h3 style="margin-top: 1.5rem;">
+    Per model (<span id="spend-permodel-count">…</span>)
+  </h3>
+  <Table
+    id="spend-permodel"
+    columns={[
+      { key: 'provider', label: 'Provider' },
+      { key: 'model', label: 'Model' },
+      { key: 'calls', label: 'Calls', numeric: true },
+      { key: 'total', label: 'Total', numeric: true },
+    ]}
+    rows={[]}
+    loading
+  />
+
+  <h3 style="margin-top: 1.5rem;">
+    Per directive (<span id="spend-perdirective-count">…</span>)
+  </h3>
+  <Table
+    id="spend-perdirective"
+    columns={[
+      { key: 'directive', label: 'Directive' },
+      { key: 'project', label: 'Project' },
+      { key: 'first', label: 'First' },
+      { key: 'last', label: 'Last' },
+      { key: 'calls', label: 'Calls', numeric: true },
+      { key: 'total', label: 'Total', numeric: true },
+    ]}
+    rows={[]}
+    loading
+  />
 
   <script>
-    import { loadInto, el, fmtUsd } from '../../lib/api';
+    import {
+      apiFetch,
+      captureTokenFromUrl,
+      getToken,
+      NoTokenError,
+      ApiError,
+      fmtUsd,
+    } from '../../lib/api';
 
     interface PerProject {
       projectId: string | null;
@@ -57,166 +126,96 @@ import Dashboard from '../../layouts/Dashboard.astro';
       perModel: PerModel[];
     }
 
-    function section(title: string): HTMLElement {
-      return el('h3', { style: 'margin-top: 1.5rem;' }, title);
-    }
+    const showError = (message: string): void => {
+      const err = document.getElementById('error');
+      if (err === null) return;
+      err.textContent = message;
+      err.hidden = false;
+    };
 
-    function render(resp: SpendResp, mount: HTMLElement): void {
-      // Per-project
-      mount.appendChild(section(`Per project (${String(resp.perProject.length)})`));
-      if (resp.perProject.length === 0) {
-        mount.appendChild(el('p', { class: 'empty' }, 'No spend recorded.'));
-      } else {
-        const tbl = el(
-          'table',
-          {},
-          el(
-            'thead',
-            {},
-            el(
-              'tr',
-              {},
-              el('th', {}, 'Project'),
-              el('th', {}, 'Directives'),
-              el('th', {}, 'Calls'),
-              el('th', {}, 'Total'),
-            ),
-          ),
-        );
-        const tb = el('tbody', {});
-        for (const p of resp.perProject) {
-          tb.appendChild(
-            el(
-              'tr',
-              {},
-              el('td', {}, p.display),
-              el('td', { class: 'num' }, String(p.directiveCount)),
-              el('td', { class: 'num' }, String(p.callCount)),
-              el('td', { class: 'num' }, fmtUsd(p.totalUsd)),
-            ),
-          );
-        }
-        tbl.appendChild(tb);
-        mount.appendChild(tbl);
+    const fillTable = <T,>(
+      tableId: string,
+      countId: string,
+      rows: T[],
+      buildRow: (item: T) => HTMLTableRowElement,
+    ): void => {
+      const countEl = document.getElementById(countId);
+      if (countEl !== null) countEl.textContent = String(rows.length);
+      const tbody = document.querySelector(`#${tableId} tbody`);
+      if (tbody === null) return;
+      tbody.innerHTML = '';
+      if (rows.length === 0) {
+        const colCount = document.querySelectorAll(`#${tableId} thead th`).length;
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = colCount;
+        td.className = 'empty';
+        td.textContent = tableId === 'spend-perproject' ? 'No spend recorded.' : 'None.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
       }
+      for (const r of rows) tbody.appendChild(buildRow(r));
+    };
 
-      // Per day
-      mount.appendChild(section(`Per day (${String(resp.perDay.length)})`));
-      if (resp.perDay.length > 0) {
-        const tbl = el(
-          'table',
-          {},
-          el(
-            'thead',
-            {},
-            el('tr', {}, el('th', {}, 'Date'), el('th', {}, 'Calls'), el('th', {}, 'Total')),
-          ),
-        );
-        const tb = el('tbody', {});
-        for (const d of resp.perDay) {
-          tb.appendChild(
-            el(
-              'tr',
-              {},
-              el('td', {}, d.date),
-              el('td', { class: 'num' }, String(d.callCount)),
-              el('td', { class: 'num' }, fmtUsd(d.totalUsd)),
-            ),
-          );
-        }
-        tbl.appendChild(tb);
-        mount.appendChild(tbl);
-      }
+    const td = (text: string, numeric = false): HTMLTableCellElement => {
+      const e = document.createElement('td');
+      e.textContent = text;
+      if (numeric) e.className = 'num';
+      return e;
+    };
 
-      // Per model
-      mount.appendChild(section(`Per model (${String(resp.perModel.length)})`));
-      if (resp.perModel.length > 0) {
-        const tbl = el(
-          'table',
-          {},
-          el(
-            'thead',
-            {},
-            el(
-              'tr',
-              {},
-              el('th', {}, 'Provider'),
-              el('th', {}, 'Model'),
-              el('th', {}, 'Calls'),
-              el('th', {}, 'Total'),
-            ),
-          ),
-        );
-        const tb = el('tbody', {});
-        for (const m of resp.perModel) {
-          tb.appendChild(
-            el(
-              'tr',
-              {},
-              el('td', {}, m.provider),
-              el('td', {}, m.model),
-              el('td', { class: 'num' }, String(m.callCount)),
-              el('td', { class: 'num' }, fmtUsd(m.totalUsd)),
-            ),
-          );
-        }
-        tbl.appendChild(tb);
-        mount.appendChild(tbl);
-      }
+    const renderSpend = (resp: SpendResp): void => {
+      fillTable<PerProject>('spend-perproject', 'spend-perproject-count', resp.perProject, (p) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(td(p.display));
+        tr.appendChild(td(String(p.directiveCount), true));
+        tr.appendChild(td(String(p.callCount), true));
+        tr.appendChild(td(fmtUsd(p.totalUsd), true));
+        return tr;
+      });
 
-      // Per directive
-      mount.appendChild(section(`Per directive (${String(resp.perDirective.length)})`));
-      if (resp.perDirective.length > 0) {
-        const tbl = el(
-          'table',
-          {},
-          el(
-            'thead',
-            {},
-            el(
-              'tr',
-              {},
-              el('th', {}, 'Directive'),
-              el('th', {}, 'Project'),
-              el('th', {}, 'First'),
-              el('th', {}, 'Last'),
-              el('th', {}, 'Calls'),
-              el('th', {}, 'Total'),
-            ),
-          ),
-        );
-        const tb = el('tbody', {});
-        for (const d of resp.perDirective) {
-          tb.appendChild(
-            el(
-              'tr',
-              {},
-              el(
-                'td',
-                {},
-                el(
-                  'a',
-                  {
-                    href: `/app/directives/detail?id=${encodeURIComponent(d.directiveId)}`,
-                    class: 'link',
-                  },
-                  d.directiveId.slice(-8),
-                ),
-              ),
-              el('td', {}, d.projectName ?? ''),
-              el('td', {}, d.firstCalledAt.slice(0, 19).replace('T', ' ')),
-              el('td', {}, d.lastCalledAt.slice(0, 19).replace('T', ' ')),
-              el('td', { class: 'num' }, String(d.callCount)),
-              el('td', { class: 'num' }, fmtUsd(d.totalUsd)),
-            ),
-          );
-        }
-        tbl.appendChild(tb);
-        mount.appendChild(tbl);
-      }
-    }
+      fillTable<PerDay>('spend-perday', 'spend-perday-count', resp.perDay, (d) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(td(d.date));
+        tr.appendChild(td(String(d.callCount), true));
+        tr.appendChild(td(fmtUsd(d.totalUsd), true));
+        return tr;
+      });
 
-    function mountPath(): string {
+      fillTable<PerModel>('spend-permodel', 'spend-permodel-count', resp.perModel, (m) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(td(m.provider));
+        tr.appendChild(td(m.model));
+        tr.appendChild(td(String(m.callCount), true));
+        tr.appendChild(td(fmtUsd(m.totalUsd), true));
+        return tr;
+      });
+
+      fillTable<PerDirective>(
+        'spend-perdirective',
+        'spend-perdirective-count',
+        resp.perDirective,
+        (d) => {
+          const tr = document.createElement('tr');
+          const dirTd = document.createElement('td');
+          const a = document.createElement('a');
+          a.href = `/app/directives/detail?id=${encodeURIComponent(d.directiveId)}`;
+          a.className = 'link';
+          a.textContent = d.directiveId.slice(-8);
+          dirTd.appendChild(a);
+          tr.appendChild(dirTd);
+          tr.appendChild(td(d.projectName ?? ''));
+          tr.appendChild(td(d.firstCalledAt.slice(0, 19).replace('T', ' ')));
+          tr.appendChild(td(d.lastCalledAt.slice(0, 19).replace('T', ' ')));
+          tr.appendChild(td(String(d.callCount), true));
+          tr.appendChild(td(fmtUsd(d.totalUsd), true));
+          return tr;
+        },
+      );
+    };
+
+    const mountPath = (): string => {
       const params = new URLSearchParams(window.location.search);
       const qs: string[] = [];
       for (const key of ['since', 'until', 'projectId']) {
@@ -224,11 +223,27 @@ import Dashboard from '../../layouts/Dashboard.astro';
         if (v !== null && v.length > 0) qs.push(`${key}=${encodeURIComponent(v)}`);
       }
       return `/api/v1/spend${qs.length > 0 ? '?' + qs.join('&') : ''}`;
-    }
+    };
 
-    const mount = document.getElementById('mount');
-    if (mount === null) throw new Error('mount missing');
-    loadInto<SpendResp>(mount, mountPath(), render);
+    captureTokenFromUrl();
+
+    if (getToken() === null) {
+      showError('No UI token present. Reopen the URL logged by factoryd.');
+    } else {
+      apiFetch<SpendResp>(mountPath())
+        .then(renderSpend)
+        .catch((err: unknown) => {
+          if (err instanceof NoTokenError) {
+            showError(err.message);
+          } else if (err instanceof ApiError) {
+            showError(`API error ${String(err.status)} (${err.code}): ${err.message}`);
+          } else if (err instanceof Error) {
+            showError(`Fetch failed: ${err.message}`);
+          } else {
+            showError('Unknown error');
+          }
+        });
+    }
 
     const form = document.getElementById('filter') as HTMLFormElement | null;
     if (form !== null) {
@@ -245,7 +260,8 @@ import Dashboard from '../../layouts/Dashboard.astro';
           const v = String(sd.get(key) ?? '');
           if (v.length > 0) nextParams.set(key, v);
         }
-        window.location.search = nextParams.toString().length > 0 ? `?${nextParams.toString()}` : '';
+        window.location.search =
+          nextParams.toString().length > 0 ? `?${nextParams.toString()}` : '';
       });
     }
   </script>
