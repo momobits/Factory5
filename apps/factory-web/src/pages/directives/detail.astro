@@ -6,7 +6,16 @@ import Dashboard from '../../layouts/Dashboard.astro';
   <div id="mount">Loading…</div>
 
   <script>
-    import { loadInto, el, fmtUsd } from '../../lib/api';
+    import {
+      apiFetch,
+      apiStream,
+      el,
+      fmtUsd,
+      NoTokenError,
+      ApiError,
+      type StreamConnectionState,
+    } from '../../lib/api';
+    import type { DirectiveStreamEvent } from '@factory5/ipc/sse';
 
     interface InflightTask {
       id: string;
@@ -40,108 +49,632 @@ import Dashboard from '../../layouts/Dashboard.astro';
       };
     }
 
-    function render(d: Detail, mount: HTMLElement): void {
-      const dt = d.directive;
-      mount.appendChild(el('h3', {}, `${dt.intent} — ${dt.status}`));
-      mount.appendChild(
-        el(
-          'p',
-          {},
-          el('strong', {}, 'Id: '),
-          dt.id,
-          el('br'),
-          el('strong', {}, 'Created: '),
-          dt.createdAt.replace('T', ' ').slice(0, 19),
-          el('br'),
-          el('strong', {}, 'Source: '),
-          `${dt.source} — ${dt.principal}`,
-          el('br'),
-          el('strong', {}, 'Autonomy: '),
-          dt.autonomy,
-        ),
-      );
-      if (dt.blockedReason !== undefined) {
-        mount.appendChild(el('p', { class: 'err' }, `Blocked: ${dt.blockedReason}`));
+    interface LogLine {
+      ts: string;
+      level: string;
+      component: string;
+      msg: string;
+    }
+
+    // ----- mount + state ----------------------------------------------------
+
+    const mountEl = document.getElementById('mount');
+    if (mountEl === null) throw new Error('mount missing');
+    const mount: HTMLElement = mountEl;
+    const id = new URLSearchParams(window.location.search).get('id');
+    if (id === null || id.length === 0) {
+      mount.textContent = 'Missing ?id=<directiveId> in URL.';
+      throw new Error('missing id');
+    }
+    const directiveId: string = id;
+
+    interface PageState {
+      directive: Directive | null;
+      tasks: Map<string, InflightTask>;
+      openQuestions: PendingQuestion[];
+      modelUsage: { totalCostUsd: number; callCount: number };
+      logLines: LogLine[];
+      connection: StreamConnectionState;
+      finalStatus: string | null;
+      finalBlockedReason: string | null;
+    }
+
+    const state: PageState = {
+      directive: null,
+      tasks: new Map(),
+      openQuestions: [],
+      modelUsage: { totalCostUsd: 0, callCount: 0 },
+      logLines: [],
+      connection: 'connecting',
+      finalStatus: null,
+      finalBlockedReason: null,
+    };
+
+    // Auto-scroll-pin tracking for log tail.
+    let logTailPaused = false;
+
+    // ----- render helpers ---------------------------------------------------
+
+    function tsLabel(iso: string | undefined): string {
+      if (iso === undefined) return '';
+      return iso.replace('T', ' ').slice(0, 19);
+    }
+
+    function pipLabel(s: StreamConnectionState): string {
+      switch (s) {
+        case 'connecting':
+          return 'Connecting';
+        case 'live':
+          return 'Live';
+        case 'reconnecting':
+          return 'Reconnecting';
+        case 'polling':
+          return 'Polling fallback';
+        case 'disconnected':
+          return 'Disconnected';
+        case 'completed':
+          return 'Completed';
       }
-      mount.appendChild(
+    }
+
+    function effectiveStatus(): string {
+      if (state.finalStatus !== null) return state.finalStatus;
+      return state.directive?.status ?? '…';
+    }
+
+    function effectiveBlockedReason(): string | null {
+      if (state.finalBlockedReason !== null) return state.finalBlockedReason;
+      return state.directive?.blockedReason ?? null;
+    }
+
+    function buildHeader(): HTMLElement {
+      const dt = state.directive;
+      const status = effectiveStatus();
+      const intent = dt?.intent ?? directiveId;
+
+      const heading = el('div', { class: 'detail-header' });
+
+      const titleRow = el('div', { class: 'detail-title-row' });
+      titleRow.appendChild(el('h3', { class: 'detail-title' }, `${intent} — ${status}`));
+      titleRow.appendChild(buildPip());
+      heading.appendChild(titleRow);
+
+      if (dt !== null) {
+        heading.appendChild(
+          el(
+            'p',
+            {},
+            el('strong', {}, 'Id: '),
+            dt.id,
+            el('br'),
+            el('strong', {}, 'Created: '),
+            tsLabel(dt.createdAt),
+            el('br'),
+            el('strong', {}, 'Source: '),
+            `${dt.source} — ${dt.principal}`,
+            el('br'),
+            el('strong', {}, 'Autonomy: '),
+            dt.autonomy,
+          ),
+        );
+      }
+
+      const blocked = effectiveBlockedReason();
+      if (blocked !== null) {
+        heading.appendChild(el('p', { class: 'err' }, `Blocked: ${blocked}`));
+      }
+
+      heading.appendChild(
         el(
           'p',
           {},
           el('strong', {}, 'Spend: '),
-          `${fmtUsd(d.timeline.modelUsage.totalCostUsd)} across ${String(d.timeline.modelUsage.callCount)} calls`,
+          `${fmtUsd(state.modelUsage.totalCostUsd)} across ${String(state.modelUsage.callCount)} calls`,
         ),
       );
 
-      mount.appendChild(el('h3', {}, `Open questions (${String(d.timeline.openQuestions.length)})`));
-      if (d.timeline.openQuestions.length === 0) {
-        mount.appendChild(el('p', { class: 'empty' }, 'None'));
-      } else {
-        const ul = el('ul', {});
-        for (const q of d.timeline.openQuestions) {
-          ul.appendChild(
-            el(
-              'li',
-              {},
-              el(
-                'a',
-                { href: `/app/questions/detail?id=${encodeURIComponent(q.id)}`, class: 'link' },
-                q.question,
-              ),
-            ),
-          );
-        }
-        mount.appendChild(ul);
-      }
+      return heading;
+    }
 
-      mount.appendChild(el('h3', {}, `Tasks (${String(d.timeline.tasks.length)})`));
-      if (d.timeline.tasks.length === 0) {
-        mount.appendChild(el('p', { class: 'empty' }, 'None'));
-      } else {
-        const table = el(
-          'table',
-          {},
+    function buildPip(): HTMLElement {
+      const pip = el('span', { class: `live-pip live-pip--${state.connection}` });
+      pip.appendChild(el('span', { class: 'live-pip-dot' }));
+      pip.appendChild(el('span', { class: 'live-pip-label' }, pipLabel(state.connection)));
+      return pip;
+    }
+
+    function buildOpenQuestions(): HTMLElement {
+      const wrap = el('section', {});
+      wrap.appendChild(el('h3', {}, `Open questions (${String(state.openQuestions.length)})`));
+      if (state.openQuestions.length === 0) {
+        wrap.appendChild(el('p', { class: 'empty' }, 'None'));
+        return wrap;
+      }
+      const ul = el('ul', {});
+      for (const q of state.openQuestions) {
+        ul.appendChild(
           el(
-            'thead',
+            'li',
             {},
             el(
-              'tr',
-              {},
-              el('th', {}, 'Id'),
-              el('th', {}, 'Title'),
-              el('th', {}, 'Agent'),
-              el('th', {}, 'Status'),
-              el('th', {}, 'Started'),
-              el('th', {}, 'Finished'),
+              'a',
+              { href: `/app/questions/detail?id=${encodeURIComponent(q.id)}`, class: 'link' },
+              q.question,
             ),
           ),
         );
-        const tbody = el('tbody', {});
-        for (const t of d.timeline.tasks) {
-          tbody.appendChild(
+      }
+      wrap.appendChild(ul);
+      return wrap;
+    }
+
+    function buildTasks(): HTMLElement {
+      const wrap = el('section', {});
+      const tasks = Array.from(state.tasks.values()).sort((a, b) => {
+        const aStart = a.startedAt ?? '';
+        const bStart = b.startedAt ?? '';
+        return aStart.localeCompare(bStart);
+      });
+      wrap.appendChild(el('h3', {}, `Tasks (${String(tasks.length)})`));
+      if (tasks.length === 0) {
+        wrap.appendChild(el('p', { class: 'empty' }, 'None'));
+        return wrap;
+      }
+      const table = el(
+        'table',
+        {},
+        el(
+          'thead',
+          {},
+          el(
+            'tr',
+            {},
+            el('th', {}, 'Id'),
+            el('th', {}, 'Title'),
+            el('th', {}, 'Agent'),
+            el('th', {}, 'Status'),
+            el('th', {}, 'Started'),
+            el('th', {}, 'Finished'),
+          ),
+        ),
+      );
+      const tbody = el('tbody', {});
+      for (const t of tasks) {
+        tbody.appendChild(
+          el(
+            'tr',
+            {},
+            el('td', {}, t.id.slice(-8)),
+            el('td', {}, t.title),
+            el('td', {}, `${t.agent} (${t.category})`),
+            el('td', {}, t.status),
+            el('td', {}, tsLabel(t.startedAt)),
+            el('td', {}, tsLabel(t.finishedAt)),
+          ),
+        );
+      }
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      return wrap;
+    }
+
+    function buildLogTail(): HTMLElement | null {
+      // Only render the panel after the first log line arrives — log.line
+      // emission is wired progressively (deferred slice of 3.1); rendering
+      // a permanently-empty panel would mislead the operator.
+      if (state.logLines.length === 0) return null;
+      const wrap = el('section', { class: 'log-tail' });
+      const header = el(
+        'div',
+        { class: 'log-tail-header' },
+        el('strong', {}, 'Live log'),
+        el('span', { class: 'log-tail-count' }, `${String(state.logLines.length)} lines`),
+      );
+      const body = el('div', { class: 'log-tail-body' });
+      for (const line of state.logLines) {
+        body.appendChild(
+          el(
+            'div',
+            { class: 'log-line' },
+            el('span', { class: 'log-ts' }, tsLabel(line.ts)),
+            el('span', { class: `log-level log-level-${line.level}` }, line.level),
             el(
-              'tr',
-              {},
-              el('td', {}, t.id.slice(-8)),
-              el('td', {}, t.title),
-              el('td', {}, `${t.agent} (${t.category})`),
-              el('td', {}, t.status),
-              el('td', {}, t.startedAt?.slice(0, 19).replace('T', ' ') ?? ''),
-              el('td', {}, t.finishedAt?.slice(0, 19).replace('T', ' ') ?? ''),
+              'span',
+              { class: 'log-component' },
+              line.component,
             ),
-          );
+            el('span', { class: 'log-msg' }, line.msg),
+          ),
+        );
+      }
+      const resume = el('button', { class: 'resume-btn', type: 'button' }, 'Resume tailing');
+      resume.addEventListener('click', () => {
+        logTailPaused = false;
+        wrap.classList.remove('paused');
+        body.scrollTop = body.scrollHeight;
+      });
+      wrap.appendChild(header);
+      wrap.appendChild(body);
+      wrap.appendChild(resume);
+      // Track user scroll: pin to bottom by default, pause when user scrolls up.
+      body.addEventListener('scroll', () => {
+        const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 4;
+        if (atBottom) {
+          logTailPaused = false;
+          wrap.classList.remove('paused');
+        } else {
+          logTailPaused = true;
+          wrap.classList.add('paused');
         }
-        table.appendChild(tbody);
-        mount.appendChild(table);
+      });
+      // Apply initial pin / pause state after the panel is in the DOM.
+      queueMicrotask(() => {
+        if (!logTailPaused) {
+          body.scrollTop = body.scrollHeight;
+        } else {
+          wrap.classList.add('paused');
+        }
+      });
+      return wrap;
+    }
+
+    function render(): void {
+      mount.innerHTML = '';
+      mount.appendChild(buildHeader());
+      mount.appendChild(buildOpenQuestions());
+      mount.appendChild(buildTasks());
+      const tail = buildLogTail();
+      if (tail !== null) mount.appendChild(tail);
+    }
+
+    // ----- snapshot apply (initial fetch + polling fallback) ----------------
+
+    function applySnapshot(detail: Detail): void {
+      state.directive = detail.directive;
+      // Merge existing live-event state with the snapshot — live events are
+      // authoritative for tasks they have already touched (start/end times),
+      // so prefer the existing Map entry when present and only insert from
+      // the snapshot when missing. This avoids overwriting a finer-grained
+      // `task.completed` state with a stale `running` snapshot row from a
+      // brief polling-fallback window.
+      for (const t of detail.timeline.tasks) {
+        if (!state.tasks.has(t.id)) {
+          state.tasks.set(t.id, t);
+        }
+      }
+      state.openQuestions = detail.timeline.openQuestions;
+      state.modelUsage = detail.timeline.modelUsage;
+      // Snapshot has no log tail data — leave state.logLines untouched.
+    }
+
+    // ----- live event apply --------------------------------------------------
+
+    function applyEvent(ev: DirectiveStreamEvent): void {
+      switch (ev.type) {
+        case 'task.started': {
+          const existing = state.tasks.get(ev.taskId);
+          state.tasks.set(ev.taskId, {
+            id: ev.taskId,
+            title: ev.title,
+            agent: ev.agent,
+            category: ev.category,
+            status: existing?.status ?? 'running',
+            startedAt: ev.startedAt,
+            ...(existing?.finishedAt !== undefined ? { finishedAt: existing.finishedAt } : {}),
+          });
+          break;
+        }
+        case 'task.completed': {
+          const existing = state.tasks.get(ev.taskId);
+          if (existing === undefined) {
+            // Live-only task we never saw start (rare; race window). Insert
+            // a partial row so the table reflects its terminal state.
+            state.tasks.set(ev.taskId, {
+              id: ev.taskId,
+              title: '',
+              agent: '',
+              category: '',
+              status: ev.status,
+              finishedAt: ev.finishedAt,
+            });
+          } else {
+            state.tasks.set(ev.taskId, {
+              ...existing,
+              status: ev.status,
+              finishedAt: ev.finishedAt,
+            });
+          }
+          break;
+        }
+        case 'finding.created': {
+          // Wired but emission deferred — re-render is the only effect today.
+          // 3.x will surface findings inline on the page.
+          break;
+        }
+        case 'spend.updated': {
+          state.modelUsage = {
+            totalCostUsd: ev.totalCostUsd,
+            callCount: ev.callCount,
+          };
+          break;
+        }
+        case 'log.line': {
+          state.logLines.push({
+            ts: ev.ts,
+            level: ev.level,
+            component: ev.component,
+            msg: ev.msg,
+          });
+          // Cap memory: keep the last 500 lines.
+          if (state.logLines.length > 500) {
+            state.logLines.splice(0, state.logLines.length - 500);
+          }
+          break;
+        }
+        case 'directive.completed': {
+          state.finalStatus = ev.status;
+          state.finalBlockedReason = ev.blockedReason;
+          break;
+        }
       }
     }
 
-    const mount = document.getElementById('mount');
-    if (mount === null) throw new Error('mount missing');
-    const id = new URLSearchParams(window.location.search).get('id');
-    if (id === null || id.length === 0) {
-      mount.textContent = 'Missing ?id=<directiveId> in URL.';
-    } else {
-      loadInto<Detail>(mount, `/api/v1/directives/${encodeURIComponent(id)}`, render);
+    // ----- bootstrap ---------------------------------------------------------
+
+    async function pollOnce(): Promise<void> {
+      try {
+        const detail = await apiFetch<Detail>(
+          `/api/v1/directives/${encodeURIComponent(directiveId)}`,
+        );
+        applySnapshot(detail);
+        // Synthesize a directive.completed-equivalent state if the snapshot
+        // shows a terminal directive — keeps the page consistent if the
+        // EventSource was lost before directive.completed could land.
+        if (
+          state.finalStatus === null &&
+          (detail.directive.status === 'complete' ||
+            detail.directive.status === 'failed' ||
+            detail.directive.status === 'blocked')
+        ) {
+          state.finalStatus = detail.directive.status;
+          state.finalBlockedReason = detail.directive.blockedReason ?? null;
+        }
+        render();
+      } catch (err: unknown) {
+        // Surface only if the page hasn't rendered yet; otherwise keep the
+        // last-good DOM and let the next poll succeed.
+        if (state.directive === null) {
+          showFatalError(err);
+        }
+      }
     }
+
+    function showFatalError(err: unknown): void {
+      mount.innerHTML = '';
+      if (err instanceof NoTokenError) {
+        mount.textContent = err.message;
+      } else if (err instanceof ApiError) {
+        const pre = document.createElement('pre');
+        pre.className = 'err';
+        pre.textContent = `API error ${String(err.status)} (${err.code}): ${err.message}`;
+        mount.appendChild(pre);
+      } else if (err instanceof Error) {
+        mount.textContent = `Fetch failed: ${err.message}`;
+      } else {
+        mount.textContent = 'Unknown error';
+      }
+    }
+
+    async function bootstrap(): Promise<void> {
+      // 1. Initial snapshot for static directive metadata + non-streamed
+      //    fields (open questions, existing tasks). The SSE backfill on
+      //    connect repeats task.* and spend events — applySnapshot's
+      //    merge-don't-clobber rule keeps us coherent.
+      try {
+        const initial = await apiFetch<Detail>(
+          `/api/v1/directives/${encodeURIComponent(directiveId)}`,
+        );
+        applySnapshot(initial);
+        render();
+      } catch (err: unknown) {
+        showFatalError(err);
+        return;
+      }
+
+      // 2. Subscribe to the live stream. apiStream handles token-auth,
+      //    Zod validation, reconnect, and degrades to pollOnce() every
+      //    5 s if the EventSource gives up retrying.
+      apiStream(`/api/v1/directives/${encodeURIComponent(directiveId)}/stream`, {
+        onEvent: (ev) => {
+          applyEvent(ev);
+          render();
+          // After re-render, keep log tail pinned to bottom unless user paused.
+          const body = mount.querySelector<HTMLElement>('.log-tail-body');
+          if (body !== null && !logTailPaused) {
+            body.scrollTop = body.scrollHeight;
+          }
+        },
+        onConnectionState: (next) => {
+          state.connection = next;
+          // Light-touch re-render: only the pip changes — but the pip lives
+          // in the header, so a full render is cheaper than a targeted DOM
+          // poke and stays consistent with the rest of the page state.
+          render();
+        },
+        onParseError: (raw, err) => {
+          // Non-fatal — log to console for debugging; the page keeps
+          // running on previously-applied state.
+          console.warn('[stream] parse error', { raw, err });
+        },
+        pollingFallback: pollOnce,
+      });
+    }
+
+    void bootstrap();
   </script>
+
+  <style>
+    .detail-header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-bottom: 1rem;
+    }
+    .detail-title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .detail-title {
+      margin: 0;
+    }
+
+    .live-pip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+      background: color-mix(in srgb, currentColor 4%, transparent);
+      line-height: 1;
+    }
+    .live-pip-dot {
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+    .live-pip--connecting,
+    .live-pip--reconnecting {
+      color: #b87b1a;
+    }
+    .live-pip--reconnecting .live-pip-dot,
+    .live-pip--connecting .live-pip-dot {
+      animation: live-pip-blink 0.9s ease-in-out infinite;
+    }
+    .live-pip--live {
+      color: #22824d;
+    }
+    .live-pip--live .live-pip-dot {
+      animation: live-pip-pulse 1.6s ease-in-out infinite;
+    }
+    .live-pip--polling,
+    .live-pip--disconnected {
+      color: color-mix(in srgb, currentColor 55%, transparent);
+    }
+    .live-pip--completed {
+      color: color-mix(in srgb, currentColor 60%, transparent);
+      border-style: dashed;
+    }
+    @keyframes live-pip-pulse {
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.4;
+        transform: scale(0.7);
+      }
+    }
+    @keyframes live-pip-blink {
+      0%,
+      100% {
+        opacity: 0.35;
+      }
+      50% {
+        opacity: 1;
+      }
+    }
+
+    .log-tail {
+      position: relative;
+      margin-top: 1rem;
+      border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+      border-radius: 5px;
+      overflow: hidden;
+      background: color-mix(in srgb, currentColor 2%, transparent);
+    }
+    .log-tail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+      background: color-mix(in srgb, currentColor 5%, transparent);
+      font-size: 0.85rem;
+    }
+    .log-tail-count {
+      font-variant-numeric: tabular-nums;
+      color: color-mix(in srgb, currentColor 55%, transparent);
+      font-size: 0.8rem;
+    }
+    .log-tail-body {
+      max-height: 18rem;
+      overflow-y: auto;
+      font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 0.78rem;
+      line-height: 1.55;
+      padding: 0.4rem 0.75rem;
+    }
+    .log-line {
+      display: grid;
+      grid-template-columns: auto 3.5rem auto 1fr;
+      gap: 0.6rem;
+      padding: 0.1rem 0;
+      border-bottom: 1px dashed color-mix(in srgb, currentColor 6%, transparent);
+    }
+    .log-line:last-child {
+      border-bottom: none;
+    }
+    .log-ts {
+      color: color-mix(in srgb, currentColor 50%, transparent);
+      font-variant-numeric: tabular-nums;
+    }
+    .log-level {
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+      align-self: center;
+      color: color-mix(in srgb, currentColor 65%, transparent);
+    }
+    .log-level-warn {
+      color: #b87b1a;
+    }
+    .log-level-error,
+    .log-level-fatal {
+      color: #c24;
+    }
+    .log-component {
+      color: color-mix(in srgb, currentColor 60%, transparent);
+    }
+    .log-msg {
+      word-break: break-word;
+    }
+    .resume-btn {
+      display: none;
+      position: absolute;
+      bottom: 0.6rem;
+      right: 0.75rem;
+      font: inherit;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.7rem;
+      border-radius: 3px;
+      border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+      background: Canvas;
+      color: inherit;
+      cursor: pointer;
+      box-shadow: 0 1px 4px color-mix(in srgb, currentColor 12%, transparent);
+    }
+    .log-tail.paused .resume-btn {
+      display: block;
+    }
+  </style>
 </Dashboard>

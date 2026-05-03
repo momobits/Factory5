@@ -75,6 +75,9 @@ importers:
 
   apps/factory-web:
     dependencies:
+      '@factory5/ipc':
+        specifier: workspace:*
+        version: link:../../packages/ipc
       astro:
         specifier: ^5.0.0
         version: 5.18.1(@types/node@20.19.39)(rollup@4.60.2)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
