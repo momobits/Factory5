@@ -9,13 +9,36 @@ import Dashboard from '../../layouts/Dashboard.astro';
     import {
       apiFetch,
       apiStream,
-      el,
       fmtUsd,
       NoTokenError,
       ApiError,
       type StreamConnectionState,
     } from '../../lib/api';
     import type { DirectiveStreamEvent } from '@factory5/ipc/sse';
+
+    // Per-page DOM-builder helper. The live-event render path destroys
+    // and rebuilds the entire mount on every state change (new SSE
+    // event arrives → full re-render of header / tasks / log tail);
+    // a wrapper like this collapses ~3 lines per element to one call.
+    // Other pages migrated to component-driven structures during 3.4 —
+    // this page kept it because <Card>/<Table>/etc. don't model a
+    // stateful streaming surface, and the per-page helper is what
+    // STATE.md's "or a per-page helper if the page genuinely needs a
+    // wrapper" clause exists for.
+    function el(
+      tag: string,
+      attrs: Record<string, string> = {},
+      ...children: (string | Node)[]
+    ): HTMLElement {
+      const e = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) {
+        e.setAttribute(k, v);
+      }
+      for (const c of children) {
+        e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+      }
+      return e;
+    }
 
     interface InflightTask {
       id: string;
