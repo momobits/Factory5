@@ -1,5 +1,6 @@
 ---
 import Dashboard from '../../layouts/Dashboard.astro';
+import Table from '../../components/Table.astro';
 ---
 
 <Dashboard title="Directives">
@@ -23,10 +24,30 @@ import Dashboard from '../../layouts/Dashboard.astro';
     <button type="submit">Apply</button>
   </form>
 
-  <div id="mount">Loading…</div>
+  <p id="error" class="err" hidden></p>
+  <p id="directives-count"></p>
+  <Table
+    id="directives-table"
+    columns={[
+      { key: 'created', label: 'Created' },
+      { key: 'id', label: 'Id' },
+      { key: 'source', label: 'Source' },
+      { key: 'intent', label: 'Intent' },
+      { key: 'status', label: 'Status' },
+      { key: 'autonomy', label: 'Autonomy' },
+    ]}
+    rows={[]}
+    loading
+  />
 
   <script>
-    import { loadInto, el } from '../../lib/api';
+    import {
+      apiFetch,
+      captureTokenFromUrl,
+      getToken,
+      NoTokenError,
+      ApiError,
+    } from '../../lib/api';
 
     interface Directive {
       id: string;
@@ -44,57 +65,68 @@ import Dashboard from '../../layouts/Dashboard.astro';
       offset: number;
     }
 
-    function render(resp: ListResp, mount: HTMLElement): void {
+    const showError = (message: string): void => {
+      const err = document.getElementById('error');
+      if (err === null) return;
+      err.textContent = message;
+      err.hidden = false;
+    };
+
+    const renderDirectives = (resp: ListResp): void => {
+      const tbody = document.querySelector('#directives-table tbody');
+      const countEl = document.getElementById('directives-count');
+      if (tbody === null) return;
+      if (countEl !== null) {
+        countEl.textContent = `${String(resp.items.length)} of ${String(resp.total)} directives`;
+      }
+      tbody.innerHTML = '';
       if (resp.items.length === 0) {
-        mount.appendChild(el('p', { class: 'empty' }, 'No directives match.'));
+        const colCount = document.querySelectorAll('#directives-table thead th').length;
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = colCount;
+        td.className = 'empty';
+        td.textContent = 'No directives match.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
         return;
       }
-      mount.appendChild(
-        el('p', {}, `${String(resp.items.length)} of ${String(resp.total)} directives`),
-      );
-      const table = el(
-        'table',
-        {},
-        el(
-          'thead',
-          {},
-          el(
-            'tr',
-            {},
-            el('th', {}, 'Created'),
-            el('th', {}, 'Id'),
-            el('th', {}, 'Source'),
-            el('th', {}, 'Intent'),
-            el('th', {}, 'Status'),
-            el('th', {}, 'Autonomy'),
-          ),
-        ),
-      );
-      const tbody = el('tbody', {});
       for (const d of resp.items) {
-        const idLink = el(
-          'a',
-          { href: `/app/directives/detail?id=${encodeURIComponent(d.id)}`, class: 'link' },
-          d.id.slice(-8),
-        );
-        tbody.appendChild(
-          el(
-            'tr',
-            {},
-            el('td', {}, d.createdAt.slice(0, 19).replace('T', ' ')),
-            el('td', {}, idLink),
-            el('td', {}, d.source),
-            el('td', {}, d.intent),
-            el('td', {}, d.status),
-            el('td', {}, d.autonomy),
-          ),
-        );
-      }
-      table.appendChild(tbody);
-      mount.appendChild(table);
-    }
+        const tr = document.createElement('tr');
 
-    function mountPath(): string {
+        const createdTd = document.createElement('td');
+        createdTd.textContent = d.createdAt.slice(0, 19).replace('T', ' ');
+        tr.appendChild(createdTd);
+
+        const idTd = document.createElement('td');
+        const idA = document.createElement('a');
+        idA.href = `/app/directives/detail?id=${encodeURIComponent(d.id)}`;
+        idA.className = 'link';
+        idA.textContent = d.id.slice(-8);
+        idTd.appendChild(idA);
+        tr.appendChild(idTd);
+
+        const sourceTd = document.createElement('td');
+        sourceTd.textContent = d.source;
+        tr.appendChild(sourceTd);
+
+        const intentTd = document.createElement('td');
+        intentTd.textContent = d.intent;
+        tr.appendChild(intentTd);
+
+        const statusTd = document.createElement('td');
+        statusTd.textContent = d.status;
+        tr.appendChild(statusTd);
+
+        const autonomyTd = document.createElement('td');
+        autonomyTd.textContent = d.autonomy;
+        tr.appendChild(autonomyTd);
+
+        tbody.appendChild(tr);
+      }
+    };
+
+    const mountPath = (): string => {
       const params = new URLSearchParams(window.location.search);
       const status = params.get('status') ?? '';
       const limit = params.get('limit') ?? '50';
@@ -102,11 +134,27 @@ import Dashboard from '../../layouts/Dashboard.astro';
       qs.push(`limit=${encodeURIComponent(limit)}`);
       if (status.length > 0) qs.push(`status=${encodeURIComponent(status)}`);
       return `/api/v1/directives?${qs.join('&')}`;
-    }
+    };
 
-    const mount = document.getElementById('mount');
-    if (mount === null) throw new Error('mount missing');
-    loadInto<ListResp>(mount, mountPath(), render);
+    captureTokenFromUrl();
+
+    if (getToken() === null) {
+      showError('No UI token present. Reopen the URL logged by factoryd.');
+    } else {
+      apiFetch<ListResp>(mountPath())
+        .then(renderDirectives)
+        .catch((err: unknown) => {
+          if (err instanceof NoTokenError) {
+            showError(err.message);
+          } else if (err instanceof ApiError) {
+            showError(`API error ${String(err.status)} (${err.code}): ${err.message}`);
+          } else if (err instanceof Error) {
+            showError(`Fetch failed: ${err.message}`);
+          } else {
+            showError('Unknown error');
+          }
+        });
+    }
 
     const form = document.getElementById('filter') as HTMLFormElement | null;
     if (form !== null) {

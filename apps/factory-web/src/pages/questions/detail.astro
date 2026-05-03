@@ -1,9 +1,59 @@
 ---
 import Dashboard from '../../layouts/Dashboard.astro';
+import Form from '../../components/Form.astro';
+import Field from '../../components/Field.astro';
+import Submit from '../../components/Submit.astro';
+import Alert from '../../components/Alert.astro';
 ---
 
 <Dashboard title="Question detail">
-  <div id="mount">Loading…</div>
+  <div id="topErrorSlot" hidden>
+    <Alert kind="conflict" title="" body="" />
+  </div>
+
+  <p id="loading" style="color: color-mix(in srgb, currentColor 65%, transparent);">Loading…</p>
+
+  <div id="content" hidden>
+    <p id="question-text" style="font-size: 1.1rem; margin-top: 0;"></p>
+
+    <div id="form-success-slot" style="margin-bottom: 1rem;" hidden>
+      <Alert
+        kind="success"
+        title="Answered"
+        body="The waiting worker (if any) will resume on its next poll."
+      />
+    </div>
+    <div id="form-error-slot" style="margin-bottom: 1rem;" hidden>
+      <Alert kind="conflict" title="" body="" />
+    </div>
+
+    <table id="question-meta">
+      <tbody></tbody>
+    </table>
+
+    <div id="answer-form-wrapper" hidden style="margin-top: 2rem;">
+      <h3 style="margin: 0 0 0.5rem 0;">Answer</h3>
+      <p
+        style="font-size: 0.8rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: 0 0 1rem 0; max-width: 36rem;"
+      >
+        Posts through the same path Discord and Telegram inbound take. The first answer wins;
+        conflicting later answers return 409 with the original preserved.
+      </p>
+
+      <Form id="answer-form">
+        <Field name="answer" label="Answer text" type="textarea" required />
+        <p
+          id="suggested-answers"
+          style="font-size: 0.8rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: 0;"
+          hidden
+        >
+        </p>
+        <div class="form-actions">
+          <Submit label="Submit answer" id="answer-submit" />
+        </div>
+      </Form>
+    </div>
+  </div>
 
   <script>
     import {
@@ -12,7 +62,6 @@ import Dashboard from '../../layouts/Dashboard.astro';
       apiFetch,
       apiPost,
       captureTokenFromUrl,
-      el,
       getToken,
     } from '../../lib/api';
 
@@ -36,261 +85,22 @@ import Dashboard from '../../layouts/Dashboard.astro';
       question: PendingQuestion;
     }
 
-    captureTokenFromUrl();
+    const setAlertText = (slotId: string, title: string, body: string): void => {
+      const slot = document.getElementById(slotId);
+      if (slot === null) return;
+      const titleEl = slot.querySelector('h4');
+      const bodyEl = slot.querySelector('p');
+      if (titleEl !== null) titleEl.textContent = title;
+      if (bodyEl !== null) bodyEl.textContent = body;
+      slot.hidden = false;
+    };
 
-    const mount = document.getElementById('mount');
-    if (mount === null) throw new Error('mount missing');
-    const id = new URLSearchParams(window.location.search).get('id');
+    const hideAlert = (slotId: string): void => {
+      const slot = document.getElementById(slotId);
+      if (slot !== null) slot.hidden = true;
+    };
 
-    if (id === null || id.length === 0) {
-      mount.textContent = 'Missing ?id=<questionId> in URL.';
-    } else if (getToken() === null) {
-      mount.textContent = 'No UI token present. Reopen the URL logged by factoryd.';
-    } else {
-      load(id, mount);
-    }
-
-    function load(qid: string, host: HTMLElement): void {
-      host.textContent = 'Loading…';
-      apiFetch<DetailResp>(`/api/v1/pending-questions/${encodeURIComponent(qid)}`)
-        .then((resp) => render(resp, host))
-        .catch((err: unknown) => renderTopError(err, host));
-    }
-
-    function render(resp: DetailResp, host: HTMLElement): void {
-      host.innerHTML = '';
-      const q = resp.question;
-
-      host.appendChild(el('p', { style: 'font-size: 1.1rem; margin-top: 0;' }, q.question));
-
-      const meta = el('table', {});
-      const tbody = el('tbody', {});
-      const row = (k: string, v: string | HTMLElement): HTMLElement =>
-        el('tr', {}, el('td', {}, el('strong', {}, k)), el('td', {}, v));
-      tbody.appendChild(row('Id', q.id));
-      tbody.appendChild(
-        row(
-          'Directive',
-          el(
-            'a',
-            {
-              href: `/app/directives/detail?id=${encodeURIComponent(q.directiveId)}`,
-              class: 'link',
-            },
-            q.directiveId,
-          ),
-        ),
-      );
-      if (q.taskId !== undefined) tbody.appendChild(row('Task', q.taskId));
-      tbody.appendChild(row('Channel', `${q.channel} (${q.channelRef})`));
-      tbody.appendChild(row('Created', q.createdAt.replace('T', ' ').slice(0, 19)));
-      if (q.deadlineAt !== undefined)
-        tbody.appendChild(row('Deadline', q.deadlineAt.replace('T', ' ').slice(0, 19)));
-      if (q.options !== undefined && q.options.length > 0)
-        tbody.appendChild(row('Options', q.options.join(', ')));
-      tbody.appendChild(
-        row('Status', q.answeredAt !== undefined ? `Answered at ${q.answeredAt}` : 'Open'),
-      );
-      if (q.answer !== undefined) tbody.appendChild(row('Answer', q.answer));
-      meta.appendChild(tbody);
-      host.appendChild(meta);
-
-      // Mutation surface (ADR 0027 §1) — render the answer form only while the
-      // question is still open. Once answered, the table above already shows
-      // the recorded answer and the form is no longer relevant.
-      if (q.answeredAt === undefined) {
-        host.appendChild(renderAnswerForm(q, host));
-      }
-    }
-
-    function renderAnswerForm(q: PendingQuestion, host: HTMLElement): HTMLElement {
-      const wrap = el('div', { style: 'margin-top: 2rem;' });
-      wrap.appendChild(el('h3', { style: 'margin: 0 0 0.5rem 0;' }, 'Answer'));
-      wrap.appendChild(
-        el(
-          'p',
-          {
-            class: 'hint',
-            style: 'margin: 0 0 1rem 0; max-width: 36rem;',
-          },
-          'Posts through the same path Discord and Telegram inbound take. The first answer wins; conflicting later answers return 409 with the original preserved.',
-        ),
-      );
-
-      const alertSlot = el('div', { id: 'alertSlot', style: 'margin-bottom: 1rem;' });
-      wrap.appendChild(alertSlot);
-
-      const form = el('form', { class: 'form' }) as HTMLFormElement;
-
-      const field = el('div', { class: 'form-field' });
-      field.appendChild(el('label', { for: 'answer' }, 'Answer text'));
-      const ta = el('textarea', {
-        id: 'answer',
-        name: 'answer',
-        required: '',
-      }) as HTMLTextAreaElement;
-      field.appendChild(ta);
-      if (q.options !== undefined && q.options.length > 0) {
-        const optsHint = el('div', { class: 'hint' });
-        optsHint.appendChild(document.createTextNode('Suggested answers: '));
-        q.options.forEach((opt, idx) => {
-          if (idx > 0) optsHint.appendChild(document.createTextNode(', '));
-          const btn = el(
-            'a',
-            { href: '#', class: 'link', style: 'text-decoration: underline;' },
-            opt,
-          ) as HTMLAnchorElement;
-          btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            ta.value = opt;
-            ta.focus();
-          });
-          optsHint.appendChild(btn);
-        });
-        field.appendChild(optsHint);
-      }
-      form.appendChild(field);
-
-      const actions = el('div', { class: 'form-actions' });
-      const submit = el(
-        'button',
-        { type: 'submit', class: 'btn btn-primary' },
-        'Submit answer',
-      ) as HTMLButtonElement;
-      actions.appendChild(submit);
-      form.appendChild(actions);
-
-      wrap.appendChild(form);
-
-      form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        if (submit.disabled) return;
-        const answer = ta.value.trim();
-        if (answer.length === 0) {
-          renderInlineError(
-            new ApiError(400, 'BAD_REQUEST', 'Answer cannot be empty.'),
-            alertSlot,
-          );
-          return;
-        }
-        submit.disabled = true;
-        submit.textContent = 'Submitting…';
-        alertSlot.innerHTML = '';
-
-        apiPost<{ answer: string }, AnswerResp>(
-          `/api/v1/pending-questions/${encodeURIComponent(q.id)}/answer`,
-          { answer },
-        )
-          .then((resp) => {
-            // Re-render the entire detail with the now-answered question
-            // (status flips to "Answered at …", the answer row appears, the
-            // form goes away because q.answeredAt !== undefined).
-            render({ question: resp.question }, host);
-            const newSlot = host.querySelector<HTMLElement>('#alertSlot');
-            if (newSlot !== null) {
-              const ok = el('div', { class: 'alert alert--success' });
-              ok.appendChild(el('h4', {}, 'Answered'));
-              ok.appendChild(el('p', {}, 'The waiting worker (if any) will resume on its next poll.'));
-              newSlot.appendChild(ok);
-            } else {
-              // The form went away (question is now answered); inject a
-              // success alert at the top of host.
-              const ok = el('div', { class: 'alert alert--success', style: 'margin-top: 1rem;' });
-              ok.appendChild(el('h4', {}, 'Answered'));
-              ok.appendChild(el('p', {}, 'The waiting worker (if any) will resume on its next poll.'));
-              host.appendChild(ok);
-            }
-          })
-          .catch((err: unknown) => {
-            submit.disabled = false;
-            submit.textContent = 'Submit answer';
-            if (err instanceof ApiError && err.code === 'QUESTION_ALREADY_ANSWERED_DIFFERENTLY') {
-              handleConflict(q.id, host);
-              return;
-            }
-            renderInlineError(err, alertSlot);
-          });
-      });
-
-      return wrap;
-    }
-
-    function handleConflict(qid: string, host: HTMLElement): void {
-      // Refetch to surface the recorded answer; render the question with a
-      // prominent conflict alert above the (now-suppressed) form so the
-      // operator sees both the rejection and the actual recorded value.
-      apiFetch<DetailResp>(`/api/v1/pending-questions/${encodeURIComponent(qid)}`)
-        .then((resp) => {
-          render(resp, host);
-          // After re-render, prepend a conflict alert. If the refetch shows
-          // the question is now answered, the form is gone — alertSlot
-          // doesn't exist; fall back to inserting at the top of host.
-          const alert = el('div', {
-            class: 'alert alert--conflict',
-            style: 'margin-top: 1rem;',
-          });
-          alert.appendChild(el('h4', {}, 'Already answered'));
-          const p = el('p', {});
-          p.appendChild(
-            document.createTextNode(
-              'Another channel (or operator) recorded an answer first; the original is preserved. ',
-            ),
-          );
-          const refresh = el('a', { href: '#', class: 'link' }, 'Refresh');
-          refresh.addEventListener('click', (e) => {
-            e.preventDefault();
-            load(qid, host);
-          });
-          p.appendChild(refresh);
-          alert.appendChild(p);
-          const newSlot = host.querySelector<HTMLElement>('#alertSlot');
-          if (newSlot !== null) {
-            newSlot.innerHTML = '';
-            newSlot.appendChild(alert);
-          } else {
-            host.appendChild(alert);
-          }
-        })
-        .catch((err: unknown) => renderTopError(err, host));
-    }
-
-    function renderInlineError(err: unknown, slot: HTMLElement): void {
-      slot.innerHTML = '';
-      const alert = el('div', { class: 'alert alert--conflict' });
-      if (err instanceof ApiError) {
-        alert.appendChild(el('h4', {}, codeHeading(err.code, err.status)));
-        alert.appendChild(el('p', {}, err.message));
-      } else if (err instanceof Error) {
-        alert.appendChild(el('h4', {}, 'Submit failed'));
-        alert.appendChild(el('p', {}, err.message));
-      } else {
-        alert.appendChild(el('h4', {}, 'Submit failed'));
-        alert.appendChild(el('p', {}, 'Unknown error.'));
-      }
-      slot.appendChild(alert);
-    }
-
-    function renderTopError(err: unknown, host: HTMLElement): void {
-      host.innerHTML = '';
-      if (err instanceof NoTokenError) {
-        host.textContent = err.message;
-        return;
-      }
-      const alert = el('div', { class: 'alert alert--conflict' });
-      if (err instanceof ApiError) {
-        alert.appendChild(el('h4', {}, codeHeading(err.code, err.status)));
-        alert.appendChild(el('p', {}, err.message));
-      } else if (err instanceof Error) {
-        alert.appendChild(el('h4', {}, 'Failed to load question'));
-        alert.appendChild(el('p', {}, err.message));
-      } else {
-        alert.appendChild(el('h4', {}, 'Failed to load question'));
-        alert.appendChild(el('p', {}, 'Unknown error.'));
-      }
-      host.appendChild(alert);
-    }
-
-    function codeHeading(code: string, status: number): string {
+    const codeHeading = (code: string, status: number): string => {
       switch (code) {
         case 'QUESTION_NOT_FOUND':
           return 'Question not found.';
@@ -311,6 +121,192 @@ import Dashboard from '../../layouts/Dashboard.astro';
         default:
           return `Error ${String(status)} (${code})`;
       }
+    };
+
+    const renderError = (err: unknown, slotId: string, fallbackTitle: string): void => {
+      if (err instanceof ApiError) {
+        setAlertText(slotId, codeHeading(err.code, err.status), err.message);
+      } else if (err instanceof Error) {
+        setAlertText(slotId, fallbackTitle, err.message);
+      } else {
+        setAlertText(slotId, fallbackTitle, 'Unknown error.');
+      }
+    };
+
+    const buildMetaRow = (
+      key: string,
+      value: string | HTMLElement,
+    ): HTMLTableRowElement => {
+      const tr = document.createElement('tr');
+      const tdKey = document.createElement('td');
+      const strong = document.createElement('strong');
+      strong.textContent = key;
+      tdKey.appendChild(strong);
+      const tdVal = document.createElement('td');
+      if (typeof value === 'string') tdVal.textContent = value;
+      else tdVal.appendChild(value);
+      tr.appendChild(tdKey);
+      tr.appendChild(tdVal);
+      return tr;
+    };
+
+    const renderSuggestedAnswers = (q: PendingQuestion): void => {
+      const slot = document.getElementById('suggested-answers');
+      const ta = document.getElementById('answer') as HTMLTextAreaElement | null;
+      if (slot === null || ta === null) return;
+      slot.innerHTML = '';
+      if (q.options === undefined || q.options.length === 0) {
+        slot.hidden = true;
+        return;
+      }
+      slot.hidden = false;
+      slot.appendChild(document.createTextNode('Suggested answers: '));
+      q.options.forEach((opt, idx) => {
+        if (idx > 0) slot.appendChild(document.createTextNode(', '));
+        const a = document.createElement('a');
+        a.href = '#';
+        a.className = 'link';
+        a.style.textDecoration = 'underline';
+        a.textContent = opt;
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          ta.value = opt;
+          ta.focus();
+        });
+        slot.appendChild(a);
+      });
+    };
+
+    const populate = (resp: DetailResp): void => {
+      const q = resp.question;
+      const loading = document.getElementById('loading');
+      if (loading !== null) loading.hidden = true;
+      const content = document.getElementById('content');
+      if (content !== null) content.hidden = false;
+
+      const questionText = document.getElementById('question-text');
+      if (questionText !== null) questionText.textContent = q.question;
+
+      const tbody = document.querySelector('#question-meta tbody');
+      if (tbody !== null) {
+        tbody.innerHTML = '';
+        tbody.appendChild(buildMetaRow('Id', q.id));
+
+        const directiveLink = document.createElement('a');
+        directiveLink.href = `/app/directives/detail?id=${encodeURIComponent(q.directiveId)}`;
+        directiveLink.className = 'link';
+        directiveLink.textContent = q.directiveId;
+        tbody.appendChild(buildMetaRow('Directive', directiveLink));
+
+        if (q.taskId !== undefined) tbody.appendChild(buildMetaRow('Task', q.taskId));
+        tbody.appendChild(buildMetaRow('Channel', `${q.channel} (${q.channelRef})`));
+        tbody.appendChild(buildMetaRow('Created', q.createdAt.replace('T', ' ').slice(0, 19)));
+        if (q.deadlineAt !== undefined) {
+          tbody.appendChild(buildMetaRow('Deadline', q.deadlineAt.replace('T', ' ').slice(0, 19)));
+        }
+        if (q.options !== undefined && q.options.length > 0) {
+          tbody.appendChild(buildMetaRow('Options', q.options.join(', ')));
+        }
+        tbody.appendChild(
+          buildMetaRow('Status', q.answeredAt !== undefined ? `Answered at ${q.answeredAt}` : 'Open'),
+        );
+        if (q.answer !== undefined) tbody.appendChild(buildMetaRow('Answer', q.answer));
+      }
+
+      const formWrap = document.getElementById('answer-form-wrapper');
+      if (formWrap !== null) {
+        if (q.answeredAt === undefined) {
+          formWrap.hidden = false;
+          renderSuggestedAnswers(q);
+        } else {
+          formWrap.hidden = true;
+        }
+      }
+    };
+
+    const load = (qid: string): Promise<DetailResp> => {
+      return apiFetch<DetailResp>(`/api/v1/pending-questions/${encodeURIComponent(qid)}`);
+    };
+
+    const wireForm = (qid: string): void => {
+      const form = document.getElementById('answer-form') as HTMLFormElement | null;
+      const submit = document.getElementById('answer-submit') as HTMLButtonElement | null;
+      const ta = document.getElementById('answer') as HTMLTextAreaElement | null;
+      if (form === null || submit === null || ta === null) return;
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (submit.disabled) return;
+        const answer = ta.value.trim();
+        if (answer.length === 0) {
+          setAlertText('form-error-slot', 'Bad request.', 'Answer cannot be empty.');
+          return;
+        }
+        submit.disabled = true;
+        submit.textContent = 'Submitting…';
+        hideAlert('form-success-slot');
+        hideAlert('form-error-slot');
+
+        apiPost<{ answer: string }, AnswerResp>(
+          `/api/v1/pending-questions/${encodeURIComponent(qid)}/answer`,
+          { answer },
+        )
+          .then((resp) => {
+            populate({ question: resp.question });
+            const slot = document.getElementById('form-success-slot');
+            if (slot !== null) slot.hidden = false;
+          })
+          .catch((err: unknown) => {
+            submit.disabled = false;
+            submit.textContent = 'Submit answer';
+            if (err instanceof ApiError && err.code === 'QUESTION_ALREADY_ANSWERED_DIFFERENTLY') {
+              load(qid)
+                .then((resp) => {
+                  populate(resp);
+                  setAlertText(
+                    'form-error-slot',
+                    'Already answered',
+                    'Another channel (or operator) recorded an answer first; the original is preserved.',
+                  );
+                })
+                .catch((refetchErr: unknown) => {
+                  renderError(refetchErr, 'topErrorSlot', 'Failed to refresh question');
+                });
+              return;
+            }
+            renderError(err, 'form-error-slot', 'Submit failed');
+          });
+      });
+    };
+
+    captureTokenFromUrl();
+
+    const id = new URLSearchParams(window.location.search).get('id');
+
+    if (id === null || id.length === 0) {
+      const loading = document.getElementById('loading');
+      if (loading !== null) loading.textContent = 'Missing ?id=<questionId> in URL.';
+    } else if (getToken() === null) {
+      const loading = document.getElementById('loading');
+      if (loading !== null) {
+        loading.textContent = 'No UI token present. Reopen the URL logged by factoryd.';
+      }
+    } else {
+      const qid = id;
+      load(qid)
+        .then((resp) => {
+          populate(resp);
+          wireForm(qid);
+        })
+        .catch((err: unknown) => {
+          const loading = document.getElementById('loading');
+          if (err instanceof NoTokenError) {
+            if (loading !== null) loading.textContent = err.message;
+            return;
+          }
+          if (loading !== null) loading.hidden = true;
+          renderError(err, 'topErrorSlot', 'Failed to load question');
+        });
     }
   </script>
 </Dashboard>
