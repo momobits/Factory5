@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-03 09:00 UTC by /phase-close (phase 2 closed)
+**Last updated:** 2026-05-03 09:15 UTC by /session-end (post-phase-2 docs polish)
 **Current phase:** 3 — web-ui
-**Current step:** 3.1 — SSE on `/api/v1/directives/:id/stream`
-**Status:** ready (clean working tree; phase 2 tag landed)
+**Current step:** 3.1 — SSE on `/api/v1/directives/:id/stream` (next; phase 2 closed)
+**Status:** ready (clean working tree; phase 2 tag landed; ONBOARDING PATH-setup gap closed)
 
 ---
 
@@ -27,7 +27,7 @@ Open [`../phases/phase-3-web-ui/README.md`](../phases/phase-3-web-ui/README.md) 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `081b832` — fix(2.2): show project name in /status output
+- **Last commit:** `f7c78ce` — docs(2): document factory/factoryd PATH setup in ONBOARDING
 - **Uncommitted changes:** none (working tree clean)
 - **Last phase tag:** `phase-2-channel-parity-closed` (annotated tag at commit `081b832`)
 
@@ -65,11 +65,11 @@ No new ADRs decided in this phase — `command-handlers.ts` extraction (2.2), `O
 
 ## Recently completed (last 5 steps)
 
-- Step 2.5 — Triage classifies chat across 8 intents; channel handlers re-route reads (`status`/`spend`/`findings`) to `command-handlers.ts` instead of creating chat directives — 2026-05-03 — `72c45e3` (placeholder; verify via `git log`)
-- Step 2.4 — `factory cancel <directive-id>` end-to-end: brain `AbortController` registry, daemon `POST /directives/:id/cancel` route, CLI command with IPC-first / DB-fallback path, worker SIGTERM-then-SIGKILL discipline, `cancelled` worktree-cleanup outcome — 2026-05-03 — `67fb998` (placeholder; verify via `git log`)
-- Step 2.3 — Pending-question button affordances on Discord (`ActionRowBuilder` + modal) and Telegram (inline keyboard via `reply_markup`); `OutboundMessage.metadata.questionId` contract; legacy reply path preserved — 2026-05-03 — `682afd3` (placeholder; verify via `git log`)
-- Step 2.2 — Wire Telegram `setMyCommands` + extract transport-agnostic `command-handlers.ts` shared with Discord — 2026-05-02 — `22e0e54`
-- Step 2.1 — Wire Discord slash commands; embed-formatted responses; SQLite-direct reads for the read-side surfaces — 2026-05-02 — `8ea8e4a`
+- Post-phase-2 docs polish — `docs(2)`: documented `factory`/`factoryd` PATH setup in `docs/ONBOARDING.md` §3.5 (three options: pnpm dev scripts / `pnpm link --global` / shell-wrapper functions); §3.4's "once factory5 is on your `$PATH`" now points at §3.5 — 2026-05-03 — `f7c78ce`
+- Phase 2 closed (`chore(phase-2): close phase 2, kick off phase 3`); tag `phase-2-channel-parity-closed` on `081b832`; Phase 3 scaffolded — 2026-05-03 — `384d2d3`
+- Post-2.2 UX fix — `fix(2.2)`: project name column in `/status` output across CLI, Discord, Telegram (shared `makeProjectNameLookup` helper); surfaced during live-smoke when the directives table only showed IDs — 2026-05-03 — `081b832`
+- Step 2.6 — `docs(2.6)`: deferred `factory chat` per-turn timeout to Phase 3; the SSE streaming work in 3.1 naturally subsumes the fix — 2026-05-02 (~) — `3cea98c`
+- Step 2.5 — `feat(2.5)`: triage classifies chat across 8 intents; channel handlers re-route reads — 2026-05-03 — `72c45e3`
 
 ---
 
@@ -102,5 +102,11 @@ Phase 3 brings the web UI from vanilla DOM-in-Astro to real Astro components wit
 - Spend page (`/app/spend/index.astro`) should also subscribe — every `spend.updated` event refreshes the rollup. Tests: a vitest-backed harness driving the SSE route end-to-end.
 
 **Pre-2026-05-03 baseline live-smoke (carried into Phase 3):** Discord+Telegram slash command surfaces are live-verified. Free-form chat re-routing (Telegram private chat; Discord with @-mention) verified. `factory cancel` IPC route paths verified (NOT_FOUND / ALREADY_TERMINAL / OK + CLI exit codes 0/2/3); subprocess-kill chain not live-smoked this phase but unit-test coverage is dense (30 tests across pool / registry / state / daemon / CLI).
+
+**Loose ends from this session (operator may want to clean before Phase 3):**
+
+- Synthetic smoke directive in DB (`01KQPDMQE6QTQZ3QMDD69019YK`, status=failed/cancelled) plus a synthetic project (`demo-project`) and its linked directive — both inserted by the live-smoke probes. `packages/state/smoke-cleanup.mjs` reaps them. The Bash sandbox denies direct `node` invocation against the DB without operator approval; run manually with `cd packages/state && node smoke-cleanup.mjs` if you want a clean `factory status`.
+- factoryd PID 32436 still running (started at 09:20 UTC for live-smoke). `factory daemon stop` (or any of the §3.5 invocation forms) shuts it down.
+- The `.factory1/` line that briefly appeared in `.gitignore` got cleaned at some point during this session (working tree is clean as of session-end). If it re-surfaces, source-trace via `git blame` on a future commit.
 
 Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions; this STATE.md is the operational cursor (overwritten at each `/session-end`).

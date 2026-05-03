@@ -2,6 +2,13 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-03 — Session-end after phase-2 close + post-close docs polish
+
+- Single small commit landed after `/phase-close`: `f7c78ce` `docs(2): document factory/factoryd PATH setup in ONBOARDING`. Closes a doc gap surfaced when operator asked "where do I run `factory daemon stop`?" — the existing onboarding doc said "once factory5 is on your `$PATH`" without ever explaining how to put it there.
+- Working tree clean at session-end. HEAD = `f7c78ce`. Phase-2 tag on `081b832`.
+- Synthetic smoke data still resident in DB; `packages/state/smoke-cleanup.mjs` available. Daemon (PID 32436) still running.
+- No blockers. Next session opens at Phase 3.1 (SSE on `/api/v1/directives/:id/stream`).
+
 ## 2026-05-03 — Phase 2 closed (tag `phase-2-channel-parity-closed` on `081b832`); Phase 3 kicked off
 
 - Steps 2.3, 2.4, 2.5 all shipped through prior-session work; Step 2.6 deferred to Phase 3 (folded into SSE streaming).
