@@ -17,7 +17,7 @@
 import { cpus } from 'node:os';
 import { env } from 'node:process';
 
-import type { DirectiveLimits, Plan, Task } from '@factory5/core';
+import type { DirectiveLimits, Finding, Plan, Task } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import type { DirectiveEventEmitter } from '@factory5/ipc';
 import type { ProviderRegistry } from '@factory5/providers';
@@ -28,7 +28,7 @@ import {
   type Database,
   type UsageMode,
 } from '@factory5/state';
-import { writePlan } from '@factory5/wiki';
+import { listFindings, writePlan } from '@factory5/wiki';
 import {
   isToolUsingAgent,
   runWorker,
@@ -93,6 +93,44 @@ function agentMode(agent: Task['agent']): UsageMode {
 export function defaultConcurrency(): number {
   const n = Math.max(1, cpus().length);
   return Math.min(4, n);
+}
+
+/**
+ * Emit a `finding.created` event for SSE subscribers (Phase 3 — the
+ * deferred-from-3.1 counterpart to `task.*` / `spend.updated` /
+ * `log.line` / `directive.completed`). One call per finding raised by
+ * a task; the canonical source of truth is the per-project
+ * `findings.json`, so the caller passes a fully-loaded {@link Finding}
+ * rather than a bare id (separates I/O from emission and lets a single
+ * `listFindings(projectPath)` per task feed every emit).
+ *
+ * Same fire-and-forget shape as `emitLogLine` / `emitDirectiveCompleted`
+ * in `loop.ts`: silent when no emitter is wired, never throws, never
+ * awaits the SSE consumer. Subscribers reconnect on transient drops
+ * and the FE's existing refresh-on-`task.completed` path remains a
+ * safety net for any event the brain failed to emit (advisory: the
+ * runtime contract is "best-effort delivery", not "exactly-once").
+ *
+ * Exported for direct unit testing (see `pool.test.ts`); the integration
+ * call site is in {@link executeTask} after the `task.completed` emit.
+ */
+export function emitFindingCreated(
+  emit: DirectiveEventEmitter | undefined,
+  directiveId: string,
+  finding: Finding,
+): void {
+  if (emit === undefined) return;
+  emit({
+    type: 'finding.created',
+    findingId: finding.id,
+    directiveId,
+    severity: finding.severity,
+    status: finding.status,
+    source: finding.source,
+    target: finding.target,
+    description: finding.description,
+    advisory: finding.advisory === true,
+  });
 }
 
 /**
@@ -266,6 +304,29 @@ async function executeTask(
     finishedAt,
     error: outcome.result.error ?? null,
   });
+
+  // Emit `finding.created` per finding raised by this task. One
+  // `listFindings` read per task feeds every emit so we don't N+1 the
+  // findings.json file on tasks that raise many findings. Wrapped in
+  // try/catch because a corrupt or transient findings.json must not
+  // fail the task — the FE's refresh-on-`task.completed` is the
+  // safety net while the SSE wire is best-effort.
+  if (emit !== undefined && outcome.result.findingsRaised.length > 0) {
+    try {
+      const all = await listFindings(plan.projectPath);
+      const byId = new Map<string, Finding>(all.map((f) => [f.id, f]));
+      for (const findingId of outcome.result.findingsRaised) {
+        const finding = byId.get(findingId);
+        if (finding === undefined) continue;
+        emitFindingCreated(emit, directiveId, finding);
+      }
+    } catch (err) {
+      log.warn(
+        { err, taskId: task.id, projectPath: plan.projectPath },
+        'pool: emit finding.created failed — non-fatal (FE refresh-on-task.completed remains)',
+      );
+    }
+  }
 
   const updatedTask: Task = {
     ...task,
