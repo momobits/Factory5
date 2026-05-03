@@ -23,6 +23,7 @@ import process from 'node:process';
 
 import type { Directive } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
+import type { DirectiveEventEmitter } from '@factory5/ipc';
 import type { ProviderRegistry } from '@factory5/providers';
 import { directives as directivesQ, type Database } from '@factory5/state';
 
@@ -57,6 +58,13 @@ export interface ServeOptions {
   /** Register a wake callback. Optional — absent ⇒ polling-only. */
   onWake?: OnWake;
   /**
+   * Per-directive SSE event emitter (Phase 3 / step 3.1). Forwarded to
+   * each per-directive `runBrain({ mode: 'inline' })` so brain emission
+   * sites in `loop.ts` and `pool.ts` can push events through to the
+   * daemon's stream hub.
+   */
+  emitDirectiveEvent?: DirectiveEventEmitter;
+  /**
    * Inline runner. Injected so tests can stub out the full pipeline without
    * spinning up providers. Production callers omit this.
    */
@@ -69,6 +77,8 @@ export interface InlineRunnerArgs {
   registry: ProviderRegistry;
   claimedBy: string;
   signal: AbortSignal;
+  /** Forward of the SSE emitter when set on the parent serve loop. */
+  emitDirectiveEvent?: DirectiveEventEmitter;
 }
 
 /**
@@ -124,6 +134,9 @@ export async function runServe(opts: ServeOptions): Promise<void> {
           registry: opts.registry,
           claimedBy,
           signal: cancellation.signal,
+          ...(opts.emitDirectiveEvent !== undefined
+            ? { emitDirectiveEvent: opts.emitDirectiveEvent }
+            : {}),
         })
           .then(() => {
             log.info({ directiveId: directive.id }, 'serve: directive finished');
@@ -217,6 +230,9 @@ async function defaultRunOne(directive: Directive, args: InlineRunnerArgs): Prom
     registry: args.registry,
     claimedBy: args.claimedBy,
     signal: args.signal,
+    ...(args.emitDirectiveEvent !== undefined
+      ? { emitDirectiveEvent: args.emitDirectiveEvent }
+      : {}),
   });
   await handle.done;
 }

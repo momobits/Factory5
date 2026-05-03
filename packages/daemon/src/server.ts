@@ -113,6 +113,8 @@ import {
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 
+import type { DirectiveStreamHub } from './directive-stream.js';
+import { registerDirectiveStreamRoute } from './directive-stream-route.js';
 import type { Doorbell } from './doorbell.js';
 import type { OutboundDeliverer } from './outbound-worker.js';
 
@@ -211,6 +213,20 @@ export interface IpcServerOptions {
    * tier). When omitted, the route falls back to body + project tiers.
    */
   configBudgetDefaults?: { maxUsd?: number | undefined; maxSteps?: number | undefined } | undefined;
+  /**
+   * Per-directive SSE event hub (Phase 3 / step 3.1). When set, the
+   * daemon mounts `GET /api/v1/directives/:id/stream`. When omitted,
+   * that route is NOT registered — clients get Fastify's default 404
+   * for the unmatched path. Production daemons always pass a hub;
+   * tests that don't exercise SSE leave it unset.
+   */
+  directiveStream?: DirectiveStreamHub;
+  /**
+   * Override for the SSE heartbeat cadence. Tests pass a small value
+   * (e.g. 100 ms) so a heartbeat fires within the test's window.
+   * Production leaves this unset (defaults to 15 s).
+   */
+  directiveStreamHeartbeatMs?: number;
 }
 
 export interface IpcServerHandle {
@@ -967,6 +983,23 @@ function registerRoutes(
     );
     reply.send(resp);
   });
+
+  // ----- GET /api/v1/directives/:id/stream (Phase 3 / step 3.1) -----
+  // SSE event stream for live task / finding / spend / log updates per
+  // directive. Mounted only when a `directiveStream` hub is supplied.
+  // Wire shape: UPGRADE/specs/sse-directive-stream.md.
+  if (opts.directiveStream !== undefined) {
+    registerDirectiveStreamRoute({
+      app,
+      db: opts.db,
+      hub: opts.directiveStream,
+      uiAuthToken: opts.uiAuthToken,
+      log: ipcLog,
+      ...(opts.directiveStreamHeartbeatMs !== undefined
+        ? { heartbeatIntervalMs: opts.directiveStreamHeartbeatMs }
+        : {}),
+    });
+  }
 
   // ----- POST /worker/ask-user (ADR 0024) -----
   // Bearer-gated; bearer check fires before schema parse so malformed bodies

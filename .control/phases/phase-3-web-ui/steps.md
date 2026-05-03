@@ -1,6 +1,6 @@
 # Phase 3 Steps
 
-- [ ] 3.1 — SSE on `/api/v1/directives/:id/stream` — events: `task.*`, `finding.created`, `spend.updated`, `log.line`, `directive.completed`; per-directive subscription map; heartbeat; close on `directive.completed`
+- [x] 3.1 — SSE on `/api/v1/directives/:id/stream` — events: `task.*`, `finding.created`, `spend.updated`, `log.line`, `directive.completed`; per-directive subscription map; heartbeat; close on `directive.completed`
 - [ ] 3.2 — Wire `directives/detail.astro` to the SSE stream — replace polling with EventSource; live tasks, findings, spend, log tail; polling fallback for SSE-stripped proxies
 - [ ] 3.3 — Astro component library — `<Card>`, `<Table>`, `<EmptyState>`, `<Alert>`, `<Form>`, `<PageShell>`; consistent prop conventions; documented in `apps/factory-web/src/components/README.md`
 - [ ] 3.4 — Convert all 9 pages to use components; retire `el()` from `lib/api.ts`; matching tests / smoke

@@ -64,6 +64,7 @@ import {
 } from '@factory5/wiki';
 
 import { startBrainSupervisor } from './brain-supervisor.js';
+import { DirectiveStreamHub } from './directive-stream.js';
 import { Doorbell } from './doorbell.js';
 import { startOutboundWorker, type OutboundWorkerHandle } from './outbound-worker.js';
 import { acquirePidFile, defaultPidFilePath, type PidFileHandle } from './pidfile.js';
@@ -196,6 +197,11 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
   // Subsystem stop order: reverse of insert order.
   const subsystems: Array<{ name: string; stop: () => Promise<void> }> = [];
   const doorbell = new Doorbell();
+  // Per-directive SSE event hub (Phase 3 / step 3.1). Brain emits via
+  // `emitDirectiveEvent` callback wired by the supervisor; SSE handler
+  // subscribes per request. Always instantiated — costs nothing when
+  // unused.
+  const directiveStream = new DirectiveStreamHub();
   let ipc: IpcServerHandle | undefined;
 
   try {
@@ -407,6 +413,7 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
         ...(workerAskUserHandler !== undefined ? { workerAskUser: workerAskUserHandler } : {}),
         ...(opts.uiAuthToken !== undefined ? { uiAuthToken: opts.uiAuthToken } : {}),
         ...(opts.webUiStaticPath !== undefined ? { webUiStaticPath: opts.webUiStaticPath } : {}),
+        directiveStream,
         configBudgetDefaults,
       });
       subsystems.push({ name: 'ipc', stop: ipc.stop });
@@ -433,6 +440,7 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
         log: createLogger('daemon.brain'),
         db,
         doorbell,
+        directiveStream,
         ...(opts.providerRegistry !== undefined ? { registry: opts.providerRegistry } : {}),
         ...(opts.serveConcurrency !== undefined ? { concurrency: opts.serveConcurrency } : {}),
       });
@@ -480,6 +488,7 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
         }
       }
       doorbell.clear();
+      directiveStream.shutdown();
       if (db !== undefined) {
         closeDatabase(db);
       }
@@ -695,6 +704,8 @@ function buildDefaultFsWatcher(db: Database): FsWatcher {
 }
 
 export * from './brain-supervisor.js';
+export * from './directive-stream.js';
+export * from './directive-stream-route.js';
 export * from './doorbell.js';
 export * from './outbound-worker.js';
 export * from './pidfile.js';

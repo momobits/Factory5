@@ -17,6 +17,7 @@ import type { AutonomyMode, Directive, DirectiveLimits, Plan } from '@factory5/c
 import { newId } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import { assess, type AssessResult, type Runtime } from '@factory5/assessor';
+import type { DirectiveEventEmitter } from '@factory5/ipc';
 import type { ProviderRegistry } from '@factory5/providers';
 import {
   directives as directivesQ,
@@ -69,6 +70,15 @@ export interface BrainOptions {
    * daemon's doorbell wired to the IPC `/directives/notify` endpoint).
    */
   onWake?: OnWake;
+  /**
+   * Per-directive SSE event emitter (Phase 3 / step 3.1). When provided,
+   * the brain's pool + loop call this at every observable state
+   * transition (task lifecycle, spend updates, directive completion).
+   * Inline `factory build` runs leave it unset — emit calls are silent
+   * no-op. The daemon's brain-supervisor wires this to the in-memory
+   * {@link DirectiveStreamHub} so SSE subscribers see live progress.
+   */
+  emitDirectiveEvent?: DirectiveEventEmitter;
 }
 
 export interface BrainHandle {
@@ -113,6 +123,7 @@ async function runPlanTasks(
   signal: AbortSignal | undefined,
   concurrency: number | undefined,
   limits: DirectiveLimits | undefined,
+  emitDirectiveEvent: DirectiveEventEmitter | undefined,
 ): Promise<TaskOutcome[]> {
   return runPlanPool({
     plan,
@@ -122,6 +133,29 @@ async function runPlanTasks(
     ...(signal !== undefined ? { signal } : {}),
     ...(concurrency !== undefined ? { concurrency } : {}),
     ...(limits !== undefined ? { limits } : {}),
+    ...(emitDirectiveEvent !== undefined ? { emitDirectiveEvent } : {}),
+  });
+}
+
+/**
+ * Emit `directive.completed` to the SSE hub if an emitter is wired.
+ * Centralised so every terminal-status branch in `runInline` ends with
+ * the same signal shape. The call is fire-and-forget — emit failures
+ * are not propagated (the SSE consumer's reconnect-and-backfill flow
+ * recovers).
+ */
+function emitDirectiveCompleted(
+  emit: DirectiveEventEmitter | undefined,
+  directiveId: string,
+  status: Directive['status'],
+  blockedReason: string | undefined,
+): void {
+  if (emit === undefined) return;
+  emit({
+    type: 'directive.completed',
+    directiveId,
+    status,
+    blockedReason: blockedReason ?? null,
   });
 }
 
@@ -131,6 +165,7 @@ async function runInline(
   const { db, owned } = ensureDatabase(opts.db);
   const registry = opts.registry ?? (await buildRegistryFromDisk());
   const claimedBy = opts.claimedBy ?? `inline-${String(process.pid)}`;
+  const emit = opts.emitDirectiveEvent;
 
   try {
     const directive = directivesQ.getById(db, opts.directiveId);
@@ -183,6 +218,7 @@ async function runInline(
           attempts: 0,
         });
         directivesQ.updateStatus(db, directive.id, 'complete');
+        emitDirectiveCompleted(emit, directive.id, 'complete', undefined);
         log.info({ directiveId: directive.id, replyText }, 'brain: chat reply queued');
         return {
           directive,
@@ -199,6 +235,7 @@ async function runInline(
           'brain: only build / chat are implemented — recording triage and exiting',
         );
         directivesQ.updateStatus(db, directive.id, 'complete');
+        emitDirectiveCompleted(emit, directive.id, 'complete', undefined);
         return {
           directive,
           triage,
@@ -266,6 +303,7 @@ async function runInline(
             `user aborted at architect checkpoint: ${ck.answer ?? '(no answer)'}`,
           );
           directivesQ.updateStatus(db, directive.id, 'blocked');
+          emitDirectiveCompleted(emit, directive.id, 'blocked', undefined);
           return {
             directive,
             triage,
@@ -310,6 +348,7 @@ async function runInline(
             `user aborted at planner checkpoint: ${ck.answer ?? '(no answer)'}`,
           );
           directivesQ.updateStatus(db, directive.id, 'blocked');
+          emitDirectiveCompleted(emit, directive.id, 'blocked', undefined);
           const resBlocked: InlineResult = {
             directive,
             triage,
@@ -331,6 +370,7 @@ async function runInline(
         opts.signal,
         opts.concurrency,
         limits,
+        emit,
       );
 
       // -------- ASSESS --------
@@ -391,6 +431,7 @@ async function runInline(
 
       const terminalStatus: Directive['status'] = hadFailures ? 'blocked' : 'complete';
       directivesQ.updateStatus(db, directive.id, terminalStatus);
+      emitDirectiveCompleted(emit, directive.id, terminalStatus, undefined);
 
       const totalCost = modelUsage.totalCostForDirective(db, directive.id);
       const findingsCountPhrase =
@@ -431,6 +472,7 @@ async function runInline(
           'brain: directive halted by pre-call budget check',
         );
         directivesQ.markBlocked(db, directive.id, reason);
+        emitDirectiveCompleted(emit, directive.id, 'blocked', reason);
         outbound.enqueue(db, {
           id: newId(),
           directiveId: directive.id,
@@ -547,6 +589,9 @@ async function startServeMode(opts: BrainOptions): Promise<BrainHandle> {
     ...(opts.claimedBy !== undefined ? { claimedBy: opts.claimedBy } : {}),
     ...(opts.serveConcurrency !== undefined ? { concurrency: opts.serveConcurrency } : {}),
     ...(opts.onWake !== undefined ? { onWake: opts.onWake } : {}),
+    ...(opts.emitDirectiveEvent !== undefined
+      ? { emitDirectiveEvent: opts.emitDirectiveEvent }
+      : {}),
   }).finally(() => {
     if (opts.signal !== undefined) {
       opts.signal.removeEventListener('abort', onExternalAbort);

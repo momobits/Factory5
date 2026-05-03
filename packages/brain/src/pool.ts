@@ -19,9 +19,11 @@ import { env } from 'node:process';
 
 import type { DirectiveLimits, Plan, Task } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
+import type { DirectiveEventEmitter } from '@factory5/ipc';
 import type { ProviderRegistry } from '@factory5/providers';
 import {
   directives as directivesQ,
+  modelUsage,
   tasksInflight,
   type Database,
   type UsageMode,
@@ -69,6 +71,13 @@ export interface PoolOptions {
    * `loop.runInline` can flip the directive to `blocked`.
    */
   limits?: DirectiveLimits;
+  /**
+   * Per-directive SSE event emitter (Phase 3 / step 3.1). When set, the
+   * pool emits `task.started`, `task.completed`, and `spend.updated`
+   * events at task lifecycle / usage transitions. Inline-only runs
+   * (no daemon) leave it unset and the calls are silent no-op.
+   */
+  emitDirectiveEvent?: DirectiveEventEmitter;
 }
 
 /**
@@ -131,6 +140,7 @@ async function executeTask(
   db: Database,
   directiveId: string,
   signal?: AbortSignal,
+  emit?: DirectiveEventEmitter,
 ): Promise<{ id: string; outcome: WorkerOutcome; task: Task }> {
   const systemPrompt = await buildAgentSystemPrompt(task.agent);
   const userPrompt = [
@@ -143,6 +153,7 @@ async function executeTask(
   ].join('\n');
 
   const now = (): string => new Date().toISOString();
+  const startedAt = now();
   tasksInflight.register(db, {
     id: task.id,
     directiveId,
@@ -152,8 +163,17 @@ async function executeTask(
     category: task.category,
     status: 'running',
     attempts: task.attempts + 1,
-    startedAt: now(),
-    lastHeartbeat: now(),
+    startedAt,
+    lastHeartbeat: startedAt,
+  });
+  emit?.({
+    type: 'task.started',
+    taskId: task.id,
+    directiveId,
+    title: task.title,
+    agent: task.agent,
+    category: task.category,
+    startedAt,
   });
 
   const hb = setInterval(() => {
@@ -220,13 +240,32 @@ async function executeTask(
       durationMs: outcome.usage.durationMs,
       mode: agentMode(task.agent),
     });
+    if (emit !== undefined) {
+      emit({
+        type: 'spend.updated',
+        directiveId,
+        totalCostUsd: modelUsage.totalCostForDirective(db, directiveId),
+        callCount: modelUsage.countForDirective(db, directiveId),
+        deltaUsd: outcome.usage.response.usage.costUsd,
+      });
+    }
   }
 
+  const finishedAt = now();
   if (outcome.result.exitCode === 0) {
-    tasksInflight.markComplete(db, task.id, outcome.result, now());
+    tasksInflight.markComplete(db, task.id, outcome.result, finishedAt);
   } else {
-    tasksInflight.markFailed(db, task.id, outcome.result, now());
+    tasksInflight.markFailed(db, task.id, outcome.result, finishedAt);
   }
+  emit?.({
+    type: 'task.completed',
+    taskId: task.id,
+    directiveId,
+    status: outcome.result.exitCode === 0 ? 'complete' : 'failed',
+    exitCode: outcome.result.exitCode,
+    finishedAt,
+    error: outcome.result.error ?? null,
+  });
 
   const updatedTask: Task = {
     ...task,
@@ -376,6 +415,7 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
         opts.db,
         opts.directiveId,
         opts.signal,
+        opts.emitDirectiveEvent,
       ).catch((err: unknown) => {
         // executeTask usually bubbles a caught error back through the worker,
         // but if it throws, translate into a failed outcome so the pool can

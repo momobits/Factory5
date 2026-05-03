@@ -14,6 +14,7 @@ import type { ProviderRegistry } from '@factory5/providers';
 import type { Logger } from '@factory5/logger';
 import type { Database } from '@factory5/state';
 
+import type { DirectiveStreamHub } from './directive-stream.js';
 import type { Doorbell } from './doorbell.js';
 import { createSupervisor, type SupervisorHandle } from './supervisor.js';
 
@@ -21,6 +22,15 @@ export interface BrainSupervisorOptions {
   log: Logger;
   db: Database;
   doorbell: Doorbell;
+  /**
+   * Per-directive SSE event hub (Phase 3 / step 3.1). When set, the
+   * supervisor wires `runBrain`'s `emitDirectiveEvent` callback to
+   * push every brain-emitted state transition into the hub. SSE
+   * subscribers receive these events live. When omitted, brain runs
+   * with emission disabled (SSE consumers see only backfill on
+   * connect).
+   */
+  directiveStream?: DirectiveStreamHub;
   /**
    * Provider registry. If omitted, `runBrain` loads config from disk on
    * each (re)start so the brain picks up config reloads naturally.
@@ -53,6 +63,7 @@ export function startBrainSupervisor(opts: BrainSupervisorOptions): SupervisorHa
     start: async (signal) => {
       let handle: BrainHandle | undefined;
       try {
+        const hub = opts.directiveStream;
         handle = await runBrain({
           mode: 'serve',
           db: opts.db,
@@ -60,6 +71,7 @@ export function startBrainSupervisor(opts: BrainSupervisorOptions): SupervisorHa
           ...(opts.registry !== undefined ? { registry: opts.registry } : {}),
           ...(opts.claimedBy !== undefined ? { claimedBy: opts.claimedBy } : {}),
           ...(opts.concurrency !== undefined ? { serveConcurrency: opts.concurrency } : {}),
+          ...(hub !== undefined ? { emitDirectiveEvent: (event) => hub.emit(event) } : {}),
           onWake: (cb) => {
             opts.doorbell.on('directive.new', cb);
             return () => opts.doorbell.off('directive.new', cb);

@@ -64,3 +64,7 @@ notes.md
 .control/.is-source-repo
 .claude/settings.local.json
 # --- /Control ---
+
+# Per-operator MCP server scratch (Serena's activate_project drops a
+# project descriptor here; not shared, not part of the build).
+.serena/
