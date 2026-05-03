@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-03 14:10 UTC by `/session-end` (post step 3.4 — all 10 pages converted, `el()` + `loadInto()` retired)
+**Last updated:** 2026-05-03 14:25 UTC by drift reconciliation (`/session-start` flagged `commit-mismatch`: STATE.md=`dfd1a07`, HEAD=`1a845f5`; option (b) — STATE.md catches up to HEAD before any 3.5 work begins)
 **Current phase:** 3 — web-ui
 **Current step:** 3.5 — `/app/chat` page (next; step 3.4 closed this session)
-**Status:** ready (clean working tree; 3.4 shipped across 7 commits, all four pnpm gates green)
+**Status:** ready (clean working tree; STATE.md cursor reconciled to HEAD `1a845f5`; 3.4 shipped across 7 step commits + 1 session-end docs commit, all four pnpm gates green at the closing commit)
 
 ---
 
@@ -27,7 +27,7 @@ Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). S
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `dfd1a07` — refactor(3.4): retire el() + loadInto() from lib/api.ts; close step 3.4
+- **Last commit:** `1a845f5` — docs(state): session end for step 3.4
 - **Uncommitted changes:** none (working tree clean)
 - **Last phase tag:** `phase-2-channel-parity-closed` (annotated tag at commit `081b832`)
 
@@ -68,13 +68,13 @@ Step 3.4 did not promote new ADRs — refactor-only step. ADR 0029 — directive
 
 ## Recently completed (last 5 steps)
 
+- Session-end docs — `docs(state)`: session end for step 3.4. Captures the 3.4 close cursor in STATE.md / journal.md / UPGRADE/LOG.md / next.md; no code changes. — 2026-05-03 — `1a845f5`
 - Step 3.4 closing — `refactor(3.4)`: retire el() + loadInto() from lib/api.ts; close step 3.4 (flips steps.md + ROADMAP.md boxes; documents the Dashboard-CSS scoping discovery and the deferred-PageShell decision in components/README.md). Final commit of a 7-commit run spanning `32bdfb6..dfd1a07`. — 2026-05-03 — `dfd1a07`
 - Step 3.4 detail — `refactor(3.4)`: inline el() helper into directives/detail.astro (the live SSE render path's per-page DOM helper exception per the migration map). — 2026-05-03 — `a405556`
 - Step 3.4 detail — `refactor(3.4)`: convert build.astro to <Form> + <Field> + <Submit> (the primary form use case; project options runtime-populated by script via `id`-based targeting; hidden-Alert-placeholder pattern for top-error / form-error / empty-projects slots). — 2026-05-03 — `58d4584`
 - Step 3.4 detail — `refactor(3.4)`: convert directives list + project/question detail pages (introduces hidden-Alert-placeholder pattern for dynamic conflict/success swapping; conditional answer-form-wrapper pattern for questions/detail). — 2026-05-03 — `e849aa7`
-- Step 3.4 detail — `refactor(3.4)`: convert projects/questions/spend list pages to <Table> + <Alert> (projects empty-state hits dedicated <Alert kind="info"> per migration map; spend page's four sub-tables share a per-page fillTable<T> helper). — 2026-05-03 — `a876608`
 
-(Earlier 3.4 commits in this session: `d55c41d` findings list + Table id?/loading? extension; `32bdfb6` index.astro → <Card> with Card id? extension; `54c0f20` post-3.3 reconcile.)
+(Earlier 3.4 commits in this session: `a876608` projects/questions/spend list pages → <Table> + <Alert>; `d55c41d` findings list + Table id?/loading? extension; `32bdfb6` index.astro → <Card> with Card id? extension; `54c0f20` post-3.3 reconcile.)
 
 ---
 
