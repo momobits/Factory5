@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-03 15:05 UTC by `/session-end` (post step 3.5 — `/app/chat` page wired end-to-end against brain log.line emission)
+**Last updated:** 2026-05-03 16:35 UTC by drift reconciliation (`/session-start` flagged `commit-mismatch`: STATE.md=`2dfd25f`, HEAD=`96f5883`; option (a) — STATE.md catches up to HEAD before any 3.6 work begins)
 **Current phase:** 3 — web-ui
-**Current step:** 3.6 — cancel + pause buttons on directive detail (next; step 3.5 closed this session)
-**Status:** ready (clean working tree; 3.5 shipped across 4 step commits + 1 drift-reconcile, all four pnpm gates green at every commit)
+**Current step:** 3.6 — cancel button on directive detail (next; pause deferred per Decision 2 = option C; step 3.5 closed last session)
+**Status:** ready (clean working tree; STATE.md cursor reconciled to HEAD `96f5883`; 3.5 shipped across 4 step commits + 1 session-end docs commit (preceded by 1 entering drift-reconcile), all four pnpm gates green at every step commit)
 
 ---
 
@@ -27,7 +27,7 @@ Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). S
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `2dfd25f` — refactor(3.5): close step 3.5 — /app/chat lands; CLI 120s gate stays
+- **Last commit:** `96f5883` — docs(state): session end for step 3.5
 - **Uncommitted changes:** none (working tree clean)
 - **Last phase tag:** `phase-2-channel-parity-closed` (annotated tag at commit `081b832`)
 
@@ -69,11 +69,13 @@ Step 3.5 did not promote new ADRs. ADR 0029 — directive-stream protocol — re
 
 ## Recently completed (last 5 steps)
 
+- Session-end docs — `docs(state)`: session end for step 3.5. Captures the 3.5 close cursor in STATE.md / journal.md / UPGRADE/LOG.md / next.md; no code changes. — 2026-05-03 — `96f5883`
 - Step 3.5 closing — `refactor(3.5)`: close step 3.5 — /app/chat lands; CLI 120s gate stays (flips steps.md + ROADMAP.md boxes; documents the chat-page patterns — bubble layout, auto-scroll-pin, hand-rolled markdown subset, /cmd shortcut path, per-turn stream lifecycle — in `apps/factory-web/src/components/README.md`; carried-forward 2.6 closes implicitly per STATE.md's prior notes — WEB chat surface supersedes the CLI cheap-bump path; CLI's 120s gate stays as a sanity bound). — 2026-05-03 — `2dfd25f`
 - Step 3.5 detail — `feat(3.5)`: /app/chat page — composer + history + markdown + /cmd shortcuts (apps/factory-web/src/pages/chat.astro: free-form messages POST /api/v1/chat/messages and subscribe to the directive's SSE stream rendering one bubble per `log.line` event with `component: 'brain.chat'`; slash-prefixed input dispatches client-side to existing /api/v1/{status,spend,findings} GETs; hand-rolled markdown for fenced code / inline code / bold / italic / paragraphs from blank lines; auto-scroll-with-pause-on-user-scroll mirrors directives/detail.astro:284-336 log-tail pattern; ⌘/Ctrl+Enter submits; Clear button purges in-page conversation; astro:before-swap teardown so streams don't outlive their page; Chat link added to dashboard nav). Frontend-design skill invoked before authoring per saved feedback. — 2026-05-03 — `1fa06fa`
 - Step 3.5 detail — `feat(3.5)`: POST /api/v1/chat/messages route + IPC schemas (apiV1ChatMessageRequestSchema { message: 1..8192, conversationId?: ulid } + apiV1ChatMessageResponseSchema { directive } in @factory5/ipc; route in packages/daemon/src/server.ts mints intent=chat directive with source='cli', principal='web-ui', channelRef='web-ui-${reqId}'; +9 tests cover 401/503/400 schema rejection paths + happy path with conversationId + multi-tab channelRef distinctness). — 2026-05-03 — `7fcbd10`
 - Step 3.5 detail — `feat(3.5)`: emit log.line from brain chat-path (adds emitLogLine helper alongside emitDirectiveCompleted in packages/brain/src/loop.ts; chat branch of runInline emits `{type: 'log.line', component: 'brain.chat', msg: replyText, attrs: {intent, confidence}}` before directive.completed; new `loop.test.ts` covers emitter-undefined-silent + well-formed-event + attrs pass-through + attrs-undefined-key-omitted; brain test count 93 → 97). — 2026-05-03 — `10efe20`
-- Drift reconcile — `docs(state)`: reconcile commit cursor after session-end (operator chose option (b) at session-start: STATE.md "Last commit" caught up from `dfd1a07` to HEAD's `1a845f5` session-end docs commit; commit body documents the steady-state lag-by-1 the runbook accepts). — 2026-05-03 — `d7a366c`
+
+(Earlier this session-pair: `d7a366c` post-3.4 drift reconcile that opened the 3.5 session.)
 
 ---
 
