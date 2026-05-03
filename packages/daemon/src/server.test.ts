@@ -2950,5 +2950,149 @@ describe('IPC server — POST /directives/:id/cancel (Phase 2.4)', () => {
   });
 });
 
+describe('IPC server — POST /api/v1/directives/:id/cancel (Phase 3 / step 3.6)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  const UI_TOKEN = 'ui-secret-cancel';
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+    _resetCancellationRegistry();
+  });
+
+  afterEach(() => {
+    db.close();
+    _resetCancellationRegistry();
+  });
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  it('returns 401 UI_AUTH_REQUIRED without bearer', async () => {
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    directivesQ.updateStatus(db, directive.id, 'running');
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${directive.id}/cancel`,
+      payload: {},
+    });
+    expect(res.statusCode).toBe(401);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('UI_AUTH_REQUIRED');
+
+    // DB row stays running — auth-failed call must not mutate.
+    expect(directivesQ.getById(db, directive.id)?.status).toBe('running');
+    await app.close();
+  });
+
+  it('returns 503 UI_DISABLED when uiAuthToken is not configured', async () => {
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    directivesQ.updateStatus(db, directive.id, 'running');
+
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: undefined });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${directive.id}/cancel`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(503);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('UI_DISABLED');
+
+    // DB row stays running — disabled-surface call must not mutate.
+    expect(directivesQ.getById(db, directive.id)?.status).toBe('running');
+    await app.close();
+  });
+
+  it('happy path with bearer: flips status to failed and returns abortFired=true', async () => {
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    directivesQ.updateStatus(db, directive.id, 'running');
+    const handle = registerCancellation(directive.id);
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${directive.id}/cancel`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { reason: 'cancelled-from-web-ui' },
+    });
+    expect(res.statusCode).toBe(200);
+    const parsed = cancelDirectiveResponseSchema.parse(res.json());
+    expect(parsed.directive.status).toBe('failed');
+    expect(parsed.directive.blockedReason).toBe('cancelled-from-web-ui');
+    expect(parsed.abortFired).toBe(true);
+    expect(handle.signal.aborted).toBe(true);
+
+    handle.release();
+    await app.close();
+  });
+
+  it('returns 404 NOT_FOUND for an unknown directive id (post-auth)', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${newId()}/cancel`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('NOT_FOUND');
+    await app.close();
+  });
+
+  it('returns 409 ALREADY_TERMINAL for a terminal directive (post-auth)', async () => {
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    directivesQ.updateStatus(db, directive.id, 'complete');
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${directive.id}/cancel`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('ALREADY_TERMINAL');
+    await app.close();
+  });
+
+  it('the legacy /directives/:id/cancel route still works without a bearer (CLI path)', async () => {
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    directivesQ.updateStatus(db, directive.id, 'running');
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/directives/${directive.id}/cancel`,
+      payload: { reason: 'from-cli' },
+    });
+    expect(res.statusCode).toBe(200);
+    const parsed = cancelDirectiveResponseSchema.parse(res.json());
+    expect(parsed.directive.status).toBe('failed');
+    expect(parsed.directive.blockedReason).toBe('from-cli');
+    await app.close();
+  });
+});
+
 // Workaround for unused-import lint when only types are referenced above.
 void IpcRequestError;

@@ -113,7 +113,7 @@ import {
   resolveDirectiveLimits,
   updateProjectMetadata,
 } from '@factory5/wiki';
-import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 
 import type { DirectiveStreamHub } from './directive-stream.js';
@@ -410,7 +410,20 @@ function registerRoutes(
   // SIGTERM (then SIGKILL after grace) within the 10 s acceptance budget.
   // Distinct from `directive mark-blocked`, which only updates the row —
   // `cancel` actively kills the in-flight work.
-  app.post<{ Params: { id: string } }>('/directives/:id/cancel', async (request, reply) => {
+  //
+  // Two routes share one handler:
+  //   - `/directives/:id/cancel`        — CLI-facing (loopback, no UI bearer);
+  //                                        used by `factory cancel <id>` via
+  //                                        the daemon-client (see ipc/client.ts).
+  //   - `/api/v1/directives/:id/cancel` — SPA-facing; gated by `requireUiAuth`
+  //                                        per the `/api/v1/*` namespace contract
+  //                                        (Step 3.6 / Decision 1 = option a).
+  // Two separate paths instead of moving the CLI route to /api/v1/* because
+  // CLI auth is loopback-only — the CLI doesn't carry the UI bearer token.
+  const handleCancel = async (
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
     const body = cancelDirectiveRequestSchema.parse(request.body ?? {});
     const id = request.params.id;
     let updated;
@@ -427,14 +440,19 @@ function registerRoutes(
     }
     const abortFired = brainCancelDirective(id, body.reason ?? 'cancelled');
     ipcLog.info(
-      { reqId: request.id, directiveId: id, reason: body.reason, abortFired },
-      'ipc: /directives/:id/cancel',
+      { reqId: request.id, directiveId: id, reason: body.reason, abortFired, url: request.url },
+      'ipc: cancel',
     );
     const resp: CancelDirectiveResponse = cancelDirectiveResponseSchema.parse({
       directive: updated,
       abortFired,
     });
     reply.send(resp);
+  };
+  app.post<{ Params: { id: string } }>('/directives/:id/cancel', handleCancel);
+  app.post<{ Params: { id: string } }>('/api/v1/directives/:id/cancel', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    await handleCancel(request, reply);
   });
 
   // ----- POST /reload-config -----

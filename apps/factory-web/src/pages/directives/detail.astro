@@ -8,6 +8,7 @@ import Dashboard from '../../layouts/Dashboard.astro';
   <script>
     import {
       apiFetch,
+      apiPost,
       apiStream,
       fmtUsd,
       NoTokenError,
@@ -100,6 +101,13 @@ import Dashboard from '../../layouts/Dashboard.astro';
       connection: StreamConnectionState;
       finalStatus: string | null;
       finalBlockedReason: string | null;
+      // Step 3.6 — cancel button state. `cancelInflight` stays true from
+      // click until SSE lands `directive.completed` (status flips out of
+      // running/pending and the button hides on the next render). On
+      // error, it flips back to false so the operator can retry, and
+      // `cancelError` carries the message inline.
+      cancelInflight: boolean;
+      cancelError: string | null;
     }
 
     const state: PageState = {
@@ -111,6 +119,8 @@ import Dashboard from '../../layouts/Dashboard.astro';
       connection: 'connecting',
       finalStatus: null,
       finalBlockedReason: null,
+      cancelInflight: false,
+      cancelError: null,
     };
 
     // Auto-scroll-pin tracking for log tail.
@@ -160,7 +170,15 @@ import Dashboard from '../../layouts/Dashboard.astro';
       const titleRow = el('div', { class: 'detail-title-row' });
       titleRow.appendChild(el('h3', { class: 'detail-title' }, `${intent} — ${status}`));
       titleRow.appendChild(buildPip());
+      const cancelable = status === 'running' || status === 'pending';
+      if (cancelable || state.cancelInflight || state.cancelError !== null) {
+        titleRow.appendChild(buildCancelControl());
+      }
       heading.appendChild(titleRow);
+
+      if (state.cancelError !== null) {
+        heading.appendChild(el('p', { class: 'err cancel-err' }, state.cancelError));
+      }
 
       if (dt !== null) {
         heading.appendChild(
@@ -204,6 +222,57 @@ import Dashboard from '../../layouts/Dashboard.astro';
       pip.appendChild(el('span', { class: 'live-pip-dot' }));
       pip.appendChild(el('span', { class: 'live-pip-label' }, pipLabel(state.connection)));
       return pip;
+    }
+
+    function buildCancelControl(): HTMLButtonElement {
+      const btnAttrs: Record<string, string> = { class: 'cancel-btn', type: 'button' };
+      if (state.cancelInflight) btnAttrs['disabled'] = 'disabled';
+      const btn = el(
+        'button',
+        btnAttrs,
+        state.cancelInflight ? 'Cancelling' : 'Cancel build',
+      ) as HTMLButtonElement;
+      btn.addEventListener('click', () => {
+        void cancelDirective();
+      });
+      return btn;
+    }
+
+    async function cancelDirective(): Promise<void> {
+      if (state.cancelInflight) return;
+      state.cancelInflight = true;
+      state.cancelError = null;
+      render();
+      try {
+        await apiPost(`/api/v1/directives/${encodeURIComponent(directiveId)}/cancel`, {
+          reason: 'cancelled-from-web-ui',
+        });
+        // Success — leave `cancelInflight=true` so the button stays
+        // "Cancelling" until the SSE `directive.completed` event flips
+        // `effectiveStatus()` out of running/pending. On the next render
+        // after that, `cancelable` is false and the button drops.
+      } catch (err: unknown) {
+        let message = 'Cancel failed';
+        if (err instanceof ApiError) {
+          if (err.code === 'ALREADY_TERMINAL') {
+            // Race: another cancel landed first (CLI / second tab). The
+            // SSE/polling will sync the status pip; clear the in-flight
+            // flag so the button drops on next render.
+            message = 'Already finished — refresh to see latest status.';
+          } else if (err.code === 'UI_AUTH_REQUIRED' || err.code === 'UI_DISABLED') {
+            message = `Cancel rejected by daemon: ${err.code}.`;
+          } else {
+            message = `Cancel failed: ${err.code} (${String(err.status)}) — ${err.message}`;
+          }
+        } else if (err instanceof NoTokenError) {
+          message = err.message;
+        } else if (err instanceof Error) {
+          message = `Cancel failed: ${err.message}`;
+        }
+        state.cancelError = message;
+        state.cancelInflight = false;
+        render();
+      }
     }
 
     function buildOpenQuestions(): HTMLElement {
@@ -566,6 +635,60 @@ import Dashboard from '../../layouts/Dashboard.astro';
       border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
       background: color-mix(in srgb, currentColor 4%, transparent);
       line-height: 1;
+    }
+
+    /* Cancel button — sits in the title row alongside the live pip.
+       Pill geometry mirrors `.live-pip` so the affordance reads as part
+       of the same family (live-state + operator-action), but fills out
+       a touch more weight and a destructive-warm palette. The blinking
+       trailing dot in the disabled state echoes `live-pip-blink` so the
+       in-flight visual language is consistent across the header. */
+    .cancel-btn {
+      font: inherit;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.85rem;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, #c24 55%, transparent);
+      color: #c24;
+      background: color-mix(in srgb, #c24 5%, transparent);
+      cursor: pointer;
+      line-height: 1;
+      transition:
+        background 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease;
+    }
+    .cancel-btn:hover:not(:disabled) {
+      background: color-mix(in srgb, #c24 14%, transparent);
+      border-color: color-mix(in srgb, #c24 80%, transparent);
+    }
+    .cancel-btn:focus-visible {
+      outline: 2px solid color-mix(in srgb, #c24 60%, transparent);
+      outline-offset: 2px;
+    }
+    .cancel-btn:disabled {
+      cursor: progress;
+      color: color-mix(in srgb, #c24 55%, transparent);
+      border-color: color-mix(in srgb, #c24 28%, transparent);
+      background: color-mix(in srgb, #c24 3%, transparent);
+    }
+    .cancel-btn:disabled::after {
+      content: '';
+      display: inline-block;
+      width: 0.4rem;
+      height: 0.4rem;
+      border-radius: 50%;
+      background: currentColor;
+      margin-left: 0.5rem;
+      vertical-align: middle;
+      animation: live-pip-blink 0.9s ease-in-out infinite;
+    }
+    .cancel-err {
+      margin: 0;
+      font-size: 0.75rem;
     }
     .live-pip-dot {
       width: 0.5rem;
