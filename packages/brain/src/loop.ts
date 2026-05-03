@@ -159,6 +159,40 @@ function emitDirectiveCompleted(
   });
 }
 
+/**
+ * Emit a `log.line` event for SSE subscribers (Phase 3 / step 3.5).
+ * Used at sites where the user-facing line content (e.g. a chat reply)
+ * should surface to live SSE subscribers as a renderable bubble. Same
+ * fire-and-forget shape as {@link emitDirectiveCompleted}; silent when
+ * no emitter is wired (CLI inline runs, tests without a hub). The
+ * helper sets `ts` to the current wall-clock instant so callers don't
+ * each have to format an ISO string.
+ *
+ * Exported for direct unit testing (see `loop.test.ts`); the
+ * integration call sites use it as an internal helper rather than a
+ * public brain API surface — the package's `index.ts` does not
+ * re-export it.
+ */
+export function emitLogLine(
+  emit: DirectiveEventEmitter | undefined,
+  directiveId: string,
+  level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal',
+  component: string,
+  msg: string,
+  attrs?: Record<string, unknown>,
+): void {
+  if (emit === undefined) return;
+  emit({
+    type: 'log.line',
+    directiveId,
+    ts: new Date().toISOString(),
+    level,
+    component,
+    msg,
+    ...(attrs !== undefined ? { attrs } : {}),
+  });
+}
+
 async function runInline(
   opts: Required<Pick<BrainOptions, 'directiveId'>> & BrainOptions,
 ): Promise<InlineResult> {
@@ -216,6 +250,14 @@ async function runInline(
           text: replyText,
           createdAt: new Date().toISOString(),
           attempts: 0,
+        });
+        // Step 3.5 — surface the chat reply as a `log.line` SSE event so
+        // /app/chat (and any other subscriber) renders one bubble per
+        // agent turn. The outbound row continues to drive Discord /
+        // Telegram / CLI-RPC delivery; the SSE event is purely additive.
+        emitLogLine(emit, directive.id, 'info', 'brain.chat', replyText, {
+          intent: triage.intent,
+          confidence: triage.confidence,
         });
         directivesQ.updateStatus(db, directive.id, 'complete');
         emitDirectiveCompleted(emit, directive.id, 'complete', undefined);
