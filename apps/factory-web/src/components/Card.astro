@@ -12,16 +12,17 @@ interface Props {
   unit?: string;
   trend?: 'up' | 'down' | 'flat';
   href?: string;
+  id?: string;
 }
 
-const { title, value, unit, trend, href } = Astro.props;
+const { title, value, unit, trend, href, id } = Astro.props;
 
 const trendArrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : trend === 'flat' ? '→' : null;
 ---
 
 {
   href === undefined ? (
-    <article class="card">
+    <article class="card" id={id}>
       <h3>{title}</h3>
       <div class="value">
         {value}
@@ -30,7 +31,7 @@ const trendArrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : trend ===
       </div>
     </article>
   ) : (
-    <a class="card card--link" href={href}>
+    <a class="card card--link" href={href} id={id}>
       <h3>{title}</h3>
       <div class="value">
         {value}

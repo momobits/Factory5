@@ -37,7 +37,7 @@ monospace`.
 
 ## Components
 
-### `<Card title value unit? trend? href?/>`
+### `<Card title value unit? trend? href? id?/>`
 
 Single overview metric for the dashboard's `.cards` grid. Renders as
 an `<article>` by default; promotes to an `<a>` when `href` is set.
@@ -46,6 +46,19 @@ an `<article>` by default; promotes to an `<a>` when `href` is set.
 <Card title="Open findings" value={12} />
 <Card title="Today spend" value="3.42" unit="USD" trend="up" />
 <Card title="Pending questions" value={3} href="/app/questions/" />
+```
+
+For runtime-fetched metrics, render the card with a placeholder value
+(`"—"`) and a stable `id`; the page's `<script>` updates the inner
+`.value` after `apiFetch`:
+
+```astro
+<Card title="Today spend" value="—" id="card-spend-today" />
+```
+
+```ts
+const cell = document.querySelector('#card-spend-today .value');
+if (cell !== null) cell.textContent = `$${todaySpend.toFixed(2)}`;
 ```
 
 ### `<Table columns rows emptyMessage? caption?/>`

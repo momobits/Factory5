@@ -1,12 +1,24 @@
 ---
 import Dashboard from '../layouts/Dashboard.astro';
+import Card from '../components/Card.astro';
 ---
 
 <Dashboard title="Overview">
-  <div id="mount">Loading…</div>
+  <p id="error" class="err" hidden></p>
+  <div class="cards">
+    <Card title="Directives (total)" value="—" id="card-directives-total" />
+    <Card title="Open questions" value="—" id="card-questions-open" />
+    <Card title="Today spend" value="—" id="card-spend-today" />
+    <Card title="All-time spend" value="—" id="card-spend-alltime" />
+    <Card title="Open findings" value="—" id="card-findings-open" />
+  </div>
+  <p style="margin-top: 1.5rem;">
+    Use the nav to drill into each section. Pending questions are the most
+    time-sensitive — answer via Telegram / Discord / CLI.
+  </p>
 
   <script>
-    import { apiFetch, captureTokenFromUrl, getToken, NoTokenError, ApiError, el } from '../lib/api';
+    import { apiFetch, captureTokenFromUrl, getToken, NoTokenError, ApiError } from '../lib/api';
 
     interface Directive {
       id: string;
@@ -34,13 +46,22 @@ import Dashboard from '../layouts/Dashboard.astro';
       items: Finding[];
     }
 
+    const setCard = (cardId: string, value: string): void => {
+      const cell = document.querySelector(`#${cardId} .value`);
+      if (cell !== null) cell.textContent = value;
+    };
+
+    const showError = (message: string): void => {
+      const err = document.getElementById('error');
+      if (err === null) return;
+      err.textContent = message;
+      err.hidden = false;
+    };
+
     captureTokenFromUrl();
 
-    const mount = document.getElementById('mount');
-    if (mount === null) throw new Error('mount missing');
-
     if (getToken() === null) {
-      mount.textContent = 'No UI token present. Reopen the URL logged by factoryd.';
+      showError('No UI token present. Reopen the URL logged by factoryd.');
     } else {
       Promise.all([
         apiFetch<DirectivesList>('/api/v1/directives?limit=1'),
@@ -49,45 +70,29 @@ import Dashboard from '../layouts/Dashboard.astro';
         apiFetch<FindingsList>('/api/v1/findings?limit=500'),
       ])
         .then(([directives, questions, spendResp, findings]) => {
-          mount.innerHTML = '';
-          const cards = el('div', { class: 'cards' });
           const todayIso = new Date().toISOString().slice(0, 10);
           const todaySpend = spendResp.perDay.find((d) => d.date === todayIso)?.totalUsd ?? 0;
           const allTimeSpend = spendResp.perDirective.reduce(
             (a: number, d) => a + d.totalUsd,
             0,
           );
-          const openFindings = findings.items.filter(
-            (e) => e.finding.status === 'OPEN',
-          ).length;
+          const openFindings = findings.items.filter((e) => e.finding.status === 'OPEN').length;
 
-          const card = (title: string, value: string): HTMLElement =>
-            el('div', { class: 'card' }, el('h3', {}, title), el('div', { class: 'value' }, value));
-
-          cards.appendChild(card('Directives (total)', String(directives.total)));
-          cards.appendChild(card('Open questions', String(questions.total)));
-          cards.appendChild(card('Today spend', `$${todaySpend.toFixed(2)}`));
-          cards.appendChild(card('All-time spend', `$${allTimeSpend.toFixed(2)}`));
-          cards.appendChild(card('Open findings', String(openFindings)));
-          mount.appendChild(cards);
-
-          const tips = el(
-            'p',
-            { style: 'margin-top: 1.5rem;' },
-            'Use the nav to drill into each section. Pending questions are the most time-sensitive — answer via Telegram / Discord / CLI.',
-          );
-          mount.appendChild(tips);
+          setCard('card-directives-total', String(directives.total));
+          setCard('card-questions-open', String(questions.total));
+          setCard('card-spend-today', `$${todaySpend.toFixed(2)}`);
+          setCard('card-spend-alltime', `$${allTimeSpend.toFixed(2)}`);
+          setCard('card-findings-open', String(openFindings));
         })
         .catch((err: unknown) => {
-          mount.innerHTML = '';
           if (err instanceof NoTokenError) {
-            mount.textContent = err.message;
+            showError(err.message);
           } else if (err instanceof ApiError) {
-            mount.textContent = `API error ${err.status} (${err.code}): ${err.message}`;
+            showError(`API error ${String(err.status)} (${err.code}): ${err.message}`);
           } else if (err instanceof Error) {
-            mount.textContent = `Fetch failed: ${err.message}`;
+            showError(`Fetch failed: ${err.message}`);
           } else {
-            mount.textContent = 'Unknown error';
+            showError('Unknown error');
           }
         });
     }
