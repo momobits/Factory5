@@ -1,9 +1,101 @@
 ---
 import Dashboard from '../layouts/Dashboard.astro';
+import Form from '../components/Form.astro';
+import Field from '../components/Field.astro';
+import Submit from '../components/Submit.astro';
+import Alert from '../components/Alert.astro';
 ---
 
 <Dashboard title="New build">
-  <div id="mount">Loading…</div>
+  <div id="topErrorSlot" hidden>
+    <Alert kind="conflict" title="" body="" />
+  </div>
+
+  <div id="empty-projects" hidden>
+    <Alert kind="info" title="No projects yet">
+      <p>
+        Run <code>factory init</code> in a workspace before kicking off a build — the UI does
+        not create projects from scratch.
+      </p>
+    </Alert>
+  </div>
+
+  <p id="loading" style="color: color-mix(in srgb, currentColor 65%, transparent);">Loading…</p>
+
+  <div id="content" hidden>
+    <p
+      style="color: color-mix(in srgb, currentColor 65%, transparent); font-size: 0.9rem; margin: 0 0 1rem 0; max-width: 36rem;"
+    >
+      Mints a new directive on the server. Mirrors <code>factory build &lt;project&gt;</code>.
+      Submit is non-idempotent — the button disables on first click to prevent
+      double-submission.
+    </p>
+
+    <Form id="build-form">
+      <Field
+        name="project"
+        label="Project"
+        type="select"
+        required
+        options={[]}
+        hint="Loading projects…"
+      />
+      <div class="form-row">
+        <Field
+          name="language"
+          label="Language"
+          type="select"
+          options={[
+            { value: '', label: '(use project default)' },
+            { value: 'python', label: 'python' },
+            { value: 'node', label: 'node' },
+            { value: 'go', label: 'go' },
+            { value: 'rust', label: 'rust' },
+          ]}
+          hint="Falls back to project.json metadata.language."
+        />
+        <Field
+          name="autonomy"
+          label="Autonomy"
+          type="select"
+          options={[
+            { value: '', label: '(server default — assisted)' },
+            { value: 'chat', label: 'chat' },
+            { value: 'assisted', label: 'assisted' },
+            { value: 'autonomous', label: 'autonomous' },
+          ]}
+        />
+      </div>
+      <div class="form-row">
+        <Field
+          name="maxUsd"
+          label="Max USD"
+          type="number"
+          step="0.01"
+          min="0"
+          placeholder="project / config default"
+          hint="Leave blank for default tiers."
+        />
+        <Field
+          name="maxSteps"
+          label="Max steps"
+          type="number"
+          step="1"
+          min="1"
+          placeholder="project / config default"
+          hint="Leave blank for default tiers."
+        />
+      </div>
+
+      <div id="form-error-slot" hidden>
+        <Alert kind="conflict" title="" body="" />
+      </div>
+
+      <div class="form-actions">
+        <Submit label="Kick off build" id="submit-btn" />
+      </div>
+    </Form>
+  </div>
 
   <script>
     import {
@@ -12,7 +104,6 @@ import Dashboard from '../layouts/Dashboard.astro';
       apiFetch,
       apiPost,
       captureTokenFromUrl,
-      el,
       getToken,
     } from '../lib/api';
 
@@ -30,157 +121,90 @@ import Dashboard from '../layouts/Dashboard.astro';
       directive: { id: string };
     }
 
-    captureTokenFromUrl();
+    const setAlertText = (slotId: string, title: string, body: string): void => {
+      const slot = document.getElementById(slotId);
+      if (slot === null) return;
+      const titleEl = slot.querySelector('h4');
+      const bodyEl = slot.querySelector('p');
+      if (titleEl !== null) titleEl.textContent = title;
+      if (bodyEl !== null) bodyEl.textContent = body;
+      slot.hidden = false;
+    };
 
-    const mount = document.getElementById('mount');
-    if (mount === null) throw new Error('mount missing');
+    const hideAlert = (slotId: string): void => {
+      const slot = document.getElementById(slotId);
+      if (slot !== null) slot.hidden = true;
+    };
 
-    if (getToken() === null) {
-      mount.textContent = 'No UI token present. Reopen the URL logged by factoryd.';
-    } else {
-      apiFetch<ProjectsList>('/api/v1/projects')
-        .then((projects) => renderForm(projects.items, mount))
-        .catch((err: unknown) => renderTopError(err, mount));
-    }
-
-    function renderForm(projects: Project[], host: HTMLElement): void {
-      host.innerHTML = '';
-
-      if (projects.length === 0) {
-        const alert = el('div', { class: 'alert alert--info' });
-        alert.appendChild(el('h4', {}, 'No projects yet'));
-        const p = el('p', {});
-        p.appendChild(document.createTextNode('Run '));
-        p.appendChild(el('code', {}, 'factory init'));
-        p.appendChild(
-          document.createTextNode(
-            ' in a workspace before kicking off a build — the UI does not create projects from scratch.',
-          ),
-        );
-        alert.appendChild(p);
-        host.appendChild(alert);
-        return;
+    const codeHeading = (code: string, status: number): string => {
+      switch (code) {
+        case 'PROJECT_NOT_FOUND':
+          return 'Project not found — run `factory init` to register one.';
+        case 'PROJECT_METADATA_CORRUPT':
+          return 'project.json is corrupt — fix it before kicking off a build.';
+        case 'PROJECT_PATH_UNREADABLE':
+          return 'Project workspace is no longer readable.';
+        case 'SCHEMA_VALIDATION_FAILED':
+          return 'Validation failed — check the field values.';
+        case 'UI_AUTH_REQUIRED':
+          return 'Auth token missing or invalid — reopen the URL logged by factoryd.';
+        case 'UI_DISABLED':
+          return 'Web UI is disabled on this daemon (no FACTORY5_UI_TOKEN).';
+        case 'NON_LOCALHOST':
+          return 'Request rejected as non-localhost.';
+        case 'BAD_REQUEST':
+          return 'Bad request.';
+        case 'INTERNAL':
+          return 'Internal server error.';
+        default:
+          return `Error ${String(status)} (${code})`;
       }
+    };
 
-      const intro = el('p', {
-        style:
-          'color: color-mix(in srgb, currentColor 65%, transparent); font-size: 0.9rem; margin: 0 0 1rem 0; max-width: 36rem;',
-      });
-      intro.appendChild(document.createTextNode('Mints a new directive on the server. Mirrors '));
-      intro.appendChild(el('code', {}, 'factory build <project>'));
-      intro.appendChild(
-        document.createTextNode(
-          '. Submit is non-idempotent — the button disables on first click to prevent double-submission.',
-        ),
-      );
-      host.appendChild(intro);
+    const renderError = (err: unknown, slotId: string, fallbackTitle: string): void => {
+      if (err instanceof ApiError) {
+        setAlertText(slotId, codeHeading(err.code, err.status), err.message);
+      } else if (err instanceof Error) {
+        setAlertText(slotId, fallbackTitle, err.message);
+      } else {
+        setAlertText(slotId, fallbackTitle, 'Unknown error.');
+      }
+    };
 
-      const form = el('form', { class: 'form' }) as HTMLFormElement;
-
-      const projField = el('div', { class: 'form-field' });
-      projField.appendChild(el('label', { for: 'project' }, 'Project'));
-      const projSelect = el('select', {
-        id: 'project',
-        name: 'project',
-        required: '',
-      }) as HTMLSelectElement;
+    const populateProjects = (projects: Project[]): void => {
+      const projInput = document.getElementById('project') as HTMLSelectElement | null;
+      if (projInput === null) return;
       for (const p of projects) {
-        const opt = el('option', { value: p.name }, p.name) as HTMLOptionElement;
-        projSelect.appendChild(opt);
+        const opt = document.createElement('option');
+        opt.value = p.name;
+        opt.textContent = p.name;
+        projInput.appendChild(opt);
       }
-      projField.appendChild(projSelect);
-      const projHint = el('div', { class: 'hint' });
-      projHint.appendChild(
-        document.createTextNode(
-          `${String(projects.length)} known project${projects.length === 1 ? '' : 's'} — most-recently touched first. Names are resolved against the daemon's default workspace.`,
-        ),
-      );
-      projField.appendChild(projHint);
-      form.appendChild(projField);
-
-      const row = el('div', { class: 'form-row' });
-
-      const langField = el('div', { class: 'form-field' });
-      langField.appendChild(el('label', { for: 'language' }, 'Language'));
-      const langSelect = el('select', {
-        id: 'language',
-        name: 'language',
-      }) as HTMLSelectElement;
-      langSelect.appendChild(el('option', { value: '' }, '(use project default)'));
-      for (const lang of ['python', 'node', 'go', 'rust']) {
-        langSelect.appendChild(el('option', { value: lang }, lang));
+      const formField = projInput.parentElement;
+      const hintEl = formField?.querySelector('.hint');
+      if (hintEl !== null && hintEl !== undefined) {
+        const plural = projects.length === 1 ? '' : 's';
+        hintEl.textContent = `${String(projects.length)} known project${plural} — most-recently touched first. Names are resolved against the daemon's default workspace.`;
       }
-      langField.appendChild(langSelect);
-      langField.appendChild(
-        el('div', { class: 'hint' }, 'Falls back to project.json metadata.language.'),
-      );
-      row.appendChild(langField);
+    };
 
-      const autoField = el('div', { class: 'form-field' });
-      autoField.appendChild(el('label', { for: 'autonomy' }, 'Autonomy'));
-      const autoSelect = el('select', {
-        id: 'autonomy',
-        name: 'autonomy',
-      }) as HTMLSelectElement;
-      autoSelect.appendChild(el('option', { value: '' }, '(server default — assisted)'));
-      for (const a of ['chat', 'assisted', 'autonomous']) {
-        autoSelect.appendChild(el('option', { value: a }, a));
-      }
-      autoField.appendChild(autoSelect);
-      row.appendChild(autoField);
-      form.appendChild(row);
-
-      const budgetRow = el('div', { class: 'form-row' });
-
-      const usdField = el('div', { class: 'form-field' });
-      usdField.appendChild(el('label', { for: 'maxUsd' }, 'Max USD'));
-      const usdInput = el('input', {
-        id: 'maxUsd',
-        name: 'maxUsd',
-        type: 'number',
-        step: '0.01',
-        min: '0',
-        placeholder: 'project / config default',
-      }) as HTMLInputElement;
-      usdField.appendChild(usdInput);
-      usdField.appendChild(el('div', { class: 'hint' }, 'Leave blank for default tiers.'));
-      budgetRow.appendChild(usdField);
-
-      const stepsField = el('div', { class: 'form-field' });
-      stepsField.appendChild(el('label', { for: 'maxSteps' }, 'Max steps'));
-      const stepsInput = el('input', {
-        id: 'maxSteps',
-        name: 'maxSteps',
-        type: 'number',
-        step: '1',
-        min: '1',
-        placeholder: 'project / config default',
-      }) as HTMLInputElement;
-      stepsField.appendChild(stepsInput);
-      stepsField.appendChild(el('div', { class: 'hint' }, 'Leave blank for default tiers.'));
-      budgetRow.appendChild(stepsField);
-      form.appendChild(budgetRow);
-
-      const errSlot = el('div', { id: 'errSlot' });
-      form.appendChild(errSlot);
-
-      const actions = el('div', { class: 'form-actions' });
-      const submit = el(
-        'button',
-        { type: 'submit', class: 'btn btn-primary' },
-        'Kick off build',
-      ) as HTMLButtonElement;
-      actions.appendChild(submit);
-      form.appendChild(actions);
-
-      host.appendChild(form);
+    const wireForm = (): void => {
+      const form = document.getElementById('build-form') as HTMLFormElement | null;
+      const submit = document.getElementById('submit-btn') as HTMLButtonElement | null;
+      if (form === null || submit === null) return;
 
       form.addEventListener('submit', (e) => {
         e.preventDefault();
         if (submit.disabled) return;
         submit.disabled = true;
         submit.textContent = 'Submitting…';
-        errSlot.innerHTML = '';
+        hideAlert('form-error-slot');
+
+        const projSelect = document.getElementById('project') as HTMLSelectElement;
+        const langSelect = document.getElementById('language') as HTMLSelectElement;
+        const autoSelect = document.getElementById('autonomy') as HTMLSelectElement;
+        const usdInput = document.getElementById('maxUsd') as HTMLInputElement;
+        const stepsInput = document.getElementById('maxSteps') as HTMLInputElement;
 
         const body: Record<string, unknown> = { project: projSelect.value };
         if (langSelect.value !== '') body.language = langSelect.value;
@@ -205,70 +229,44 @@ import Dashboard from '../layouts/Dashboard.astro';
           .catch((err: unknown) => {
             submit.disabled = false;
             submit.textContent = 'Kick off build';
-            renderInlineError(err, errSlot);
+            renderError(err, 'form-error-slot', 'Submit failed');
           });
       });
-    }
+    };
 
-    function renderInlineError(err: unknown, slot: HTMLElement): void {
-      slot.innerHTML = '';
-      const alert = el('div', { class: 'alert alert--conflict' });
-      if (err instanceof ApiError) {
-        alert.appendChild(el('h4', {}, codeHeading(err.code, err.status)));
-        alert.appendChild(el('p', {}, err.message));
-      } else if (err instanceof Error) {
-        alert.appendChild(el('h4', {}, 'Submit failed'));
-        alert.appendChild(el('p', {}, err.message));
-      } else {
-        alert.appendChild(el('h4', {}, 'Submit failed'));
-        alert.appendChild(el('p', {}, 'Unknown error.'));
-      }
-      slot.appendChild(alert);
-    }
+    captureTokenFromUrl();
 
-    function renderTopError(err: unknown, host: HTMLElement): void {
-      host.innerHTML = '';
-      if (err instanceof NoTokenError) {
-        host.textContent = err.message;
-        return;
+    if (getToken() === null) {
+      const loading = document.getElementById('loading');
+      if (loading !== null) {
+        loading.textContent = 'No UI token present. Reopen the URL logged by factoryd.';
       }
-      const alert = el('div', { class: 'alert alert--conflict' });
-      if (err instanceof ApiError) {
-        alert.appendChild(el('h4', {}, codeHeading(err.code, err.status)));
-        alert.appendChild(el('p', {}, err.message));
-      } else if (err instanceof Error) {
-        alert.appendChild(el('h4', {}, 'Failed to load projects'));
-        alert.appendChild(el('p', {}, err.message));
-      } else {
-        alert.appendChild(el('h4', {}, 'Failed to load projects'));
-        alert.appendChild(el('p', {}, 'Unknown error.'));
-      }
-      host.appendChild(alert);
-    }
+    } else {
+      apiFetch<ProjectsList>('/api/v1/projects')
+        .then((projects) => {
+          const loading = document.getElementById('loading');
+          if (loading !== null) loading.hidden = true;
 
-    function codeHeading(code: string, status: number): string {
-      switch (code) {
-        case 'PROJECT_NOT_FOUND':
-          return 'Project not found — run `factory init` to register one.';
-        case 'PROJECT_METADATA_CORRUPT':
-          return 'project.json is corrupt — fix it before kicking off a build.';
-        case 'PROJECT_PATH_UNREADABLE':
-          return 'Project workspace is no longer readable.';
-        case 'SCHEMA_VALIDATION_FAILED':
-          return 'Validation failed — check the field values.';
-        case 'UI_AUTH_REQUIRED':
-          return 'Auth token missing or invalid — reopen the URL logged by factoryd.';
-        case 'UI_DISABLED':
-          return 'Web UI is disabled on this daemon (no FACTORY5_UI_TOKEN).';
-        case 'NON_LOCALHOST':
-          return 'Request rejected as non-localhost.';
-        case 'BAD_REQUEST':
-          return 'Bad request.';
-        case 'INTERNAL':
-          return 'Internal server error.';
-        default:
-          return `Error ${String(status)} (${code})`;
-      }
+          if (projects.items.length === 0) {
+            const empty = document.getElementById('empty-projects');
+            if (empty !== null) empty.hidden = false;
+            return;
+          }
+
+          const content = document.getElementById('content');
+          if (content !== null) content.hidden = false;
+          populateProjects(projects.items);
+          wireForm();
+        })
+        .catch((err: unknown) => {
+          const loading = document.getElementById('loading');
+          if (err instanceof NoTokenError) {
+            if (loading !== null) loading.textContent = err.message;
+            return;
+          }
+          if (loading !== null) loading.hidden = true;
+          renderError(err, 'topErrorSlot', 'Failed to load projects');
+        });
     }
   </script>
 </Dashboard>
