@@ -2,6 +2,28 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-03 — Step 3.4 shipped (all 10 pages converted to component library; el() retired)
+
+- Step range 3.4 across `54c0f20..dfd1a07` (8 commits including a session-start drift reconcile).
+- Session-start drift reconcile (`54c0f20`) — third occurrence of the post-session-end self-reference drift (`cce7065`/`db61baf` were the prior two): STATE.md "Last commit" pointed at `94b8b71` (the 3.3 feat) but actual HEAD was the `4466078` session-end docs commit. First reconcile attempt amended the SHA, which changed the commit's SHA and reproduced the drift; soft-reset and recommitted as a single non-self-referencing entry matching the established `db61baf` shape ("Last commit" → the session-end commit; "State reconcile" entry → the prior reconcile, not itself). Worth a small `/session-end` skill fix (track "last work commit" rather than HEAD, or amend STATE.md post-commit) to break the recurrence — flagged in the reconcile commit body, not addressed here.
+- Step 3.4 spans 7 page-conversion commits + this final closing commit:
+  - `32bdfb6` index.astro → `<Card>` × 5; first `id?` extension on a 3.3 component (the runtime-fetch placeholder pattern that turned out to be load-bearing for every list page).
+  - `d55c41d` findings/index.astro + Table extension (`id?` + `loading?`); chrome rendered server-side, script replaces tbody on resolve, empty result → single colspan'd `<td class="empty">` row.
+  - `a876608` projects/questions/spend list pages; projects empty-state hits dedicated `<Alert kind="info">` per migration map; spend page's four sub-tables share a per-page `fillTable<T>` helper.
+  - `e849aa7` directives list + project/question detail pages; introduces the hidden-Alert-placeholder pattern for dynamic conflict/success swapping (one Alert per kind, server-rendered hidden, script reveals via `hidden=false` and writes textContent into inner h4/p).
+  - `58d4584` build.astro → `<Form>` + `<Field>` + `<Submit>` (the primary form use case); project select `options={[]}` server-side, script appends one `<option>` per fetched project then rewrites the `Loading projects…` hint paragraph.
+  - `a405556` directives/detail.astro inlines `el()` as a per-page helper (the live SSE render path's per-page DOM helper exception per the migration map).
+  - `dfd1a07` retires `el()` and `loadInto()` from `lib/api.ts`; flips `[ ] 3.4` → `[x] 3.4` in steps.md and ROADMAP.md; documents the Dashboard-CSS scoping discovery + deferred PageShell decision in components/README.md.
+- ADRs decided: none (refactor-only step).
+- Issues opened / closed: none.
+- Minor fixes: README format issue auto-fixed by `prettier --write` after the components/README.md edit; soft-reset of the failed self-amend reconcile attempt.
+- Blockers hit: self-reference in the reconcile commit (described above). Found mid-conversion that Astro's scoped CSS doesn't propagate `data-astro-cid-*` to slot content — Dashboard's class-based rules (`.cards`, `.card`, `.empty`, `.err`, `.btn*`, `.alert*`, `.form-*`, table-base) only match elements rendered directly inside Dashboard's own template (just the `<header class="shell">` chrome and the inner `<h2>`). Decided not to prune those rules during 3.4 (they're already inert for slot content; pruning is safe but the future `<style is:global>` follow-up is what would actually make them load-bearing); recorded in components/README.md.
+- All four `pnpm` gates green at every commit and at session end. Test count holds at the prior baseline (state 152, channels 175, daemon 152, brain 93, worker 38, worker-sandbox 86 + 3 skipped, assessor 79, wiki 64, cli 82, providers 39, ipc 28, events 3 — same as last STATE.md baseline of 1040 across 73 files). 3.4 added zero test files (page conversions; `factory-web` still has no vitest harness).
+- Two items deferred during 3.4, filed as 3.x backlog rather than 3.5 blockers: (i) `<PageShell>` adoption across all 10 pages — coupled to removing Dashboard's inner `<h2>{title}</h2>` so we don't get double `<h2>`s; (ii) Dashboard primitives (`.cards`, `.empty`, `.err`, `.btn*`, etc.) → `<style is:global>` so they actually apply to slot-level elements. Both fit cleanly in one focused follow-up commit.
+- Step 3.1 deferred work (still open): `finding.created` and `log.line` brain emission. 3.5 specifically needs `log.line` (one bubble per agent message in the chat page); pin `log.line` emission as part of 3.5's scope OR a 3.5-prerequisite mini-step.
+- Loose ends from prior sessions still open (not blocking 3.5): synthetic smoke directive `01KQPDMQE6QTQZ3QMDD69019YK` + `demo-project` in DB; factoryd PID 32436 may still be running.
+- Next: step 3.5 — `/app/chat` page (browser mirror of `factory chat`); reuses Phase 2's `command-handlers.ts` for `/cmd` shortcut path; SSE stream consumed via `apiStream` helper from 3.2.
+
 ## 2026-05-03 — Steps 3.2 + 3.3 shipped (SSE FE wiring + Astro component library)
 
 - Step range 3.2-3.3 across `db61baf..94b8b71` (3 commits including a session-start drift reconcile).

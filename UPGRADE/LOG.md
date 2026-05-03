@@ -6,6 +6,50 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-03 — Phase 3 step 3.4 closed (all 10 pages → component library; el() retired)
+
+Step 3.4 shipped this session run — the longest sub-step in Phase 3. Every page in `apps/factory-web/src/pages/` now consumes the Astro component library shipped in 3.3 (`<Card>`, `<Table>`, `<EmptyState>`, `<Alert>`, `<Form>`, `<Field>`, `<Submit>`); `el()` and `loadInto()` retired from `lib/api.ts`. Tier 3 ROADMAP item flipped.
+
+**Commits (8 in this session, post-`4466078`):**
+
+- `54c0f20` `docs(state): reconcile STATE.md last-commit pointer to current HEAD` (third occurrence of the post-session-end self-reference drift; first attempt to self-reference via `git commit --amend` reproduced the drift because amend changes the SHA — soft-reset and recommitted following the established `db61baf` shape that points "Last commit" at the session-end commit and the "State reconcile" entry at the prior reconcile)
+- `32bdfb6` `refactor(3.4): convert index.astro to <Card> components` (introduces the `id?` extension on Card for the runtime-fetch placeholder pattern)
+- `d55c41d` `refactor(3.4): convert findings list page to <Table>; extend Table with id?/loading?` (Table extension: `loading={true}` renders chrome + colspan'd "Loading…" row instead of falling through to the empty-message branch — realises the components/README.md's "render with `rows={[]}` server-side and append `<tr>` rows from the script" pattern that Table couldn't actually do pre-3.4)
+- `a876608` `refactor(3.4): convert projects/questions/spend list pages to <Table> + <Alert>` (projects empty-state hits dedicated `<Alert kind="info">` per migration map; spend page's four sub-tables share a per-page `fillTable<T>` helper)
+- `e849aa7` `refactor(3.4): convert directives list + project/question detail pages` (introduces the hidden-Alert-placeholder pattern for dynamic conflict/success swapping; conditional answer-form-wrapper for questions/detail)
+- `58d4584` `refactor(3.4): convert build.astro to <Form> + <Field> + <Submit>` (the primary form use case; project select `options={[]}` server-side + script appends one `<option>` per fetched project + rewrites the placeholder hint)
+- `a405556` `refactor(3.4): inline el() helper into directives/detail.astro` (the live SSE render path's per-page DOM helper exception per the migration map's "or a per-page helper if the page genuinely needs a wrapper" clause)
+- `dfd1a07` `refactor(3.4): retire el() + loadInto() from lib/api.ts; close step 3.4` (flips `[ ] 3.4` → `[x] 3.4` in steps.md and ROADMAP.md; documents the Dashboard-CSS scoping discovery and the deferred PageShell decision in components/README.md)
+
+**Design discoveries (recorded in `apps/factory-web/src/components/README.md`):**
+
+- **Astro scoped CSS does not propagate to slot content.** Dashboard's class-based rules (`.cards`, `.card`, `.empty`, `.err`, `.btn*`, `.alert*`, `.form-*`, `table`/`th`/`td`) survive 3.4 intentionally — they only ever matched elements rendered directly inside Dashboard's own template (the `<header class="shell">` chrome and inner `<h2>`), so they were already inert for slot content. Pruning would not visually regress anything; leaving them in place keeps the door open for a future `<style is:global>` adoption that would let the layout actually style slot-level elements without per-page repetition.
+- **`<PageShell>` adoption deferred.** Optional structural sugar; not required by §3.4 acceptance. Wiring it across all 10 pages couples to removing Dashboard's inner `<h2>` (otherwise pages get double `<h2>`s), which would land cleanest in the same focused follow-up step that adopts `<style is:global>` for the Dashboard primitives. Filed as 3.x backlog.
+- **`<Card>` and `<Table>` `id?` / `loading?` extensions** were the load-bearing pattern for runtime-fetched data. Server-render with placeholder values + stable `id`; script populates inner cells (`#card-X .value`) or replaces tbody (`#tbl-X tbody`) on `apiFetch` resolution. Empty results from the fetch render a single colspan'd `<tr><td class="empty">` row inside the table so column headers stay visible. Both extensions are non-breaking and documented in components/README.md alongside their static-data counterparts.
+
+**Decisions / judgement calls during 3.4 worth recording (no new ADR):**
+
+- **Filter forms (`<form class="filter-form">`)** stay as inline HTML — they're a horizontal toolbar, not the heavy `<Form>` grid layout. Per the migration map, only `<form class="form">` converts to `<Form>` + `<Field>`.
+- **Hidden-Alert-placeholder pattern** for dynamic alerts (conflict/success swapping inside detail pages and the build form): server-render a `<Alert>` with empty `title=""` `body=""` inside a `<div hidden>`; the script reveals via `hidden=false` and writes textContent into the inner `<h4>`/`<p>`. Avoids dynamic class manipulation (which wouldn't pick up Astro's scoped `.alert--conflict[data-astro-cid-X]` selector anyway) and keeps the script free of `<div class="alert alert--conflict">` building.
+- **`<Submit>` is type=submit by design.** The projects/detail "Clear all defaults" button stays a raw `<button type="button" class="btn btn-danger">` because it has its own click handler distinct from form submit. Dashboard's global `.btn*` rules survive the prune partly because of this — though see the scoping discovery above; the rules are nominally "global" but in practice scoped, so the visual fate of raw buttons is one of the questions the future `<style is:global>` follow-up answers.
+- **`loadInto()` retirement** (not in the migration map; called out here because it was unused after the conversion). The new pattern is direct `apiFetch` + `then`/`catch` with a server-rendered `<p id="error" class="err" hidden>` region above the content; `loadInto` no longer fit because it expected a single mount element to wipe and refill, and the new pages have a distributed mount (table tbody + error region + count paragraph + form fields).
+
+**State of `main` at session end:**
+
+- `pnpm build` ✅
+- `pnpm test` ✅ (state 152, channels 175, daemon 152, brain 93, worker 38, worker-sandbox 86+3 skipped, assessor 79, wiki 64, cli 82, providers 39, ipc 28, events 3 — baseline holds; 3.4 added zero test files)
+- `pnpm lint` ✅
+- `pnpm format:check` ✅
+- Phase 3 progress: 3.1 / 3.2 / 3.3 / 3.4 closed; 3.5 / 3.6 / 3.7 / 3.8 / 3.9 / 3.10 still open. Phase 3 tag (`phase-3-web-ui-closed`) goes on at step 3.11 once acceptance criteria for the remaining steps are met.
+
+**What's next:**
+
+Step **3.5** = `/app/chat` page (browser mirror of `factory chat`) per [`plans/tier-3-web-ui-live-and-complete.md`](plans/tier-3-web-ui-live-and-complete.md) §3.5. Three new surfaces: `apps/factory-web/src/pages/chat.astro` (history + composer + markdown-rendered replies + auto-scroll-with-pause); `POST /api/v1/chat/messages` route in `packages/daemon/src/server.ts` minting an `intent=chat` directive whose SSE stream the page subscribes to; request/response shapes in `packages/ipc/src/schemas.ts`. Reuses Phase 2's `command-handlers.ts` for the optional `/cmd` shortcut path (web-typed `/status` / `/spend` / `/findings` hit the same handler set Discord/Telegram chat does). Carries the Step 2.6 `factory chat` per-turn timeout fix implicitly (streaming partial daemon-side progress eliminates the 120 s false-timeout for chat the same way it did for builds in 3.2).
+
+Pre-requisite: the deferred `log.line` brain emission from Step 3.1 needs to land for 3.5 to render replies (one bubble per agent message). Either pin as part of 3.5's scope or a 3.5-prerequisite mini-step.
+
+---
+
 ## 2026-05-03 — Phase 2 (channel-parity) closed; Phase 3 (web-ui) kicked off
 
 Phase 2 shipped end-to-end this session run. Steps 2.3 (pending-question button affordances), 2.4 (`factory cancel` kills workers), 2.5 (8-intent triage + channel re-routing) all landed; 2.6 deferred to Phase 3 (folded into the SSE work). Plus an out-of-step fix that caught a UX gap once channels went live: `/status` output across CLI, Discord, and Telegram now includes a project column so operators can tell which directive belongs to which project.
