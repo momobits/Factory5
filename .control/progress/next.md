@@ -1,7 +1,7 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-03T09:16:31Z by
-> `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-03T12:13:11Z by
+> `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
 
@@ -16,27 +16,32 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-Open [`../phases/phase-3-web-ui/README.md`](../phases/phase-3-web-ui/README.md) and [`steps.md`](../phases/phase-3-web-ui/steps.md). Step **3.1 = SSE on `/api/v1/directives/:id/stream`** per [`../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md`](../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md) §3.1. Adds an SSE route on the daemon emitting `task.*`, `finding.created`, `spend.updated`, `log.line`, and `directive.completed` events; replaces the polling pattern in `apps/factory-web/src/pages/directives/detail.astro`. The carried-forward Step 2.6 (`factory chat` per-turn timeout) is naturally subsumed by this work — once partial daemon-side progress streams, the 120 s false-timeout problem disappears without a constant bump.
+Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). Step **3.2 = wire `apps/factory-web/src/pages/directives/detail.astro` to the SSE stream** per [`../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md`](../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md) §3.2. Replace the existing one-shot `loadInto<Detail>` polling with an EventSource subscription that incrementally renders task / spend / completion events as they arrive. Add an `apiStream<T>(path)` helper to `apps/factory-web/src/lib/api.ts` that wraps EventSource with token-auth (`?t=<UI_TOKEN>` query param) and reconnect. UX: connection-state pip ("Live" / "Reconnecting" / "Disconnected"), auto-scroll log tail with pause-on-user-scroll, on `directive.completed` stop showing the live indicator and surface the final status. Acceptance: open detail in a second browser tab during a live build and see updates without F5; EventSource reconnects on transient disconnect; polling fallback exercised under a stub that strips SSE.
+
 
 ## Notes for next session
 
-Phase 3 brings the web UI from vanilla DOM-in-Astro to real Astro components with live updates via SSE, plus a chat surface and mobile-responsive nav. The phase splits naturally into 3a (SSE + component-library + page conversion) and 3b (chat / projects-new / cancel-pause buttons / spend charts / mobile nav / explicit logout). Issues addressed: U006, U007, U008, U009, U010, U022.
+Step 3.1 shipped the backend half of the live-updates uplift. Step 3.2 wires the front-end. Two anchor files: `apps/factory-web/src/lib/api.ts` (new `apiStream<T>(path)` helper) and `apps/factory-web/src/pages/directives/detail.astro` (replace `loadInto<Detail>` with EventSource subscription).
 
-**Carried forward from Phase 2:** Step 2.6 (`factory chat` per-turn timeout) — the cheap path was a bump to 600 s; the better path is partial daemon-side progress streaming. Phase 3.1's SSE route is the natural home for the streaming work — once it ships, the 120 s false-timeout problem disappears for chat as well.
+**Step 3.2 design notes:**
 
-**Step 3.1 design notes:**
+- **Auth.** EventSource cannot set custom headers, so `apiStream` must append `?t=<UI_TOKEN>` to the URL. The token already lives in `apps/factory-web/src/lib/api.ts` (the existing `apiFetch`/`apiPost` paths read it). Strip the token from `history.replaceState` after the initial page load so it doesn't appear in browser history.
+- **Reconnect.** The browser's EventSource auto-reconnects on transient disconnect. Wrap it so `apiStream` emits a "Reconnecting" connection-state to the page.
+- **Render.** Detail page tracks `Map<taskId, Task>` for live tasks; on `task.started` insert; on `task.completed` flip status + finishedAt; on `spend.updated` rewrite the spend line; on `directive.completed` stop showing the live indicator and surface the final status prominently. Keep a polling fallback (every 5 s `apiFetch('/api/v1/directives/:id')`) for browsers behind an SSE-stripping proxy — only used when the EventSource fires `error` and `readyState === CLOSED` repeatedly.
+- **Spend page.** `/app/spend/index.astro` should also subscribe (per-directive or one-shot reconnect) so spend rolls up live. Out-of-scope for 3.2 if 3.2 stays focused on `directive/detail`; pencil it in for 3.8 (spend page charts).
 
-- The SSE route is `/api/v1/directives/:id/stream`. Events: `task.*` (created / updated / completed), `finding.created`, `spend.updated`, `log.line`, `directive.completed`. Use Fastify's reply.raw for the SSE pump.
-- Author the wire shape in `packages/ipc/src/sse.ts` (or similar) so the brain emits via a single helper. Channel for events: the existing `Doorbell` infra plus a per-directive subscription map.
-- Replace the polling loop in `apps/factory-web/src/pages/directives/detail.astro` with an EventSource subscription. Keep the polling fallback for browsers behind a proxy that strips SSE.
-- Spend page (`/app/spend/index.astro`) should also subscribe — every `spend.updated` event refreshes the rollup. Tests: a vitest-backed harness driving the SSE route end-to-end.
+**Step 3.1 deferred work that 3.2 may want to wire:**
 
-**Pre-2026-05-03 baseline live-smoke (carried into Phase 3):** Discord+Telegram slash command surfaces are live-verified. Free-form chat re-routing (Telegram private chat; Discord with @-mention) verified. `factory cancel` IPC route paths verified (NOT_FOUND / ALREADY_TERMINAL / OK + CLI exit codes 0/2/3); subprocess-kill chain not live-smoked this phase but unit-test coverage is dense (30 tests across pool / registry / state / daemon / CLI).
+- **`finding.created` brain emission.** Tier-3 plan calls for it; spec carries the shape; route forwards it. The cheapest place is `pool.ts` after a task finishes — emit one `finding.created` per entry in `outcome.result.findingsRaised` (look up the registry row by id for the body fields). Self-contained (~20 LOC). 3.2 may need it for the "findings list grows live" UX, or it can defer to a 3.x sub-step.
+- **`log.line` forwarder.** Selective pino-stream tap that filters by directive correlation id. More invasive — a Pino transport or a custom serializer. Defer to a separate sub-step (or skip entirely for 3.x; the page can show task-level log via the existing `BUILD.md` poll).
 
-**Loose ends from this session (operator may want to clean before Phase 3):**
+**Carried forward from Phase 2 (Step 2.6 — `factory chat` per-turn timeout):** infrastructure now in place via 3.1's SSE route. Full resolution lands in step 3.5 when the `/app/chat` page routes chat directives through this stream — until then the 120 s false-timeout could still bite a chat directive that takes longer than 120 s for the first turn. Not a regression vs prior state; the cheap-path bump remains an option if 3.5 slips.
 
-- Synthetic smoke directive in DB (`01KQPDMQE6QTQZ3QMDD69019YK`, status=failed/cancelled) plus a synthetic project (`demo-project`) and its linked directive — both inserted by the live-smoke probes. `packages/state/smoke-cleanup.mjs` reaps them. The Bash sandbox denies direct `node` invocation against the DB without operator approval; run manually with `cd packages/state && node smoke-cleanup.mjs` if you want a clean `factory status`.
-- factoryd PID 32436 still running (started at 09:20 UTC for live-smoke). `factory daemon stop` (or any of the §3.5 invocation forms) shuts it down.
-- The `.factory1/` line that briefly appeared in `.gitignore` got cleaned at some point during this session (working tree is clean as of session-end). If it re-surfaces, source-trace via `git blame` on a future commit.
+**Pre-2026-05-03 baseline live-smoke (carried into Phase 3):** Discord+Telegram slash command surfaces are live-verified. Free-form chat re-routing verified. `factory cancel` IPC route paths verified end-to-end. SSE route is unit/integration-tested only — full live-smoke (open a real browser to `/app/directives/detail?id=…` while a build runs) lands with 3.2.
+
+**Loose ends from prior session (still open; not blocking 3.2):**
+
+- Synthetic smoke directive in DB (`01KQPDMQE6QTQZ3QMDD69019YK`, status=failed/cancelled) plus a synthetic project (`demo-project`) and its linked directive. Reap with `cd packages/state && node smoke-cleanup.mjs` if you want a clean `factory status`.
+- factoryd PID 32436 from prior session still running. `factory daemon stop` shuts it down.
 
 Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions; this STATE.md is the operational cursor (overwritten at each `/session-end`).
