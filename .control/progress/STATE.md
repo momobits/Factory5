@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-03 12:10 UTC by /session-end (post step 3.1 — SSE backend + brain wiring shipped)
+**Last updated:** 2026-05-03 12:15 UTC by drift reconcile (post-session-end pointer drift surfaced at session start)
 **Current phase:** 3 — web-ui
 **Current step:** 3.2 — wire `directives/detail.astro` to the SSE stream (next; step 3.1 closed)
 **Status:** ready (clean working tree; SSE backend infrastructure complete with brain emission wired)
@@ -27,7 +27,7 @@ Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). S
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `772f9f3` — feat(3.1): SSE on /api/v1/directives/:id/stream
+- **Last commit:** `15bbad3` — docs(state): session end for step 3.1
 - **Uncommitted changes:** none (working tree clean)
 - **Last phase tag:** `phase-2-channel-parity-closed` (annotated tag at commit `081b832`)
 
@@ -65,11 +65,11 @@ Step 3.1 did not promote a new ADR — the SSE protocol shape is pinned in `UPGR
 
 ## Recently completed (last 5 steps)
 
+- Session-end docs — `docs(state)`: session end for step 3.1 (STATE.md / journal / next.md updated by `/session-end`) — 2026-05-03 — `15bbad3`
 - Step 3.1 — `feat(3.1)`: SSE on `/api/v1/directives/:id/stream` — spec, six Zod event schemas (`task.started` / `task.completed` / `finding.created` / `spend.updated` / `log.line` / `directive.completed`), `DirectiveStreamHub` (subscribe / emit / closeDirective / shutdown), Fastify route via `reply.hijack()` with header-or-`?t=` auth, backfill on connect, 15 s heartbeats, cleanup on disconnect, brain emission threaded through `BrainOptions.emitDirectiveEvent` → serve → inline → loop+pool. `finding.created` and `log.line` emission deferred. — 2026-05-03 — `772f9f3`
 - State reconcile — `docs(state)`: reconcile STATE.md last-commit pointer to current HEAD (closed the post-session-end self-reference drift surfaced at the start of this session) — 2026-05-03 — `cce7065`
 - Post-phase-2 docs polish — `docs(2)`: documented `factory`/`factoryd` PATH setup in `docs/ONBOARDING.md` §3.5 (three options: pnpm dev scripts / `pnpm link --global` / shell-wrapper functions) — 2026-05-03 — `f7c78ce`
 - Phase 2 closed (`chore(phase-2): close phase 2, kick off phase 3`); tag `phase-2-channel-parity-closed` on `081b832`; Phase 3 scaffolded — 2026-05-03 — `384d2d3`
-- Post-2.2 UX fix — `fix(2.2)`: project name column in `/status` output across CLI, Discord, Telegram (shared `makeProjectNameLookup` helper) — 2026-05-03 — `081b832`
 
 ---
 
