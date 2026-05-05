@@ -1199,7 +1199,7 @@ describe('IPC server — /api/v1/spend (ADR 0025, sub-step 9.6)', () => {
     await app.close();
   });
 
-  it('GET /api/v1/spend returns all four rollups + echoed filter on empty db', async () => {
+  it('GET /api/v1/spend returns all five rollups + echoed filter on empty db', async () => {
     const app = await buildIpcServer(baseOpts());
     const res = await app.inject({
       method: 'GET',
@@ -1211,12 +1211,14 @@ describe('IPC server — /api/v1/spend (ADR 0025, sub-step 9.6)', () => {
       perProject: unknown[];
       perDirective: unknown[];
       perDay: unknown[];
+      perDayPerProject: unknown[];
       perModel: unknown[];
       filter: Record<string, unknown>;
     };
     expect(body.perProject).toEqual([]);
     expect(body.perDirective).toEqual([]);
     expect(body.perDay).toEqual([]);
+    expect(body.perDayPerProject).toEqual([]);
     expect(body.perModel).toEqual([]);
     expect(body.filter).toEqual({});
     await app.close();
@@ -1235,6 +1237,13 @@ describe('IPC server — /api/v1/spend (ADR 0025, sub-step 9.6)', () => {
       perProject: Array<{ totalUsd: number; callCount: number }>;
       perDirective: Array<{ directiveId: string; totalUsd: number; callCount: number }>;
       perDay: Array<{ date: string; totalUsd: number; callCount: number }>;
+      perDayPerProject: Array<{
+        date: string;
+        projectId: string | null;
+        display: string;
+        totalUsd: number;
+        callCount: number;
+      }>;
       perModel: Array<{ provider: string; model: string; totalUsd: number }>;
     };
     expect(body.perDirective).toHaveLength(1);
@@ -1243,6 +1252,14 @@ describe('IPC server — /api/v1/spend (ADR 0025, sub-step 9.6)', () => {
     expect(body.perDirective[0]?.totalUsd).toBeCloseTo(0.17, 2);
     expect(body.perDay).toHaveLength(1);
     expect(body.perDay[0]?.date).toBe('2026-04-23');
+    // The seeded directive has no project, so perDayPerProject collapses
+    // both calls into a single (unassigned) cell on 2026-04-23.
+    expect(body.perDayPerProject).toHaveLength(1);
+    expect(body.perDayPerProject[0]?.date).toBe('2026-04-23');
+    expect(body.perDayPerProject[0]?.projectId).toBeNull();
+    expect(body.perDayPerProject[0]?.display).toBe('(unassigned)');
+    expect(body.perDayPerProject[0]?.callCount).toBe(2);
+    expect(body.perDayPerProject[0]?.totalUsd).toBeCloseTo(0.17, 2);
     expect(body.perModel).toHaveLength(2);
     expect(body.perModel.some((m) => m.model === 'claude-sonnet-4-6')).toBe(true);
     expect(body.perModel.some((m) => m.model === 'claude-opus-4-7')).toBe(true);

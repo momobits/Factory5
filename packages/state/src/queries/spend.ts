@@ -1,14 +1,15 @@
 /**
  * Cross-session spend aggregation queries over `model_usage`.
  *
- * Phase 7b.2 — powers the `factory spend` CLI subcommand in 7b.3. Four
+ * Phase 7b.2 — powers the `factory spend` CLI subcommand in 7b.3. Five
  * rollup shapes, each returning JSON-friendly rows that the CLI formats
- * for terminal display:
+ * for terminal display (and the spend web page renders as tables / charts):
  *
- *   - {@link perProject}    — `SUM(cost_usd)` grouped by `directives.project_id`
- *   - {@link perDirective}  — `SUM(cost_usd)` grouped by `directive_id`
- *   - {@link perDay}        — `SUM(cost_usd)` grouped by `date(called_at)` (UTC)
- *   - {@link perModel}      — `SUM(cost_usd)` grouped by `(provider, model)`
+ *   - {@link perProject}        — `SUM(cost_usd)` grouped by `directives.project_id`
+ *   - {@link perDirective}      — `SUM(cost_usd)` grouped by `directive_id`
+ *   - {@link perDay}            — `SUM(cost_usd)` grouped by `date(called_at)` (UTC)
+ *   - {@link perDayPerProject}  — `SUM(cost_usd)` grouped by `(date(called_at), project_id)` — powers Phase 3.8's spend-page sparkline + stacked bar
+ *   - {@link perModel}          — `SUM(cost_usd)` grouped by `(provider, model)`
  *
  * Per-project and per-directive rollups join through `directives.project_id`
  * (populated for every directive since migration 006 per ADR 0021).
@@ -67,6 +68,19 @@ export interface PerDirectiveSpend {
 export interface PerDaySpend {
   /** UTC calendar date as `YYYY-MM-DD` (via SQLite's `date()` function). */
   date: string;
+  totalUsd: number;
+  callCount: number;
+}
+
+export interface PerDayPerProjectSpend {
+  /** UTC calendar date as `YYYY-MM-DD` (via SQLite's `date()` function). */
+  date: string;
+  /** ULID from `directives.project_id`. `null` for rows attributed to no project. */
+  projectId: string | null;
+  /** Human label from `projects.name`. `null` when `projectId` is `null` or the projects row is missing. */
+  projectName: string | null;
+  /** Pre-formatted display label per ADR 0021 §5 — `name (…id-suffix)`. See {@link formatProjectDisplay}. */
+  display: string;
   totalUsd: number;
   callCount: number;
 }
@@ -260,6 +274,53 @@ export function perDay(db: Database, filter?: SpendFilter): PerDaySpend[] {
     callCount: number;
   }[];
   return rows;
+}
+
+/**
+ * Per-(day, project) spend rollup. Joins `model_usage → directives → projects`
+ * (both LEFT) so orphan-directive and NULL-project rows roll up into a
+ * single `(unassigned)` bucket per date rather than being silently dropped.
+ *
+ * Powers Phase 3.8's spend-page charts: the per-project 14-day sparklines
+ * (one row per project, picking that project's date series) and the 30-day
+ * stacked bar (date as outer axis, project as stack segment).
+ *
+ * Ordering: `date DESC, totalUsd DESC` — today first, biggest-spend project
+ * inside each day first. Callers slice the leading window client-side.
+ */
+export function perDayPerProject(db: Database, filter?: SpendFilter): PerDayPerProjectSpend[] {
+  const { sql: filterSql, params } = buildFilterClause(filter);
+  const where = composeWhere(filterSql);
+  const rows = db
+    .prepare(
+      `SELECT
+         date(u.called_at)             AS date,
+         d.project_id                  AS projectId,
+         p.name                        AS projectName,
+         COALESCE(SUM(u.cost_usd), 0)  AS totalUsd,
+         COUNT(*)                      AS callCount
+       FROM model_usage u
+       LEFT JOIN directives d ON u.directive_id = d.id
+       LEFT JOIN projects   p ON d.project_id = p.id
+       ${where}
+       GROUP BY date(u.called_at), d.project_id
+       ORDER BY date DESC, totalUsd DESC`,
+    )
+    .all(params) as {
+    date: string;
+    projectId: string | null;
+    projectName: string | null;
+    totalUsd: number;
+    callCount: number;
+  }[];
+  return rows.map((r) => ({
+    date: r.date,
+    projectId: r.projectId,
+    projectName: r.projectName,
+    display: formatProjectDisplay(r.projectName, r.projectId),
+    totalUsd: r.totalUsd,
+    callCount: r.callCount,
+  }));
 }
 
 /**

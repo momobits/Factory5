@@ -521,6 +521,15 @@ const perDaySpendSchema = z.object({
   callCount: z.number().int().nonnegative(),
 });
 
+const perDayPerProjectSpendSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  projectId: z.string().nullable(),
+  projectName: z.string().nullable(),
+  display: z.string(),
+  totalUsd: z.number().nonnegative(),
+  callCount: z.number().int().nonnegative(),
+});
+
 const perModelSpendSchema = z.object({
   provider: z.string(),
   model: z.string(),
@@ -532,6 +541,7 @@ export const apiV1SpendResponseSchema = z.object({
   perProject: z.array(perProjectSpendSchema),
   perDirective: z.array(perDirectiveSpendSchema),
   perDay: z.array(perDaySpendSchema),
+  perDayPerProject: z.array(perDayPerProjectSpendSchema),
   perModel: z.array(perModelSpendSchema),
   filter: z.object({
     since: z.string().datetime({ offset: true }).optional(),

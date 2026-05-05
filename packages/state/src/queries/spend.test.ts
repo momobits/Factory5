@@ -380,6 +380,108 @@ describe('spend.perDay', () => {
   });
 });
 
+describe('spend.perDayPerProject', () => {
+  let db: BetterSqlite3.Database;
+  beforeEach(() => {
+    db = freshDb();
+  });
+
+  it('returns empty array for an empty database', () => {
+    expect(spend.perDayPerProject(db)).toEqual([]);
+  });
+
+  it('groups by (UTC date, project_id) and emits one row per cell', () => {
+    const pa = seedProject(db, { name: 'alpha' });
+    const pb = seedProject(db, { name: 'beta' });
+    const da = seedDirective(db, { projectId: pa.id });
+    const dbd = seedDirective(db, { projectId: pb.id });
+    // 04-10: alpha $1.50 (2 calls), beta $2.00 (1 call)
+    seedUsage(db, 0, { directiveId: da, costUsd: 1.0, calledAt: '2026-04-10T05:00:00.000Z' });
+    seedUsage(db, 1, { directiveId: da, costUsd: 0.5, calledAt: '2026-04-10T23:00:00.000Z' });
+    seedUsage(db, 2, { directiveId: dbd, costUsd: 2.0, calledAt: '2026-04-10T12:00:00.000Z' });
+    // 04-11: alpha $0.25 only
+    seedUsage(db, 3, { directiveId: da, costUsd: 0.25, calledAt: '2026-04-11T00:01:00.000Z' });
+
+    const rows = spend.perDayPerProject(db);
+    expect(rows).toHaveLength(3);
+
+    // Ordering: date DESC, then totalUsd DESC inside each day.
+    expect(rows[0]?.date).toBe('2026-04-11');
+    expect(rows[0]?.projectId).toBe(pa.id);
+    expect(rows[0]?.totalUsd).toBeCloseTo(0.25);
+    expect(rows[0]?.callCount).toBe(1);
+
+    // 2026-04-10 has beta ($2) before alpha ($1.5) by totalUsd DESC.
+    expect(rows[1]?.date).toBe('2026-04-10');
+    expect(rows[1]?.projectId).toBe(pb.id);
+    expect(rows[1]?.projectName).toBe('beta');
+    expect(rows[1]?.totalUsd).toBeCloseTo(2.0);
+    expect(rows[1]?.callCount).toBe(1);
+
+    expect(rows[2]?.date).toBe('2026-04-10');
+    expect(rows[2]?.projectId).toBe(pa.id);
+    expect(rows[2]?.projectName).toBe('alpha');
+    expect(rows[2]?.totalUsd).toBeCloseTo(1.5);
+    expect(rows[2]?.callCount).toBe(2);
+  });
+
+  it('exposes display field per ADR 0021 §5', () => {
+    const p = seedProject(db, { name: 'alpha', id: '01KPRHNEX1T3VR3S4ZTTSJ8F0M' });
+    const d = seedDirective(db, { projectId: p.id });
+    seedUsage(db, 0, { directiveId: d, costUsd: 1.0, calledAt: '2026-04-10T00:00:00.000Z' });
+
+    const rows = spend.perDayPerProject(db);
+    expect(rows[0]?.display).toBe('alpha (…8F0M)');
+  });
+
+  it('collapses orphan-directive and project-less directives into (unassigned) per date', () => {
+    const p = seedProject(db, { name: 'alpha' });
+    const d = seedDirective(db, { projectId: p.id });
+    const dNoProject = seedDirective(db);
+    seedUsage(db, 0, { directiveId: d, costUsd: 1.0, calledAt: '2026-04-10T00:00:00.000Z' });
+    seedUsage(db, 1, {
+      directiveId: dNoProject,
+      costUsd: 0.25,
+      calledAt: '2026-04-10T00:00:00.000Z',
+    });
+    // Orphan usage row (no directive_id at all) on the same date.
+    seedUsage(db, 2, { costUsd: 0.1, calledAt: '2026-04-10T00:00:00.000Z' });
+
+    const rows = spend.perDayPerProject(db);
+    expect(rows).toHaveLength(2);
+    const unassigned = rows.find((r) => r.projectId === null);
+    expect(unassigned?.totalUsd).toBeCloseTo(0.35);
+    expect(unassigned?.callCount).toBe(2);
+    expect(unassigned?.display).toBe('(unassigned)');
+  });
+
+  it('applies since / until / projectId filters', () => {
+    const pa = seedProject(db, { name: 'alpha' });
+    const pb = seedProject(db, { name: 'beta' });
+    const da = seedDirective(db, { projectId: pa.id });
+    const dbd = seedDirective(db, { projectId: pb.id });
+    seedUsage(db, 0, { directiveId: da, costUsd: 1.0, calledAt: '2026-04-01T00:00:00.000Z' });
+    seedUsage(db, 1, { directiveId: da, costUsd: 2.0, calledAt: '2026-04-10T00:00:00.000Z' });
+    seedUsage(db, 2, { directiveId: dbd, costUsd: 4.0, calledAt: '2026-04-10T00:00:00.000Z' });
+
+    const recent = spend.perDayPerProject(db, { since: '2026-04-05T00:00:00.000Z' });
+    expect(recent.reduce((a, r) => a + r.totalUsd, 0)).toBeCloseTo(6.0);
+
+    const alphaOnly = spend.perDayPerProject(db, { projectId: pa.id });
+    expect(alphaOnly).toHaveLength(2);
+    expect(alphaOnly.every((r) => r.projectId === pa.id)).toBe(true);
+    expect(alphaOnly.reduce((a, r) => a + r.totalUsd, 0)).toBeCloseTo(3.0);
+
+    const alphaRecent = spend.perDayPerProject(db, {
+      projectId: pa.id,
+      since: '2026-04-05T00:00:00.000Z',
+    });
+    expect(alphaRecent).toHaveLength(1);
+    expect(alphaRecent[0]?.date).toBe('2026-04-10');
+    expect(alphaRecent[0]?.totalUsd).toBeCloseTo(2.0);
+  });
+});
+
 describe('spend.perModel', () => {
   let db: BetterSqlite3.Database;
   beforeEach(() => {

@@ -737,9 +737,11 @@ function registerRoutes(
   );
 
   // ----- GET /api/v1/spend (ADR 0025, sub-step 9.6) -----
-  // All four rollups (per-project / per-directive / per-day / per-model) in
-  // a single response so the Spend page renders with one round-trip. The
-  // shared SpendFilter (since / until / projectId) applies uniformly.
+  // All five rollups (per-project / per-directive / per-day /
+  // per-day-per-project / per-model) in a single response so the Spend
+  // page renders with one round-trip. The shared SpendFilter (since /
+  // until / projectId) applies uniformly. The per-day-per-project rollup
+  // powers Phase 3.8's spend-page sparklines + 30-day stacked bar.
   app.get('/api/v1/spend', async (request, reply) => {
     requireUiAuth(request, opts.uiAuthToken);
     const query = apiV1SpendQuerySchema.parse(request.query);
@@ -754,11 +756,13 @@ function registerRoutes(
     const perProject = spend.perProject(opts.db, filter);
     const perDirective = spend.perDirective(opts.db, filter);
     const perDay = spend.perDay(opts.db, filter);
+    const perDayPerProject = spend.perDayPerProject(opts.db, filter);
     const perModel = spend.perModel(opts.db, filter);
     const resp: ApiV1SpendResponse = apiV1SpendResponseSchema.parse({
       perProject,
       perDirective,
       perDay,
+      perDayPerProject,
       perModel,
       filter,
     });
@@ -768,6 +772,7 @@ function registerRoutes(
         projects: perProject.length,
         directives: perDirective.length,
         days: perDay.length,
+        dayProjectCells: perDayPerProject.length,
         models: perModel.length,
         filter,
       },
