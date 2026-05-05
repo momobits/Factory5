@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -3090,6 +3090,147 @@ describe('IPC server — POST /api/v1/directives/:id/cancel (Phase 3 / step 3.6)
     const parsed = cancelDirectiveResponseSchema.parse(res.json());
     expect(parsed.directive.status).toBe('failed');
     expect(parsed.directive.blockedReason).toBe('from-cli');
+    await app.close();
+  });
+});
+
+describe('IPC server — POST /api/v1/projects (Phase 3 step 3.7)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+  let workspaceDir: string;
+
+  beforeEach(async () => {
+    db = freshDb();
+    doorbell = new Doorbell();
+    // Each test gets its own workspace root — the route writes
+    // `<workspace>/<name>/{CLAUDE.md, .factory/project.json}`.
+    workspaceDir = await mkdtemp(join(tmpdir(), 'factory5-create-project-route-'));
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(workspaceDir, { recursive: true, force: true });
+  });
+
+  const UI_TOKEN = 'ui-secret-create-project';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+    workspace: workspaceDir,
+  });
+
+  it('returns 401 without bearer', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/projects',
+      payload: { name: 'demo', language: 'python' },
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns 503 UI_DISABLED when uiAuthToken is not configured', async () => {
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: undefined });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/projects',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { name: 'demo', language: 'python' },
+    });
+    expect(res.statusCode).toBe(503);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('UI_DISABLED');
+    await app.close();
+  });
+
+  it('returns 400 SCHEMA_VALIDATION_FAILED on missing name', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/projects',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { language: 'python' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('returns 400 SCHEMA_VALIDATION_FAILED on invalid language enum', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/projects',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { name: 'demo', language: 'kotlin' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('happy path: scaffolds files on disk + inserts registry row', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/projects',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { name: 'demo-py', language: 'python' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { id: string; path: string };
+    expect(body.id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(body.path).toBe(join(workspaceDir, 'demo-py'));
+
+    // Filesystem: CLAUDE.md scaffold + .factory/project.json identity.
+    const claudeMd = await readFile(join(body.path, 'CLAUDE.md'), 'utf8');
+    expect(claudeMd).toMatch(/^# demo-py/);
+    expect(claudeMd).toMatch(/Python 3\.11\+/);
+    const meta = JSON.parse(
+      await readFile(join(body.path, '.factory', 'project.json'), 'utf8'),
+    ) as { id: string; metadata: { language?: string } };
+    expect(meta.id).toBe(body.id);
+    expect(meta.metadata.language).toBe('python');
+
+    // Registry row inserted so GET /api/v1/projects sees it immediately.
+    const persisted = projectsQ.getById(db, body.id);
+    expect(persisted?.id).toBe(body.id);
+    expect(persisted?.name).toBe('demo-py');
+    expect(persisted?.workspacePath).toBe(body.path);
+
+    await app.close();
+  });
+
+  it('returns 409 ALREADY_EXISTS when the project path already has identity', async () => {
+    const app = await buildIpcServer(baseOpts());
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/projects',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { name: 'taken', language: 'go' },
+    });
+    expect(first.statusCode).toBe(200);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/projects',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { name: 'taken', language: 'go' },
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('ALREADY_EXISTS');
     await app.close();
   });
 });

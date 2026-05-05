@@ -43,6 +43,8 @@ import {
   apiV1ChatMessageResponseSchema,
   apiV1CreateBuildRequestSchema,
   apiV1CreateBuildResponseSchema,
+  apiV1CreateProjectRequestSchema,
+  apiV1CreateProjectResponseSchema,
   apiV1DirectiveDetailResponseSchema,
   apiV1DirectivesListQuerySchema,
   apiV1DirectivesListResponseSchema,
@@ -72,6 +74,7 @@ import {
   type ApiV1AnswerPendingQuestionResponse,
   type ApiV1ChatMessageResponse,
   type ApiV1CreateBuildResponse,
+  type ApiV1CreateProjectResponse,
   type ApiV1DirectiveDetailResponse,
   type ApiV1DirectivesListResponse,
   type ApiV1FindingsListResponse,
@@ -104,6 +107,8 @@ import {
 } from '@factory5/state';
 import {
   budgetDefaultsFromProjectMeta,
+  createProject,
+  CreateProjectAlreadyExistsError,
   defaultWorkspace,
   languageFromProjectMeta,
   loadOrCreateProjectMetadata,
@@ -216,6 +221,14 @@ export interface IpcServerOptions {
    * tier). When omitted, the route falls back to body + project tiers.
    */
   configBudgetDefaults?: { maxUsd?: number | undefined; maxSteps?: number | undefined } | undefined;
+  /**
+   * Workspace root used by `POST /api/v1/projects` for new-project paths
+   * (`<workspace>/<name>`). When omitted, falls back to
+   * `defaultWorkspace()` (`~/factory5-workspace`). Production factoryd
+   * passes `cfg.general.workspace` so the operator's config wins; tests
+   * pass an `mkdtemp` path to keep filesystem side-effects scoped.
+   */
+  workspace?: string;
   /**
    * Per-directive SSE event hub (Phase 3 / step 3.1). When set, the
    * daemon mounts `GET /api/v1/directives/:id/stream`. When omitted,
@@ -891,6 +904,66 @@ function registerRoutes(
         hasLimits,
       },
       'ipc: /api/v1/builds — directive created',
+    );
+    reply.send(resp);
+  });
+
+  // ----- POST /api/v1/projects (Phase 3 step 3.7 — browser mirror of `factory init`) -----
+  // Mutation surface — scaffolds a new project at `<defaultWorkspace()>/<name>`
+  // via `wiki.createProject`. Refuses with 409 ALREADY_EXISTS when an identity
+  // or CLAUDE.md already lives at that path (mirrors the CLI's exit-2). The
+  // route does not honour absolute / relative paths in `name` — that's a
+  // CLI-only convenience; web operators use the configured workspace.
+  // Bearer-gated like the other UI routes.
+  app.post('/api/v1/projects', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const body = apiV1CreateProjectRequestSchema.parse(request.body);
+
+    const workspace = opts.workspace ?? defaultWorkspace();
+    const projectPath = join(workspace, body.name);
+
+    let result;
+    try {
+      result = await createProject({
+        projectPath,
+        name: body.name,
+        language: body.language,
+        ...(body.claudeMd !== undefined ? { claudeMd: body.claudeMd } : {}),
+      });
+    } catch (err) {
+      if (err instanceof CreateProjectAlreadyExistsError) {
+        throw new IpcRequestError(409, 'ALREADY_EXISTS', err.message);
+      }
+      throw err;
+    }
+
+    // Mirror the new project into the SQLite registry so it appears in
+    // GET /api/v1/projects immediately. Same pattern as POST /api/v1/builds
+    // line 840+ — the registry's createdAt is registry-scoped (sorting,
+    // listing); project.json owns the canonical identity timestamp.
+    const nowIso = new Date().toISOString();
+    projectsQ.upsert(opts.db, {
+      id: result.id,
+      name: body.name,
+      workspacePath: result.path,
+      status: 'active',
+      createdAt: nowIso,
+      lastTouchedAt: nowIso,
+    });
+
+    const resp: ApiV1CreateProjectResponse = apiV1CreateProjectResponseSchema.parse({
+      id: result.id,
+      path: result.path,
+    });
+    ipcLog.info(
+      {
+        reqId: request.id,
+        projectId: result.id,
+        name: body.name,
+        language: body.language,
+        hasClaudeMdOverride: body.claudeMd !== undefined,
+      },
+      'ipc: /api/v1/projects POST — project scaffolded',
     );
     reply.send(resp);
   });

@@ -374,6 +374,44 @@ export const apiV1CreateBuildResponseSchema = z.object({
 export type ApiV1CreateBuildResponse = z.infer<typeof apiV1CreateBuildResponseSchema>;
 
 // -----------------------------------------------------------------------------
+// POST /api/v1/projects  (web UI, Phase 3 step 3.7 — browser mirror of `factory init`)
+// -----------------------------------------------------------------------------
+
+/**
+ * Request body for scaffolding a new project via the web UI. Mirrors
+ * `factory init <name> [--language <lang>]`'s argument set; the actual
+ * scaffold work runs in `wiki.createProject` so CLI and daemon share
+ * the same refuse-overwrite + identity-claim semantics.
+ *
+ *   - `name` — bare project name, joined under `defaultWorkspace()`.
+ *     The route does NOT honour absolute / relative paths — those are a
+ *     CLI-only convenience; the web flow trusts the daemon's workspace
+ *     config so the operator can't sidestep it.
+ *   - `language` — required; drives both the per-language `CLAUDE.md`
+ *     scaffold and `metadata.language` (read by the assessor on
+ *     subsequent builds, ADR 0026).
+ *   - `claudeMd` — optional override for the default scaffold (e.g.
+ *     when the operator pastes their own spec into the form).
+ *
+ * Idempotency: NOT idempotent — each POST claims a fresh ULID. The
+ * route refuses with 409 `ALREADY_EXISTS` when a project at that path
+ * already has identity or `CLAUDE.md`, mirroring the CLI's exit-2
+ * behaviour. Operators rename or pick a different name to retry.
+ */
+export const apiV1CreateProjectRequestSchema = z.object({
+  name: z.string().min(1),
+  language: z.enum(['python', 'node', 'go', 'rust']),
+  claudeMd: z.string().optional(),
+});
+export type ApiV1CreateProjectRequest = z.infer<typeof apiV1CreateProjectRequestSchema>;
+
+export const apiV1CreateProjectResponseSchema = z.object({
+  id: ulidSchema,
+  path: z.string().min(1),
+});
+export type ApiV1CreateProjectResponse = z.infer<typeof apiV1CreateProjectResponseSchema>;
+
+// -----------------------------------------------------------------------------
 // GET /api/v1/projects  (web UI, ADR 0027 sub-step 11.5 — SPA prerequisite)
 // -----------------------------------------------------------------------------
 
