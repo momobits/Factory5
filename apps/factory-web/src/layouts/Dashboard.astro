@@ -76,9 +76,73 @@ const navLinks: NavLink[] = [
          Uses native <details>/<summary> so toggle is keyboard-accessible
          and screen-reader-friendly without JS. The drawer auto-closes on
          link click because each click navigates to a fresh page. */
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-left: auto;
+      }
+      .status-pip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.85rem;
+        color: color-mix(in srgb, currentColor 70%, transparent);
+      }
+      .pip-dot {
+        display: inline-block;
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 50%;
+        background: color-mix(in srgb, currentColor 50%, transparent);
+        flex-shrink: 0;
+      }
+      /* Status colors are intentional and theme-independent — operators
+         need at-a-glance recognition of green/amber/red regardless of
+         light/dark. Mid-luminance shades read on both themes. */
+      .status-pip[data-status='connected'] .pip-dot {
+        background: #2a8;
+        box-shadow: 0 0 0 2px color-mix(in srgb, #2a8 25%, transparent);
+      }
+      .status-pip[data-status='reconnecting'] .pip-dot {
+        background: #d80;
+        box-shadow: 0 0 0 2px color-mix(in srgb, #d80 25%, transparent);
+      }
+      .status-pip[data-status='disconnected'] .pip-dot {
+        background: #c24;
+        box-shadow: 0 0 0 2px color-mix(in srgb, #c24 25%, transparent);
+      }
+      .btn-text {
+        font: inherit;
+        font-size: 0.85rem;
+        padding: 0.25rem 0.5rem;
+        background: transparent;
+        border: 1px solid transparent;
+        color: inherit;
+        cursor: pointer;
+        border-radius: 3px;
+      }
+      .btn-text:hover:not(:disabled) {
+        background: color-mix(in srgb, currentColor 10%, transparent);
+      }
+      .btn-text:focus-visible {
+        outline: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+        outline-offset: 1px;
+      }
+      .drawer-logout {
+        margin-top: 0.5rem;
+        text-align: left;
+        padding: 0.6rem 0.5rem;
+        border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+        border-radius: 0;
+        font-size: 0.95rem;
+        width: 100%;
+      }
+      .logged-out-banner {
+        margin-bottom: 1.25rem;
+      }
       header.shell .nav-drawer {
         display: none;
-        margin-left: auto;
       }
       header.shell .nav-drawer summary {
         list-style: none;
@@ -160,13 +224,17 @@ const navLinks: NavLink[] = [
       @media (max-width: 768px) {
         header.shell {
           padding: 0.5rem 1rem;
-          gap: 1rem;
+          gap: 0.75rem;
         }
         header.shell nav.nav-inline {
           display: none;
         }
         header.shell .nav-drawer {
           display: block;
+        }
+        .header-actions .pip-label,
+        .header-actions .btn-logout {
+          display: none;
         }
         main.shell {
           padding: 1rem;
@@ -396,6 +464,13 @@ const navLinks: NavLink[] = [
           ))
         }
       </nav>
+      <div class="header-actions">
+        <span class="status-pip" id="status-pip" data-status="reconnecting" aria-live="polite">
+          <span class="pip-dot" aria-hidden="true"></span>
+          <span class="pip-label">Connecting…</span>
+        </span>
+        <button type="button" class="btn-text btn-logout" data-logout>Sign out</button>
+      </div>
       <details class="nav-drawer">
         <summary aria-label="Navigation">
           <span class="hamburger" aria-hidden="true">
@@ -413,12 +488,97 @@ const navLinks: NavLink[] = [
               </a>
             ))
           }
+          <button type="button" class="btn-text drawer-logout" data-logout>
+            Sign out
+          </button>
         </nav>
       </details>
     </header>
     <main class="shell">
+      <div class="logged-out-banner alert alert--info" id="logged-out-banner" hidden>
+        Signed out — reopen the URL logged by factoryd to sign in.
+      </div>
       <h2>{title}</h2>
       <slot />
     </main>
+    <script>
+      import { apiFetch, captureTokenFromUrl, clearToken, getToken, NoTokenError } from '../lib/api';
+
+      // Idempotent — page-level scripts also call this; whichever runs first wins.
+      captureTokenFromUrl();
+
+      // Logged-out banner: show on `?logged-out=1`, then strip the param so a
+      // refresh doesn't keep replaying the banner.
+      {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('logged-out') === '1') {
+          const banner = document.getElementById('logged-out-banner');
+          if (banner !== null) banner.hidden = false;
+          params.delete('logged-out');
+          const query = params.toString();
+          const newUrl =
+            window.location.pathname +
+            (query.length > 0 ? `?${query}` : '') +
+            window.location.hash;
+          window.history.replaceState({}, '', newUrl);
+        }
+      }
+
+      // Logout — single handler wired to every [data-logout] button (desktop
+      // header + mobile drawer share the click target).
+      for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-logout]')) {
+        btn.addEventListener('click', () => {
+          clearToken();
+          window.location.href = '/app/?logged-out=1';
+        });
+      }
+
+      // Connection-status heartbeat — poll /api/v1/status every 30s.
+      // 0 failures → green Connected; 1-2 → amber Reconnecting;
+      // 3+ consecutive → red Disconnected. No-token jumps straight to red
+      // labelled "Signed out" so the post-logout state reads honestly.
+      const POLL_INTERVAL_MS = 30_000;
+      const FAILURE_THRESHOLD = 3;
+
+      type PipState = 'connected' | 'reconnecting' | 'disconnected';
+
+      let consecutiveFailures = 0;
+
+      const setStatus = (state: PipState, label: string): void => {
+        const pip = document.getElementById('status-pip');
+        if (pip === null) return;
+        pip.dataset.status = state;
+        pip.title = label;
+        const labelEl = pip.querySelector('.pip-label');
+        if (labelEl !== null) labelEl.textContent = label;
+      };
+
+      const tick = async (): Promise<void> => {
+        if (getToken() === null) {
+          consecutiveFailures = FAILURE_THRESHOLD;
+          setStatus('disconnected', 'Signed out');
+          return;
+        }
+        try {
+          await apiFetch('/api/v1/status');
+          consecutiveFailures = 0;
+          setStatus('connected', 'Connected');
+        } catch (err) {
+          if (err instanceof NoTokenError) {
+            setStatus('disconnected', 'Signed out');
+            return;
+          }
+          consecutiveFailures++;
+          if (consecutiveFailures >= FAILURE_THRESHOLD) {
+            setStatus('disconnected', 'Disconnected');
+          } else {
+            setStatus('reconnecting', 'Reconnecting…');
+          }
+        }
+      };
+
+      void tick();
+      window.setInterval(() => void tick(), POLL_INTERVAL_MS);
+    </script>
   </body>
 </html>
