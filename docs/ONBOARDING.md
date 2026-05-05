@@ -437,7 +437,7 @@ The config file is harmless to lose (you can regenerate it from the template + t
 - **Config didn't take effect** — run from a directory that has `.factory/config.toml` above it (cwd-walk needs this). `pwd` and verify.
 - **Two factories fighting over the same port** — both bound to default `127.0.0.1:25295`. Give one an alternate `[daemon].port` in config.
 - **Dashboard URL says `UI_DISABLED`** — the daemon was started without a UI auth token. Restart `factoryd` (the token is minted on startup); confirm `apps/factory-web/dist/` exists, otherwise `pnpm --filter factory-web build` first.
-- **Dashboard token rejected (401 in browser DevTools)** — the daemon was restarted since the URL was issued. Run `factory ui-token` for the live one, or paste a fresh URL from the daemon's stdout.
+- **Dashboard token rejected (401 in browser DevTools, or the header pip says "Session expired")** — the daemon was restarted since the URL was issued. Run `factory ui-token` for the live one, or paste a fresh URL from the daemon's stdout. The pip's hover tooltip names the command.
 - **`factory chat` says `no running daemon`** — start it with `factory daemon start` (or `pnpm factoryd` for foreground / live logs) and re-run.
 - **Discord thread doesn't auto-answer your reply** — make sure you're posting inside the thread the bot opened, not the parent channel; the matcher keys on `channelRef` ending in `#<threadId>`.
 

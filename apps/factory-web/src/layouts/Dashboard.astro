@@ -502,7 +502,14 @@ const navLinks: NavLink[] = [
       <slot />
     </main>
     <script>
-      import { apiFetch, captureTokenFromUrl, clearToken, getToken, NoTokenError } from '../lib/api';
+      import {
+        apiFetch,
+        ApiError,
+        captureTokenFromUrl,
+        clearToken,
+        getToken,
+        NoTokenError,
+      } from '../lib/api';
 
       // Idempotent — page-level scripts also call this; whichever runs first wins.
       captureTokenFromUrl();
@@ -544,11 +551,11 @@ const navLinks: NavLink[] = [
 
       let consecutiveFailures = 0;
 
-      const setStatus = (state: PipState, label: string): void => {
+      const setStatus = (state: PipState, label: string, hover?: string): void => {
         const pip = document.getElementById('status-pip');
         if (pip === null) return;
         pip.dataset.status = state;
-        pip.title = label;
+        pip.title = hover ?? label;
         const labelEl = pip.querySelector('.pip-label');
         if (labelEl !== null) labelEl.textContent = label;
       };
@@ -566,6 +573,19 @@ const navLinks: NavLink[] = [
         } catch (err) {
           if (err instanceof NoTokenError) {
             setStatus('disconnected', 'Signed out');
+            return;
+          }
+          // 401 means the stored token is stale (commonly: daemon restart
+          // rotated the token, or the operator was signed out elsewhere).
+          // Polling won't recover this — short-circuit to a label that tells
+          // the operator what to do instead of cycling through "Reconnecting".
+          if (err instanceof ApiError && err.status === 401) {
+            consecutiveFailures = FAILURE_THRESHOLD;
+            setStatus(
+              'disconnected',
+              'Session expired',
+              'Daemon restarted — run `factory ui-token` for a fresh URL (or paste a new URL from the daemon stdout).',
+            );
             return;
           }
           consecutiveFailures++;
