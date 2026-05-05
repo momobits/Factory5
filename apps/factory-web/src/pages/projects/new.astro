@@ -1,0 +1,169 @@
+---
+import Dashboard from '../../layouts/Dashboard.astro';
+import Form from '../../components/Form.astro';
+import Field from '../../components/Field.astro';
+import Submit from '../../components/Submit.astro';
+import Alert from '../../components/Alert.astro';
+---
+
+<Dashboard title="New project">
+  <div id="topErrorSlot" hidden>
+    <Alert kind="conflict" title="" body="" />
+  </div>
+
+  <p
+    style="color: color-mix(in srgb, currentColor 65%, transparent); font-size: 0.9rem; margin: 0 0 1rem 0; max-width: 36rem;"
+  >
+    Scaffolds a new project on the daemon — browser mirror of <code>factory init &lt;name&gt;</code>.
+    Creates <code>&lt;workspace&gt;/&lt;name&gt;/CLAUDE.md</code> + <code>.factory/project.json</code>
+    (a fresh ULID identity). Submit is non-idempotent — the button disables on first
+    click.
+  </p>
+
+  <Form id="new-project-form">
+    <Field
+      name="name"
+      label="Project name"
+      type="text"
+      required
+      placeholder="my-project"
+      hint="Letters, digits, hyphens. Joined under the daemon's default workspace; refused if the path already has identity or CLAUDE.md."
+    />
+    <Field
+      name="language"
+      label="Language"
+      type="select"
+      required
+      value="python"
+      options={[
+        { value: 'python', label: 'python' },
+        { value: 'node', label: 'node' },
+        { value: 'go', label: 'go' },
+        { value: 'rust', label: 'rust' },
+      ]}
+      hint="Drives the per-language CLAUDE.md scaffold and the assessor runtime on subsequent builds (recorded in metadata.language)."
+    />
+    <Field
+      name="claudeMd"
+      label="CLAUDE.md (optional)"
+      type="textarea"
+      rows={12}
+      placeholder="Leave blank for the per-language scaffold. Paste your own spec to override — # heading, ## Project Overview, ## Tech Stack, ## Key Modules, ## Coding Standards, ## Testing."
+      hint="Optional override. The default scaffold is a minimal but valid spec the operator fills in after creation."
+    />
+
+    <div id="form-error-slot" hidden>
+      <Alert kind="conflict" title="" body="" />
+    </div>
+
+    <div class="form-actions">
+      <Submit label="Create project" id="submit-btn" />
+    </div>
+  </Form>
+
+  <script>
+    import { ApiError, apiPost, captureTokenFromUrl, getToken } from '../../lib/api';
+
+    interface CreateProjectResp {
+      id: string;
+      path: string;
+    }
+
+    const setAlertText = (slotId: string, title: string, body: string): void => {
+      const slot = document.getElementById(slotId);
+      if (slot === null) return;
+      const titleEl = slot.querySelector('h4');
+      const bodyEl = slot.querySelector('p');
+      if (titleEl !== null) titleEl.textContent = title;
+      if (bodyEl !== null) bodyEl.textContent = body;
+      slot.hidden = false;
+    };
+
+    const hideAlert = (slotId: string): void => {
+      const slot = document.getElementById(slotId);
+      if (slot !== null) slot.hidden = true;
+    };
+
+    const codeHeading = (code: string, status: number): string => {
+      switch (code) {
+        case 'ALREADY_EXISTS':
+          return 'Project already exists at that path.';
+        case 'SCHEMA_VALIDATION_FAILED':
+          return 'Validation failed — check the field values.';
+        case 'UI_AUTH_REQUIRED':
+          return 'Auth token missing or invalid — reopen the URL logged by factoryd.';
+        case 'UI_DISABLED':
+          return 'Web UI is disabled on this daemon (no FACTORY5_UI_TOKEN).';
+        case 'NON_LOCALHOST':
+          return 'Request rejected as non-localhost.';
+        case 'INTERNAL':
+          return 'Internal server error.';
+        default:
+          return `Error ${String(status)} (${code})`;
+      }
+    };
+
+    const renderError = (err: unknown, slotId: string, fallbackTitle: string): void => {
+      if (err instanceof ApiError) {
+        setAlertText(slotId, codeHeading(err.code, err.status), err.message);
+      } else if (err instanceof Error) {
+        setAlertText(slotId, fallbackTitle, err.message);
+      } else {
+        setAlertText(slotId, fallbackTitle, 'Unknown error.');
+      }
+    };
+
+    const wireForm = (): void => {
+      const form = document.getElementById('new-project-form') as HTMLFormElement | null;
+      const submit = document.getElementById('submit-btn') as HTMLButtonElement | null;
+      if (form === null || submit === null) return;
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (submit.disabled) return;
+        submit.disabled = true;
+        submit.textContent = 'Creating…';
+        hideAlert('form-error-slot');
+
+        const nameInput = document.getElementById('name') as HTMLInputElement;
+        const langSelect = document.getElementById('language') as HTMLSelectElement;
+        const claudeMdArea = document.getElementById('claudeMd') as HTMLTextAreaElement;
+
+        const body: Record<string, unknown> = {
+          name: nameInput.value.trim(),
+          language: langSelect.value,
+        };
+        // Only send claudeMd when the operator actually typed something — empty
+        // string would override the per-language scaffold with nothing.
+        const claudeMd = claudeMdArea.value;
+        if (claudeMd.trim() !== '') body.claudeMd = claudeMd;
+
+        apiPost<typeof body, CreateProjectResp>('/api/v1/projects', body)
+          .then((resp) => {
+            window.location.assign(
+              `/app/projects/detail?id=${encodeURIComponent(resp.id)}`,
+            );
+          })
+          .catch((err: unknown) => {
+            submit.disabled = false;
+            submit.textContent = 'Create project';
+            renderError(err, 'form-error-slot', 'Submit failed');
+          });
+      });
+    };
+
+    captureTokenFromUrl();
+
+    if (getToken() === null) {
+      setAlertText(
+        'topErrorSlot',
+        'No UI token present',
+        'Reopen the URL logged by factoryd to set the session token.',
+      );
+      const submit = document.getElementById('submit-btn') as HTMLButtonElement | null;
+      if (submit !== null) submit.disabled = true;
+    } else {
+      wireForm();
+    }
+  </script>
+</Dashboard>

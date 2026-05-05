@@ -5,13 +5,23 @@ import Alert from '../../components/Alert.astro';
 ---
 
 <Dashboard title="Projects">
+  <p style="margin: 0 0 1rem 0;">
+    <a
+      href="/app/projects/new"
+      style="color: inherit; font-weight: 600; text-decoration: none; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); padding: 0.35rem 0.85rem; border-radius: 4px; font-size: 0.9rem; display: inline-block;"
+    >
+      + New project
+    </a>
+  </p>
+
   <p id="error" class="err" hidden></p>
 
   <div id="empty-state" hidden>
     <Alert kind="info" title="No projects yet">
       <p>
-        Run <code>factory init</code> in a workspace to register one. Builds and per-project
-        budget defaults will appear here.
+        Click <strong>+ New project</strong> above to scaffold one in the browser, or run
+        <code>factory init &lt;name&gt;</code> in a terminal. Builds and per-project budget
+        defaults will appear here.
       </p>
     </Alert>
   </div>
