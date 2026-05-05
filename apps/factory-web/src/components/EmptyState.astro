@@ -55,12 +55,15 @@ const { title, body, cta } = Astro.props;
     font-size: 0.9rem;
     padding: 0.4rem 0.85rem;
     border-radius: 4px;
-    background: color-mix(in srgb, currentColor 85%, transparent);
+    /* CanvasText, not currentColor: `color: Canvas` rebinds currentColor to
+       Canvas, collapsing background and text to the same colour. CanvasText
+       is the system pair to Canvas, guaranteed to contrast. */
+    background: color-mix(in srgb, CanvasText 85%, transparent);
     color: Canvas;
     text-decoration: none;
     border: 1px solid transparent;
   }
   .empty-state-cta:hover {
-    background: color-mix(in srgb, currentColor 95%, transparent);
+    background: color-mix(in srgb, CanvasText 95%, transparent);
   }
 </style>

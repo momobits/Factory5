@@ -228,12 +228,15 @@ const navLinks: NavLink[] = [
         cursor: not-allowed;
       }
       .btn-primary {
-        background: color-mix(in srgb, currentColor 85%, transparent);
+        /* CanvasText, not currentColor: `color: Canvas` rebinds currentColor
+           to Canvas, collapsing background and text to the same colour.
+           CanvasText is the system pair to Canvas, guaranteed to contrast. */
+        background: color-mix(in srgb, CanvasText 85%, transparent);
         color: Canvas;
         border-color: transparent;
       }
       .btn-primary:hover:not(:disabled) {
-        background: color-mix(in srgb, currentColor 95%, transparent);
+        background: color-mix(in srgb, CanvasText 95%, transparent);
       }
       .btn-danger {
         border-color: color-mix(in srgb, #c24 50%, transparent);

@@ -48,12 +48,16 @@ const { label, variant = 'primary', disabled = false, id } = Astro.props;
     cursor: not-allowed;
   }
   .btn-primary {
-    background: color-mix(in srgb, currentColor 85%, transparent);
+    /* CanvasText, not currentColor: `color: Canvas` on this rule rebinds
+       currentColor to Canvas, so the background and text would otherwise
+       both resolve to Canvas (invisible). CanvasText is the system pair
+       to Canvas, guaranteed to contrast under color-scheme: light dark. */
+    background: color-mix(in srgb, CanvasText 85%, transparent);
     color: Canvas;
     border-color: transparent;
   }
   .btn-primary:hover:not(:disabled) {
-    background: color-mix(in srgb, currentColor 95%, transparent);
+    background: color-mix(in srgb, CanvasText 95%, transparent);
   }
   .btn-danger {
     border-color: color-mix(in srgb, #c24 50%, transparent);
