@@ -6,6 +6,47 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-05 — Phase 3 step 3.7 code-complete (createProject extraction → POST route → /app/projects/new page)
+
+Step 3.7 ships its three code commits this session, plus a session-start drift reconcile. The `/app/projects/new` page closes the SPA's last hand-rolled-in-CLI gap from ADR 0027 §3.7 — operators can scaffold a project from the dashboard end-to-end without a terminal. Behaviour-preserving for `factory init <name>` (CLI thin-wrapped over the same `wiki.createProject` extraction).
+
+**Commits (4 in this session, post-`1c6eeaf`):**
+
+- `317d94b` `docs(state): reconcile STATE.md last-commit pointer to current HEAD` (sixth occurrence of the post-session-end self-reference drift after `cce7065` / `db61baf` / `54c0f20` / `d7a366c` / `288603e`; STATE.md "Last commit" caught up from `79474b1` (ADR 0029) to `1c6eeaf` (prior session-end docs); same `288603e`-shape — accepts the steady-state lag-by-1 the runbook documents).
+- `d118e1c` `refactor(3.7): extract createProject into @factory5/wiki` — new `wiki.createProject({projectPath, name, language, claudeMd?}) → {id, path, claudeMdPath}` containing `runProjectInit`'s body (refuse-overwrite + mkdir + writeFile + loadOrCreateProjectMetadata); new `CreateProjectAlreadyExistsError` with reason union for CLI exit-2 / daemon 409 fan-out; `scaffoldClaudeMd` relocated to wiki (single source of truth); CLI's `runProjectInit` thin-wrapper rewrite (~30 LOC); init.test.ts deleted, its 4 scaffold tests reproduced in wiki + 6 new createProject tests added. Wiki 64 → 74, CLI 82 → 78.
+- `50e8b33` `feat(3.7): POST /api/v1/projects route + schemas` — `apiV1CreateProject{Request,Response}Schema` in `@factory5/ipc`; daemon route gated by `requireUiAuth` mirrors the 3.6 cancel-route auth pattern; pipeline parses → joins workspace + name → wiki.createProject (maps already-exists → 409) → upserts registry row; new `IpcServerOptions.workspace?` opt for test override + future config-driven prod use; +6 route tests covering 401/503/400-missing-name/400-bad-language/happy-path/409-already-exists. Daemon 167 → 173.
+- `53e4e98` `feat(3.7): /app/projects/new page` — `apps/factory-web/src/pages/projects/new.astro` modeled on `build.astro`'s `<Form>+<Field>+<Submit>` shape; fields are name (required) + language (required, python default) + optional CLAUDE.md textarea; on 200 redirects to `/app/projects/detail?id=<id>`; hidden-`<Alert>`-placeholder pattern surfaces inline errors (ALREADY_EXISTS / SCHEMA_VALIDATION_FAILED / UI_AUTH_REQUIRED / UI_DISABLED). `+ New project` affordance added to `projects/index.astro`; empty-state copy updated. Frontend-design skill invoked per saved feedback. Top nav left at 8 items intentionally — `+ New project` on the projects list page covers discoverability without crowding the global nav (intentional deviation from plan's nav-link recommendation, in the lighter direction).
+
+**Design discoveries (recorded in this session's commit bodies + STATE.md notes):**
+
+- **Daemon route cleanly accepts a test-override workspace.** `IpcServerOptions.workspace?` enables tests to scope filesystem side effects via `mkdtemp`. Production factoryd doesn't currently pass it (POST /api/v1/builds has the same gap — `defaultWorkspace()` direct call); the wiring of `cfg.general.workspace` through to IpcServerOptions can land any time and would be picked up by both routes simultaneously. Filed as deferred prod-config wiring; not blocking any 3.x step.
+- **The CLI's existing absolute / relative / workspace-rooted path resolution is CLI-only.** The daemon route doesn't honour absolute / relative paths in `name` — operators on the web flow trust the daemon's workspace config and can't sidestep it. Documented in the request schema's TSDoc.
+- **`readProjectMetadata` swallow-corruption-as-undefined is preserved in the wiki API.** `runProjectInit`'s `.catch(() => undefined)` semantics carry into `wiki.createProject` for behaviour parity. The `ProjectMetadataCorruptError` then re-surfaces from `loadOrCreateProjectMetadata` further down — slightly different error path but operator-equivalent. Tightening this is filed as latent ergonomic work.
+
+**Decisions / judgement calls during 3.7 worth recording (no new ADR):**
+
+- **Budget fields excluded from `apiV1CreateProjectRequestSchema`.** The plan speculatively included `maxUsd?` / `maxSteps?`; on closer read, the existing `PUT /api/v1/projects/:id/budget` route is the canonical surface for budget defaults (it has full RFC-9110 PUT semantics already). Keeping create minimal mirrors the CLI's two-step flow (`factory init` then `factory build --max-usd …`) and reduces test surface for this commit. Operators can chain create-then-set-budget client-side if a one-form UX wins later.
+- **No nav link addition for `/app/projects/new`.** Plan recommended adding "New project" between "Projects" and "Build" in the dashboard nav. On reflection, that would push to 9 nav items (already 8) and a creation flow is contextually accessed from the projects list — the `+ New project` affordance on `projects/index.astro` plus the deep-link from the empty-state alert covers discoverability without nav clutter. Lighter direction.
+- **3.7 close commit deferred** (matches the multi-commit-step pattern set by `dfd1a07` (3.4 close) and `0f5775a` (3.6 close)). The `- [ ] 3.7` checkbox flip + ROADMAP tick land in a separate `refactor(3.7): close step 3.7` commit alongside the live-smoke acceptance — keeps the close commit's diff aligned with the acceptance evidence.
+
+**State of `main` at session end:**
+
+- `pnpm build` ✅
+- `pnpm test` ✅ (state 152, channels 175, daemon **173**, brain 101, worker 38, worker-sandbox 86 + 3 skipped, assessor 79, wiki **74**, cli **78**, providers 39, ipc 28, events 3, core 14, logger 20, worker-mcp 15. Total **1075 passing**, +12 from 1063 baseline.)
+- `pnpm lint` ✅
+- `pnpm format:check` ✅
+- Phase 3 progress: 3.1 / 3.2 / 3.3 / 3.4 / 3.5 / 3.6 closed; 3.7 code-complete (steps.md checkbox not yet flipped); 3.8 / 3.9 / 3.10 / 3.11 still open. Phase 3 tag (`phase-3-web-ui-closed`) goes on at step 3.11 after acceptance.
+
+**What's next:**
+
+1. **Live-smoke step 3.7** against a restarted factoryd (the long-running daemon on `127.0.0.1:25295` is the pre-3.7 build and 404s the new POST /api/v1/projects route — confirmed via curl). `factory daemon stop && factory daemon start` to pick up commit (b)'s route. Open `/app/projects/new`, submit a real project (recommend a non-trivial one that produces verifier findings — the prior session's `add(a, b)` smoke produced none, missing the `finding.created` live-verification gap pinned in ADR 0029). Verify scaffolded files + redirect + project visibility at `/app/projects/`. Kick a build at `/app/build`; watch `directives/detail` SSE for `finding.created` events.
+2. **Close commit** `refactor(3.7): close step 3.7` flips `- [ ] 3.7` → `- [x] 3.7` in `phase-3-web-ui/steps.md` and ticks the matching item in `UPGRADE/ROADMAP.md`. Same shape as `dfd1a07` / `0f5775a`.
+3. **Step 3.8** — Spend page charts (sparkline per project + 30-day stacked bar, vanilla SVG) per `plans/tier-3-web-ui-live-and-complete.md` §3.8.
+
+Carry-forward bugs / cleanup (not blocking 3.7 close or 3.8): Submit-button-invisible `.btn-primary { color: Canvas }` will repro on the new form (one-line CSS or fold into the `<style is:global>` migration follow-up); Control framework repo uncommitted edits at `G:\Projects\Small-Projects\Control` (operator's go for 2.2.3 publish); smoke residue cleanup from prior session.
+
+---
+
 ## 2026-05-03 — Phase 3 step 3.4 closed (all 10 pages → component library; el() retired)
 
 Step 3.4 shipped this session run — the longest sub-step in Phase 3. Every page in `apps/factory-web/src/pages/` now consumes the Astro component library shipped in 3.3 (`<Card>`, `<Table>`, `<EmptyState>`, `<Alert>`, `<Form>`, `<Field>`, `<Submit>`); `el()` and `loadInto()` retired from `lib/api.ts`. Tier 3 ROADMAP item flipped.

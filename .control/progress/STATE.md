@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-05 17:32 UTC by drift reconciliation (`/session-start` flagged `commit-mismatch`: STATE.md=`79474b1`, HEAD=`1c6eeaf`; option (a) — STATE.md catches up to HEAD before any 3.7 work begins)
+**Last updated:** 2026-05-05 18:22 UTC by `/session-end` (post step 3.7 commits a/b/c — code-complete; live-smoke + steps.md/ROADMAP close commit pending)
 **Current phase:** 3 — web-ui
-**Current step:** 3.7 — `/app/projects/new` (next; Decision 1 = smoke-first landed last session, Decision 2 = Option A locked in for execution)
-**Status:** ready (STATE.md cursor reconciled to HEAD `1c6eeaf` before 3.7 work; all four `pnpm` gates green at last run; ADR 0029 promoted with documented `finding.created` live-verification gap)
+**Current step:** 3.7 — `/app/projects/new` (code-complete; checkbox not yet flipped — close commit lands alongside the live-smoke acceptance per the project's multi-commit-step pattern)
+**Status:** ready (clean working tree post session-end; all four `pnpm` gates green; workspace test count 1063 → 1075 across the three step commits; live-smoke acceptance still open and folds into the still-pending phase-3 acceptance smoke that closes ADR 0029's `finding.created` live-verification gap)
 
 ---
 
@@ -20,15 +20,15 @@
 
 ## Next action
 
-Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). Step **3.7 = `/app/projects/new` — mirror of `factory init <project>` for a single project** per [`../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md`](../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md) §3.7. **Decision 2 from last session is locked in: Option A — extract `createProject(workspace, name, language) → { id, path }` into `@factory5/wiki`, then add `POST /api/v1/projects` route gated by `requireUiAuth` (mirrors 3.6 cancel-route pattern), then add the FE page.** Confirmed last session by reading `packages/cli/src/commands/init.ts:402` (CLI's `runProjectInit` is filesystem + DB-direct, not HTTP — there's no existing route to reuse) and `packages/daemon/src/server.ts:898+` (daemon has GET routes for projects but no POST). Three-commit shape: (a) `refactor(3.7): extract createProject into @factory5/wiki` (~50 LOC + tests + CLI thin-wrapper rewrite), (b) `feat(3.7): POST /api/v1/projects route + schemas` (~100 LOC + 6 route tests mirroring 3.6's auth/conflict/happy-path coverage), (c) `feat(3.7): /app/projects/new page` (~150 LOC, frontend-design skill required before authoring per saved feedback). Acceptance: form submit creates `<workspace>/<project>/.factory/project.json` + matching DB row, project appears at `/app/projects`, follow-up build directive at `/app/build` succeeds against the new project end-to-end.
+Live-smoke step 3.7's full flow against a restarted factoryd (the long-running daemon on `127.0.0.1:25295` is the pre-3.7 build and 404s the new `POST /api/v1/projects` route). Stop + restart factoryd (`factory daemon stop` then `factory daemon start`, or kill the process and re-run), open `/app/projects/new?t=<token>` (or via the dashboard's `+ New project` link from `/app/projects/`), submit a real project (e.g. name `node-sse-smoke`, language `node`, optional CLAUDE.md asking the architect to add a non-trivial verifier-flagged feature so the build produces findings). Verify: scaffolded files at `<workspace>/<name>/{CLAUDE.md, .factory/project.json}`, redirect to `/app/projects/detail?id=<id>`, project visible at `/app/projects/`, then kick a build at `/app/build` against the new project, watch `directives/detail` for SSE events including `finding.created` (the still-open phase-3 acceptance gap from ADR 0029's Live verification section). After the smoke lands cleanly, single close commit `refactor(3.7): close step 3.7` flips `- [ ] 3.7` → `- [x] 3.7` in [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md) and ticks the matching item in [`../../UPGRADE/ROADMAP.md`](../../UPGRADE/ROADMAP.md). Per [`../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md`](../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md) §3.7. Phase 3 has 3.8 / 3.9 / 3.10 / 3.11 still open after that.
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `1c6eeaf` — docs(state): session end for step 3.7
-- **Uncommitted changes:** none (working tree clean post drift-reconcile commit; this commit itself will create steady-state lag-by-1 the runbook documents)
+- **Last commit:** `53e4e98` — feat(3.7): /app/projects/new page
+- **Uncommitted changes:** none (working tree clean post session-end commit; this commit itself will create steady-state lag-by-1 the runbook documents — same pattern as `1c6eeaf` / `288603e` predecessors)
 - **Last phase tag:** `phase-2-channel-parity-closed` (annotated tag at commit `081b832`)
 
 ---
@@ -41,19 +41,22 @@ Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). S
 
 ## In-flight work
 
-None on the factory5 side. Three carry-forward items live outside the work cursor:
+Step 3.7 itself is **code-complete** but not closed: the `- [ ] 3.7` checkbox in `phase-3-web-ui/steps.md` and the matching tick in `UPGRADE/ROADMAP.md` are intentionally not flipped yet — they land in a separate `refactor(3.7): close step 3.7` commit alongside the live-smoke acceptance (matches the pattern set by `dfd1a07` for 3.4 close and `0f5775a` for 3.6 close). The acceptance smoke is the operator's call to schedule.
 
-- **Control framework repo (`G:\Projects\Small-Projects\Control`) has uncommitted edits awaiting operator's go.** `tools/cli.js` settings-template generator was refactored to use `JSON.stringify` + `cmdFor()` helper, generating both bash and PowerShell hook commands wrapped with `cd "$CLAUDE_PROJECT_DIR"` (the upstream of the local `chore(install)` patch in `e5ec723`). `.claude/settings.json` in the Control repo also patched to match. Operator wanted explicit go before commit + version bump (2.2.2 → 2.2.3) + npm publish since that's a public artifact change. Not blocking factory5 work.
-- **Submit button invisible** in `apps/factory-web/src/components/Submit.astro` `.btn-primary` style — `color: Canvas` rendered identical to the page background for the operator's browser color scheme. Surfaced when answering the askUser question in the live smoke; operator could only locate the button via Ctrl+A text selection. Minor; one-line fix likely (swap `color: Canvas` for an explicit foreground that holds against any color scheme, or add an explicit background fill that contrasts). Not blocking 3.7.
-- **Smoke residue in DB** — two cancelled directives (`01KQW3D4CZ84ZFHFKYEP7BWQBX`, `01KQWDWRQD08X3BEYEQNAD6M23`) and a real `smoke-demo` project (`01KQW30T5274QGSEHHVZTRQ953` at `C:\Users\Momo\factory5-workspace\smoke-demo`) remain. The `smoke-demo` workspace got real files written (scaffolder + builder ran before cancel — `package.json`, `tsconfig.json`, `src/index.ts`, etc.). Operator can reap with `cd packages/state && node smoke-cleanup.mjs` (existing tool used for prior smoke residue) plus an `rm -rf C:\Users\Momo\factory5-workspace\smoke-demo\` if a clean `factory status` is wanted. Not blocking 3.7.
+Carry-forward items outside the work cursor (none block 3.7's close):
+
+- **Stale running factoryd on `127.0.0.1:25295`.** Started in the prior session for the 3.6 smoke; loaded the pre-3.7 build, so `POST /api/v1/projects` 404s on it. Live-smoke for 3.7 needs a `factory daemon stop && factory daemon start` (or process kill + restart) to pick up commit (b)'s new route. Astro dev on `127.0.0.1:4321` is hot-reloading and already serving the new page — confirmed via `curl` against `/app/projects/new`.
+- **Submit button invisible** in `apps/factory-web/src/components/Submit.astro` `.btn-primary` style — `color: Canvas` rendered identical to the page background. Will repro on the new `/app/projects/new` form too. Not a blocker for the smoke (operator can ctrl+A or click the right region of the visible outline). One-line fix or fold into the deferred PageShell + `<style is:global>` migration.
+- **Control framework repo** (`G:\Projects\Small-Projects\Control`) still has uncommitted upstream patches matching local `e5ec723`. Operator owns the go for 2.2.2 → 2.2.3 publish.
+- **Smoke residue from prior session** — two cancelled directives (`01KQW3D4CZ84ZFHFKYEP7BWQBX`, `01KQWDWRQD08X3BEYEQNAD6M23`) and a real `smoke-demo` project (`01KQW30T5274QGSEHHVZTRQ953` at `C:\Users\Momo\factory5-workspace\smoke-demo`) remain. Optional cleanup via `cd packages/state && node smoke-cleanup.mjs` + `rm -rf C:\Users\Momo\factory5-workspace\smoke-demo\`.
 
 ---
 
 ## Test / eval status
 
-- **Last test run:** 2026-05-05 — full workspace passes, all four `pnpm` gates green: build / test / lint / format:check. Per-package counts unchanged from last session (no test files touched this session — auth fix in `apps/factory-web/src/pages/directives/detail.astro` has no FE test harness; ADR 0029 promotion is markdown only; hooks settings.json is config). Workspace total still ~1063.
+- **Last test run:** 2026-05-05 — full workspace passes, all four `pnpm` gates green: build / test / lint / format:check. Per-package counts: state 152, channels 175, daemon **173** (+6 new POST /api/v1/projects route tests), brain 101, worker 38, worker-sandbox 86 + 3 skipped, assessor 79, wiki **74** (+10: 4 scaffold migrated from CLI + 6 new createProject tests), cli **78** (-4: scaffold tests moved to wiki), providers 39, ipc 28, events 3, core 14, logger 20, worker-mcp 15. **Workspace total 1075 passing + 3 skipped** — net +12 from the 1063 baseline (+10 wiki - 4 cli + 6 daemon).
 - **Eval score** (agent phases only): n/a
-- **Regression tests:** unit + integration only; no eval harness
+- **Regression tests:** unit + integration only; no eval harness. The 3.7 commit (b) happy-path daemon test asserts CLAUDE.md scaffold body + `.factory/project.json` identity + SQLite registry row in one assertion sweep — substantive coverage even before the live-smoke.
 
 ---
 
@@ -67,17 +70,17 @@ None on the factory5 side. Three carry-forward items live outside the work curso
 
 ## Recently completed (last 5 steps)
 
-- Session-end docs — `docs(state)`: session end for step 3.7. Captures the 2026-05-05 session cursor in STATE.md / journal.md / next.md ahead of step 3.7 work; documents the three commits this session (`00d2bc4` 3.6 follow-up auth bootstrap fix, `e5ec723` Claude Code hooks cwd-anchor, `79474b1` ADR 0029 promotion) and locks in Decision 2 = Option A (extract `createProject` into `@factory5/wiki`) for 3.7's three-commit execution plan. — 2026-05-05 — `1c6eeaf`
-- ADR 0029 promotion — `docs(adr)`: ADR 0029 — directive-stream protocol (authors `docs/decisions/0029-directive-stream-protocol.md`; adds INDEX row; pins 6 architectural decisions distilled from the spec; Live verification section records the 2026-05-05 smoke scorecard with `finding.created` documented as unit-test-only). — 2026-05-05 — `79474b1`
-- Hooks cwd-anchor — `chore(install)`: cwd-anchor Claude Code hooks via `$CLAUDE_PROJECT_DIR` (wraps each hook command in `.claude/settings.json` with `bash -c 'cd "$CLAUDE_PROJECT_DIR" && exec bash .claude/hooks/<name>.sh'`; addresses the recurring "No such file or directory" Stop hook error caused by Bash-tool-call cwd drift; verified end-to-end by running the new Stop hook command from `packages/state/`. Local hot-patch ahead of Control v2.2.3 — Control's installer template (`tools/cli.js`) and own `.claude/settings.json` mirrored upstream but uncommitted there pending operator's go for npm publish). — 2026-05-05 — `e5ec723`
-- 3.6 follow-up auth fix — `fix(3.6)`: bootstrap UI token in `directives/detail.astro` (one-line addition: `import captureTokenFromUrl` from `lib/api`, call it as the first executable statement in the script body. Mirrors the canonical pattern used by every other auth-gated page; detail.astro was the only page using auth-gated APIs that didn't bootstrap the token from URL. Surfaced during the 3.6 cancel-button live-smoke when the operator opened the detail page directly without a prior visit to `/app/`). — 2026-05-05 — `00d2bc4`
-- Session-end docs (prior session) — `docs(state)`: session end for step 3.6. Captures the 3.6 close cursor in STATE.md / journal.md / UPGRADE/LOG.md / next.md; no code changes. — 2026-05-03 — `fb63d58`
+- Step 3.7 commit (c) — `feat(3.7)`: `/app/projects/new` page. Mirrors `build.astro`'s `<Form>`+`<Field>`+`<Submit>` shape; fields are name (required text), language (required select; python default), claudeMd (optional textarea, 12 rows). On submit, `apiPost('/api/v1/projects', …)` then redirects to `/app/projects/detail?id=<id>`; on error, hidden-`<Alert>`-placeholder pattern surfaces inline with `ALREADY_EXISTS` / `SCHEMA_VALIDATION_FAILED` / `UI_AUTH_REQUIRED` / `UI_DISABLED` headings. `captureTokenFromUrl()` first executable statement (per saved-feedback memory + lesson from `00d2bc4`). `+ New project` outline-button affordance added to `projects/index.astro` near the page heading; empty-state copy updated to surface the new web flow. Top nav left at 8 items — adding "New project" as a 9th would crowd; the contextual affordance covers discoverability without nav clutter (intentional deviation from plan's nav-link recommendation, lighter direction). — 2026-05-05 — `53e4e98`
+- Step 3.7 commit (b) — `feat(3.7)`: POST /api/v1/projects route + schemas. New `apiV1CreateProject{Request,Response}Schema` in `@factory5/ipc` (request: `name` ≥1, `language` enum, `claudeMd?`; response: `{ id (ULID), path }`). New route in `packages/daemon/src/server.ts` near the GET counterparts; bearer-gated via `requireUiAuth`; pipeline `parseBody → join workspace + name → wiki.createProject (maps CreateProjectAlreadyExistsError → 409 ALREADY_EXISTS) → projectsQ.upsert → respond { id, path }`. New `IpcServerOptions.workspace?` opt for test override (also future-proofs the prod path for cfg.general.workspace once that wiring lands; POST /api/v1/builds has the same gap, deferred). +6 route tests in `server.test.ts` mirroring the build route's 401/503/400/happy/409 shape. — 2026-05-05 — `50e8b33`
+- Step 3.7 commit (a) — `refactor(3.7)`: extract createProject into `@factory5/wiki`. New `wiki.createProject({projectPath, name, language, claudeMd?}) → {id, path, claudeMdPath}`; `CreateProjectAlreadyExistsError` with `reason ∈ {'existing-metadata' | 'existing-claude-md'}` + `existingProjectId?`; `scaffoldClaudeMd` relocated from CLI to wiki. CLI's `runProjectInit` collapses to ~30-LOC thin wrapper (path resolution + try/catch around createProject + stdout messages). `packages/cli/src/commands/init.test.ts` deleted; its 4 scaffoldClaudeMd tests reproduced verbatim in `wiki/src/create-project.test.ts` alongside 6 new createProject tests (fresh-create, claudeMd override, refuse-existing-identity, refuse-existing-claude-md, identity-stable, each-language scaffold). Wiki 64→74, CLI 82→78. — 2026-05-05 — `d118e1c`
+- State reconcile — `docs(state)`: reconcile STATE.md last-commit pointer to current HEAD. Fifth occurrence of the post-session-end self-reference drift (after `cce7065` / `db61baf` / `54c0f20` / `288603e`); STATE.md said `79474b1` but HEAD was `1c6eeaf`. Brought "Last commit" + "Recently completed[0]" current to `1c6eeaf`. Same `288603e`-shape — accepts the steady-state lag-by-1 the runbook documents. — 2026-05-05 — `317d94b`
+- Session-end docs (prior session) — `docs(state)`: session end for step 3.7 — captures the 2026-05-05 session cursor ahead of step 3.7 work; documents `00d2bc4` / `e5ec723` / `79474b1` and locks in Decision 2 = Option A. — 2026-05-05 — `1c6eeaf`
 
 ---
 
 ## Attempts that didn't work (current step only)
 
-- None yet — Step 3.7 not started. (Session-time work was 3.6 follow-ups + ADR 0029 promotion + hooks infrastructure; no rollback or rework happened.)
+- None — all three step commits + the reconcile landed cleanly on first attempt, all gates green at every commit. No rollbacks, no rework. The closest thing to a course-correction was tightening the `let result;` declaration in CLI's thin wrapper to `let result: CreateProjectResult;` for TS strict-mode flow analysis, decided pre-commit before the build was run.
 
 ---
 
@@ -87,54 +90,43 @@ None on the factory5 side. Three carry-forward items live outside the work curso
 - **Key pinned deps:** pnpm 9.12.0, tsup 8.5.1, vitest 2.1.9, prettier 3.8.3, eslint 9.39.4, better-sqlite3 (workspace), discord.js v14, grammy, fastify (workspace), Astro 5.x
 - **Model in use:** Claude Code (claude-opus-4-7[1m])
 - **Other:** Windows Server 2025 host
-- **Background processes still running** (cleanup at next session start if not wanted): `factoryd` on `127.0.0.1:25295` (started this session for the smoke), `astro dev` on `127.0.0.1:4321`. Both consume desktop resources but don't burn API spend with no inflight directive. Stop with `factory daemon stop` + kill astro process by PID.
+- **Background processes still running** (carry-forward from prior session): `factoryd` on `127.0.0.1:25295` — **stale; loaded the pre-3.7 build, will 404 the new POST /api/v1/projects route**; restart with `factory daemon stop && factory daemon start` before live-smoke. `astro dev` on `127.0.0.1:4321` — hot-reloading correctly, already serving `/app/projects/new` (verified via curl). Stop both with `factory daemon stop` + kill astro process by PID if not running the smoke this session.
 
 ---
 
 ## Notes for next session
 
-Step 3.7 is the `/app/projects/new` page — browser mirror of `factory init <project>`. Decision 2 was resolved last session: **Option A — extract `createProject(...)` into `@factory5/wiki`, daemon and CLI both call it**. Three-commit plan is locked in.
+Step 3.7 is **code-complete**. Three commits landed plus a drift reconcile; all four `pnpm` gates green at the end of every commit; workspace test count 1063 → 1075. The remaining work is the live-smoke + a single close commit.
 
-**3.7 execution plan:**
+**Live-smoke + 3.7 close (recommended next):**
 
-1. **Commit (a) — `refactor(3.7): extract createProject into @factory5/wiki`.**
-   - New export `wiki.createProject({ workspace, name, language, claudeMd? }) → { id, path }` containing the body of `runProjectInit` from `packages/cli/src/commands/init.ts:402-452`: refuse-to-overwrite guards, `mkdirSync`, `writeFileSync(claudeMd)` via `scaffoldClaudeMd`, `loadOrCreateProjectMetadata`. Move `scaffoldClaudeMd` itself from CLI to wiki (or re-export through wiki) so the daemon doesn't reach across to `@factory5/cli`.
-   - Rewrite CLI's `runProjectInit` as a thin caller (parses flags, calls `wiki.createProject`, prints results to stdout).
-   - +unit tests in `packages/wiki/src/createProject.test.ts` mirroring `init.test.ts`'s coverage: happy-path-each-language, refuse-overwrite-existing, refuse-when-CLAUDE.md-exists, identity-stable-after-create. CLI test count adjusts; wiki gains a new file.
-   - Frontend-design skill NOT required for this commit (no UI).
+1. **Restart factoryd** to pick up commit (b)'s new POST `/api/v1/projects` route — the stale background daemon on port 25295 was loaded with the pre-3.7 build. `factory daemon stop && factory daemon start` (or process kill + restart). Astro dev on 4321 already has the new page hot-reloaded.
+2. **Run the smoke**, ideally combined with the still-open phase-3 acceptance smoke that closes ADR 0029's `finding.created` live-verification gap:
+   - Open `/app/projects/new` (via the dashboard's `+ New project` link from `/app/projects/`, or directly).
+   - Submit a real project that the assessor will produce findings on — e.g. name `node-sse-smoke`, language `node`, optional CLAUDE.md asking the architect to add a verifier-flagged feature (per the prior smoke lesson: pick a project that naturally produces findings, not the trivial `add(a, b)`). Use `--autonomy autonomous` if you want unattended; `assisted` parks at architect→planning + planning→execution and needs 2 askUser answers.
+   - Verify: scaffolded `<workspace>/<name>/{CLAUDE.md, .factory/project.json}`, redirect to `/app/projects/detail?id=<id>` on success, project visible at `/app/projects/`.
+   - Kick a build at `/app/build` against the new project; watch `directives/detail` SSE for `finding.created` events (the gap pinned in ADR 0029's Live verification section).
+3. **Close commit** `refactor(3.7): close step 3.7` — flips `- [ ] 3.7` → `- [x] 3.7` in `.control/phases/phase-3-web-ui/steps.md` and ticks the matching item in `UPGRADE/ROADMAP.md`. Same shape as `dfd1a07` (3.4 close) and `0f5775a` (3.6 close).
 
-2. **Commit (b) — `feat(3.7): POST /api/v1/projects route + schemas`.**
-   - New schemas in `packages/ipc/src/schemas.ts`: `apiV1CreateProjectRequestSchema { name: string≥1, language: 'python'|'node'|'go'|'rust', claudeMd?: string, maxUsd?: number, maxSteps?: number }` + `apiV1CreateProjectResponseSchema { id, path }`. Mirror the existing `apiV1CreateBuildRequestSchema` shape.
-   - New route in `packages/daemon/src/server.ts` near the existing `/api/v1/projects` GET routes (around line 898+). Gated by `requireUiAuth` (mirrors 3.6 cancel pattern). Handler: parse body via Zod, call `wiki.createProject`, return `{ id, path }`. Error envelope follows existing `ipcErrorSchema`.
-   - +6 route tests in `packages/daemon/test/`: 401 UI_AUTH_REQUIRED / 503 UI_DISABLED / 400 SCHEMA_VALIDATION_FAILED on missing-name / 409 ALREADY_EXISTS on name-collision (refuse-overwrite from wiki) / happy path with bearer (DB row + filesystem files created) / 400 on invalid language enum.
-   - Daemon test count expected ~167 → ~173.
+**After 3.7 closes**, Phase 3 still has 4 step commits + one phase-close commit ahead:
 
-3. **Commit (c) — `feat(3.7): /app/projects/new page`.**
-   - New `apps/factory-web/src/pages/projects/new.astro` modeled on `apps/factory-web/src/pages/build.astro`'s `<Form>` + `<Field>` + `<Submit>` shape (3.4 commit `58d4584`). Fields: project name (required), language picker (`python` / `node` / `go` / `rust` / `(use server default)`), optional `CLAUDE.md` textarea, optional `--max-usd` / `--max-steps` numeric inputs. On submit: `apiPost('/api/v1/projects', ...)`, redirect to `/app/projects/detail?id=<new-id>` on success or surface inline `<Alert kind="conflict">` on failure (same hidden-Alert-placeholder pattern used by build.astro).
-   - **Frontend-design skill required before authoring** per saved feedback.
-   - **Apply the captureTokenFromUrl pattern from the start** — all auth-gated pages need it (lesson from this session's 3.6 follow-up `00d2bc4`).
-   - Add nav link to dashboard between "Projects" and "Build" (or under the Projects submenu if the nav has hierarchy).
-   - Acceptance: form submit creates `<workspace>/<project>/.factory/project.json` + matching DB row; project appears in `/app/projects`; follow-up build directive at `/app/build` succeeds against the new project end-to-end.
+- **3.8** — Spend page charts. Sparkline per project (last 14 days) + 30-day stacked bar of daily totals split by project. Vanilla SVG, no chart-lib dep. Per `tier-3-web-ui-live-and-complete.md` §3.8.
+- **3.9** — Mobile-responsive nav. Hamburger drawer at ≤768px; primary actions reachable in two taps at 375px.
+- **3.10** — Explicit logout + connection-status indicator in header. SSE-heartbeat-backed pip; clears session token on logout.
+- **3.11** — `/phase-close` (tags `phase-3-web-ui-closed`, scaffolds Phase 4).
+- Plus the **Deferred follow-ups** still open in `phase-3-web-ui/steps.md`: pause primitive (when a workflow signal demands it), PageShell + `<style is:global>` migration (11-page structural sweep — would also fix the Submit-invisible bug), pre-3.5 baseline live-smoke (mostly closed by the 2026-05-05 smoke + the upcoming 3.7 acceptance).
 
-**Acceptance smoke for 3.7:** ideally combined with the still-open phase-3 acceptance smoke (which also closes the `finding.created` live-verification gap from ADR 0029). Live-test the new project flow: create at `/app/projects/new` → verify it renders at `/app/projects` → kick a build at `/app/build` against the new project → watch `directives/detail` for SSE events including `finding.created` (which the substantive build will exercise).
+**Carry-forward bugs / cleanup (not blocking 3.8 or beyond):**
 
-**Carry-forward bugs / cleanup (not blocking 3.7):**
+- **Submit button invisible** (`Submit.astro` `.btn-primary` `color: Canvas` issue) will repro on the new `/app/projects/new` form too — same `<style is:global>` follow-up will fix all dashboard buttons in one sweep.
+- **Control framework repo** at `G:\Projects\Small-Projects\Control` — operator's go on 2.2.3 publish.
+- **Smoke residue from prior session** — optional reap via `cd packages/state && node smoke-cleanup.mjs` + `rm -rf C:\Users\Momo\factory5-workspace\smoke-demo\`.
 
-- **Submit button invisible** (Submit.astro `.btn-primary` `color: Canvas` issue) — minor, one-line fix likely. Could land as `fix(3.x)` standalone or fold into the PageShell + Dashboard `<style is:global>` migration follow-up if that lands first.
-- **Control framework repo uncommitted edits** at `G:\Projects\Small-Projects\Control` — operator decides on commit + 2.2.3 publish. Local factory5 already patched (`e5ec723`).
-- **Smoke residue cleanup** — see "In-flight work" above; optional.
-- **Daemon + astro background processes** — still up on `127.0.0.1:25295` and `127.0.0.1:4321`. Useful if you want to immediately resume live-testing on session start; otherwise stop at session start.
+**Frontend-design judgement calls captured during 3.7 commit (c)** worth recalling for 3.8 / 3.9 / 3.10:
 
-**3.x backlog still open** (no 3.7 acceptance dependency, in `phase-3-web-ui/steps.md` "Deferred follow-ups"):
-
-- **PageShell + Dashboard `<style is:global>` migration** — 11-page structural sweep. Now has additional motivation: the 2026-05-05 smoke surfaced multiple visual quirks ("Completed Cancelling" text-glom on the cancel button, invisible Submit button, generally unstyled forms). Land in a session where you can spot-check pages in a browser as they convert.
-- **Pause primitive** — design when a workflow signal demands it. Option A (status-enum extension) vs Option B (`markBlocked` reuse) vs longer-term-defer.
-- **Pre-3.5 baseline live-smoke against running factoryd** — partially closed by the 2026-05-05 smoke (4 of 5 SSE event types verified). Phase-3 acceptance smoke needs to close the `finding.created` gap on a substantive build.
-
-**Smoke lessons (carried to inform future smokes):**
-
-- A directed `CLAUDE.md` (e.g., "Add `add(a, b)` pure function with vitest test") gets the architect past readiness checks but `assisted` autonomy still parks at each phase transition (architect→planning, planning→execution). To exercise an unattended build for `finding.created` evidence, use `--autonomy autonomous`, OR plan to answer 2 askUser questions before workers fire.
-- The brain's `emitFindingCreated` emits per-task only when `listFindings(plan.projectPath)` returns non-empty. The smoke-demo "add(a,b)" project produced no findings (no verifier-class issues). Smokes that need to verify `finding.created` should pick a project that produces findings naturally — e.g., a build the verifier flags advisories on.
-- Operator can answer pending questions via direct API POST (`/api/v1/pending-questions/:id/answer`) when the FE submit button is hidden by the unstyled-CSS issue. Faster than navigating around UI bugs and equally valid for non-UI-smoke purposes.
+- **Inherit, don't invent.** The dashboard's existing aesthetic is utilitarian-functional (`system-ui`, `color-mix(currentColor)` palette adapting to `color-scheme: light dark`); the page-design move is to apply frontend-design *principles* (hierarchy, affordance copy, friction-aware errors, smart defaults) within that aesthetic, not introduce a new palette / typography.
+- **Hint copy teaches the consequence, not the shape.** "Drives the per-language CLAUDE.md scaffold and the assessor runtime on subsequent builds" beats "Pick a language" — the operator already knows what a select does; what they don't know is what choosing affects downstream.
+- **Empty submit fields ≠ explicit empty.** `body.claudeMd` is sent only when the textarea has non-whitespace content; sending `claudeMd: ''` would override the per-language scaffold with nothing. Same pattern transfers to 3.8/3.9 forms (don't conflate "not specified" with "explicitly cleared").
+- **Skipping the global nav addition** when an in-context affordance covers discoverability is the cleaner UX — `+ New project` on the projects list page beats a 9th nav item. Plan recommended nav; this was an intentional deviation in the lighter direction (recorded in `53e4e98`'s body).
 
 Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions; this STATE.md is the operational cursor (overwritten at each `/session-end`).
