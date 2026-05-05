@@ -1,7 +1,7 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-05T20:09:10Z by
-> `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-05T21:50:14Z by
+> `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
 
@@ -16,57 +16,43 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-Pick step 3.8 — spend page charts. Per [`../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md`](../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md) §3.8: two charts on `/app/spend`, both vanilla SVG (no chart-library dep). (i) **Per-project sparkline** — last 14 days of daily spend, one row per project, inline mini-line + USD label. (ii) **30-day stacked bar** — daily totals across the workspace, color-coded segments per project. Inherit-don't-invent — keep the existing utilitarian aesthetic (`color-mix(currentColor)` palette adapting to `color-scheme: light dark`); apply frontend-design *principles* (hierarchy, affordance copy, smart defaults) within that aesthetic. **Invoke the `frontend-design` skill before authoring** per saved feedback. First step is to read `apps/factory-web/src/pages/spend/index.astro` (the current flat-array consumer) and `packages/state/src/queries-spend.ts` (or wherever the spend query lives) to determine whether `/api/v1/spend` already has the daily/project decomposition or whether 3.8 needs a new query/route too. Background processes still running: factoryd PID 37148 on `127.0.0.1:25295` (fresh on the 3.7 build, ADR 0029 wired correctly); astro dev on `127.0.0.1:4321`. After 3.8: 3.9 (mobile-responsive nav) → 3.10 (logout + connection-status indicator) → 3.11 (`/phase-close`).
-
+Run `/phase-close`. Phase 3 is complete: every step in [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md) flipped to `[x]` (3.1 → 3.10) and three deferred follow-ups remain (Pause primitive, PageShell adoption + Dashboard `<style is:global>` migration, pre-3.5 baseline live-smoke chat-page click-test) — none are 3.x acceptance dependencies, and per the steps.md "Deferred follow-ups" header all are explicitly free to land any time before `/phase-close` (or be carried into Phase 4). The `/phase-close` skill will: (i) tag `phase-3-web-ui-closed` annotated at HEAD; (ii) append a session entry to [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) summarizing the phase; (iii) tick remaining Tier 3 boxes in [`../../UPGRADE/ROADMAP.md`](../../UPGRADE/ROADMAP.md) (none left as of step-3.10 close); (iv) promote ADR 0029 (`directive-stream-protocol`) past the gated state — the Live verification carve-out can be retired since all six event types are confirmed live (closed in step 3.7's smoke); (v) scaffold Phase 4 (`cli-completion`) at `.control/phases/phase-4-cli-completion/{README.md,steps.md}` per [`../architecture/phase-plan.md`](../architecture/phase-plan.md). One smoke remaining as a 30-second click-test before the close: open `/app/chat` against a live factoryd, type a question, verify the streamed reply renders end-to-end (the only piece of Phase 3.5's pre-existing work without a dedicated live smoke). Background processes still running: factoryd PID 21776 → may have rotated again; live URL via `factory ui-token`. Astro dev on `127.0.0.1:4321`.
 
 ## Notes for next session
 
-Step 3.7 is **closed**. All of the prior session's pending work landed cleanly: the live-smoke acceptance + 2 in-flight fix commits + the close commit. ADR 0029's `finding.created` live-verification gap is closed; the ADR can promote past the gated state at `/phase-close` (step 3.11) without further smokes.
+Step 3.10 is **closed**. Three steps landed this session: 3.8 spend charts (2 commits: daemon-side perDayPerProject rollup + page-side SVG charts), 3.9 mobile-responsive nav (1 feat + 1 close), 3.10 logout + connection pip (1 feat + 1 follow-up fix + 1 close). Workspace tests 1075 → 1080 + 3 skipped (state +5 from `perDayPerProject` coverage; 3.9/3.10 are layout-only).
 
-**Step 3.8 — Spend page charts (recommended next):**
+**Step 3.11 — `/phase-close` (recommended next):**
 
-Per [`../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md`](../../UPGRADE/plans/tier-3-web-ui-live-and-complete.md) §3.8. Two charts on `/app/spend`:
+Run `/phase-close`. The skill:
+1. **Verifies done criteria.** All sub-step checkboxes in `phase-3-web-ui/steps.md` flipped to `[x]` (3.1 → 3.10) — confirmed at session-end. Three deferred follow-ups remain in the "Deferred follow-ups" section but are explicitly not 3.x acceptance dependencies.
+2. **Tags the phase boundary.** Annotated tag `phase-3-web-ui-closed` at HEAD per `${CONTROL_PHASE_CLOSE_TAG_FORMAT}`.
+3. **Appends to UPGRADE/LOG.md.** Phase summary covering the 11 sub-steps (3.1-3.10 + the deferred bucket) and the cumulative test-count delta from phase-2 baseline.
+4. **Ticks remaining ROADMAP boxes.** All Tier 3 ROADMAP items already ticked through step-3.10 close — no remaining Tier 3 boxes; the Tier 3 close itself is the wrap.
+5. **Promotes ADR 0029 past gated state.** Docs amendment to `docs/decisions/0029-directive-stream-protocol.md` retiring the unit-test-only carve-out in the Live verification section — six event types now confirmed live end-to-end (4 from 2026-05-05 prior session smokes + cancel round-trip + this session's `finding.created` from 3.7's smoke).
+6. **Scaffolds Phase 4.** `.control/phases/phase-4-cli-completion/{README.md,steps.md}` per `phase-plan.md`'s Phase 4 entry. The Phase 4 plan in `UPGRADE/plans/tier-4-cli-completion.md` lists the sub-steps to enumerate.
 
-1. **Per-project sparkline** — one row per project, last 14 days of daily spend rendered as an inline mini-line + USD label. Hover (or click on touch) shows `<date>: $<amount>`.
-2. **30-day stacked bar** — daily totals across the workspace, color-coded segments per project; legend below or hover-tooltip.
+**One smoke remaining as a 30-second click-test before the close** (carry-forward from prior session, recorded in steps.md "Deferred follow-ups"): open `/app/chat` against a live factoryd, type a question, verify the streamed reply renders end-to-end. The 3.6 cancel acceptance smoke + 3.7 acceptance smoke covered the directive-detail page condition; the chat-page click-test is the remaining piece of Phase 3.5 without a dedicated live smoke. Pin this as part of the `/phase-close` smoke.
 
-Hard requirements:
-
-- **Vanilla SVG only.** No chart-library dep (D3, Chart.js, recharts, etc.). Per `tier-3-web-ui-live-and-complete.md` §3.8.
-- **Inherit, don't invent.** Use the existing `color-mix(currentColor)` palette adapting to `color-scheme: light dark`. Per-project colors can either (a) reuse a small fixed palette indexed by project insertion order or (b) hash the project id to a hue — either works; pick the simpler one.
-- **Invoke the `frontend-design` skill before authoring** per saved feedback. The skill is calibrated for greenfield design but its principles (hierarchy, affordance copy, friction-aware errors, smart defaults) still apply within the existing aesthetic.
-
-First-step investigation:
-
-- Read `apps/factory-web/src/pages/spend/index.astro` to see the current shape (flat-array consumer of `/api/v1/spend`).
-- Read `packages/state/src/queries-spend.ts` (or wherever spend lives — grep `'queries-spend'` if the path differs) to see whether the daily/project decomposition is already available or whether 3.8 needs a new query helper.
-- Read `packages/daemon/src/server.ts` for the `/api/v1/spend` route shape — if a daily-rollup endpoint is missing, decide whether to add it as a separate route or extend the existing one.
-
-If the daily decomposition needs new daemon work, 3.8 is a 2-commit step (route + schema → page); otherwise it's a single-commit step (page only). Plan the split when the investigation is done.
-
-**After 3.8:**
-
-- **3.9** — Mobile-responsive nav. Hamburger drawer at ≤768px; primary actions reachable in two taps at 375px (iPhone SE width).
-- **3.10** — Explicit logout + connection-status indicator in header. SSE-heartbeat-backed pip; clears session token on logout.
-- **3.11** — `/phase-close`. Tags `phase-3-web-ui-closed`; ADR 0029 promoted past gated state (Live verification carve-out retired); scaffolds Phase 4.
-
-**Deferred follow-ups still open in `phase-3-web-ui/steps.md`** (no 3.x acceptance dependency):
+**Deferred follow-ups still open in `phase-3-web-ui/steps.md`** (three items, none block /phase-close):
 
 - **Pause primitive on directive detail.** Defer until a real workflow signal demands it. Choose between Option A (`directivesQ.status` enum extension) and Option B (`markBlocked` reuse with `blockedReason: 'paused-by-operator'`) when the signal lands.
-- **PageShell adoption + Dashboard `<style is:global>` migration.** 11-page structural sweep that would also (a) eliminate the carry-forward "Clear all defaults" + 4× filter-form Apply buttons unstyled-button issue, (b) consolidate inline `style=` attributes scattered across pages (e.g., `pages/projects/detail.astro:14-30` etc.), (c) move Dashboard.astro's currently-scoped `.btn*` / `.alert*` / `.form-*` rules to global so raw page buttons inherit them. Self-contained ~1 commit when authored. Not a per-step blocker.
-- **Pre-3.5 baseline live-smoke** is now mostly closed by the 2026-05-05 session's smokes (3.6 cancel + 3.7 acceptance + ADR 0029 verification). The chat-page click-test is the remaining 30-second piece; pin it as part of the `/phase-close` smoke.
+- **PageShell adoption + Dashboard `<style is:global>` migration.** 11-page structural sweep that would also (a) eliminate the carry-forward "Clear all defaults" + 4× filter-form Apply buttons unstyled-button issue, (b) consolidate inline `style=` attributes scattered across pages, (c) move Dashboard.astro's currently-scoped `.btn*` / `.alert*` / `.form-*` rules to global so raw page buttons inherit them. Self-contained ~1 commit when authored. Could land before /phase-close as a "loose-ends sweep" or carry into Phase 4 — operator's call.
+- **Pre-3.5 baseline live-smoke (chat-page click-test)** — the remaining 30-second piece. Pin as part of the /phase-close smoke per #6 above.
 
-**Carry-forward bugs / cleanup (not blocking 3.8 or beyond):**
+**Carry-forward bugs / cleanup (not blocking 3.11 or beyond):**
 
-- **Smoke residue cleanup** is optional. Two projects + 2 cancelled directives in DB; corresponding workspace dirs on disk. See In-flight work § for paths.
+- **Smoke residue cleanup** is optional. Two projects + 3 cancelled-or-completed directives in DB; corresponding workspace dirs on disk. See In-flight work § for paths.
 - **Control framework repo** at `G:\Projects\Small-Projects\Control` — operator's go on 2.2.3 publish.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 drift, now at 7 occurrences. Not load-bearing; ergonomic.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 drift, now at 8 occurrences. Not load-bearing; ergonomic.
 
-**Frontend-design judgement calls captured this session worth carrying forward to 3.8/3.9/3.10:**
+**Frontend-design judgement calls captured this session worth carrying forward:**
 
-- **Root-cause CSS fixes over global rewrites.** The `currentColor` self-reference bug in `.btn-primary` had three identical instances; each one fixed with a 2-character change (`currentColor` → `CanvasText`) without redesigning the filled-accent button concept. Applies generally: when a CSS bug surfaces, look for the *anti-pattern's other instances* before reaching for a redesign.
-- **Astro `<ClientRouter />` is fragile when page scripts use module-level top-level setup.** Either drop the router or refactor every page script into `astro:page-load` callbacks. Mid-state ("router on, no listeners") is the worst of both worlds. Same applies if any future page wants SPA-like nav back: the listener wrap is the prerequisite.
-- **Inline-style audit pass.** Multiple pages have inline `style=` attributes for colors. When the PageShell migration lands, fold these into the global stylesheet — they're harder to maintain inline.
-- **Frontend-design judgement calls already captured in last session's notes** (inherit-don't-invent, hint-copy-teaches-consequence, empty-fields-aren't-explicit-empty, in-context-affordance-vs-nav) still apply for 3.8/3.9/3.10.
+- **Smart defaults read better than manual rendering at the empty case.** 3.8's sparkline + stacked bar always render the 14- and 30-day windows anchored on today UTC, regardless of data — trailing empty days render as visible gaps, which is honest and avoids "no chart at all" empty states for fresh databases. Same principle would apply to any future dashboard widget.
+- **Native HTML elements beat custom widgets when semantics align.** 3.9's hamburger uses `<details>`/`<summary>` — zero JS, native a11y, keyboard support out of the box, auto-closes on navigation since each click is a fresh page load. The aesthetic restraint (no animation flourishes beyond the 120ms hamburger→× rotate) keeps the operator tool feeling like a tool.
+- **Theme-independent intentional colors for status semantics.** 3.10's pip uses fixed `#2a8` (green) / `#d80` (amber) / `#c24` (red) instead of theme-aware colors because operators recognize traffic-light semantics on muscle memory; mid-luminance shades read on both light and dark canvases without per-theme branching.
+- **Error-class differentiation matters when the recovery path differs.** 3.10's initial heartbeat treated all failures uniformly via 3-consecutive-failures cycle; operator smoke caught that 401 (stale token) needs a different treatment because polling can't recover from it. Short-circuit on 401 with a label that names the recovery command — generic retry semantics hide actionable signals.
+- **Visible label vs. hover title separation.** 3.10's `setStatus(state, label, hover?)` keeps the visible chrome terse ("Session expired") while the hover tooltip carries the actionable detail (`Daemon restarted — run \`factory ui-token\` for a fresh URL`). Future labeled-with-action UI can reuse this pattern.
+- **Frontend-design judgement calls carried from prior sessions still apply** for /phase-close polish and Phase 4: inherit-don't-invent, hint-copy-teaches-consequence, in-context-affordance-vs-nav, root-cause CSS fixes over global rewrites.
 
 Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions; this STATE.md is the operational cursor (overwritten at each `/session-end`).
