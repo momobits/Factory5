@@ -52,12 +52,17 @@ import {
   saveConfig,
 } from '@factory5/brain';
 import { ClaudeCliProvider } from '@factory5/providers';
-import { loadOrCreateProjectMetadata, readProjectMetadata } from '@factory5/wiki';
+import {
+  CreateProjectAlreadyExistsError,
+  createProject,
+  type CreateProjectResult,
+} from '@factory5/wiki';
 import type { Command } from 'commander';
 
 /**
  * Languages the project-creation mode supports. Mirror of
- * `@factory5/assessor`'s `Runtime` union; inlined to avoid the workspace dep.
+ * `@factory5/wiki`'s `ProjectLanguage` union; inlined here to keep the
+ * Commander option-parsing surface explicit.
  */
 type InitLanguage = 'python' | 'node' | 'go' | 'rust';
 
@@ -395,17 +400,15 @@ async function runGenerate(opts: InitOptions): Promise<void> {
  * runs read `project.json.metadata.language` to pick the assessor runtime
  * (ADR 0026), so the operator does not need to repeat `--language` per build.
  *
- * Refuses to overwrite an existing project to avoid silent identity churn.
- * Default language is `python` for back-compat with the existing
- * `factory5-workspace/` corpus.
+ * Path resolution: an explicit absolute / relative path wins; bare names
+ * resolve under the configured workspace. The actual scaffold work runs in
+ * `wiki.createProject` so the daemon's `POST /api/v1/projects` route shares
+ * the same refuse-overwrite + identity-claim semantics.
  */
 async function runProjectInit(project: string, opts: InitOptions): Promise<void> {
   const language: InitLanguage =
     opts.language !== undefined ? parseInitLanguage(opts.language) : 'python';
 
-  // Resolve target dir — explicit absolute/relative path wins; otherwise
-  // <workspace>/<project>. Workspace comes from --workspace flag, instance
-  // config, or the default `~/factory5-workspace` (matches `factory build`).
   const cfg = await loadConfig().catch(() => undefined);
   const workspace =
     opts.workspace ?? cfg?.general.workspace ?? join(homedir(), 'factory5-workspace');
@@ -415,84 +418,33 @@ async function runProjectInit(project: string, opts: InitOptions): Promise<void>
       ? resolve(processCwd(), project)
       : join(workspace, project);
 
-  // Refuse to clobber an existing project. ADR 0021's identity guarantee
-  // means re-tagging would orphan spend / findings / build history.
-  const existingMeta = await readProjectMetadata(projectPath).catch(() => undefined);
-  if (existingMeta !== undefined) {
-    stdout.write(
-      `factory init: ${projectPath} already has a project identity (${existingMeta.id}). ` +
-        `Refusing to overwrite — delete .factory/project.json to claim a new identity, or pick a different name.\n`,
-    );
-    exit(2);
+  let result: CreateProjectResult;
+  try {
+    result = await createProject({ projectPath, name: project, language });
+  } catch (err) {
+    if (err instanceof CreateProjectAlreadyExistsError) {
+      if (err.reason === 'existing-metadata') {
+        stdout.write(
+          `factory init: ${err.projectPath} already has a project identity (${err.existingProjectId}). ` +
+            `Refusing to overwrite — delete .factory/project.json to claim a new identity, or pick a different name.\n`,
+        );
+      } else {
+        stdout.write(
+          `factory init: ${err.projectPath}/CLAUDE.md already exists. Refusing to overwrite — pick a different name or remove it manually.\n`,
+        );
+      }
+      exit(2);
+    }
+    throw err;
   }
-  if (existsSync(join(projectPath, 'CLAUDE.md'))) {
-    stdout.write(
-      `factory init: ${projectPath}/CLAUDE.md already exists. Refusing to overwrite — pick a different name or remove it manually.\n`,
-    );
-    exit(2);
-  }
-
-  mkdirSync(projectPath, { recursive: true });
-  const claudeMdPath = join(projectPath, 'CLAUDE.md');
-  writeFileSync(claudeMdPath, scaffoldClaudeMd(project, language), 'utf8');
-
-  await loadOrCreateProjectMetadata(projectPath, project, {
-    initialMetadata: { language },
-  });
 
   stdout.write(`factory init: scaffolded ${project} (${language})\n`);
-  stdout.write(`  path:     ${projectPath}\n`);
-  stdout.write(`  spec:     ${claudeMdPath}\n`);
+  stdout.write(`  path:     ${result.path}\n`);
+  stdout.write(`  spec:     ${result.claudeMdPath}\n`);
   stdout.write(`  language: ${language} (recorded in .factory/project.json)\n`);
   stdout.write('\nNext steps:\n');
-  stdout.write(`  1. Edit ${claudeMdPath} to describe what you want built\n`);
+  stdout.write(`  1. Edit ${result.claudeMdPath} to describe what you want built\n`);
   stdout.write(
     `  2. Run \`factory build ${project}\` — the assessor runtime is already wired to ${language}\n`,
   );
-}
-
-/**
- * Per-language CLAUDE.md scaffold. Minimal but valid spec the operator can
- * fill in — names the language explicitly so downstream agents do not need
- * to infer it.
- *
- * Exported for unit testing; the runtime caller is `runProjectInit`.
- */
-export function scaffoldClaudeMd(project: string, language: InitLanguage): string {
-  const header = `# ${project}\n\n## Project Overview\n\nDescribe what this project does in 2-3 sentences.\n`;
-  switch (language) {
-    case 'python':
-      return (
-        header +
-        '\n## Tech Stack\n\n- Python 3.11+\n- pytest for tests\n- Add runtime dependencies as needed\n\n' +
-        '## Key Modules\n\n1. `src/<module>.py` — describe each module here\n\n' +
-        '## Coding Standards\n\n- Type hints on all functions\n- Docstrings on public functions\n\n' +
-        '## Testing\n\n- pytest, tests under `tests/`\n'
-      );
-    case 'node':
-      return (
-        header +
-        '\n## Tech Stack\n\n- TypeScript 5.x, strict mode, ESM (NodeNext)\n- Node 20+\n- pnpm for package management\n- vitest for tests\n\n' +
-        '## Key Modules\n\n1. `src/index.ts` — entry point\n2. `src/<module>.ts` — describe each module\n\n' +
-        '## Coding Standards\n\n- `"strict": true` in tsconfig\n- No `any`; use `unknown` and narrow\n- Public exports carry a one-line TSDoc\n\n' +
-        '## Testing\n\n- vitest; `*.test.ts` next to source\n\n' +
-        '## package.json scripts\n\nThe assessor invokes `pnpm install → pnpm typecheck (or tsc --noEmit) → pnpm test`, so expose `typecheck` and `test` scripts.\n'
-      );
-    case 'go':
-      return (
-        header +
-        '\n## Tech Stack\n\n- Go 1.21+\n- standard library first; add modules sparingly\n\n' +
-        '## Key Modules\n\n1. `main.go` — entry point\n2. `internal/<pkg>/` — describe each package\n\n' +
-        '## Coding Standards\n\n- `go fmt` clean\n- Errors wrapped with context\n\n' +
-        '## Testing\n\n- `go test ./...`; tests in `_test.go` files alongside source\n'
-      );
-    case 'rust':
-      return (
-        header +
-        '\n## Tech Stack\n\n- Rust stable (1.70+)\n- Cargo\n\n' +
-        '## Key Modules\n\n1. `src/main.rs` (binary) or `src/lib.rs` (library)\n2. `src/<module>.rs` — describe each module\n\n' +
-        '## Coding Standards\n\n- `cargo fmt` clean, `cargo clippy` clean\n- No `unwrap()` outside tests; use `?` and proper error types\n\n' +
-        '## Testing\n\n- `cargo test`; unit tests in `#[cfg(test)] mod tests`, integration tests under `tests/`\n'
-      );
-  }
 }

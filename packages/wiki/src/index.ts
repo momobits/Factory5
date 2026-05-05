@@ -15,3 +15,4 @@ export * from './plan.js';
 export * from './readiness.js';
 export * from './project-metadata.js';
 export * from './project-resolver.js';
+export * from './create-project.js';
