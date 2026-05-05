@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-05 18:50 UTC by `/session-end` (post 3.6 live-smoke + ADR 0029 promotion + auth-bootstrap fix on detail page + Claude Code hooks cwd-anchor)
+**Last updated:** 2026-05-05 17:32 UTC by drift reconciliation (`/session-start` flagged `commit-mismatch`: STATE.md=`79474b1`, HEAD=`1c6eeaf`; option (a) — STATE.md catches up to HEAD before any 3.7 work begins)
 **Current phase:** 3 — web-ui
-**Current step:** 3.7 — `/app/projects/new` (next; Decision 1 = smoke-first landed this session, Decision 2 = Option A locked in for execution)
-**Status:** ready (clean working tree post session-end commit; all four `pnpm` gates green; ADR 0029 promoted with documented `finding.created` live-verification gap)
+**Current step:** 3.7 — `/app/projects/new` (next; Decision 1 = smoke-first landed last session, Decision 2 = Option A locked in for execution)
+**Status:** ready (STATE.md cursor reconciled to HEAD `1c6eeaf` before 3.7 work; all four `pnpm` gates green at last run; ADR 0029 promoted with documented `finding.created` live-verification gap)
 
 ---
 
@@ -27,8 +27,8 @@ Open [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md). S
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `79474b1` — docs(adr): ADR 0029 — directive-stream protocol
-- **Uncommitted changes:** none (working tree clean post session-end commit)
+- **Last commit:** `1c6eeaf` — docs(state): session end for step 3.7
+- **Uncommitted changes:** none (working tree clean post drift-reconcile commit; this commit itself will create steady-state lag-by-1 the runbook documents)
 - **Last phase tag:** `phase-2-channel-parity-closed` (annotated tag at commit `081b832`)
 
 ---
@@ -67,11 +67,11 @@ None on the factory5 side. Three carry-forward items live outside the work curso
 
 ## Recently completed (last 5 steps)
 
+- Session-end docs — `docs(state)`: session end for step 3.7. Captures the 2026-05-05 session cursor in STATE.md / journal.md / next.md ahead of step 3.7 work; documents the three commits this session (`00d2bc4` 3.6 follow-up auth bootstrap fix, `e5ec723` Claude Code hooks cwd-anchor, `79474b1` ADR 0029 promotion) and locks in Decision 2 = Option A (extract `createProject` into `@factory5/wiki`) for 3.7's three-commit execution plan. — 2026-05-05 — `1c6eeaf`
 - ADR 0029 promotion — `docs(adr)`: ADR 0029 — directive-stream protocol (authors `docs/decisions/0029-directive-stream-protocol.md`; adds INDEX row; pins 6 architectural decisions distilled from the spec; Live verification section records the 2026-05-05 smoke scorecard with `finding.created` documented as unit-test-only). — 2026-05-05 — `79474b1`
 - Hooks cwd-anchor — `chore(install)`: cwd-anchor Claude Code hooks via `$CLAUDE_PROJECT_DIR` (wraps each hook command in `.claude/settings.json` with `bash -c 'cd "$CLAUDE_PROJECT_DIR" && exec bash .claude/hooks/<name>.sh'`; addresses the recurring "No such file or directory" Stop hook error caused by Bash-tool-call cwd drift; verified end-to-end by running the new Stop hook command from `packages/state/`. Local hot-patch ahead of Control v2.2.3 — Control's installer template (`tools/cli.js`) and own `.claude/settings.json` mirrored upstream but uncommitted there pending operator's go for npm publish). — 2026-05-05 — `e5ec723`
 - 3.6 follow-up auth fix — `fix(3.6)`: bootstrap UI token in `directives/detail.astro` (one-line addition: `import captureTokenFromUrl` from `lib/api`, call it as the first executable statement in the script body. Mirrors the canonical pattern used by every other auth-gated page; detail.astro was the only page using auth-gated APIs that didn't bootstrap the token from URL. Surfaced during the 3.6 cancel-button live-smoke when the operator opened the detail page directly without a prior visit to `/app/`). — 2026-05-05 — `00d2bc4`
 - Session-end docs (prior session) — `docs(state)`: session end for step 3.6. Captures the 3.6 close cursor in STATE.md / journal.md / UPGRADE/LOG.md / next.md; no code changes. — 2026-05-03 — `fb63d58`
-- Step 3.6 closing — `refactor(3.6)`: close step 3.6 — cancel-only; pause + 3.x follow-ups deferred (flips `[ ] 3.6` → `[x] 3.6` in phase-3-web-ui/steps.md and UPGRADE/ROADMAP.md; rewrites the 3.6 line to "cancel-only" wording per Decision 2 = option C; adds a "Deferred follow-ups" section to steps.md with three explicit `- [ ]` bullets for pause primitive, PageShell + Dashboard global migration, and pre-3.5 baseline live-smoke). — 2026-05-03 — `0f5775a`
 
 ---
 
