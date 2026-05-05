@@ -3,6 +3,73 @@ import Dashboard from '../../layouts/Dashboard.astro';
 import Table from '../../components/Table.astro';
 ---
 
+<style is:global>
+  .sparklines {
+    display: grid;
+    grid-template-columns: minmax(8rem, 14rem) 1fr minmax(4.5rem, 6rem);
+    column-gap: 0.75rem;
+    row-gap: 0.35rem;
+    align-items: center;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+    max-width: 50rem;
+  }
+  .sparklines .label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sparklines .spark {
+    display: block;
+    line-height: 0;
+  }
+  .sparklines .spark svg {
+    display: block;
+    width: 100%;
+    height: 28px;
+  }
+  .sparklines .total {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in srgb, currentColor 80%, transparent);
+  }
+  .stacked-bar {
+    margin-top: 0.5rem;
+    max-width: 50rem;
+  }
+  .stacked-bar svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 720 / 180;
+    border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, currentColor 2%, transparent);
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1rem;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    max-width: 50rem;
+    color: color-mix(in srgb, currentColor 80%, transparent);
+  }
+  .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .legend-swatch {
+    display: inline-block;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+</style>
+
 <Dashboard title="Spend">
   <form class="filter-form" id="filter">
     <label>
@@ -21,6 +88,17 @@ import Table from '../../components/Table.astro';
   </form>
 
   <p id="error" class="err" hidden></p>
+
+  <h3 style="margin-top: 1.5rem;">Per-project trend (last 14 days)</h3>
+  <div id="sparklines" class="sparklines">
+    <p class="empty">Loading…</p>
+  </div>
+
+  <h3 style="margin-top: 1.5rem;">Daily totals (last 30 days)</h3>
+  <div id="stacked-bar" class="stacked-bar">
+    <p class="empty">Loading…</p>
+  </div>
+  <div id="stacked-bar-legend" class="legend"></div>
 
   <h3 style="margin-top: 1.5rem;">
     Per project (<span id="spend-perproject-count">…</span>)
@@ -113,6 +191,14 @@ import Table from '../../components/Table.astro';
       totalUsd: number;
       callCount: number;
     }
+    interface PerDayPerProject {
+      date: string;
+      projectId: string | null;
+      projectName: string | null;
+      display: string;
+      totalUsd: number;
+      callCount: number;
+    }
     interface PerModel {
       provider: string;
       model: string;
@@ -123,6 +209,7 @@ import Table from '../../components/Table.astro';
       perProject: PerProject[];
       perDirective: PerDirective[];
       perDay: PerDay[];
+      perDayPerProject: PerDayPerProject[];
       perModel: PerModel[];
     }
 
@@ -165,7 +252,267 @@ import Table from '../../components/Table.astro';
       return e;
     };
 
+    // Last N UTC dates ending today (inclusive). Anchored on today rather
+    // than the last data date so empty trailing days render as visible gaps —
+    // operators want "we ran nothing today" to be obvious.
+    const buildDateWindow = (n: number): string[] => {
+      const today = new Date();
+      const dates: string[] = [];
+      for (let i = n - 1; i >= 0; i--) {
+        const d = new Date(
+          Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - i),
+        );
+        dates.push(d.toISOString().slice(0, 10));
+      }
+      return dates;
+    };
+
+    // Deterministic hue from projectId so colors are stable across reloads
+    // and across the two charts. mid-luminance HSL works in both light and
+    // dark themes without per-theme branching.
+    const projectHue = (projectId: string | null): number => {
+      if (projectId === null) return 0;
+      let h = 0;
+      for (let i = 0; i < projectId.length; i++) {
+        h = (h * 31 + projectId.charCodeAt(i)) | 0;
+      }
+      return ((h % 360) + 360) % 360;
+    };
+    const projectColor = (projectId: string | null): string => {
+      if (projectId === null) return 'color-mix(in srgb, currentColor 35%, transparent)';
+      return `hsl(${projectHue(projectId)} 50% 50%)`;
+    };
+
+    const escapeAttr = (s: string): string =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    interface ProjectMeta {
+      projectId: string | null;
+      display: string;
+      totalUsd: number;
+    }
+
+    // Aggregate per-project totals + capture display label from the rows.
+    const projectsFromRows = (rows: PerDayPerProject[]): ProjectMeta[] => {
+      const m = new Map<string | null, ProjectMeta>();
+      for (const r of rows) {
+        const cur = m.get(r.projectId);
+        if (cur === undefined) {
+          m.set(r.projectId, { projectId: r.projectId, display: r.display, totalUsd: r.totalUsd });
+        } else {
+          cur.totalUsd += r.totalUsd;
+        }
+      }
+      return Array.from(m.values()).sort((a, b) => b.totalUsd - a.totalUsd);
+    };
+
+    // (date, projectId) → totalUsd lookup so chart loops are O(1) per cell.
+    const indexByDayProject = (
+      rows: PerDayPerProject[],
+    ): Map<string, Map<string | null, number>> => {
+      const m = new Map<string, Map<string | null, number>>();
+      for (const r of rows) {
+        let inner = m.get(r.date);
+        if (inner === undefined) {
+          inner = new Map();
+          m.set(r.date, inner);
+        }
+        inner.set(r.projectId, r.totalUsd);
+      }
+      return m;
+    };
+
+    const buildSparklineSvg = (values: number[], color: string): string => {
+      const w = 240;
+      const h = 28;
+      const pad = 2;
+      const max = Math.max(...values, 0.0001);
+      const n = values.length;
+      const xStep = n > 1 ? (w - 2 * pad) / (n - 1) : 0;
+      // Render as discrete segments so zero-spend days create visible gaps
+      // (more honest than connecting through zero, which implies a value).
+      const segments: string[] = [];
+      for (let i = 1; i < n; i++) {
+        const v0 = values[i - 1] ?? 0;
+        const v1 = values[i] ?? 0;
+        if (v0 === 0 || v1 === 0) continue;
+        const x0 = pad + (i - 1) * xStep;
+        const y0 = h - pad - (v0 / max) * (h - 2 * pad);
+        const x1 = pad + i * xStep;
+        const y1 = h - pad - (v1 / max) * (h - 2 * pad);
+        segments.push(
+          `<line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" />`,
+        );
+      }
+      // Dots for any non-zero day so isolated single-day spend stays visible
+      // even when both neighbors are zero (otherwise the segment-only render
+      // shows nothing at all for an isolated point).
+      const dots: string[] = [];
+      for (let i = 0; i < n; i++) {
+        const v = values[i] ?? 0;
+        if (v === 0) continue;
+        const x = pad + i * xStep;
+        const y = h - pad - (v / max) * (h - 2 * pad);
+        dots.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.4" />`);
+      }
+      return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+        <g stroke="${color}" stroke-width="1.5" stroke-linecap="round" fill="none" vector-effect="non-scaling-stroke">${segments.join('')}</g>
+        <g fill="${color}" stroke="none">${dots.join('')}</g>
+      </svg>`;
+    };
+
+    const renderSparklines = (rows: PerDayPerProject[]): void => {
+      const container = document.getElementById('sparklines');
+      if (container === null) return;
+      const window14 = new Set(buildDateWindow(14));
+      const inWindow = rows.filter((r) => window14.has(r.date));
+      const projects = projectsFromRows(inWindow);
+
+      if (projects.length === 0) {
+        container.innerHTML = '<p class="empty">No spend in last 14 days.</p>';
+        return;
+      }
+
+      const dates = buildDateWindow(14);
+      const idx = indexByDayProject(inWindow);
+
+      container.innerHTML = '';
+      for (const p of projects) {
+        const values = dates.map((d) => idx.get(d)?.get(p.projectId) ?? 0);
+        const color = projectColor(p.projectId);
+
+        const labelEl = document.createElement('span');
+        labelEl.className = 'label';
+        labelEl.textContent = p.display;
+        labelEl.title = p.display;
+
+        const svgWrap = document.createElement('span');
+        svgWrap.className = 'spark';
+        svgWrap.innerHTML = buildSparklineSvg(values, color);
+
+        const totalEl = document.createElement('span');
+        totalEl.className = 'total';
+        totalEl.textContent = fmtUsd(p.totalUsd);
+
+        container.appendChild(labelEl);
+        container.appendChild(svgWrap);
+        container.appendChild(totalEl);
+      }
+    };
+
+    const renderStackedBar = (rows: PerDayPerProject[]): void => {
+      const container = document.getElementById('stacked-bar');
+      const legendEl = document.getElementById('stacked-bar-legend');
+      if (container === null || legendEl === null) return;
+
+      const window30 = new Set(buildDateWindow(30));
+      const inWindow = rows.filter((r) => window30.has(r.date));
+      const projects = projectsFromRows(inWindow);
+
+      legendEl.innerHTML = '';
+      if (projects.length === 0) {
+        container.innerHTML = '<p class="empty">No spend in last 30 days.</p>';
+        return;
+      }
+
+      const dates = buildDateWindow(30);
+      const idx = indexByDayProject(inWindow);
+
+      // Stable per-project paint order inside each stack: largest-total at
+      // the bottom, so visual mass mirrors the legend order.
+      const paintOrder = [...projects];
+
+      const w = 720;
+      const h = 180;
+      const padTop = 8;
+      const padBottom = 14;
+      const dayWidth = w / dates.length;
+      const barGap = 1.5;
+      const barWidth = Math.max(dayWidth - barGap, 1);
+      const chartH = h - padTop - padBottom;
+
+      const dayTotals = dates.map((d) => {
+        const m = idx.get(d);
+        if (m === undefined) return 0;
+        let s = 0;
+        for (const v of m.values()) s += v;
+        return s;
+      });
+      const maxDayTotal = Math.max(...dayTotals, 0.0001);
+
+      const parts: string[] = [];
+      // Background grid: subtle horizontal line at top to anchor the eye to
+      // the y-max. No further gridlines — they'd add noise without value.
+      parts.push(
+        `<line x1="0" y1="${padTop.toFixed(1)}" x2="${w}" y2="${padTop.toFixed(1)}" stroke="color-mix(in srgb, currentColor 8%, transparent)" stroke-width="1" />`,
+      );
+
+      for (let i = 0; i < dates.length; i++) {
+        const date = dates[i] ?? '';
+        const x = i * dayWidth;
+        const dayMap = idx.get(date);
+        const total = dayTotals[i] ?? 0;
+
+        // Day-level invisible hover target so empty days still surface a
+        // tooltip ("2026-04-17: $0.00") rather than reading dead.
+        parts.push(
+          `<rect x="${x.toFixed(2)}" y="${padTop}" width="${barWidth.toFixed(2)}" height="${chartH}" fill="transparent" pointer-events="all"><title>${escapeAttr(date)}: ${escapeAttr(fmtUsd(total))}</title></rect>`,
+        );
+
+        if (dayMap === undefined || total === 0) continue;
+
+        // Stack from the bottom up. y starts at the chart bottom and
+        // climbs by each segment's height.
+        let yCursor = padTop + chartH;
+        for (const p of paintOrder) {
+          const v = dayMap.get(p.projectId);
+          if (v === undefined || v === 0) continue;
+          const segH = (v / maxDayTotal) * chartH;
+          // Floor at 1 unit so very-small bars stay visible.
+          const renderH = Math.max(segH, 1);
+          yCursor -= renderH;
+          parts.push(
+            `<rect x="${x.toFixed(2)}" y="${yCursor.toFixed(2)}" width="${barWidth.toFixed(2)}" height="${renderH.toFixed(2)}" fill="${projectColor(p.projectId)}"><title>${escapeAttr(p.display)} · ${escapeAttr(date)}: ${escapeAttr(fmtUsd(v))}</title></rect>`,
+          );
+        }
+      }
+
+      // X-axis: first and last date labels only (every-fifth would be tighter
+      // but the chart's tooltip carries per-day detail; bookending suffices).
+      const firstDate = dates[0] ?? '';
+      const lastDate = dates[dates.length - 1] ?? '';
+      parts.push(
+        `<text x="0" y="${(h - 2).toFixed(1)}" font-size="9" fill="color-mix(in srgb, currentColor 60%, transparent)">${escapeAttr(firstDate)}</text>`,
+      );
+      parts.push(
+        `<text x="${w}" y="${(h - 2).toFixed(1)}" font-size="9" text-anchor="end" fill="color-mix(in srgb, currentColor 60%, transparent)">${escapeAttr(lastDate)}</text>`,
+      );
+      // Y-max label, top-left.
+      parts.push(
+        `<text x="2" y="${(padTop - 2).toFixed(1)}" font-size="9" fill="color-mix(in srgb, currentColor 60%, transparent)">max ${escapeAttr(fmtUsd(maxDayTotal))}/day</text>`,
+      );
+
+      container.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Daily spend stacked by project, last 30 days">${parts.join('')}</svg>`;
+
+      // Legend (DOM, not innerHTML, to keep user-content sanitized).
+      for (const p of projects) {
+        const item = document.createElement('span');
+        item.className = 'legend-item';
+        const swatch = document.createElement('span');
+        swatch.className = 'legend-swatch';
+        swatch.style.background = projectColor(p.projectId);
+        const label = document.createElement('span');
+        label.textContent = `${p.display} · ${fmtUsd(p.totalUsd)}`;
+        item.appendChild(swatch);
+        item.appendChild(label);
+        legendEl.appendChild(item);
+      }
+    };
+
     const renderSpend = (resp: SpendResp): void => {
+      renderSparklines(resp.perDayPerProject);
+      renderStackedBar(resp.perDayPerProject);
+
       fillTable<PerProject>('spend-perproject', 'spend-perproject-count', resp.perProject, (p) => {
         const tr = document.createElement('tr');
         tr.appendChild(td(p.display));
