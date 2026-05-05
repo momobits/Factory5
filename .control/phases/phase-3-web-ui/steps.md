@@ -8,7 +8,7 @@
 - [x] 3.6 — Cancel button on directive detail — POST `/api/v1/directives/:id/cancel` (new SPA-namespace alias of Phase 2's CLI route, gated by `requireUiAuth`). Pause deferred — see follow-up bullet at the end of this list.
 - [x] 3.7 — Add `/app/projects/new` — mirror of `factory init <project>` for a single project; same shape as the chat-side build kickoff
 - [x] 3.8 — Spend page charts — sparkline per project + 30-day daily stacked bar; vanilla SVG (no chart-lib dep)
-- [ ] 3.9 — Mobile-responsive nav — hamburger drawer at narrow widths (≤768px); primary actions reachable in two taps at 375px
+- [x] 3.9 — Mobile-responsive nav — hamburger drawer at narrow widths (≤768px); primary actions reachable in two taps at 375px
 - [ ] 3.10 — Explicit logout + connection-status indicator in header — clears session token; "Connected" / "Disconnected" / "Reconnecting" pip backed by a heartbeat
 - [ ] 3.11 — `/phase-close` — tag `phase-3-web-ui-closed`; append session entry to [`../../../UPGRADE/LOG.md`](../../../UPGRADE/LOG.md); tick Tier 3 boxes in [`../../../UPGRADE/ROADMAP.md`](../../../UPGRADE/ROADMAP.md); scaffold Phase 4
 

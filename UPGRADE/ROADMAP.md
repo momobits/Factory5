@@ -50,7 +50,7 @@ Vanilla DOM-in-Astro → real Astro components + live updates + complete operati
 - [x] Add cancel button on directive detail (pause deferred — operator workflow signal not present yet; see phase-3-web-ui/steps.md follow-up bullet)
 - [x] Add `/app/projects/new` — mirror of `factory init` for a single project
 - [x] Spend page charts — sparkline per project + 30-day daily stacked bar
-- [ ] Mobile-responsive nav (hamburger drawer at narrow widths)
+- [x] Mobile-responsive nav (hamburger drawer at narrow widths)
 - [ ] Explicit logout + connection-status indicator in header
 
 Plan: [`plans/tier-3-web-ui-live-and-complete.md`](plans/tier-3-web-ui-live-and-complete.md)
