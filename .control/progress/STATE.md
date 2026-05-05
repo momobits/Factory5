@@ -27,8 +27,8 @@ Live-smoke step 3.7's full flow against a restarted factoryd (the long-running d
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `53e4e98` — feat(3.7): /app/projects/new page
-- **Uncommitted changes:** none (working tree clean post session-end commit; this commit itself will create steady-state lag-by-1 the runbook documents — same pattern as `1c6eeaf` / `288603e` predecessors)
+- **Last commit:** `e3aca18` — fix(3.7): drop `<ClientRouter />` so page setup runs on every nav
+- **Uncommitted changes:** none (working tree clean post step-3.7 close commit; same lag-by-1 the runbook documents — STATE.md reconcile folded into this commit per the operator's preference, vs. the standalone `317d94b`-shape last cycle)
 - **Last phase tag:** `phase-2-channel-parity-closed` (annotated tag at commit `081b832`)
 
 ---
