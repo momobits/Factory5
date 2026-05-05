@@ -51,7 +51,7 @@ Vanilla DOM-in-Astro → real Astro components + live updates + complete operati
 - [x] Add `/app/projects/new` — mirror of `factory init` for a single project
 - [x] Spend page charts — sparkline per project + 30-day daily stacked bar
 - [x] Mobile-responsive nav (hamburger drawer at narrow widths)
-- [ ] Explicit logout + connection-status indicator in header
+- [x] Explicit logout + connection-status indicator in header
 
 Plan: [`plans/tier-3-web-ui-live-and-complete.md`](plans/tier-3-web-ui-live-and-complete.md)
 
