@@ -10,6 +10,7 @@ import Dashboard from '../../layouts/Dashboard.astro';
       apiFetch,
       apiPost,
       apiStream,
+      captureTokenFromUrl,
       fmtUsd,
       NoTokenError,
       ApiError,
@@ -81,6 +82,8 @@ import Dashboard from '../../layouts/Dashboard.astro';
     }
 
     // ----- mount + state ----------------------------------------------------
+
+    captureTokenFromUrl();
 
     const mountEl = document.getElementById('mount');
     if (mountEl === null) throw new Error('mount missing');
