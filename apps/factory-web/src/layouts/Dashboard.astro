@@ -1,6 +1,4 @@
 ---
-import { ClientRouter } from 'astro:transitions';
-
 interface Props {
   title: string;
 }
@@ -28,7 +26,6 @@ const navLinks: NavLink[] = [
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title} — factory5</title>
-    <ClientRouter />
     <style>
       :root {
         color-scheme: light dark;
