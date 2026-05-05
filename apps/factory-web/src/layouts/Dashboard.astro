@@ -46,11 +46,13 @@ const navLinks: NavLink[] = [
         gap: 1.5rem;
         padding: 0.75rem 1.5rem;
         border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+        position: relative;
       }
       header.shell h1 {
         margin: 0;
         font-size: 1rem;
         font-weight: 600;
+        flex-shrink: 0;
       }
       header.shell nav {
         display: flex;
@@ -67,10 +69,113 @@ const navLinks: NavLink[] = [
       header.shell nav a:hover {
         background: color-mix(in srgb, currentColor 10%, transparent);
       }
+      header.shell nav.nav-inline {
+        flex-wrap: wrap;
+      }
+      /* Hamburger drawer — visible only at ≤768px (see media query below).
+         Uses native <details>/<summary> so toggle is keyboard-accessible
+         and screen-reader-friendly without JS. The drawer auto-closes on
+         link click because each click navigates to a fresh page. */
+      header.shell .nav-drawer {
+        display: none;
+        margin-left: auto;
+      }
+      header.shell .nav-drawer summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 3px;
+        /* Generous tap target — 44×44 per Apple HIG.
+           Three 2px bars + 5px gaps = 16px tall icon centered in a ~44px box. */
+        min-width: 44px;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      header.shell .nav-drawer summary::-webkit-details-marker {
+        display: none;
+      }
+      header.shell .nav-drawer summary::marker {
+        display: none;
+        content: '';
+      }
+      header.shell .nav-drawer summary:hover,
+      header.shell .nav-drawer[open] summary {
+        background: color-mix(in srgb, currentColor 10%, transparent);
+      }
+      header.shell .nav-drawer summary:focus-visible {
+        outline: 2px solid color-mix(in srgb, currentColor 40%, transparent);
+        outline-offset: 2px;
+      }
+      header.shell .hamburger {
+        display: inline-flex;
+        flex-direction: column;
+        justify-content: space-between;
+        width: 18px;
+        height: 14px;
+      }
+      header.shell .hamburger span {
+        display: block;
+        height: 2px;
+        background: currentColor;
+        border-radius: 1px;
+      }
+      header.shell .nav-drawer[open] .hamburger span:nth-child(1) {
+        transform: translateY(6px) rotate(45deg);
+      }
+      header.shell .nav-drawer[open] .hamburger span:nth-child(2) {
+        opacity: 0;
+      }
+      header.shell .nav-drawer[open] .hamburger span:nth-child(3) {
+        transform: translateY(-6px) rotate(-45deg);
+      }
+      header.shell .hamburger span {
+        transition:
+          transform 120ms ease,
+          opacity 120ms ease;
+      }
+      header.shell .nav-drawer nav {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        left: 0;
+        flex-direction: column;
+        gap: 0;
+        padding: 0.5rem 1.5rem 1rem;
+        background: Canvas;
+        border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+        z-index: 10;
+      }
+      header.shell .nav-drawer nav a {
+        padding: 0.6rem 0.5rem;
+        font-size: 0.95rem;
+        border-radius: 4px;
+      }
       main.shell {
         padding: 1.5rem;
         max-width: 72rem;
         margin: 0 auto;
+      }
+      @media (max-width: 768px) {
+        header.shell {
+          padding: 0.5rem 1rem;
+          gap: 1rem;
+        }
+        header.shell nav.nav-inline {
+          display: none;
+        }
+        header.shell .nav-drawer {
+          display: block;
+        }
+        main.shell {
+          padding: 1rem;
+        }
+      }
+      @media (max-width: 640px) {
+        form.form .form-row {
+          grid-template-columns: 1fr;
+        }
       }
       main.shell h2 {
         margin-top: 0;
@@ -279,7 +384,7 @@ const navLinks: NavLink[] = [
   <body>
     <header class="shell">
       <h1>factory5</h1>
-      <nav>
+      <nav class="nav-inline">
         {
           navLinks.map((link) => (
             <a
@@ -291,6 +396,25 @@ const navLinks: NavLink[] = [
           ))
         }
       </nav>
+      <details class="nav-drawer">
+        <summary aria-label="Navigation">
+          <span class="hamburger" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </span>
+        </summary>
+        <nav>
+          {
+            navLinks.map((link) => (
+              <a
+                href={link.href}
+                aria-current={Astro.url.pathname === link.href ? 'page' : undefined}
+              >
+                {link.label}
+              </a>
+            ))
+          }
+        </nav>
+      </details>
     </header>
     <main class="shell">
       <h2>{title}</h2>
