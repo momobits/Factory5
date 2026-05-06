@@ -2,19 +2,26 @@
 
 Commander-based CLI. Used by the `factory` binary in `apps/factory`.
 
+Every `factory <cmd> --help` lists worked examples and exit codes; `factory --help` cross-references [`../../docs/WORKFLOWS.md`](../../docs/WORKFLOWS.md) for the four canonical operator loops. Tab completion for bash / zsh / pwsh — see [Tab completion](#tab-completion) below.
+
 ## Subcommands
 
 | Command                                                                         | Status   | Purpose                                                                       |
 | ------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------- |
 | `factory --version`                                                             | **done** | Print version                                                                 |
 | `factory answer <questionId> [text...]`                                         | **done** | Close a pending `askUser`/`escalate_blocked` question                         |
+| `factory ask "<question>" [--json] [--autonomy …]`                              | **done** | Single-shot chat — one directive, one reply, exit                             |
+| `factory budget set <project> --max-usd <n> [--max-steps <n>]`                  | **done** | Per-project budget defaults — per-field merge, matches web UI write path      |
 | `factory build <project> [--autonomy … --concurrency … --inline]`               | **done** | Delegates to factoryd if running, else inline                                 |
+| `factory cancel <directive-id> [--reason <text>]`                               | **done** | Actively cancel a directive — flip to `failed` and kill the worker            |
 | `factory chat [--autonomy …]`                                                   | **done** | Interactive REPL against factoryd (daemon must be up)                         |
+| `factory completion <bash\|zsh\|pwsh>`                                          | **done** | Emit a static tab-completion script                                           |
 | `factory daemon start\|stop\|status\|restart`                                   | **done** | Lifecycle; refuses duplicate starts via pidfile                               |
 | `factory directive mark-blocked <id> [--reason …]`                              | **done** | Flip a stuck `running` directive to `blocked` (manual recovery)               |
 | `factory doctor [--skip-call] [--skip-discord]`                                 | **done** | Provider probe + triage round-trip + optional Discord reachability probe      |
 | `factory findings list\|show\|backfill`                                         | **done** | Cross-project findings registry — list, show one, backfill from workspaces    |
 | `factory init [--discord-token … --discord-application-id … ...]`               | **done** | Writes `config.toml`; populates `[channels.discord]` when `--discord-*` given |
+| `factory project list\|show\|delete <name> [--force --purge]`                   | **done** | Per-project introspection + lifecycle (registry-aware)                        |
 | `factory questions cleanup [--since <iso-date>] [--dry-run]`                    | **done** | Mark un-answered questions on terminated directives as answered (sweep)       |
 | `factory resume <project>`                                                      | **done** | Resume the most recent build for a project                                    |
 | `factory spend [--group-by project\|directive\|day\|model] [--since/--until …]` | **done** | Cross-session spend dashboard — per-project / -directive / -day / -model      |
@@ -101,9 +108,42 @@ stored in `directives.blocked_reason`. For the automated version —
 "sweep at daemon startup" — see `reconcileOrphanedDirectives` in
 `@factory5/state`, which is wired into `factoryd` automatically.
 
+## `factory cancel <directive-id> [--reason <text>]`
+
+Actively cancel a directive — flip the row to `failed` and kill the in-flight worker subprocess (SIGTERM, then SIGKILL after a 5 s grace window). Distinct from `factory directive mark-blocked`: that command flips a stuck row's status without touching the worker; `cancel` is the active-kill surface.
+
+```
+$ factory cancel 01K0…ULID --reason "wrong project"
+factory cancel: 01K0…ULID → failed (reason: wrong project)
+  worker abort signalled — subprocess will exit within ~5 s.
+```
+
+Two paths, daemon-preferred:
+
+- **Daemon up** — IPC `POST /directives/:id/cancel`. The daemon flips the row and fires the per-directive `AbortController`, which propagates to the worker subprocess. The whole cancel completes inside the 10 s acceptance budget.
+- **Daemon down** — DB-direct row update. Workers running in another shell continue until their next directive-status check; the row is reconciled immediately for anyone querying state.
+
+Exit codes: `0` cancelled, `1` hard error, `2` directive id not found, `3` directive already terminal (`complete` | `failed` | `blocked`).
+
 ## `factory chat`
 
 Interactive REPL that writes `intent=chat` directives against a running daemon and polls `outbound_messages` for replies. Type `/quit` or `Ctrl-D` to exit.
+
+## `factory ask "<question>"`
+
+Single-shot chat: mint one `intent=chat` directive, await the brain's reply, print, exit. The mint + notify + reply-poll cycle is shared with `factory chat` via the internal `submitOneDirective` helper. The daemon must be running (chat goes through the brain, not direct SQLite).
+
+```
+$ factory ask "what's the spend this week?"
+You've spent $0.32 across 84 calls in the last 7 days. Top project: weather-cli ($0.18).
+
+$ factory ask "list my projects" --json | jq -r .reply
+weather-cli, hello-cli, finance-tracker
+```
+
+`--json` emits a single JSON object on stdout (no leading log noise), shape `{ directive, reply, status }` — `status` is `reply` | `timeout` | `terminal-no-reply` (the latter adds a `directiveStatus` field). `--autonomy <chat|assisted|autonomous>` overrides the directive's autonomy mode (defaults to `chat`).
+
+Exit codes: `0` got a reply, `1` timeout / terminal-no-reply / hard error, `2` no daemon running (preflight).
 
 ## `factory ui-token`
 
@@ -119,6 +159,54 @@ When the SPA bundle hasn't been built (`pnpm --filter factory-web build`), the p
 `--token-only` prints just the bare token, useful for piping into env vars or `curl -H "Authorization: Bearer $(factory ui-token --token-only)"`.
 
 Exit codes: `0` on success, `2` if no daemon is running, `3` if the daemon is running CLI-only (no UI bundle), `1` on any other failure.
+
+## `factory budget set <project>`
+
+Set per-project `metadata.budgetDefaults` in `<workspace>/<project>/.factory/project.json` — the same on-disk shape the web UI's `PUT /api/v1/projects/:id/budget` writes (ADR 0027). Idempotent — same call twice yields the same on-disk state.
+
+```
+$ factory budget set weather-cli --max-usd 5
+factory budget set: weather-cli -> metadata.budgetDefaults
+  maxUsd:   $5.00
+  maxSteps: (unset)
+
+$ factory budget set weather-cli --max-steps 100
+factory budget set: weather-cli -> metadata.budgetDefaults
+  maxUsd:   $5.00       # preserved — per-field merge
+  maxSteps: 100
+```
+
+**Per-field merge** is the distinguishing CLI semantic: passing only `--max-steps` preserves an existing `maxUsd`. The web UI's PUT is full-document replacement; the CLI takes one or both flags and merges into the existing block, so operators never have to re-state the whole budget block. At least one of `--max-usd <n>` or `--max-steps <n>` is required.
+
+Project resolution: `<project>` is matched against the `projects` table by name (the common case) first, then by full ULID. Two projects sharing a name surface as ambiguous — disambiguate with the full ULID. ULID-suffix matching is intentionally not supported here (use `factory spend --project <suffix>` to resolve a suffix to a full ULID first).
+
+Exit codes: `0` on success, `1` on hard error (filesystem / DB exception), `2` on invalid input (missing flags, bad value, project not found, project.json missing or corrupt, ambiguous ref).
+
+## `factory project list / show <name> / delete <name>`
+
+Per-project introspection + lifecycle (registry-aware).
+
+`factory project list` walks the projects registry and prints one row per project — name + status + on-disk language + most-recent build status + workspace path. A missing or corrupt `project.json` renders the language column as `(unavailable)` rather than failing the whole table.
+
+```
+$ factory project list
+NAME         STATUS  LANGUAGE  LAST BUILD                     WORKSPACE
+weather-cli  active  python    complete 2026-04-26T14:02:11Z   /home/op/factory5-workspace/weather-cli
+hello-cli    active  node      (no builds yet)                 /home/op/factory5-workspace/hello-cli
+```
+
+`factory project show <project>` resolves a project ref (name or full ULID) and pretty-prints the registry row + on-disk `project.json` metadata + the most recent build directive's id / status / timestamp.
+
+`factory project delete <project>` is the unregister surface. Defaults are non-destructive — the registry row is removed, workspace files are left in place. Two flags shape the behaviour:
+
+- _(no flags)_ — interactive `y/N` prompt, then `DELETE FROM projects` only.
+- `--force` — skip the prompt, registry-only delete.
+- `--purge` — second typed-name confirm, then `DELETE FROM projects` followed by `rm -rf <workspacePath>`.
+- `--purge --force` — no prompts, registry-only delete + rm-rf. Use with care.
+
+Order on `--purge`: registry first, then `rm -rf`. If the rm trips (permission denied, etc.) the registry is already clean — the operator gets the rm error, removes the dir manually, and `factory build` won't trip on a stale registry entry.
+
+Exit codes (all three handlers): `0` on success (a declined prompt counts as success — operator chose to cancel), `1` on hard error (rm-rf failed unexpectedly), `2` on invalid input (project not found, ambiguous name).
 
 ## `factory spend`
 
@@ -166,6 +254,32 @@ Dry run — no rows written. Re-run without --dry-run to mark them answered.
 ```
 
 Works whether or not factoryd is running (straight SQL). `--since <iso-date>` restricts the sweep to rows created strictly before that ISO-8601 date / datetime. Exit `0` on success (including empty sweeps), `2` on malformed `--since`, `1` on any other failure.
+
+## Tab completion
+
+`factory completion <shell>` emits a static tab-completion script. Three shells: `bash`, `zsh`, `pwsh`. Static surface only — completes top-level command names and the fixed nested sub-subcommands (e.g. `daemon start|stop|status|restart`, `project list|show|delete`). Dynamic completion (project names, directive ids) is intentionally deferred: it would require running `factory` inside the completion script, which adds latency on every tab press.
+
+Install one-liners — pipe the script into your shell's rc-file:
+
+```bash
+# bash
+factory completion bash >> ~/.bashrc && source ~/.bashrc
+
+# zsh
+factory completion zsh > "${fpath[1]}/_factory" && compinit
+
+# pwsh
+factory completion pwsh >> $PROFILE && . $PROFILE
+```
+
+Or for one shell session without persisting:
+
+```bash
+source <(factory completion bash)                  # bash
+factory completion pwsh | Out-String | Invoke-Expression   # pwsh
+```
+
+Exit codes: `0` script printed, `2` unknown shell.
 
 ## API
 
