@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-06T13:41:41Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-06T20:31:45Z by
 > `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
@@ -16,47 +16,36 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-Begin Phase 4 (cli-completion). Read [`../phases/phase-4-cli-completion/README.md`](../phases/phase-4-cli-completion/README.md) and [`steps.md`](../phases/phase-4-cli-completion/steps.md) plus the full plan at [`../../UPGRADE/plans/tier-4-cli-completion.md`](../../UPGRADE/plans/tier-4-cli-completion.md). Two pre-kickoff items the operator should fill in: (i) `## Where we were, end of Phase 3` section in the new README — terse summary of the 10-step Phase 3 arc that 4.x can rely on (SSE protocol, Astro component library, web cancel/chat/projects-new, mobile nav, logout/connection pip); (ii) `## Why this phase exists` section — the carry-forward block (3 deferred items from Phase 3) is already seeded; add the operator-facing motivation (CLI is the third operator surface, Phase 4 closes parity with web + channels). Then start step 4.1: verify `factory cancel <directive-id>` works against a real factoryd (Phase 2's plumbing + DB-direct fallback already shipped — this is a smoke-only verification or a small fix). 4.2 (`factory budget set`) is the first feature step. Background processes still running from Phase 3: factoryd PID may have rotated; live URL via `factory ui-token`. Astro dev on `127.0.0.1:4321` (not load-bearing for Phase 4 work).
+Step 4.7 — refresh [`../../packages/cli/README.md`](../../packages/cli/README.md) to document the five new (or newly-verified) commands shipped in this session: `cancel`, `ask`, `budget set`, `project list/show/delete`, `completion`. Add a Tab completion install section (bash / zsh / pwsh one-liners). Add a row to the subcommand table for each of them. Update `Exit codes:` blocks to match the 4-code surfaces (`cancel` 0/1/2/3; `budget set` 0/1/2; `project delete` 0/1/2; `ask` 0/1/2). Cross-reference [`../../docs/WORKFLOWS.md`](../../docs/WORKFLOWS.md) for the canonical operator loops. **One file, no tests, ~1 commit.** After 4.7: 4.8 (move issues U018-U021 Open → Resolved + verify Tier 4 ROADMAP boxes are all ticked) then 4.9 (`/phase-close` — tag `phase-4-cli-completion-closed`).
 
 ## Notes for next session
 
-Phase 3 is **closed** (tag `phase-3-web-ui-closed`). Phase 4 (cli-completion) is the active phase — small but high-leverage tier estimated at ~1 session.
+Phase 4 is **6 of 9 sub-steps closed** (4.1 → 4.6). Three remain:
 
-**Step 4.1 — Verify `factory cancel` (recommended start):**
+**Step 4.7 — `packages/cli/README.md` refresh (recommended start):**
 
-Phase 2 step 2.4 shipped the brain hook + IPC route + DB-direct fallback. The CLI surface (`factory cancel <directive-id> [--reason <text>]`) was wired then; this Phase 4 step is the verification commit. If everything works as expected against a real factoryd, this might be a no-op or a tiny doc tweak. If something needs a fix (e.g., exit codes or `--reason` handling), land it as `fix(4.1): factory cancel — <issue>`.
+Touch one file. Add documentation for the new commands shipped this session:
 
-**Phase 4 sub-step roadmap:**
+- `factory cancel <directive-id> [--reason <text>]` — exit codes 0/1/2/3.
+- `factory ask "<question>"` — single-shot chat, `--json` shape.
+- `factory budget set <project> --max-usd <n> [--max-steps <n>]` — per-field merge, exit codes.
+- `factory project list / show <name> / delete <name>` — `--force` and `--purge` semantics.
+- `factory completion <shell>` — install one-liners for bash / zsh / pwsh.
 
-1. **4.1** — Verify `factory cancel` end-to-end (smoke, possibly no-op).
-2. **4.2** — `factory budget set <project>` reusing wiki helpers; same code path as `PUT /api/v1/projects/:id/budget`.
-3. **4.3** — `factory project list / show / delete` (with `--purge` for explicit destructive variant).
-4. **4.4** — `factory ask "<question>"` single-shot chat (`--json` for scripting); reuses chat.ts via extracted `submitOneDirective` helper.
-5. **4.5** — Tab completion via `factory completion <shell>` (bash/zsh/pwsh, static).
-6. **4.6** — Rich `--help` examples via `addHelpText('after', '...')` on every command.
-7. **4.7** — `packages/cli/README.md` refresh.
-8. **4.8** — Resolve issues U018, U019, U020, U021 in `UPGRADE/ISSUES.md` + tick Tier 4 boxes in `UPGRADE/ROADMAP.md`.
-9. **4.9** — `/phase-close`.
+Add a Tab completion top-level section. Update the subcommand table (which is missing the five new rows). Cross-reference `docs/WORKFLOWS.md` for canonical operator loops. Suggested commit: `docs(cli): packages/cli/README.md — refresh after Tier 4` (or `docs(4.7)`).
 
-Full plan + sub-task detail in [`../../UPGRADE/plans/tier-4-cli-completion.md`](../../UPGRADE/plans/tier-4-cli-completion.md).
+**Step 4.8 — Resolve U018-U021 + verify ROADMAP ticks:**
 
-**Pre-kickoff README edits the operator should make:**
+Move issues U018 (rich --help), U019 (tab completion), U020 (project commands), U021 (budget set) from Open → Resolved in [`../../UPGRADE/ISSUES.md`](../../UPGRADE/ISSUES.md) with full Resolution lines pointing at this session's commits (`91eebca` for U018, `9340cfd` for U019, `9da25ba` for U020, `fa28e6d` for U021). Verify all six Tier 4 ROADMAP rows are ticked (cancel `9da25ba` 4.5; budget `fa28e6d` 4.2; project `9da25ba` 4.3; ask was implicit via this session — should be ticked already; tab completion `9340cfd` 4.5 ✅; rich --help `91eebca` 4.6 ✅). Suggested commit: `chore(4.8): resolve U018-U021 + tick Tier 4 ROADMAP`.
 
-The Phase 4 README has two `<Fill in during phase kickoff.>` placeholders:
-- `## Where we were, end of Phase 3` — terse summary of the 10-step Phase 3 arc.
-- `## Why this phase exists` — the carry-forward block (3 deferred items) is already seeded; add the operator-facing motivation paragraph (e.g., "CLI is the third operator surface; Phase 4 closes parity with web + channels — `cancel`, budget mutation, project introspection, single-shot chat, plus the polish — tab completion + worked help examples").
+**Step 4.9 — `/phase-close`:**
 
-These are conventionally filled at the start of the first Phase 4 sub-step session.
+Run after 4.7 + 4.8. Tag `phase-4-cli-completion-closed`. The phase-close runbook will scaffold Phase 5 if a phase-plan.md entry exists, otherwise the upgrade arc closes out and STATE.md transitions to "all phases complete".
 
-**Carry-forward items (none block 4.x):** Pause primitive (defer-until-signal); PageShell + `<style is:global>` migration (1-commit sweep, available any time); brain-side `log.line` forwarder (ADR 0029 future-work; not gating); chat-page click-test (Phase 3 deferred follow-up — natural fit during Phase 4 visual checks); Control framework repo 2.2.3 publish (operator's go); `/session-end` skill lag-by-1 fix (8 occurrences; ergonomic).
+**Estimate:** all three remaining steps fit comfortably in a single short session (~1 hour of session time). 4.7 is a single-file doc edit; 4.8 is mechanical issue moves; 4.9 is `/phase-close`.
 
-Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions; this STATE.md is the operational cursor (overwritten at each `/session-end`).
+**Carry-forward items (still don't block):** Pause primitive; PageShell + `<style is:global>` migration (1-commit sweep); brain-side `log.line` forwarder; chat-page click-test; Control framework 2.2.3 publish; `/session-end` skill lag-by-1 fix (now 10 occurrences).
 
-**Frontend-design judgement calls carried from Phase 3** (worth recalling for any Phase 4 web-side work, even though Phase 4 is CLI-only):
+Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions.
 
-- Smart defaults read better than empty states.
-- Native HTML beats custom widgets when semantics align.
-- Theme-independent intentional colors for status semantics (traffic-light pip).
-- Error-class differentiation matters when recovery paths differ.
-- Visible-label vs. hover-title separation.
-- Inherit-don't-invent; root-cause CSS fixes over global rewrites; hint-copy-teaches-consequence; in-context-affordance-vs-nav.
+**Frontend-design judgement calls** carried from Phase 3 — not load-bearing for the remaining 4.x steps (CLI/docs only) but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav.
