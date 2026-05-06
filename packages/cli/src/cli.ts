@@ -6,6 +6,7 @@
 import { Command } from 'commander';
 
 import { registerAnswerCommand } from './commands/answer.js';
+import { registerAskCommand } from './commands/ask.js';
 import { registerBudgetCommand } from './commands/budget.js';
 import { registerBuildCommand } from './commands/build.js';
 import { registerCancelCommand } from './commands/cancel.js';
@@ -38,6 +39,7 @@ export function buildCli(opts: BuildCliOptions = {}): Command {
     .version(opts.version ?? '0.0.1');
 
   registerAnswerCommand(program);
+  registerAskCommand(program);
   registerBudgetCommand(program);
   registerBuildCommand(program);
   registerCancelCommand(program);
