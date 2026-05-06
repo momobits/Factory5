@@ -19,11 +19,16 @@ Every operator action available from the web UI or channels is also available fr
 
 ## Where we were, end of Phase 3
 
-<!-- What the previous phase shipped that this phase builds on. What's
-already proven. What infrastructure this phase can rely on without
-re-paving. One paragraph + bullets; terse is fine for small phases. -->
+Phase 3 closed `phase-3-web-ui-closed` after a ten-step arc that turned the dashboard from a static, F5-driven page set into a live, mobile-aware operating surface. ADR 0029 pinned the SSE protocol (six event types: `task.update`, `finding.created`, `spend.tick`, `directive.status`, `log.line`, `heartbeat`); ADR 0027 pinned the web-side mutation surface (`POST /api/v1/builds`, `POST /api/v1/pending-questions/:id/answer`, `PUT /api/v1/projects/:id/budget`); ADR 0028 pinned the per-spawn worker-sandbox contract.
 
-<Fill in during phase kickoff.>
+What 4.x can rely on without re-paving:
+
+- **Live build observation** via SSE on `/api/v1/directives/:id/stream` — task / finding / spend / status / log events arrive without polling. Brain-side emission is callback-optional, so non-streaming callers are unaffected.
+- **Astro component library** + `lib/api.ts` cleanup — `el()` is retired, all nine pages render via shared components.
+- **Web parity surfaces**: `/app/chat` (single-shot + REPL via the chat protocol), `/app/projects/new` (`factory init` analogue), cancel + answer-question buttons on directive detail, spend page with sparkline-per-project + 30-day stacked bar.
+- **Mobile-responsive nav** (hamburger drawer at narrow widths; primary actions reachable in ≤2 taps).
+- **Header connection-status pip + explicit logout** — 30 s heartbeat against `/api/v1/status` with a green/amber/red state machine; 401 short-circuits to "Session expired" with a tooltip naming `factory ui-token`.
+- **Phase 2.4's cancel plumbing is live and verified** — brain `AbortController` registry, IPC `POST /directives/:id/cancel`, DB-direct fallback, worker SIGTERM/SIGKILL discipline. The CLI surface (`factory cancel <id>`) was wired then; Phase 4.1 is the verification commit.
 
 ## Why this phase exists
 
@@ -33,11 +38,7 @@ Carried forward from Phase 3:
 - PageShell adoption + Dashboard `<style is:global>` migration — 11-page structural sweep that absorbs the unstyled "Clear all defaults" + 4× filter-form Apply buttons issue, consolidates inline `style=` attributes, and moves Dashboard's currently-scoped `.btn*` / `.alert*` / `.form-*` rules to global so raw page buttons inherit them; self-contained ~1 commit when authored.
 - Brain-side `log.line` forwarder — selective pino-stream tap filtered by `correlationId` so the FE log tail uses live events instead of the polling fallback (ADR 0029 future-work item; not gating any 4.x step but a natural fit alongside the CLI-completion polish).
 
-<!-- The forcing function, gap, or operator-pain that motivates this
-phase. Link to issues, findings, incidents, or external commitments
-that drove the decision to do this work now. One paragraph is enough. -->
-
-<Fill in during phase kickoff.>
+The CLI is the third operator surface, and after Phases 2 and 3 it's the one that's drifted — the web UI and the channels both gained capabilities (cancel, budget mutation, single-shot chat, project introspection) without sibling CLI commands. Operators on a desktop, where CLI is fastest, end up reaching for the dashboard or `sqlite3` for things that should be a one-liner. Phase 4 closes the parity gap with five new commands (`cancel` verify, `budget set`, `project list/show/delete`, `ask`, `completion`), then layers polish — rich `--help` examples on every command and tab completion for bash/zsh/pwsh. Issues addressed: U018 (no `cancel` CLI verification), U019 (no `budget set` CLI), U020 (no project introspection CLI), U021 (no single-shot chat CLI), partially U004 (CLI surface for cancel; closed in Phase 2 plumbing).
 
 ## Steps
 

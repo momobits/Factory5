@@ -1,6 +1,6 @@
 # Phase 4 Steps
 
-- [ ] 4.1 — Verify `factory cancel <directive-id>` CLI surface end-to-end (Phase 2 brain hook + IPC route + DB-direct fallback already shipped; this step is a smoke-only verification commit if the surface is already correct)
+- [x] 4.1 — Verify `factory cancel <directive-id>` CLI surface end-to-end (Phase 2 brain hook + IPC route + DB-direct fallback already shipped; this step is a smoke-only verification commit if the surface is already correct)
 - [ ] 4.2 — `factory budget set <project> --max-usd <n> [--max-steps <n>]` — new `packages/cli/src/commands/budget.ts` reusing `packages/wiki/src/project-metadata.ts`; per-field independent (max-steps doesn't flush max-usd); idempotent; outputs the updated `metadata.budgetDefaults` block; unit tests parallel `spend.test.ts` shape
 - [ ] 4.3 — `factory project list / show <name> / delete <name>` — new `packages/cli/src/commands/project.ts`; `list` walks workspace for `.factory/project.json` and prints a table; `show` pretty-prints `project.json`; `delete` defaults to unregister-only (no file deletion), `--force` skips confirm, `--purge` also `rm -rf`s the workspace dir with double-confirm
 - [ ] 4.4 — `factory ask "<question>"` — new `packages/cli/src/commands/ask.ts` reusing chat.ts via an extracted `submitOneDirective` helper; emits one `intent=chat` directive, awaits one reply, prints, exits; `--json` outputs the reply shape for scripting
@@ -18,9 +18,9 @@ Each step's full detail (file pointers, acceptance criteria, edge cases, suggest
 
 Per [`../../../UPGRADE/plans/tier-4-cli-completion.md`](../../../UPGRADE/plans/tier-4-cli-completion.md) §4.1.
 
-**Acceptance:** `factory cancel <id>` calls the `POST /directives/:id/cancel` IPC route on a real factoryd; falls back to direct SQLite update when no daemon. Exit codes: `0` on success, `2` on directive not found / already terminal, `1` on hard error. (Unit tests already shipped with Phase 2; this step is verify-only.)
+**Acceptance:** `factory cancel <id>` calls the `POST /directives/:id/cancel` IPC route on a real factoryd; falls back to direct SQLite update when no daemon. Exit codes (live-verified 2026-05-06 against real factoryd): `0` on success, `1` on hard error, `2` on directive not found, `3` on directive already terminal. The 4-code surface is more granular than the 3-code shape originally sketched in the tier-4 plan — distinguishing "doesn't exist" from "you're too late" is useful for scripting and parallels `factory ui-token`'s 4-code shape. Unit tests shipped with Phase 2 (7 tests in `cancel.test.ts`, all paths covered); live smoke confirmed `2` (bogus ULID) and `3` (complete directive with `--reason` cleanly accepted) in this step.
 
-**Commit:** `chore(4.1): verify factory cancel CLI surface end-to-end` (or fold into 4.2's commit if no fix needed)
+**Commit:** `chore(4.1): verify factory cancel CLI surface end-to-end`
 
 ### 4.2 — `factory budget set <project>`
 

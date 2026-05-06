@@ -32,10 +32,10 @@ Already most of the way done by Tier 2.4 (brain hook + IPC route + CLI command).
 
 - `factory cancel <directive-id> [--reason <text>]`
 - Calls the `POST /directives/:id/cancel` IPC route.
-- Falls back to direct SQLite update when no daemon (Tier 2 should have wired this).
-- Exit codes: `0` on success, `2` on directive not found / already terminal, `1` on hard error.
+- Falls back to direct SQLite update when no daemon (Tier 2 wired this).
+- Exit codes: `0` on success, `1` on hard error, `2` on directive not found, `3` on directive already terminal. (Phase 4.1 verified live: the 4-code surface ships, distinguishing not-found from already-terminal — the tier-4 plan's earlier 3-code sketch was wrong.)
 
-**Acceptance**: tested in Tier 2; just verify here.
+**Acceptance**: tested in Tier 2; live-smoke verified in Phase 4.1.
 
 ### 4.2 `factory budget set <project> --max-usd <n> [--max-steps <n>]`
 
