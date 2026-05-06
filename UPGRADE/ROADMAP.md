@@ -60,7 +60,7 @@ Plan: [`plans/tier-3-web-ui-live-and-complete.md`](plans/tier-3-web-ui-live-and-
 Polish. Estimated **1 session**.
 
 - [x] `factory cancel <directive-id>` (shared with Tier 2; Phase 4.1 live-smoke verified the 4-code exit surface)
-- [ ] `factory budget set <project> --max-usd <n> [--max-steps <n>]`
+- [x] `factory budget set <project> --max-usd <n> [--max-steps <n>]`
 - [ ] `factory project list / show <name> / delete <name>`
 - [ ] `factory ask "<question>"` — single-shot chat
 - [ ] Tab completion for bash/zsh/pwsh
