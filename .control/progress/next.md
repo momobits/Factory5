@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-06T20:31:45Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-06T21:25:48Z by
 > `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
@@ -16,36 +16,36 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-Step 4.7 — refresh [`../../packages/cli/README.md`](../../packages/cli/README.md) to document the five new (or newly-verified) commands shipped in this session: `cancel`, `ask`, `budget set`, `project list/show/delete`, `completion`. Add a Tab completion install section (bash / zsh / pwsh one-liners). Add a row to the subcommand table for each of them. Update `Exit codes:` blocks to match the 4-code surfaces (`cancel` 0/1/2/3; `budget set` 0/1/2; `project delete` 0/1/2; `ask` 0/1/2). Cross-reference [`../../docs/WORKFLOWS.md`](../../docs/WORKFLOWS.md) for the canonical operator loops. **One file, no tests, ~1 commit.** After 4.7: 4.8 (move issues U018-U021 Open → Resolved + verify Tier 4 ROADMAP boxes are all ticked) then 4.9 (`/phase-close` — tag `phase-4-cli-completion-closed`).
+The factory5 first-class upgrade arc that ran from Tier 1 (doc-sweep) through Tier 4 (cli-completion) is complete. Four operator surfaces — CLI, Discord, Telegram, web dashboard — now reach feature parity for the eight-intent vocabulary; live SSE wiring on the web side; tab completion + rich `--help` on the CLI side; one Astro component library; one shared chat protocol. ADRs 0027 / 0028 / 0029 codify the pinned contracts.
+
+No new phase is scaffolded. Operator's options:
+
+1. **Open a new arc** — author a fresh `UPGRADE/plans/tier-5-<name>.md`, add a Phase 5 row to `.control/architecture/phase-plan.md`, then run `/phase-add` (if Control supports it) or hand-scaffold `.control/phases/phase-5-<name>/{README.md,steps.md}` from `.control/templates/`.
+2. **Promote a carry-forward item to a Tier-5+ ROADMAP entry** — see "In-flight work" below; each is small and self-contained, ships as ~1 commit when authored.
+3. **Park** — surfaces are stable; nothing is gated on more work.
+
+**Recommended `/session-end`** next so STATE.md / journal.md / next.md / UPGRADE/LOG.md all transition together to the post-arc state. The phase-close commit landed the structural transition; `/session-end` records the operator-side handoff for whoever picks up next.
 
 ## Notes for next session
 
-Phase 4 is **6 of 9 sub-steps closed** (4.1 → 4.6). Three remain:
+The factory5 first-class upgrade arc (Tiers 1 → 4) is complete. There is no scheduled Phase 5. The operator opens the next arc when a demand signal surfaces.
 
-**Step 4.7 — `packages/cli/README.md` refresh (recommended start):**
+If you want to continue working on factory5, the cleanest paths are:
 
-Touch one file. Add documentation for the new commands shipped this session:
+**A. Promote one of the carry-forward items.** Each is small and self-contained:
 
-- `factory cancel <directive-id> [--reason <text>]` — exit codes 0/1/2/3.
-- `factory ask "<question>"` — single-shot chat, `--json` shape.
-- `factory budget set <project> --max-usd <n> [--max-steps <n>]` — per-field merge, exit codes.
-- `factory project list / show <name> / delete <name>` — `--force` and `--purge` semantics.
-- `factory completion <shell>` — install one-liners for bash / zsh / pwsh.
+- _Pause primitive on directive detail_ — when a real workflow signal surfaces, decide between extending `directivesQ.status` with `paused`/resume vs reusing `markBlocked` with `blockedReason: 'paused-by-operator'`.
+- _PageShell migration + Dashboard `<style is:global>`_ — 11-page sweep, absorbs filter-form Apply / "Clear all defaults" unstyled-button issue + inline-style audit pass; ships as ~1 commit.
+- _Brain-side `log.line` forwarder_ — selective pino-stream tap; ADR 0029 future-work item.
+- _Chat-page click-test_ — 30-second smoke; final piece of Phase 3.5's pre-existing baseline.
+- _U005 `factory chat` 120 s timeout_ — extend or replace with streaming.
+- _Control framework 2.2.3 publish_ at `G:\Projects\Small-Projects\Control` — operator owns the go.
+- _`/session-end` skill structural fix_ for the "Last commit" lag-by-1 (now 11 occurrences). Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
-Add a Tab completion top-level section. Update the subcommand table (which is missing the five new rows). Cross-reference `docs/WORKFLOWS.md` for canonical operator loops. Suggested commit: `docs(cli): packages/cli/README.md — refresh after Tier 4` (or `docs(4.7)`).
+**B. Author a new tier.** If a larger arc surfaces (e.g., persistent-session resumption, multi-tenant operator auth, Linux+Mac CI matrix, Pause primitive once a demand signal lands, eval harness for triage / architect / verify), draft a `UPGRADE/plans/tier-5-<name>.md`, add a Phase 5 row to `phase-plan.md`, then run `/phase-add` (or scaffold by hand) to bring the cursor back online.
 
-**Step 4.8 — Resolve U018-U021 + verify ROADMAP ticks:**
+**C. Park.** Nothing is gated. Walking away is fine; the surfaces are stable and document themselves.
 
-Move issues U018 (rich --help), U019 (tab completion), U020 (project commands), U021 (budget set) from Open → Resolved in [`../../UPGRADE/ISSUES.md`](../../UPGRADE/ISSUES.md) with full Resolution lines pointing at this session's commits (`91eebca` for U018, `9340cfd` for U019, `9da25ba` for U020, `fa28e6d` for U021). Verify all six Tier 4 ROADMAP rows are ticked (cancel `9da25ba` 4.5; budget `fa28e6d` 4.2; project `9da25ba` 4.3; ask was implicit via this session — should be ticked already; tab completion `9340cfd` 4.5 ✅; rich --help `91eebca` 4.6 ✅). Suggested commit: `chore(4.8): resolve U018-U021 + tick Tier 4 ROADMAP`.
+Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across all four tiers (~10 sessions). Read [`../../UPGRADE/ROADMAP.md`](../../UPGRADE/ROADMAP.md) for the per-tier acceptance picture.
 
-**Step 4.9 — `/phase-close`:**
-
-Run after 4.7 + 4.8. Tag `phase-4-cli-completion-closed`. The phase-close runbook will scaffold Phase 5 if a phase-plan.md entry exists, otherwise the upgrade arc closes out and STATE.md transitions to "all phases complete".
-
-**Estimate:** all three remaining steps fit comfortably in a single short session (~1 hour of session time). 4.7 is a single-file doc edit; 4.8 is mechanical issue moves; 4.9 is `/phase-close`.
-
-**Carry-forward items (still don't block):** Pause primitive; PageShell + `<style is:global>` migration (1-commit sweep); brain-side `log.line` forwarder; chat-page click-test; Control framework 2.2.3 publish; `/session-end` skill lag-by-1 fix (now 10 occurrences).
-
-Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions.
-
-**Frontend-design judgement calls** carried from Phase 3 — not load-bearing for the remaining 4.x steps (CLI/docs only) but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav.
+**Frontend-design judgement calls** carried from Phase 3 — not load-bearing (no current web work) but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav.
