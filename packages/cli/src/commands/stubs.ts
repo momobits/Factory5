@@ -14,6 +14,15 @@ export function registerStubCommands(program: Command): void {
     .option('--follow', 'live tail')
     .option('--component <name>', 'filter to a single component')
     .option('--directive <id>', 'stitch by directive correlation id')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  # stub — placeholder; tail the files directly for now
+  tail -F ~/.factory5/logs/factory.log
+  grep -F 01KQ…ULID ~/.factory5/logs/*.log              # stitch by directive
+`,
+    )
     .action(() => {
       stdout.write('factory logs: not yet implemented (tail the files under ~/.factory5/logs/)\n');
     });

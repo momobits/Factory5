@@ -28,6 +28,15 @@ export function registerDoctorCommand(program: Command): void {
     .option('--skip-call', 'only check binary availability; do not call the model', false)
     .option('--skip-discord', 'skip the Discord probe even if a token is configured', false)
     .option('--skip-telegram', 'skip the Telegram probe even if a token is configured', false)
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory doctor                       # full check: provider + channels + triage
+  factory doctor --skip-call           # binary availability only — no model spend
+  factory doctor --skip-discord        # offline / no Discord token configured
+`,
+    )
     .action(async (opts: { skipCall?: boolean; skipDiscord?: boolean; skipTelegram?: boolean }) => {
       const provider = new ClaudeCliProvider();
       stdout.write('Checking claude-cli provider…\n');

@@ -181,6 +181,20 @@ export function registerInitCommand(program: Command): void {
       '--telegram-poll-timeout-sec <seconds>',
       'Long-poll timeout passed to getUpdates (0–60s; default 30)',
     )
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory init                                              # template-copy or validate
+  factory init --force --workspace ~/projects               # CI-friendly regen
+  factory init my-app --language node                       # scaffold a project
+  factory init my-cli --language python
+  factory init --discord-token "$DISCORD_TOKEN" --discord-guild 12345
+
+Project mode is triggered by passing a positional name; without a
+positional, init operates on the instance config.toml.
+`,
+    )
     .action(async (project: string | undefined, opts: InitOptions) => {
       // Mode 4 (ADR 0026 / Phase 10.8): scaffold a new project with a
       // language picker. Triggered by the positional argument; entirely

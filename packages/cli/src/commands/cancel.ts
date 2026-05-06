@@ -153,6 +153,21 @@ export function registerCancelCommand(program: Command): void {
       'actively cancel a directive — flip to `failed` and kill the worker (use `factory directive mark-blocked` to flip a stuck row without killing anything)',
     )
     .option('--reason <text>', 'free-text reason persisted to the directive')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory cancel 01KQ…ULID
+  factory cancel 01KQ…ULID --reason "wrong project"
+  factory cancel 01KQ…ULID --reason "out of budget"
+
+Exit codes:
+  0  cancelled
+  1  hard error
+  2  directive id not found
+  3  directive already terminal (complete | failed | blocked)
+`,
+    )
     .action(async (directiveId: string, opts: { reason?: string }) => {
       const code = await runCancel({
         directiveId,

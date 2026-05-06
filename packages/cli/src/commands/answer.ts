@@ -37,6 +37,15 @@ export function registerAnswerCommand(program: Command): void {
   program
     .command('answer <questionId> [text...]')
     .description('answer a pending question raised by the brain (askUser / escalate_blocked)')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory answer 01K0…ULID "continue"
+  factory answer 01K0…ULID skip
+  echo "yes" | factory answer 01K0…ULID -          # read answer from stdin
+`,
+    )
     .action(async (questionId: string, textParts: string[]) => {
       const db = openDatabase();
       try {

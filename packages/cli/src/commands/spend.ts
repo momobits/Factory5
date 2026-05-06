@@ -392,6 +392,16 @@ export function registerSpendCommand(program: Command): void {
       String(DEFAULT_LIMIT),
     )
     .option('--json', 'emit NDJSON instead of a table')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory spend                                              # per-project, last 50
+  factory spend --group-by day --since 7d
+  factory spend --group-by directive --project my-app
+  factory spend --group-by model --json | jq '.[].totalUsd'
+`,
+    )
     .action((opts: SpendCommandOptions) => {
       const result = runWithDb((db) => runSpend(db, opts));
       stdout.write(result.stdout);

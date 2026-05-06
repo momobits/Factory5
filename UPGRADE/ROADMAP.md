@@ -64,7 +64,7 @@ Polish. Estimated **1 session**.
 - [x] `factory project list / show <name> / delete <name>`
 - [x] `factory ask "<question>"` — single-shot chat
 - [x] Tab completion for bash/zsh/pwsh
-- [ ] Rich `--help` examples on every command (`addHelpText('after', ...)`)
+- [x] Rich `--help` examples on every command (`addHelpText('after', ...)`)
 
 Plan: [`plans/tier-4-cli-completion.md`](plans/tier-4-cli-completion.md)
 

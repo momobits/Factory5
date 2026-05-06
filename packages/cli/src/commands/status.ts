@@ -18,6 +18,14 @@ export function registerStatusCommand(program: Command): void {
     .command('status')
     .description('show projects, recent directives, and spend')
     .option('--limit <n>', 'how many recent directives to show', '20')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory status
+  factory status --limit 50
+`,
+    )
     .action((opts: { limit: string }) => {
       const db = openDatabase();
       runMigrations(db);

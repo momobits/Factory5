@@ -138,6 +138,15 @@ export function registerAskCommand(program: Command): void {
     .description('single-shot chat — mint one chat directive, wait for the reply, print, exit')
     .option('--json', 'emit a JSON object instead of the bare reply text', false)
     .option('--autonomy <mode>', 'chat | assisted | autonomous', 'chat')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory ask "what's the spend this week?"
+  factory ask "list my projects" --json | jq -r .reply
+  factory ask "draft a release-note for v0.5.0" --autonomy assisted
+`,
+    )
     .action(async (question: string, opts: { json: boolean; autonomy: string }) => {
       // Preflight: same checks `factory chat` runs.
       const info = readPidFile();

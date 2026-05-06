@@ -185,6 +185,18 @@ export function registerChatCommand(program: Command): void {
     .command('chat')
     .description('interactive chat against factoryd')
     .option('--autonomy <mode>', 'chat | assisted | autonomous', 'chat')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory chat
+  factory chat --autonomy assisted
+
+Inside the REPL: type your question; \`/quit\` or Ctrl-D exits.
+For one-shot scripted use, prefer \`factory ask "<question>"\` (single
+directive, single reply, exits).
+`,
+    )
     .action(async (opts: { autonomy: string }) => {
       const info = readPidFile();
       if (info?.alive !== true) {

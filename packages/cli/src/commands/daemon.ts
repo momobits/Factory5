@@ -233,6 +233,14 @@ export function registerDaemonCommand(program: Command): void {
   daemon
     .command('start')
     .description('spawn a detached factoryd if none is running')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory daemon start
+  FACTORY5_FACTORYD_BIN=/path/to/factoryd factory daemon start
+`,
+    )
     .action(async () => {
       try {
         await startDaemon();
@@ -245,6 +253,13 @@ export function registerDaemonCommand(program: Command): void {
   daemon
     .command('stop')
     .description('gracefully terminate the running factoryd')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory daemon stop
+`,
+    )
     .action(async () => {
       try {
         await stopDaemon();
@@ -257,6 +272,13 @@ export function registerDaemonCommand(program: Command): void {
   daemon
     .command('status')
     .description('print daemon liveness + IPC status')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory daemon status                # pidfile + IPC probe + channel list
+`,
+    )
     .action(async () => {
       try {
         await printStatus();
@@ -269,6 +291,13 @@ export function registerDaemonCommand(program: Command): void {
   daemon
     .command('restart')
     .description('stop then start factoryd')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory daemon restart               # picks up config.toml + env changes
+`,
+    )
     .action(async () => {
       try {
         await restartDaemon();

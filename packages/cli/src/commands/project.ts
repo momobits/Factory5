@@ -399,6 +399,13 @@ export function registerProjectCommand(program: Command): void {
   project
     .command('list')
     .description('walk the registry and print one row per project')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory project list                  # name + status + language + last build + workspace
+`,
+    )
     .action(async (): Promise<void> => {
       const result = await runWithDb((db) => runProjectList(db));
       stdout.write(result.stdout);
@@ -408,6 +415,14 @@ export function registerProjectCommand(program: Command): void {
   project
     .command('show <project>')
     .description('pretty-print the registry row + on-disk project.json metadata')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory project show my-app
+  factory project show 01KQ…ULID            # resolve by full ULID
+`,
+    )
     .action(async (projectRef: string): Promise<void> => {
       const result = await runWithDb((db) => runProjectShow(db, { project: projectRef }));
       stdout.write(result.stdout);
@@ -421,6 +436,16 @@ export function registerProjectCommand(program: Command): void {
     )
     .option('--force', 'skip the interactive confirm', false)
     .option('--purge', 'also recursively delete the workspace directory', false)
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory project delete my-app                # interactive y/N, registry only
+  factory project delete my-app --force        # skip prompt, registry only
+  factory project delete my-app --purge        # double-confirm + rm -rf workspace
+  factory project delete my-app --force --purge   # destructive; no prompts
+`,
+    )
     .action(async (projectRef: string, opts: { force: boolean; purge: boolean }): Promise<void> => {
       const result = await runWithDb((db) =>
         runProjectDelete(db, {

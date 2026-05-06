@@ -91,6 +91,17 @@ export function registerBuildCommand(program: Command): void {
     )
     .option('--inline', 'force inline execution even when a daemon is running')
     .option('--verbose', 'log at debug level')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory build my-app
+  factory build my-app --autonomy autonomous --max-usd 5
+  factory build my-app --language node --max-steps 200
+  factory build templates/python-cli --autonomy chat
+  factory build my-app --inline                       # bypass the daemon
+`,
+    )
     .action(
       async (
         project: string,

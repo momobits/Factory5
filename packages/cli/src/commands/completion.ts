@@ -275,6 +275,16 @@ export function registerCompletionCommand(program: Command): void {
   program
     .command('completion <shell>')
     .description('emit a tab-completion script for bash | zsh | pwsh')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory completion bash >> ~/.bashrc && source ~/.bashrc
+  factory completion zsh > "\${fpath[1]}/_factory" && compinit
+  factory completion pwsh >> $PROFILE && . $PROFILE
+  source <(factory completion bash)                 # one-shot, current shell
+`,
+    )
     .action((shellArg: string): void => {
       const shell = isSupportedShell(shellArg) ? shellArg : (shellArg as SupportedShell);
       const result = runCompletion({ shell });

@@ -79,6 +79,15 @@ export function registerResumeCommand(program: Command): void {
       'workspace to search for the project (defaults to the workspace recorded on the project)',
     )
     .option('--autonomy <mode>', 'override autonomy on the resumed run', 'assisted')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory resume my-app
+  factory resume my-app --autonomy autonomous
+  factory resume my-app --workspace ~/projects
+`,
+    )
     .action(async (project: string, options: { workspace?: string; autonomy: string }) => {
       try {
         const db = openDatabase();

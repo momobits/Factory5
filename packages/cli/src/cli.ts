@@ -37,7 +37,23 @@ export function buildCli(opts: BuildCliOptions = {}): Command {
   program
     .name(opts.name ?? 'factory')
     .description('factory5 — autonomous (and human-directable) software builder')
-    .version(opts.version ?? '0.0.1');
+    .version(opts.version ?? '0.0.1')
+    .addHelpText(
+      'afterAll',
+      `
+Common workflows: see docs/WORKFLOWS.md for the four canonical operator
+loops (build, chat, debug, channel-driven) plus a surface decision matrix
+(when to reach for CLI vs web UI vs Discord/Telegram).
+
+Per-command help:
+  factory <command> --help                    # worked examples on every command
+
+Tab completion:
+  factory completion bash >> ~/.bashrc
+  factory completion zsh > "\${fpath[1]}/_factory" && compinit
+  factory completion pwsh >> $PROFILE
+`,
+    );
 
   registerAnswerCommand(program);
   registerAskCommand(program);

@@ -98,6 +98,16 @@ export function registerUiTokenCommand(program: Command): void {
     .command('ui-token')
     .description('print the live dashboard URL with the current FACTORY5_UI_TOKEN')
     .option('--token-only', 'print just the token (for piping into env vars)', false)
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory ui-token                                       # full URL (paste into browser)
+  factory ui-token --token-only                          # bare token (for env / curl)
+  curl -H "Authorization: Bearer $(factory ui-token --token-only)" \\
+       http://127.0.0.1:25295/api/v1/status
+`,
+    )
     .action(async (opts: { tokenOnly: boolean }) => {
       const code = await runUiToken({ tokenOnly: opts.tokenOnly });
       if (code !== UI_TOKEN_EXIT.OK) process.exit(code);

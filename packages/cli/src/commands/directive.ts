@@ -43,6 +43,18 @@ export function registerDirectiveCommand(program: Command): void {
       'flip a non-terminal directive to blocked (manual recovery for stuck `running` rows)',
     )
     .option('--reason <text>', 'free-text explanation stored on the directive')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory directive mark-blocked 01KQ…ULID
+  factory directive mark-blocked 01KQ…ULID --reason "shell timeout, recovering by hand"
+
+When you also want the worker subprocess killed (not just the row flipped),
+use \`factory cancel <id>\` instead — it goes through the daemon and
+propagates an AbortSignal into the worker.
+`,
+    )
     .action((id: string, opts: { reason?: string }) => {
       const db = openDatabase();
       try {

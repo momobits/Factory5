@@ -237,6 +237,16 @@ export function registerBudgetCommand(program: Command): void {
       'maximum step count per directive (positive integer)',
       parseStepsFlag,
     )
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory budget set my-app --max-usd 5
+  factory budget set my-app --max-steps 100
+  factory budget set my-app --max-usd 5 --max-steps 100
+  factory budget set 01KQ…ULID --max-usd 0.5      # resolve by full ULID
+`,
+    )
     .action(
       async (projectRef: string, opts: { maxUsd?: number; maxSteps?: number }): Promise<void> => {
         const result = await runWithDb((db) =>

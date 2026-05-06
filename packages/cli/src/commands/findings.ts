@@ -553,6 +553,16 @@ export function registerFindingsCommand(program: Command): void {
     .option('--blocking', 'show blocking findings only (default)')
     .option('--limit <n>', 'max rows to show (capped at 1000)', '50')
     .option('--json', 'emit NDJSON instead of a table')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory findings list                                  # OPEN blocking findings
+  factory findings list --severity HIGH
+  factory findings list --status all --project my-app
+  factory findings list --advisory --json | jq '.finding.id'
+`,
+    )
     .action((opts: ListCommandOptions) => {
       const result = runWithDb((db) => runFindingsList(db, opts)) as HandlerResult;
       stdout.write(result.stdout);
@@ -569,6 +579,15 @@ export function registerFindingsCommand(program: Command): void {
       'workspace root holding <project> subdirs (default: ~/factory5-workspace)',
     )
     .option('--dry-run', 'report what would change without writing to the registry')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory findings backfill                              # default ~/factory5-workspace
+  factory findings backfill --workspace /work --dry-run
+  factory findings backfill --workspace ~/projects
+`,
+    )
     .action(async (opts: BackfillCommandOptions) => {
       const result = (await runWithDb((db) => runFindingsBackfill(db, opts))) as HandlerResult;
       stdout.write(result.stdout);
@@ -581,6 +600,15 @@ export function registerFindingsCommand(program: Command): void {
       'show a single finding in full. <id> is either "<project>/F001" or bare "F001" (must be unambiguous)',
     )
     .option('--json', 'emit one JSON object instead of formatted text')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory findings show my-app/F003
+  factory findings show F003                             # if unambiguous
+  factory findings show my-app/F003 --json
+`,
+    )
     .action((rawId: string, opts: ShowCommandOptions) => {
       const result = runWithDb((db) => runFindingsShow(db, rawId, opts)) as HandlerResult;
       stdout.write(result.stdout);

@@ -115,6 +115,15 @@ export function registerQuestionsCommand(program: Command): void {
       'only sweep rows created strictly before this ISO-8601 date/datetime',
     )
     .option('--dry-run', 'list what would change without writing')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory questions cleanup                             # sweep all orphaned rows
+  factory questions cleanup --dry-run
+  factory questions cleanup --since 2026-04-01 --dry-run
+`,
+    )
     .action((opts: CleanupCliOptions) => {
       const db = openDatabase();
       try {
