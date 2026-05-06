@@ -11,6 +11,7 @@ import { registerBudgetCommand } from './commands/budget.js';
 import { registerBuildCommand } from './commands/build.js';
 import { registerCancelCommand } from './commands/cancel.js';
 import { registerChatCommand } from './commands/chat.js';
+import { registerCompletionCommand } from './commands/completion.js';
 import { registerDaemonCommand } from './commands/daemon.js';
 import { registerDirectiveCommand } from './commands/directive.js';
 import { registerDoctorCommand } from './commands/doctor.js';
@@ -44,6 +45,7 @@ export function buildCli(opts: BuildCliOptions = {}): Command {
   registerBuildCommand(program);
   registerCancelCommand(program);
   registerChatCommand(program);
+  registerCompletionCommand(program);
   registerDaemonCommand(program);
   registerDirectiveCommand(program);
   registerDoctorCommand(program);
