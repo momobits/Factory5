@@ -7,7 +7,7 @@
 - [x] 4.5 — Tab completion via `factory completion <shell>` — new `packages/cli/src/commands/completion.ts`; supports bash / zsh / pwsh; static command + flag completion (dynamic deferred); install via `factory completion bash >> ~/.bashrc` or shell-equivalent
 - [x] 4.6 — Rich `--help` examples — `addHelpText('after', '...')` on every command; top-level gets `addHelpText('afterAll', '...')` pointing at `docs/WORKFLOWS.md`
 - [x] 4.7 — `packages/cli/README.md` refresh — add the new commands; document tab completion install; align with current command surface
-- [ ] 4.8 — Resolve issues U018 / U019 / U020 / U021 in [`../../../UPGRADE/ISSUES.md`](../../../UPGRADE/ISSUES.md) and tick Tier 4 boxes in [`../../../UPGRADE/ROADMAP.md`](../../../UPGRADE/ROADMAP.md)
+- [x] 4.8 — Resolve issues U018 / U019 / U020 / U021 in [`../../../UPGRADE/ISSUES.md`](../../../UPGRADE/ISSUES.md) and tick Tier 4 boxes in [`../../../UPGRADE/ROADMAP.md`](../../../UPGRADE/ROADMAP.md)
 - [ ] 4.9 — `/phase-close` — tag `phase-4-cli-completion-closed`; append session entry to [`../../../UPGRADE/LOG.md`](../../../UPGRADE/LOG.md); scaffold Phase 5 if a next-phase plan exists, otherwise close out the upgrade arc
 
 ## Step detail

@@ -33,39 +33,6 @@ Severity:
 - **Hypothesis**: Either (a) increase the timeout to something like 10 min and rely on user `Ctrl-C`, or (b) stream partial responses and the daemon emits intermediate progress messages. Option (b) is the better UX but requires daemon-side support.
 - **Resolution**: Tier 2 or 4. Pair with the chat surface work.
 
-### U018 — CLI has no `--help` examples beyond Commander defaults
-
-- **Severity**: medium
-- **Tier**: 4
-- **Area**: cli
-- **Description**: `factory build --help` lists flags but doesn't show worked examples. New operators don't know what a real invocation looks like.
-- **Hypothesis**: Use Commander's `addHelpText('after', '...')` per command with a worked invocation.
-- **Resolution**: Tier 4.
-
-### U019 — CLI has no tab completion
-
-- **Severity**: low
-- **Tier**: 4
-- **Area**: cli
-- **Description**: Commander supports tab completion via `commander.completion()` or shellcomp. Not wired today.
-- **Resolution**: Tier 4 — generate completion for bash / zsh / pwsh; add `factory completion <shell>` install command.
-
-### U020 — CLI has no `factory project ...` command set
-
-- **Severity**: medium
-- **Tier**: 4
-- **Area**: cli
-- **Description**: Project management is implicit (a side-effect of `factory init` and `factory build`). No `factory project list / show <name> / delete <name>`.
-- **Resolution**: Tier 4.
-
-### U021 — CLI has no `factory budget set` command (only via flags)
-
-- **Severity**: medium
-- **Tier**: 4
-- **Area**: cli
-- **Description**: Budget changes go through the web UI's `PUT /api/v1/projects/:id/budget`. The CLI has no sibling. Operators must edit `project.json` by hand or use the web UI.
-- **Resolution**: Tier 4 — `factory budget set <project> --max-usd <n> [--max-steps <n>]`. Same code path as the web mutation.
-
 ## Resolved
 
 ### U001 — packages/cli/README.md is stale
@@ -211,3 +178,36 @@ Severity:
 - **Area**: web
 - **Description**: `apps/factory-web/src/lib/api.ts:158` — `e.setAttribute(k, v)` is called with raw values from object spreads. Text content is safe (uses `createTextNode`), but attributes are not escaped. Today the only attribute values come from server-trusted strings, so practical risk is low. Still: not a robust pattern.
 - **Resolution**: Resolved 2026-05-03 — Tier 3 step 3.4, commit `dfd1a07`. `el()` retired from `lib/api.ts` as part of the 10-page component conversion; the unsafe `setAttribute(k, v)` callsite no longer exists. Component primitives (`<Card>`, `<Table>`, `<Alert>`, `<Form>`, etc.) encode safe rendering by construction (Astro auto-escapes interpolated values).
+
+### U018 — CLI has no `--help` examples beyond Commander defaults
+
+- **Severity**: medium
+- **Tier**: 4
+- **Area**: cli
+- **Description**: `factory build --help` lists flags but doesn't show worked examples. New operators don't know what a real invocation looks like.
+- **Hypothesis**: Use Commander's `addHelpText('after', '...')` per command with a worked invocation.
+- **Resolution**: Resolved 2026-05-06 — Tier 4 step 4.6, commit `91eebca`. Every command in `packages/cli/src/commands/` gained an `addHelpText('after', ...)` block with worked examples and an `Exit codes:` line; `cli.ts` got `addHelpText('afterAll', ...)` pointing at `docs/WORKFLOWS.md`. New `packages/cli/src/help-coverage.test.ts` walks the Commander tree, captures rendered help via `cmd.outputHelp()` with a stub writer (`helpInformation()` doesn't fire the `addHelpText` events), and asserts every leaf shows `Examples:`. Sonic-boom-on-help flush race fixed in `apps/factory/src/main.ts` via argv-sniff so help/version paths skip the async logger init.
+
+### U019 — CLI has no tab completion
+
+- **Severity**: low
+- **Tier**: 4
+- **Area**: cli
+- **Description**: Commander supports tab completion via `commander.completion()` or shellcomp. Not wired today.
+- **Resolution**: Resolved 2026-05-06 — Tier 4 step 4.5, commit `9340cfd`. New `packages/cli/src/commands/completion.ts` emits a static tab-completion script for bash, zsh, or pwsh. Single-source-of-truth pattern: `TOP_LEVEL_COMMANDS` (19 entries) + `NESTED_SUBCOMMANDS` (7 groups) drive all three template generators (bash `compgen -W`; zsh `_describe` / `_values`; pwsh `Register-ArgumentCompleter -Native`). Static surface only — dynamic completion (project names, directive ids) intentionally deferred per the tier-4 plan §4.5 risks-and-decisions ('dynamic requires running `factory` inside the completion script, latency on every tab press'). 9 unit tests pin the structural invariants.
+
+### U020 — CLI has no `factory project ...` command set
+
+- **Severity**: medium
+- **Tier**: 4
+- **Area**: cli
+- **Description**: Project management is implicit (a side-effect of `factory init` and `factory build`). No `factory project list / show <name> / delete <name>`.
+- **Resolution**: Resolved 2026-05-06 — Tier 4 step 4.3, commit `9da25ba`. New `packages/cli/src/commands/project.ts` with three pure handlers (`runProjectList` / `runProjectShow` / `runProjectDelete`) + Commander wiring. `list` enriches each registry row with on-disk `language` and a most-recent-build summary; missing or corrupt project.json renders affected fields as `(unavailable)`. `show` resolves a project ref (name-first, full-ULID-second; ambiguous names error with a disambiguation list). `delete` defaults to non-destructive `y/N`-prompted unregister; `--force` skips the prompt; `--purge` adds a typed-name second confirm and `rm -rf`s the workspace dir; order on `--purge` is registry-first-then-rm so a failed rm leaves the registry clean. New `packages/state/src/queries/projects.ts:remove`. 22 unit tests via an injectable `prompt` fn.
+
+### U021 — CLI has no `factory budget set` command (only via flags)
+
+- **Severity**: medium
+- **Tier**: 4
+- **Area**: cli
+- **Description**: Budget changes go through the web UI's `PUT /api/v1/projects/:id/budget`. The CLI has no sibling. Operators must edit `project.json` by hand or use the web UI.
+- **Resolution**: Resolved 2026-05-06 — Tier 4 step 4.2, commit `fa28e6d`. New `packages/cli/src/commands/budget.ts` writes `<workspace>/<project>/.factory/project.json` `metadata.budgetDefaults` via `@factory5/wiki`'s `updateProjectMetadata` — the same code path the daemon's `PUT /api/v1/projects/:id/budget` route uses (ADR 0027 §1). **Per-field merge** is the distinguishing CLI semantic: passing only `--max-steps` preserves an existing `maxUsd`, so operators never have to re-state the whole budget block (the web UI's PUT remains full-document replacement; divergence intentional and called out in the README). Project ref resolution is name-first / full-ULID-second; ULID-suffix matching intentionally not supported here. 15 unit tests cover per-field merge in both directions, idempotence, both Wiki error classes, and validation rejections.
