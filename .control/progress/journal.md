@@ -2,7 +2,21 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
-## 2026-05-05 (latest) — Steps 3.8 + 3.9 + 3.10 closed in one session (spend charts + mobile-responsive nav + logout + connection pip)
+## 2026-05-06 (latest) — Phase 3 closed (tag: `phase-3-web-ui-closed`); Phase 4 (cli-completion) kicked off
+
+- `/phase-close` ran on Phase 3 work. All ten sub-steps shipped (3.1 → 3.10); 3.11 was `/phase-close` itself.
+- Six issues moved Open → Resolved in `UPGRADE/ISSUES.md` (U006, U007, U008, U009, U010, U022) — all Tier 3 web-UI issues now in the Resolved section.
+- ADR 0029 promoted past gated state — Live verification table now ✅ for all six event types; unit-test-only carve-out for `finding.created` retired (closed in 3.7's `node-sse-smoke` smoke); Negative-consequence bullet for the gap removed; future-work list trimmed.
+- Phase 3 README's `## ADRs decided in this phase` populated (0027 / 0028 / 0029); `## Deferred to Phase 4 (or later)` populated with three carry-forward items (Pause primitive; PageShell + `<style is:global>` migration; brain-side `log.line` forwarder). Carry-forward block auto-seeded into Phase 4 README's `## Why this phase exists`.
+- Phase 4 scaffolded at `.control/phases/phase-4-cli-completion/{README.md,steps.md}` per `phase-plan.md` Phase 4 entry + `tier-4-cli-completion.md`. Sub-step list: 4.1 verify `factory cancel`; 4.2 `factory budget set`; 4.3 `factory project list/show/delete`; 4.4 `factory ask`; 4.5 tab completion (bash/zsh/pwsh, static); 4.6 rich `--help` examples; 4.7 README refresh; 4.8 resolve U018-U021 + tick Tier 4 ROADMAP; 4.9 `/phase-close`.
+- All four `pnpm` gates green at /phase-close verification. Workspace test count unchanged from end-of-Phase-3 baseline: 1080 passing + 3 skipped.
+- Tier 3 ROADMAP boxes were already fully ticked through step-3.10 close — `/phase-close` had nothing to do there; the Tier 3 close itself is the wrap.
+- Annotated tag `phase-3-web-ui-closed` at the close commit.
+- One verification-stage discovery: issues U006-U010 + U022 were still in ISSUES.md "Open" at phase-close time (sub-step closes had not folded in the resolution-marking). Fixed in the close commit. Lesson worth recording: marking issues resolved is best done in the per-sub-step close commits as each issue's work completes; folding into `/phase-close` is acceptable but increases the close commit's diff size.
+
+---
+
+## 2026-05-05 — Steps 3.8 + 3.9 + 3.10 closed in one session (spend charts + mobile-responsive nav + logout + connection pip)
 
 - Step range 3.8 → 3.10 across `bf19b2b..80b9bec` (7 commits + this session-end docs commit). Six functional commits + 1 follow-up fix + 3 close commits + this docs commit. All four `pnpm` gates green at every commit. Workspace test count 1075 → **1080 + 3 skipped** (state +5 for `perDayPerProject` coverage in 3.8; 3.9 + 3.10 are layout-only, no test deltas).
 - **Session-start drift:** `commit-mismatch` (STATE.md said `06e7460` but HEAD was `8d13c26`, the prior session-end docs commit). 7th occurrence of the documented post-session-end self-reference lag-by-1; STATE.md itself documented it. Operator was given the narrative + verbose block per the runbook; no reconciliation action needed (the lag is structural, not real divergence). Steady-state lag-by-1 maintained — this session's session-end commit will create the 8th occurrence.

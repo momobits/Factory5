@@ -1,9 +1,9 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-05T21:50:14Z by
-> `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
-> or "Notes for next session" to influence this prompt; **do not edit
-> next.md by hand** -- it's overwritten on every session end.
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-06T13:05:00Z by
+> `/phase-close`. Edit STATE.md's "Next action" or "Notes for next session"
+> to influence this prompt; **do not edit next.md by hand** -- it's overwritten
+> on every session end and at /phase-close.
 
 This is a Control-managed project. Bootstrap protocol:
 
@@ -16,43 +16,53 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-Run `/phase-close`. Phase 3 is complete: every step in [`../phases/phase-3-web-ui/steps.md`](../phases/phase-3-web-ui/steps.md) flipped to `[x]` (3.1 → 3.10) and three deferred follow-ups remain (Pause primitive, PageShell adoption + Dashboard `<style is:global>` migration, pre-3.5 baseline live-smoke chat-page click-test) — none are 3.x acceptance dependencies, and per the steps.md "Deferred follow-ups" header all are explicitly free to land any time before `/phase-close` (or be carried into Phase 4). The `/phase-close` skill will: (i) tag `phase-3-web-ui-closed` annotated at HEAD; (ii) append a session entry to [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) summarizing the phase; (iii) tick remaining Tier 3 boxes in [`../../UPGRADE/ROADMAP.md`](../../UPGRADE/ROADMAP.md) (none left as of step-3.10 close); (iv) promote ADR 0029 (`directive-stream-protocol`) past the gated state — the Live verification carve-out can be retired since all six event types are confirmed live (closed in step 3.7's smoke); (v) scaffold Phase 4 (`cli-completion`) at `.control/phases/phase-4-cli-completion/{README.md,steps.md}` per [`../architecture/phase-plan.md`](../architecture/phase-plan.md). One smoke remaining as a 30-second click-test before the close: open `/app/chat` against a live factoryd, type a question, verify the streamed reply renders end-to-end (the only piece of Phase 3.5's pre-existing work without a dedicated live smoke). Background processes still running: factoryd PID 21776 → may have rotated again; live URL via `factory ui-token`. Astro dev on `127.0.0.1:4321`.
+Phase 3 (web-ui) is **closed** (annotated tag `phase-3-web-ui-closed`). Phase 4 (cli-completion) is now active — small but high-leverage tier estimated at ~1 session. Read [`../phases/phase-4-cli-completion/README.md`](../phases/phase-4-cli-completion/README.md) and [`steps.md`](../phases/phase-4-cli-completion/steps.md) plus the full plan at [`../../UPGRADE/plans/tier-4-cli-completion.md`](../../UPGRADE/plans/tier-4-cli-completion.md).
+
+Two pre-kickoff README edits the operator should make before starting code work:
+
+1. `## Where we were, end of Phase 3` section in the new README — terse summary of the 10-step Phase 3 arc that 4.x can rely on (SSE protocol via ADR 0029, Astro component library, web cancel/chat/projects-new, mobile nav, logout/connection pip, all six SSE event types live-verified).
+2. `## Why this phase exists` section — the carry-forward block (3 deferred items from Phase 3) is already seeded; add the operator-facing motivation paragraph (CLI is the third operator surface, Phase 4 closes parity with web + channels).
+
+Then start step **4.1** — Verify `factory cancel <directive-id>` end-to-end. Phase 2 step 2.4 shipped the brain hook + IPC route + DB-direct fallback; the CLI surface was wired then. 4.1 is a verification commit (smoke against a real factoryd; possibly no-op or tiny doc tweak). The first feature step is **4.2** — `factory budget set <project> --max-usd <n> [--max-steps <n>]` reusing `packages/wiki/src/project-metadata.ts`; same code path as the web UI's `PUT /api/v1/projects/:id/budget` route.
+
+Background processes from Phase 3 may still be running: factoryd PID may have rotated; live URL via `factory ui-token` (or `node apps/factory/dist/main.js ui-token`). Astro dev on `127.0.0.1:4321` is not used by Phase 4 (CLI-only work) — stop both at session start if you want a clean slate.
 
 ## Notes for next session
 
-Step 3.10 is **closed**. Three steps landed this session: 3.8 spend charts (2 commits: daemon-side perDayPerProject rollup + page-side SVG charts), 3.9 mobile-responsive nav (1 feat + 1 close), 3.10 logout + connection pip (1 feat + 1 follow-up fix + 1 close). Workspace tests 1075 → 1080 + 3 skipped (state +5 from `perDayPerProject` coverage; 3.9/3.10 are layout-only).
+Phase 3 closed cleanly. Six issues moved from Open to Resolved in `UPGRADE/ISSUES.md` (U006, U007, U008, U009, U010, U022 — each with a full Resolution line pointing at the closing commit per step). ADR 0029 promoted past the gated state — Live verification table now shows ✅ for all six event types; the unit-test-only carve-out for `finding.created` is retired (closed in 3.7's `node-sse-smoke` smoke); the `finding.created live verification gap` Negative-consequence bullet removed; future-work list trimmed. Phase 3 README's `## Deferred to Phase 4 (or later)` section populated with three carry-forward items so the carry-forward auto-seeding into Phase 4's `## Why this phase exists` block worked. Tier 3 ROADMAP boxes were already ticked through step-3.10 close — `/phase-close` had nothing to do there, the Tier 3 close itself is the wrap.
 
-**Step 3.11 — `/phase-close` (recommended next):**
+**Phase 4 sub-step roadmap (full detail in `tier-4-cli-completion.md`):**
 
-Run `/phase-close`. The skill:
-1. **Verifies done criteria.** All sub-step checkboxes in `phase-3-web-ui/steps.md` flipped to `[x]` (3.1 → 3.10) — confirmed at session-end. Three deferred follow-ups remain in the "Deferred follow-ups" section but are explicitly not 3.x acceptance dependencies.
-2. **Tags the phase boundary.** Annotated tag `phase-3-web-ui-closed` at HEAD per `${CONTROL_PHASE_CLOSE_TAG_FORMAT}`.
-3. **Appends to UPGRADE/LOG.md.** Phase summary covering the 11 sub-steps (3.1-3.10 + the deferred bucket) and the cumulative test-count delta from phase-2 baseline.
-4. **Ticks remaining ROADMAP boxes.** All Tier 3 ROADMAP items already ticked through step-3.10 close — no remaining Tier 3 boxes; the Tier 3 close itself is the wrap.
-5. **Promotes ADR 0029 past gated state.** Docs amendment to `docs/decisions/0029-directive-stream-protocol.md` retiring the unit-test-only carve-out in the Live verification section — six event types now confirmed live end-to-end (4 from 2026-05-05 prior session smokes + cancel round-trip + this session's `finding.created` from 3.7's smoke).
-6. **Scaffolds Phase 4.** `.control/phases/phase-4-cli-completion/{README.md,steps.md}` per `phase-plan.md`'s Phase 4 entry. The Phase 4 plan in `UPGRADE/plans/tier-4-cli-completion.md` lists the sub-steps to enumerate.
+1. **4.1** — Verify `factory cancel <directive-id>` end-to-end (smoke-only or tiny fix; Phase 2 brain hook + IPC route + DB-direct fallback already shipped).
+2. **4.2** — `factory budget set <project>` reusing wiki helpers; same code path as the web UI's `PUT /api/v1/projects/:id/budget`.
+3. **4.3** — `factory project list / show / delete` (with `--purge` for explicit destructive variant + double-confirm).
+4. **4.4** — `factory ask "<question>"` single-shot chat (`--json` for scripting); reuses chat.ts via extracted `submitOneDirective` helper.
+5. **4.5** — Tab completion via `factory completion <shell>` (bash/zsh/pwsh, static — sub-commands + flag names; dynamic completion is future polish).
+6. **4.6** — Rich `--help` examples via `addHelpText('after', '...')` on every command; top-level `addHelpText('afterAll', '...')` pointing at `docs/WORKFLOWS.md`.
+7. **4.7** — `packages/cli/README.md` refresh.
+8. **4.8** — Resolve issues U018, U019, U020, U021 in `UPGRADE/ISSUES.md` + tick Tier 4 boxes in `UPGRADE/ROADMAP.md` (mark resolved as each sub-step closes, or fold into one `chore(4.8)` commit at the end — operator's call).
+9. **4.9** — `/phase-close`.
 
-**One smoke remaining as a 30-second click-test before the close** (carry-forward from prior session, recorded in steps.md "Deferred follow-ups"): open `/app/chat` against a live factoryd, type a question, verify the streamed reply renders end-to-end. The 3.6 cancel acceptance smoke + 3.7 acceptance smoke covered the directive-detail page condition; the chat-page click-test is the remaining piece of Phase 3.5 without a dedicated live smoke. Pin this as part of the `/phase-close` smoke.
+**Carry-forward items from Phase 3** (none block 4.x — captured in the new Phase 4 README's "Why this phase exists"):
 
-**Deferred follow-ups still open in `phase-3-web-ui/steps.md`** (three items, none block /phase-close):
+- **Pause primitive on directive detail.** Defer until a real workflow signal demands it (cancel solves the primary operator-pain case; pause-then-think is the kind of feature worth designing once the demand is real).
+- **PageShell adoption + Dashboard `<style is:global>` migration.** 11-page structural sweep — self-contained ~1 commit; absorbs the unstyled "Clear all defaults" + 4× filter-form Apply buttons, the inline-style audit, and Dashboard's slot-content scoping issue. Operator can slot any time as a "loose-ends sweep" or carry into Phase 5.
+- **Brain-side `log.line` forwarder.** Selective pino-stream tap filtered by `correlationId` so the FE log tail uses live events instead of polling. ADR 0029 future-work item; not gating any 4.x step but a natural fit alongside CLI-completion polish.
 
-- **Pause primitive on directive detail.** Defer until a real workflow signal demands it. Choose between Option A (`directivesQ.status` enum extension) and Option B (`markBlocked` reuse with `blockedReason: 'paused-by-operator'`) when the signal lands.
-- **PageShell adoption + Dashboard `<style is:global>` migration.** 11-page structural sweep that would also (a) eliminate the carry-forward "Clear all defaults" + 4× filter-form Apply buttons unstyled-button issue, (b) consolidate inline `style=` attributes scattered across pages, (c) move Dashboard.astro's currently-scoped `.btn*` / `.alert*` / `.form-*` rules to global so raw page buttons inherit them. Self-contained ~1 commit when authored. Could land before /phase-close as a "loose-ends sweep" or carry into Phase 4 — operator's call.
-- **Pre-3.5 baseline live-smoke (chat-page click-test)** — the remaining 30-second piece. Pin as part of the /phase-close smoke per #6 above.
+**Other carry-forward (not deferred-from-Phase-3 specifically):**
 
-**Carry-forward bugs / cleanup (not blocking 3.11 or beyond):**
+- **Pre-3.5 baseline live-smoke (chat-page click-test).** 30-second smoke (open `/app/chat`, type a question, see streamed reply) — the chat page passes its 3.5 unit + integration coverage and ADR 0029's six-event-type live-verification is closed, so this isn't a Phase 3 acceptance dependency anymore. Natural fit during Phase 4 if the operator wants a quick visual check while testing CLI commands against a live daemon.
+- **Smoke residue cleanup.** Two projects + 3 cancelled directives in DB + workspace dirs on disk. Phase 4's `factory project delete --purge` (step 4.3) will be the right tool to clean these up once it ships — natural validation target.
+- **Control framework repo** at `G:\Projects\Small-Projects\Control` — uncommitted upstream patches; operator's go for 2.2.2 → 2.2.3 publish.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 drift — 8 occurrences (the 9th lands at next session-end). Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit. Worth filing during a quiet Phase 4 session as ergonomic infrastructure work.
 
-- **Smoke residue cleanup** is optional. Two projects + 3 cancelled-or-completed directives in DB; corresponding workspace dirs on disk. See In-flight work § for paths.
-- **Control framework repo** at `G:\Projects\Small-Projects\Control` — operator's go on 2.2.3 publish.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 drift, now at 8 occurrences. Not load-bearing; ergonomic.
+**Frontend-design judgement calls carried from Phase 3** (Phase 4 is CLI-only, but worth recalling for any web-side polish that lands during the loose-ends sweep):
 
-**Frontend-design judgement calls captured this session worth carrying forward:**
+- Smart defaults read better than empty states.
+- Native HTML beats custom widgets when semantics align.
+- Theme-independent intentional colors for status semantics (traffic-light pip).
+- Error-class differentiation matters when recovery paths differ.
+- Visible-label vs. hover-title separation.
+- Inherit-don't-invent; root-cause CSS fixes over global rewrites; hint-copy-teaches-consequence; in-context-affordance-vs-nav.
 
-- **Smart defaults read better than manual rendering at the empty case.** 3.8's sparkline + stacked bar always render the 14- and 30-day windows anchored on today UTC, regardless of data — trailing empty days render as visible gaps, which is honest and avoids "no chart at all" empty states for fresh databases. Same principle would apply to any future dashboard widget.
-- **Native HTML elements beat custom widgets when semantics align.** 3.9's hamburger uses `<details>`/`<summary>` — zero JS, native a11y, keyboard support out of the box, auto-closes on navigation since each click is a fresh page load. The aesthetic restraint (no animation flourishes beyond the 120ms hamburger→× rotate) keeps the operator tool feeling like a tool.
-- **Theme-independent intentional colors for status semantics.** 3.10's pip uses fixed `#2a8` (green) / `#d80` (amber) / `#c24` (red) instead of theme-aware colors because operators recognize traffic-light semantics on muscle memory; mid-luminance shades read on both light and dark canvases without per-theme branching.
-- **Error-class differentiation matters when the recovery path differs.** 3.10's initial heartbeat treated all failures uniformly via 3-consecutive-failures cycle; operator smoke caught that 401 (stale token) needs a different treatment because polling can't recover from it. Short-circuit on 401 with a label that names the recovery command — generic retry semantics hide actionable signals.
-- **Visible label vs. hover title separation.** 3.10's `setStatus(state, label, hover?)` keeps the visible chrome terse ("Session expired") while the hover tooltip carries the actionable detail (`Daemon restarted — run \`factory ui-token\` for a fresh URL`). Future labeled-with-action UI can reuse this pattern.
-- **Frontend-design judgement calls carried from prior sessions still apply** for /phase-close polish and Phase 4: inherit-don't-invent, hint-copy-teaches-consequence, in-context-affordance-vs-nav, root-cause CSS fixes over global rewrites.
-
-Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions; this STATE.md is the operational cursor (overwritten at each `/session-end`).
+Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across sessions; this STATE.md is the operational cursor (overwritten at each `/session-end` and at `/phase-close`).

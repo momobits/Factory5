@@ -6,6 +6,74 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-06 — Phase 3 (web-ui) closed; Phase 4 (cli-completion) kicked off
+
+`/phase-close` ran on the Phase 3 work. All ten sub-steps shipped across the prior multi-session arc (3.1 → 3.10); 3.11 was `/phase-close` itself. Tagged `phase-3-web-ui-closed` (annotated) at the close commit. Phase 4 (cli-completion) scaffolded.
+
+**What shipped in Phase 3** (cumulative across sessions, summarized for the upgrade-side narrative):
+
+- **3.1 / 3.2** — SSE on `GET /api/v1/directives/:id/stream` (six event types, per-directive `DirectiveStreamHub` subscription map, 15 s `:keepalive` heartbeats, backfill burst on connect); `directives/detail.astro` consumes via `EventSource` with `?t=` token accommodation; polling fallback for SSE-stripped proxies. Pinned by ADR 0029.
+- **3.3 / 3.4** — Astro component library (`<Card>`, `<Table>`, `<EmptyState>`, `<Alert>`, `<Form>`, `<Field>`, `<Submit>`, `<PageShell>`); all 10 pages converted; `el()` and `loadInto()` retired from `lib/api.ts`. Slot-content CSS-scoping discovery captured in `apps/factory-web/src/components/README.md`.
+- **3.5** — `/app/chat` page mirrors `factory chat` end-to-end against a real factoryd; new `POST /api/v1/chat/messages` route mints `intent=chat` directives; page subscribes to the same SSE stream for token-by-token reply rendering; slash-prefixed reads route through Phase 2's shared `command-handlers.ts` so Discord, Telegram, and web-chat never drift.
+- **3.6** — Cancel button on directive detail page; `POST /api/v1/directives/:id/cancel` (SPA-namespace alias of Phase 2's CLI route, gated by `requireUiAuth`); operator clicks Cancel, daemon mutates `directives.status`, brain emits `directive.completed`, hub forwards to the open SSE client, FE re-renders within ~2 s end-to-end (live-smoke verified). Pause primitive deferred — operator workflow signal not yet present.
+- **3.7** — `/app/projects/new` page mirrors `factory init <project>` for a single project; `wiki.createProject` extraction + `POST /api/v1/projects` daemon route; `apiV1CreateProjectRequestSchema` in `@factory5/ipc`. Live smoke against `node-sse-smoke` build also confirmed `finding.created` end-to-end (F001 emitted live by the assessor), closing ADR 0029's live-verification gap.
+- **3.8** — Spend page charts: per-project sparkline (240×28 SVG, last 14 days, discrete segments + dots so zero-spend days render as visible gaps not connecting through zero) + 30-day stacked bar (720×180 SVG, native `<title>` tooltips, per-day invisible hover targets, deterministic-hue palette per `projectId` hash). New `spend.perDayPerProject(db, filter?)` rollup helper; +5 tests.
+- **3.9** — Mobile-responsive nav: `<details>`-based hamburger drawer at ≤768px (zero JS, native a11y, 44×44 px tap target); `@media (max-width: 640px)` form-row stacking; `Table.astro` `.table-wrap` overflow-x for wide data tables. Plan-vs-steps.md numbering offset surfaced and documented (steps.md is the cursor).
+- **3.10** — Explicit logout + connection-status pip in header: layout-level 30 s heartbeat on `/api/v1/status` drives a colored pip (green Connected / amber Reconnecting / red Disconnected/Signed out); theme-independent traffic-light colors; logged-out banner; stale-token (401) short-circuit names `factory ui-token` as the recovery command in the hover tooltip. The 401 short-circuit was a follow-up fix surfaced in operator smoke — the lesson recorded was "error-class differentiation matters when recovery paths differ."
+
+**ADRs decided in Phase 3:**
+
+- **ADR 0027** — web-ui-mutation-surface (`POST /api/v1/builds`, `POST /api/v1/pending-questions/:id/answer`, `PUT /api/v1/projects/:id/budget`).
+- **ADR 0028** — worker-sandbox-contract (per-spawn fs scoping; three Claude-Code-native primitives layered per-spawn).
+- **ADR 0029** — directive-stream-protocol — promoted past gated state at this `/phase-close` (Live verification table now ✅ for all six event types; unit-test-only carve-out retired).
+
+**Issues closed at /phase-close:** U006 (no live updates), U007 (no chat surface), U008 (DOM-builder pattern), U009 (no mobile design), U010 (sessionStorage UX), U022 (`el()` setAttribute escaping). All moved from Open to Resolved with full Resolution lines pointing at the per-step close commits.
+
+**Test-count delta across Phase 3:** workspace 1063 → 1080 + 3 skipped (+17 cumulative; +5 in 3.7's wiki + daemon, +5 in 3.8's `perDayPerProject` state coverage; the rest from 3.1-3.6's per-step adds; 3.9 + 3.10 were layout-only with zero test deltas).
+
+**`/phase-close` housekeeping (this commit):**
+
+- Six issues moved Open → Resolved in `UPGRADE/ISSUES.md`.
+- ADR 0029 amended: Live verification table updated, `finding.created` caveat paragraph removed, Negative-consequence bullet removed, Implementation-status future-work list trimmed.
+- Phase 3 README's `## ADRs decided in this phase` populated (0027 / 0028 / 0029); `## Deferred to Phase 4 (or later)` populated with three carry-forward items (Pause primitive; PageShell + `<style is:global>` migration; brain-side `log.line` forwarder).
+- Phase 3 `steps.md` 3.11 → `[x]`.
+- Phase 4 scaffolded at `.control/phases/phase-4-cli-completion/{README.md,steps.md}` from templates + `phase-plan.md` Phase 4 entry + `tier-4-cli-completion.md` plan; carry-forward block auto-seeded into Phase 4 README's `## Why this phase exists`.
+- STATE.md → Phase 4, step 4.1.
+- Tier 3 ROADMAP boxes were already fully ticked through step-3.10 close — no remaining work.
+- Annotated tag `phase-3-web-ui-closed` at the close commit.
+
+**State of `main` at session end:**
+
+- `pnpm build` ✅
+- `pnpm test` ✅ (state 157, channels 175, daemon 173, brain 101, worker 38, worker-sandbox 86 + 3 skipped, assessor 79, wiki 74, cli 78, providers 39, ipc 28, events 3, core 14, logger 20, worker-mcp 15. Total **1080 passing + 3 skipped**.)
+- `pnpm lint` ✅
+- `pnpm format:check` ✅
+- `apps/factory-web` builds clean.
+- All four `pnpm` gates green at `/phase-close` verification.
+
+**What's next (Phase 4):**
+
+1. **Operator pre-kickoff edits to Phase 4 README** — fill `## Where we were, end of Phase 3` (terse summary of the 10-step Phase 3 arc) and the operator-motivation paragraph in `## Why this phase exists` (above the auto-seeded carry-forward block).
+2. **Step 4.1** — Verify `factory cancel <directive-id>` end-to-end. Phase 2's plumbing already shipped; this is a smoke-only verification commit (or a small fix if needed).
+3. **Step 4.2** — `factory budget set <project>` (the first feature step). Reuses `packages/wiki/src/project-metadata.ts`; same code path as the web UI's `PUT /api/v1/projects/:id/budget`.
+
+Phase 4 estimate: ~1 session. Most of the heavy lifting (cancel plumbing) shipped in Tier 2; Phase 4 is feature-completion + polish.
+
+**Carry-forward items captured in the new Phase 4 README's `## Why this phase exists`** (none block any 4.x step):
+
+- Pause primitive on directive detail (defer-until-signal).
+- PageShell adoption + Dashboard `<style is:global>` migration (1-commit sweep, available any time).
+- Brain-side `log.line` forwarder (ADR 0029 future-work item).
+
+**Other carry-forward not specifically deferred from Phase 3:**
+
+- Pre-3.5 baseline live-smoke (chat-page click-test) — Phase 3's chat page passes its 3.5 unit + integration coverage and ADR 0029's live-verification is closed, so this is no longer a Phase 3 acceptance gate. Natural fit during Phase 4 if the operator wants a visual check while testing CLI commands.
+- Smoke residue cleanup — Phase 4's `factory project delete --purge` (step 4.3) will be the right tool once it ships.
+- `/session-end` skill structural fix for the "Last commit" lag-by-1 drift (8 occurrences).
+- Control framework repo 2.2.3 publish (operator's go).
+
+---
+
 ## 2026-05-05 — Phase 3 step 3.7 code-complete (createProject extraction → POST route → /app/projects/new page)
 
 Step 3.7 ships its three code commits this session, plus a session-start drift reconcile. The `/app/projects/new` page closes the SPA's last hand-rolled-in-CLI gap from ADR 0027 §3.7 — operators can scaffold a project from the dashboard end-to-end without a terminal. Behaviour-preserving for `factory init <name>` (CLI thin-wrapped over the same `wiki.createProject` extraction).

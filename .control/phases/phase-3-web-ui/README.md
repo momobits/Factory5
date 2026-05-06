@@ -66,7 +66,9 @@ If Phase 3 needs to be undone: `git reset --hard phase-2-channel-parity-closed`.
 
 ## ADRs decided in this phase
 
-- (filled in as decisions are made — likely candidates: SSE event-name namespace + heartbeat shape; per-directive subscription multiplexing; component prop conventions for the new library; mobile-breakpoint policy; logout + token rotation surface)
+- **ADR 0027** — web-ui-mutation-surface (`POST /api/v1/builds`, `POST /api/v1/pending-questions/:id/answer`, `PUT /api/v1/projects/:id/budget`).
+- **ADR 0028** — worker-sandbox-contract (per-spawn fs scoping; three Claude-Code-native primitives layered per-spawn).
+- **ADR 0029** — directive-stream-protocol (SSE for live build observation, six event types, brain-side optional-callback emission). Live-verification gap for `finding.created` was closed in 3.7's smoke; structural promotion past gated state landed at `/phase-close`.
 
 ## Deferred to Phase 4 (or later)
 
@@ -74,4 +76,6 @@ If Phase 3 needs to be undone: `git reset --hard phase-2-channel-parity-closed`.
 One-line reason per item. Copy forward into the next phase's
 "Why this phase exists" section when it activates. -->
 
-- <item> — <one-line reason for deferral>
+- Pause primitive on directive detail — defer until a real workflow signal demands it (cancel solves the primary operator-pain case; pause-then-think is the kind of feature worth designing once; choose between extending `directivesQ.status` with `paused`/resume or reusing `markBlocked` with `blockedReason: 'paused-by-operator'` when the signal lands).
+- PageShell adoption + Dashboard `<style is:global>` migration — 11-page structural sweep that absorbs the unstyled "Clear all defaults" + 4× filter-form Apply buttons issue, consolidates inline `style=` attributes, and moves Dashboard's currently-scoped `.btn*` / `.alert*` / `.form-*` rules to global so raw page buttons inherit them; self-contained ~1 commit when authored.
+- Brain-side `log.line` forwarder — selective pino-stream tap filtered by `correlationId` so the FE log tail uses live events instead of the polling fallback (ADR 0029 future-work item; not gating any 4.x step but a natural fit alongside the CLI-completion polish).

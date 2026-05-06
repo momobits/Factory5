@@ -33,50 +33,6 @@ Severity:
 - **Hypothesis**: Either (a) increase the timeout to something like 10 min and rely on user `Ctrl-C`, or (b) stream partial responses and the daemon emits intermediate progress messages. Option (b) is the better UX but requires daemon-side support.
 - **Resolution**: Tier 2 or 4. Pair with the chat surface work.
 
-### U006 — Web UI directive detail has no live updates
-
-- **Severity**: high
-- **Tier**: 3
-- **Area**: web
-- **Description**: After kicking off a build, the SPA redirects to `directives/detail?id=...`. The page loads once and never refreshes. Tasks transitioning, findings appearing, spend ticking up — none of it is visible without a manual reload.
-- **Hypothesis**: Add `GET /api/v1/directives/:id/stream` SSE endpoint emitting NDJSON for `task.started` / `task.completed` / `finding.created` / `spend.updated` / `log.line`. SPA subscribes on page load and appends rows live.
-- **Resolution**: Tier 3 (SSE stream + page wiring).
-
-### U007 — Web UI has no chat surface
-
-- **Severity**: high
-- **Tier**: 3
-- **Area**: web
-- **Description**: To talk to the brain conversationally, the operator must drop to `factory chat` (terminal) or use Discord/Telegram. The dashboard has zero conversational affordance.
-- **Hypothesis**: New `/app/chat.astro` page; new `POST /api/v1/chat/messages` route that creates `intent=chat` directives; SSE on the same directive stream for replies. Markdown-rendered history.
-- **Resolution**: Tier 3.
-
-### U008 — Web UI uses `el()` builder pattern instead of Astro components
-
-- **Severity**: medium
-- **Tier**: 3
-- **Area**: web
-- **Description**: Each page in `apps/factory-web/src/pages/` hand-builds DOM with `mount.appendChild(el('div', {}, ...))`. No shared components; no reuse beyond the `el()` helper in `lib/api.ts`. Astro's component model is not used.
-- **Hypothesis**: Build a small component library (`<Card>`, `<Table>`, `<EmptyState>`, `<Alert>`, `<Form>` primitives, `<Layout>`); replace `el()` calls page-by-page; retire `el()`.
-- **Resolution**: Tier 3.
-
-### U009 — Web UI has no mobile-specific design
-
-- **Severity**: medium
-- **Tier**: 3
-- **Area**: web
-- **Description**: `Dashboard.astro` has horizontal nav with no responsive collapse; tables and forms aren't tested below ~600 px. `viewport` meta is set but layout doesn't adapt.
-- **Resolution**: Tier 3 — hamburger / drawer nav at narrow widths; stacked form rows.
-
-### U010 — Web UI sessionStorage token UX is fragile
-
-- **Severity**: low
-- **Tier**: 3
-- **Area**: web
-- **Description**: Token in `sessionStorage` survives reload but dies on tab close. No explicit logout. No "your session is fresh" indicator. If the operator closes the tab they have to re-fetch the URL via `factory ui-token`.
-- **Hypothesis**: Optional `localStorage` mode; add `factory ui-token --rotate` to invalidate prior sessions; add a "Connected to factory5" strip in header.
-- **Resolution**: Tier 3.
-
 ### U018 — CLI has no `--help` examples beyond Commander defaults
 
 - **Severity**: medium
@@ -109,14 +65,6 @@ Severity:
 - **Area**: cli
 - **Description**: Budget changes go through the web UI's `PUT /api/v1/projects/:id/budget`. The CLI has no sibling. Operators must edit `project.json` by hand or use the web UI.
 - **Resolution**: Tier 4 — `factory budget set <project> --max-usd <n> [--max-steps <n>]`. Same code path as the web mutation.
-
-### U022 — `el()` helper does not escape `setAttribute` arguments
-
-- **Severity**: low
-- **Tier**: 3 (folded into the component refactor)
-- **Area**: web
-- **Description**: `apps/factory-web/src/lib/api.ts:158` — `e.setAttribute(k, v)` is called with raw values from object spreads. Text content is safe (uses `createTextNode`), but attributes are not escaped. Today the only attribute values come from server-trusted strings, so practical risk is low. Still: not a robust pattern.
-- **Resolution**: Tier 3 — `el()` is retired in favor of components; risk goes away.
 
 ## Resolved
 
@@ -215,3 +163,51 @@ Severity:
 - **Area**: brain / channels
 - **Description**: The brain understands `build / fix / review / investigate / chat / status / resume / cancel`. Today, channel-originated chat (Discord thread reply, Telegram DM) becomes `intent=chat` regardless of content. A user asking _"what's the budget?"_ in Telegram gets a chat-intent LLM round-trip rather than a structured status response.
 - **Resolution**: Resolved 2026-05-02 — Tier 2 step 2.5, commit `72c45e3`. Triage prompt expanded with 8-intent guidance, ten worked examples, and the `<0.7` confidence floor for non-chat. New `ChannelContext.classifyIntent` callback bound by the daemon to `brain.triageDirective`. Channel handlers (Discord + Telegram) call `routeChatIntent` which maps `status` (+ keyword pass for spend/findings) → `runStatus`/`runSpend`/`runFindings`, and `resume` (+ project token extract) → `runResume`. `cancel` stays explicit-only (needs a ULID); `build`/`fix`/`review`/`investigate`/`chat` fall through to the legacy chat-directive path. Intent enum kept at 8 to avoid a SQLite CHECK-constraint migration; the channel-side keyword sub-router picks spend vs findings within `intent=status`.
+
+### U006 — Web UI directive detail has no live updates
+
+- **Severity**: high
+- **Tier**: 3
+- **Area**: web
+- **Description**: After kicking off a build, the SPA redirects to `directives/detail?id=...`. The page loads once and never refreshes. Tasks transitioning, findings appearing, spend ticking up — none of it is visible without a manual reload.
+- **Resolution**: Resolved 2026-05-06 — Tier 3 step 3.1 (route/hub) + 3.2 (page wiring), `phase-3-web-ui-closed`. SSE on `GET /api/v1/directives/:id/stream` with six event types (`task.started/completed`, `finding.created`, `spend.updated`, `log.line`, `directive.completed`); per-directive `DirectiveStreamHub` subscription map, 15 s `:keepalive` heartbeats, backfill burst on connect that makes connect-after-build idempotent. `directives/detail.astro` consumes via `EventSource` with token-via-`?t=` accommodation; polling fallback for SSE-stripped proxies. ADR 0029 pins the protocol; live-verification record completed in 3.7's `node-sse-smoke` build (six event types confirmed end-to-end).
+
+### U007 — Web UI has no chat surface
+
+- **Severity**: high
+- **Tier**: 3
+- **Area**: web
+- **Description**: To talk to the brain conversationally, the operator must drop to `factory chat` (terminal) or use Discord/Telegram. The dashboard has zero conversational affordance.
+- **Resolution**: Resolved 2026-05-06 — Tier 3 step 3.5, `phase-3-web-ui-closed`. New `apps/factory-web/src/pages/chat.astro` mirrors `factory chat` end-to-end against a real factoryd; new `POST /api/v1/chat/messages` route mints `intent=chat` directives; the page subscribes to the same SSE stream from 3.1 for token-by-token reply rendering. Slash-prefixed reads (`/status`, `/spend`, `/findings`) re-route through Phase 2's shared `command-handlers.ts` so Discord, Telegram, and web-chat never drift.
+
+### U008 — Web UI uses `el()` builder pattern instead of Astro components
+
+- **Severity**: medium
+- **Tier**: 3
+- **Area**: web
+- **Description**: Each page in `apps/factory-web/src/pages/` hand-builds DOM with `mount.appendChild(el('div', {}, ...))`. No shared components; no reuse beyond the `el()` helper in `lib/api.ts`. Astro's component model is not used.
+- **Resolution**: Resolved 2026-05-03 — Tier 3 step 3.3 (component library) + 3.4 (page conversion), commit `dfd1a07` closed 3.4. Astro component library shipped: `<Card>`, `<Table>`, `<EmptyState>`, `<Alert>`, `<Form>`, `<Field>`, `<Submit>`, `<PageShell>`. All 10 pages converted; `el()` and `loadInto()` retired from `lib/api.ts`. Migration map covered list pages, detail pages, the build form, and `directives/detail`'s per-page DOM helper for the live SSE render path. Dashboard's class-based primitives (`.btn*`, `.alert*`, `.form-*`, table base) survive intentionally — slot-content scoping discovery captured in `apps/factory-web/src/components/README.md`; full PageShell adoption + `<style is:global>` migration deferred to Phase 4.
+
+### U009 — Web UI has no mobile-specific design
+
+- **Severity**: medium
+- **Tier**: 3
+- **Area**: web
+- **Description**: `Dashboard.astro` has horizontal nav with no responsive collapse; tables and forms aren't tested below ~600 px. `viewport` meta is set but layout doesn't adapt.
+- **Resolution**: Resolved 2026-05-05 — Tier 3 step 3.9, commit `5a15b1a`. `Dashboard.astro` gains a `<details>`-based hamburger drawer at ≤768px (zero JS, native a11y, keyboard- and screen-reader-friendly); 44×44px tap target per Apple HIG; `@media (max-width: 640px)` stacks paired-column `.form-row` to single column; `Table.astro` wraps `<table>` in a `.table-wrap` div with `overflow-x: auto` for horizontal scrolling on wide data tables. Operator visual verification across desktop, ≤768px, 375px (iPhone SE), <640px breakpoints + keyboard nav + light/dark.
+
+### U010 — Web UI sessionStorage token UX is fragile
+
+- **Severity**: low
+- **Tier**: 3
+- **Area**: web
+- **Description**: Token in `sessionStorage` survives reload but dies on tab close. No explicit logout. No "your session is fresh" indicator. If the operator closes the tab they have to re-fetch the URL via `factory ui-token`.
+- **Resolution**: Resolved 2026-05-05 — Tier 3 step 3.10, commits `d544192` (feat) + `3cecb72` (follow-up fix). Header gains a connection-status pip + Sign out button; layout-level heartbeat (30 s poll on `/api/v1/status`) drives the pip across all pages; state machine 0 failures → green `Connected` / 1-2 → amber `Reconnecting…` / 3+ → red `Disconnected`; no token in store → red `Signed out`. Theme-independent traffic-light colors (`#2a8` / `#d80` / `#c24`); `aria-live="polite"` announces transitions. Logout flow: `clearToken()` + redirect to `/app/?logged-out=1`; logged-out banner unhides on the URL param then strips it via `history.replaceState`. Stale-token (401) short-circuits to red `Session expired` with a hover tooltip naming `factory ui-token` as the recovery command — error-class differentiation that the generic 3-failure cycle hid.
+
+### U022 — `el()` helper does not escape `setAttribute` arguments
+
+- **Severity**: low
+- **Tier**: 3 (folded into the component refactor)
+- **Area**: web
+- **Description**: `apps/factory-web/src/lib/api.ts:158` — `e.setAttribute(k, v)` is called with raw values from object spreads. Text content is safe (uses `createTextNode`), but attributes are not escaped. Today the only attribute values come from server-trusted strings, so practical risk is low. Still: not a robust pattern.
+- **Resolution**: Resolved 2026-05-03 — Tier 3 step 3.4, commit `dfd1a07`. `el()` retired from `lib/api.ts` as part of the 10-page component conversion; the unsafe `setAttribute(k, v)` callsite no longer exists. Component primitives (`<Card>`, `<Table>`, `<Alert>`, `<Form>`, etc.) encode safe rendering by construction (Astro auto-escapes interpolated values).
