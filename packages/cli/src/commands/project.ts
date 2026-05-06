@@ -39,12 +39,7 @@ import { exit, stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 
 import { createLogger } from '@factory5/logger';
-import {
-  openDatabase,
-  projects as projectsQ,
-  runMigrations,
-  type Database,
-} from '@factory5/state';
+import { openDatabase, projects as projectsQ, runMigrations, type Database } from '@factory5/state';
 import {
   budgetDefaultsFromProjectMeta,
   languageFromProjectMeta,
