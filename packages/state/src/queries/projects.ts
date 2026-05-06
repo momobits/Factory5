@@ -92,3 +92,21 @@ export function listAll(db: Database): Project[] {
   const rows = db.prepare('SELECT * FROM projects ORDER BY last_touched_at DESC').all() as Row[];
   return rows.map(rowToProject);
 }
+
+/**
+ * Unregister a project from the registry. Returns `true` when a row was
+ * removed, `false` when the id wasn't present (idempotent caller-side).
+ *
+ * Used by `factory project delete` (Phase 4.3). Does NOT cascade — there's
+ * no FK constraint on `directives.project_id` (migration 006 §implementation
+ * note), so historical directives, llm-call rollups, and findings rows
+ * tagged with this project survive the unregister and continue to surface
+ * in `factory spend` / `factory findings` when queried directly. That's
+ * the intended archival behaviour: an operator who wants the project
+ * gone for accounting purposes uses `--purge` to also drop the workspace
+ * dir, but historical spend/finding records are preserved as ledger.
+ */
+export function remove(db: Database, id: string): boolean {
+  const result = db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  return result.changes > 0;
+}

@@ -61,7 +61,7 @@ Polish. Estimated **1 session**.
 
 - [x] `factory cancel <directive-id>` (shared with Tier 2; Phase 4.1 live-smoke verified the 4-code exit surface)
 - [x] `factory budget set <project> --max-usd <n> [--max-steps <n>]`
-- [ ] `factory project list / show <name> / delete <name>`
+- [x] `factory project list / show <name> / delete <name>`
 - [ ] `factory ask "<question>"` — single-shot chat
 - [ ] Tab completion for bash/zsh/pwsh
 - [ ] Rich `--help` examples on every command (`addHelpText('after', ...)`)
