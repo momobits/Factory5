@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-06T21:25:48Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-06T21:44:40Z by
 > `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
@@ -24,7 +24,7 @@ No new phase is scaffolded. Operator's options:
 2. **Promote a carry-forward item to a Tier-5+ ROADMAP entry** — see "In-flight work" below; each is small and self-contained, ships as ~1 commit when authored.
 3. **Park** — surfaces are stable; nothing is gated on more work.
 
-**Recommended `/session-end`** next so STATE.md / journal.md / next.md / UPGRADE/LOG.md all transition together to the post-arc state. The phase-close commit landed the structural transition; `/session-end` records the operator-side handoff for whoever picks up next.
+**Session-end ran** (this commit) — STATE.md / journal.md / next.md / UPGRADE/LOG.md have all transitioned to the post-arc state. The phase-close commit `28c0188` landed the structural transition; this docs(state) commit records the operator-side handoff for whoever picks up next.
 
 ## Notes for next session
 

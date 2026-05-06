@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-06 21:30 UTC by `/phase-close` (Phase 4 closed; upgrade arc complete — `phase-plan.md` defines only Phases 1-4, no Phase 5 scaffolded)
+**Last updated:** 2026-05-06 21:30 UTC by `/session-end` for step 4.9 (Phase 4 closed at `28c0188`; upgrade arc complete — `phase-plan.md` defines only Phases 1-4, no Phase 5 scaffolded; this docs(state) commit creates the 11th lag-by-1 occurrence)
 **Current phase:** — (all four phases closed; no Phase 5 scheduled)
 **Current step:** — (no active cursor)
-**Status:** complete (all four `pnpm` gates green; clean working tree post phase-close commit; workspace test count 1135 passing + 3 skipped; `phase-4-cli-completion-closed` tagged at this commit)
+**Status:** complete (all four `pnpm` gates green; clean working tree post phase-close commit; workspace test count 1135 passing + 3 skipped; `phase-4-cli-completion-closed` tagged at `28c0188`)
 
 ---
 
@@ -28,16 +28,16 @@ No new phase is scaffolded. Operator's options:
 2. **Promote a carry-forward item to a Tier-5+ ROADMAP entry** — see "In-flight work" below; each is small and self-contained, ships as ~1 commit when authored.
 3. **Park** — surfaces are stable; nothing is gated on more work.
 
-**Recommended `/session-end`** next so STATE.md / journal.md / next.md / UPGRADE/LOG.md all transition together to the post-arc state. The phase-close commit landed the structural transition; `/session-end` records the operator-side handoff for whoever picks up next.
+**Session-end ran** (this commit) — STATE.md / journal.md / next.md / UPGRADE/LOG.md have all transitioned to the post-arc state. The phase-close commit `28c0188` landed the structural transition; this docs(state) commit records the operator-side handoff for whoever picks up next.
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `<phase-close-sha>` — chore(phase-4): close phase 4 (final phase — upgrade arc complete)
-- **Uncommitted changes:** none (clean post phase-close commit)
-- **Last phase tag:** `phase-4-cli-completion-closed` (annotated tag at the phase-close commit; final upgrade-arc tag)
+- **Last commit:** `28c0188` — chore(phase-4): close phase 4 (final phase — upgrade arc complete)
+- **Uncommitted changes:** none (this `docs(state)` session-end commit will create the 11th lag-by-1 occurrence — STATE.md references `28c0188` while HEAD will move to the new commit)
+- **Last phase tag:** `phase-4-cli-completion-closed` (annotated tag at `28c0188`; final upgrade-arc tag)
 
 ---
 
@@ -62,7 +62,7 @@ Carry-forward items outside the work cursor (none gating any current phase; orde
 - **Inline `style=` attributes** scattered across pages — same PageShell migration absorbs these.
 - **U005** — `factory chat` REPL turn timeout 120 s (still in `UPGRADE/ISSUES.md` Open). Sized as a future Tier 2/4 follow-up if a demand signal surfaces; fold into a streaming-replies surface vs raise the timeout.
 - **Control framework repo** (`G:\Projects\Small-Projects\Control`) still has uncommitted upstream patches matching local `e5ec723`. Operator owns the go for 2.2.2 → 2.2.3 publish.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 self-reference drift remains unaddressed across **11 occurrences** now (counting this phase-close commit, since STATE.md will reference itself). Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit. Worth filing as ergonomic infrastructure work — no tier-budget impact.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 self-reference drift remains unaddressed across **11 occurrences** now (the 11th lands at this very commit — STATE.md inside this `docs(state)` commit references `28c0188` while HEAD points at the new commit). Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit. Worth filing as ergonomic infrastructure work — no tier-budget impact.
 
 ---
 
@@ -86,7 +86,7 @@ No new ADRs in Phase 4. Tier 4 plan flagged three likely candidates — each lan
 
 ## Recently completed (last 5 steps)
 
-- Step 4.9 close — `chore(phase-4)`: close phase 4 (final phase — upgrade arc complete). Tagged `phase-4-cli-completion-closed`. No `phase-plan.md` entry for Phase 5 → no scaffolding; STATE.md transitions to "all phases complete". Done-criteria verification: 11/11 green (all 4.x steps closed; no `phase:4-blocker` issues; all 4 gates pass; new commands all have unit tests; tab completion produces valid scripts gated by tests; every `--help` shows examples; U018-U021 Resolved; README refreshed; tree clean; commit shapes match `<type>(4.<step>): <subject>`). Phase 4 README's `## Deferred to Phase 5 (or later)` section uses the `<item>` placeholder verbatim, so no carry-forward bullets get seeded into a non-existent Phase 5 README. — 2026-05-06 — `<phase-close-sha>`
+- Step 4.9 close — `chore(phase-4)`: close phase 4 (final phase — upgrade arc complete). Tagged `phase-4-cli-completion-closed`. No `phase-plan.md` entry for Phase 5 → no scaffolding; STATE.md transitions to "all phases complete". Done-criteria verification: 11/11 green (all 4.x steps closed; no `phase:4-blocker` issues; all 4 gates pass; new commands all have unit tests; tab completion produces valid scripts gated by tests; every `--help` shows examples; U018-U021 Resolved; README refreshed; tree clean; commit shapes match `<type>(4.<step>): <subject>`). Phase 4 README's `## Deferred to Phase 5 (or later)` section uses the `<item>` placeholder verbatim, so no carry-forward bullets get seeded into a non-existent Phase 5 README. — 2026-05-06 — `28c0188`
 - Step 4.8 close — `chore(4.8)`: resolve U018-U021 + verify Tier 4 ROADMAP. Moved U018 (rich --help, `91eebca`), U019 (tab completion, `9340cfd`), U020 (project commands, `9da25ba`), and U021 (budget set, `fa28e6d`) from Open to Resolved with full resolution lines. Tier 4 ROADMAP rows already ticked alongside per-step work commits — no edits there, just verification. — 2026-05-06 — `1d1f6a9`
 - Step 4.7 close — `docs(4.7)`: packages/cli/README.md — refresh after Tier 4. Five new rows in the subcommand table (cancel, ask, budget set, project, completion) + dedicated sections for each + a top-level Tab completion section with bash/zsh/pwsh install one-liners. Top-level intro now points at `docs/WORKFLOWS.md` and the Tab completion section. Documents per-field merge in budget set, the unregister-vs-purge contract in project delete, the daemon-up-vs-down paths in cancel, and the JSON shape + status enum in ask. — 2026-05-06 — `4902480`
 - Step 4.6 close — `docs(4.6)`: rich --help examples on every command. Every leaf command's `--help` now ends with `Examples:` (and Exit codes: where applicable). Top-level `factory --help` `addHelpText('afterAll', ...)` points at `docs/WORKFLOWS.md`. New help-coverage gate at `packages/cli/src/help-coverage.test.ts` (2 tests) walks the Commander tree via `cmd.outputHelp()` with a captured writer (since `helpInformation()` alone misses event-driven addHelpText content). **Sonic-boom-on-help flush race fixed:** `apps/factory/src/main.ts` argv-sniffs for `-h`/`--help`/`-V`/`--version` and inits the logger with `noFile: true, noConsole: true` on those paths. — 2026-05-06 — `91eebca`

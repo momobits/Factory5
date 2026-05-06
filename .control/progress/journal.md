@@ -2,7 +2,21 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
-## 2026-05-06 (latest) — Phase 4 closed (tag: `phase-4-cli-completion-closed`); upgrade arc complete (no Phase 5 scheduled)
+## 2026-05-06 (latest) — Session end after Phase 4 close (final upgrade-arc session)
+
+- Single-session continuation that picked up post-compact at HEAD `a1cacfa`, advanced through 4.7 → 4.8 → /phase-close (4.9) on operator "proceed" signals. Three work commits + this session-end docs commit.
+- **Step 4.7 (`4902480`):** `packages/cli/README.md` refresh adding the five new (or newly-verified) commands shipped in the prior session — cancel, ask, budget set, project (list/show/delete), completion — plus a top-level Tab completion section, a WORKFLOWS.md cross-reference, and exit-code blocks aligned with the implementations.
+- **Step 4.8 (`1d1f6a9`):** U018 / U019 / U020 / U021 moved Open → Resolved with full Resolution lines pointing at this arc's commits (`91eebca` / `9340cfd` / `9da25ba` / `fa28e6d`). Tier 4 ROADMAP rows already ticked in the per-step work commits — no edits there, just verification.
+- **Step 4.9 (`28c0188`):** `/phase-close` on Phase 4. All 11 done-criteria green; no `phase:4-blocker` issues; all four `pnpm` gates clean. No Phase 5 scaffolded — `phase-plan.md` defines only Phases 1-4. Annotated tag `phase-4-cli-completion-closed` at the close commit. **Final upgrade-arc tag.**
+- All four `pnpm` gates re-verified post-4.7 (build/lint/format/test), post-4.8 (format), and at /phase-close (format/build/lint/test). Workspace test count held at **1135 + 3 skipped** throughout — 4.7 / 4.8 / 4.9 are docs/state-only with no test deltas.
+- This session-end commit creates the **11th occurrence** of the documented `/session-end` skill lag-by-1 (STATE.md references `28c0188` while HEAD will move to this docs commit). The phase-close commit was self-referential (STATE.md inside `28c0188` references `28c0188`), so it didn't itself trigger lag-by-1 — only this trailing session-end commit does.
+- No new ADRs.
+- Issues opened / closed: closed U018, U019, U020, U021. UPGRADE/ISSUES.md "Open" now contains only U005 (`factory chat` 120 s turn timeout — out-of-upgrade-arc scope).
+- **Carry-forward at session/arc end:** Pause primitive (defer-until-signal); PageShell + `<style is:global>` migration (1-commit sweep); brain-side `log.line` forwarder (ADR 0029 future-work); chat-page click-test; U005 chat 120 s timeout; Control framework 2.2.3 publish; `/session-end` skill structural fix. None gating any current work.
+- **Auto-mode session shape worth recording.** The session ran in auto mode after the operator gave one initial "proceed" — three steps closed without further per-step prompting, including the destructive-feeling /phase-close (annotated tag). The runbook clarity made this safe: each step had explicit acceptance criteria, the gates were re-verified at the right boundaries, and the close commit's done-criteria check was 11/11 before tagging. The pattern works for end-of-arc steps where the cursor is mechanical; it would not have been right for any step that needed operator judgement (a new ADR, a UX call, a destructive cleanup).
+- Working tree clean post session-end commit. Kickoff prompt at `.control/progress/next.md` regenerated for the post-arc parking state (three options: open a new arc; promote a carry-forward item; park).
+
+## 2026-05-06 — Phase 4 closed (tag: `phase-4-cli-completion-closed`); upgrade arc complete (no Phase 5 scheduled)
 
 - `/phase-close` ran on Phase 4 work. All nine sub-steps shipped (4.1 → 4.8 in this session and the prior, plus this 4.9 close); steps.md fully ticked.
 - Done-criteria verification: 11/11 green. All four `pnpm` gates clean; no `phase:4-blocker` issues open; new commands all unit-tested (ask 7 / budget 15 / project 22 / completion 9 / cancel 7 + help-coverage 2); tab completion produces valid bash/zsh/pwsh scripts (gated by `completion.test.ts`); every `factory <cmd> --help` shows worked examples (gated by `help-coverage.test.ts`); U018-U021 already moved to Resolved in 4.8 (`1d1f6a9`); README refreshed in 4.7 (`4902480`); tree clean; commit shapes all match `<type>(4.<step>): <subject>`.

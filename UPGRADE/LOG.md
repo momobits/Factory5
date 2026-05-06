@@ -6,6 +6,67 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-06 — Phase 4 (cli-completion) closed; **factory5 first-class upgrade arc complete**
+
+`/phase-close` ran on the Phase 4 work. All nine sub-steps shipped (4.1 → 4.8 in this and the prior session, plus this 4.9 close). Tagged `phase-4-cli-completion-closed` (annotated) at `28c0188`. **No Phase 5 scaffolded — `phase-plan.md` defines only four phases (doc-sweep / channel-parity / web-ui / cli-completion); the upgrade arc is complete.** STATE.md transitions to "all phases complete".
+
+**What shipped in Phase 4** (cumulative across sessions, summarized for the upgrade-side narrative):
+
+- **4.1** — Verified `factory cancel <directive-id>` end-to-end against a live factoryd (Phase 2.4's plumbing already shipped). Live smoke confirmed the 4-code exit surface (0 OK / 1 generic / 2 not-found / 3 already-terminal) — more granular than the 3-code shape originally sketched in the tier-4 plan; matches `factory ui-token`'s shape. Tightened steps.md + tier-4 plan to the live 4-code surface.
+- **4.2** — `factory budget set <project> --max-usd <n> [--max-steps <n>]`. New `packages/cli/src/commands/budget.ts` reusing `@factory5/wiki`'s `updateProjectMetadata` — same code path as the daemon's `PUT /api/v1/projects/:id/budget` route (ADR 0027). **Per-field merge** is the distinguishing CLI semantic: passing only `--max-steps` preserves an existing `maxUsd` (web UI's PUT remains full-document replacement; divergence intentional and called out in the README). 15 unit tests.
+- **4.3** — `factory project list / show <name> / delete <name>`. Three pure handlers + Commander wiring. `list` enriches each registry row with on-disk language + most-recent build; `show` resolves a project ref (name-first / full-ULID-second; ambiguous names error) and pretty-prints registry + on-disk metadata + last build; `delete` defaults to non-destructive `y/N`-prompted unregister; `--force` skips the prompt; `--purge` adds a typed-name second confirm and `rm -rf`s the workspace dir (order: registry-first-then-rm so a failed rm leaves a clean registry). New `packages/state/src/queries/projects.ts:remove`. 22 unit tests via injectable `prompt` fn.
+- **4.4** — `factory ask "<question>"`. Single-shot chat — mints one chat directive, awaits the brain's reply, prints, exits. `--json` emits `{ directive, reply, status[, directiveStatus] }`. Refactored chat.ts to extract `submitOneDirective` helper (mint + notify + reply-poll cycle) — chat REPL loops over the helper, ask calls it once. 7 tests via the notify-injection trick (the test's notify hook either enqueues an outbound row or flips the directive's status — avoids race conditions in the polling loop).
+- **4.5** — Tab completion for bash / zsh / pwsh via `factory completion <shell>`. Static surface — 19 top-level commands + 7 nested groups. Single source of truth (`TOP_LEVEL_COMMANDS` + `NESTED_SUBCOMMANDS`) drives all three template generators. Dynamic completion (project names, directive ids) intentionally deferred — would require running `factory` inside the completion script. 9 unit tests pin the structural invariants.
+- **4.6** — Rich `--help` examples on every command via `addHelpText('after', ...)`. Top-level `factory --help` `addHelpText('afterAll', ...)` points at `docs/WORKFLOWS.md`. New help-coverage gate at `packages/cli/src/help-coverage.test.ts` (2 tests) walks the Commander tree via `cmd.outputHelp()` with a captured writer (since `helpInformation()` alone misses event-driven addHelpText content). **Sonic-boom-on-help flush race fixed** in `apps/factory/src/main.ts` via argv-sniff: help/version paths skip the async logger init so synchronous `process.exit` doesn't lose the buffered transport bind.
+- **4.7** — `packages/cli/README.md` refresh: five new rows in the subcommand table (cancel, ask, budget set, project, completion) + dedicated sections for each + a top-level Tab completion section with bash/zsh/pwsh install one-liners. Top-level intro now points at `docs/WORKFLOWS.md`.
+- **4.8** — U018 / U019 / U020 / U021 moved Open → Resolved with full Resolution lines pointing at this arc's commits. Tier 4 ROADMAP rows already ticked in per-step work commits.
+- **4.9** — `/phase-close` (this commit's structural close).
+
+**ADRs decided in Phase 4:** none. Tier 4 plan flagged three likely candidates — each landed as a sane-default decision matching the plan; recorded inline in commit bodies (4.5 static-only completion; 4.3 default-non-destructive delete with `--force`/`--purge`; 4.4 JSON shape `{directive, reply, status[, directiveStatus]}`). The relative scarcity of new ADRs across the whole arc (only 0027 / 0028 / 0029, all in Phase 3) reflects how much the 0001-0026 prior corpus already pinned.
+
+**Issues closed in Phase 4:** U018 (rich --help), U019 (tab completion), U020 (project commands), U021 (budget set). All moved Open → Resolved with full Resolution lines pointing at the per-step close commits.
+
+**Test-count delta across Phase 4:** workspace 1080 → **1135 + 3 skipped** (+55 across the phase: +15 budget, +22 project, +7 ask, +9 completion, +2 help-coverage). CLI package alone: 78 → 133.
+
+**Cumulative across the upgrade arc** (Tiers 1 → 4):
+
+- **Twenty-three issues moved Open → Resolved** — Tier 1 (U001-U003, U014-U017); Tier 2 (U004, U011-U013, U023); Tier 3 (U006-U010, U022); Tier 4 (U018-U021). UPGRADE/ISSUES.md "Open" now contains only **U005** (`factory chat` REPL turn timeout 120s — out of upgrade-arc scope; sized as future Tier 2/4 follow-up if a demand signal surfaces).
+- **Three new ADRs:** 0027 (web-ui-mutation-surface), 0028 (worker-sandbox-contract), 0029 (directive-stream-protocol — promoted past gated state at Phase 3 close).
+- **Four operator surfaces at parity for the eight-intent vocabulary:** CLI, Discord, Telegram, web dashboard. Each can build / chat / status / spend / findings / resume / cancel / budget. Live SSE wiring on the web side; tab completion + rich `--help` on the CLI side.
+- **One Astro component library** (`<Card>`, `<Table>`, `<EmptyState>`, `<Alert>`, `<Form>`, `<Field>`, `<Submit>`, `<PageShell>`); all 10 web pages converted to use it; `el()` / `loadInto()` retired from `lib/api.ts`.
+- **One shared chat protocol:** `command-handlers.ts` is the single dispatcher routing slash-prefixed reads (status / spend / findings) across Discord, Telegram, and web-chat — surfaces never drift.
+- **`/phase-close` housekeeping (this commit)** at `28c0188`: U018-U021 already moved to Resolved in 4.8; ROADMAP already ticked per-step; steps.md `[x] 4.9`; STATE.md → "all phases complete"; journal entry; carry-forward "Deferred to Phase 5" section uses the `<item>` placeholder verbatim, so no carry-forward bullets get seeded into a non-existent Phase 5 README. Annotated tag `phase-4-cli-completion-closed` at the close commit.
+
+**State of `main` at session end:**
+
+- `pnpm build` ✅
+- `pnpm test` ✅ (state 157, channels 175, daemon 173, brain 101, worker 38, worker-sandbox 86 + 3 skipped, assessor 79, wiki 74, cli **133**, providers 39, ipc 28, events 3, core 14, logger 20, worker-mcp 15. Total **1135 passing + 3 skipped**.)
+- `pnpm lint` ✅
+- `pnpm format:check` ✅
+- All four `pnpm` gates green at `/phase-close` verification.
+
+**What's next:**
+
+The upgrade arc is complete. Operator's options:
+
+1. **Open a new arc** — author a fresh `UPGRADE/plans/tier-5-<name>.md`, add a Phase 5 row to `.control/architecture/phase-plan.md`, then scaffold `.control/phases/phase-5-<name>/{README.md,steps.md}` from `.control/templates/`.
+2. **Promote a carry-forward item to a Tier-5+ ROADMAP entry** — see "Carry-forward" below; each ships as ~1 commit when authored.
+3. **Park** — surfaces are stable; nothing is gated on more work.
+
+**Carry-forward at arc-end** (none load-bearing, none gating any current work):
+
+- **Pause primitive on directive detail** — defer until a real workflow signal surfaces; cancel solved the primary "kill the build" pain. Two design options unchanged.
+- **PageShell adoption + Dashboard `<style is:global>` migration** — 11-page sweep absorbing the unstyled "Clear all defaults" + 4× filter-form Apply buttons + inline-style audit. Self-contained ~1 commit.
+- **Brain-side `log.line` forwarder** — selective pino-stream tap; ADR 0029 future-work item.
+- **Chat-page click-test** — 30-second smoke; final piece of Phase 3.5's pre-existing baseline.
+- **U005** — `factory chat` 120 s turn timeout (extend or replace with streaming).
+- **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 self-reference drift (now **11 occurrences**).
+
+**Auto-mode session shape worth recording.** This session ran in auto mode after one initial "proceed" — three steps closed in sequence (4.7 README + 4.8 issues + /phase-close) including the destructive-feeling annotated tag. The runbook clarity made it safe: each step had explicit acceptance criteria, the gates were re-verified at the right boundaries, and the close commit's done-criteria check was 11/11 before tagging. The pattern works for end-of-arc steps where the cursor is mechanical; it would not have been right for any step that needed operator judgement (a new ADR, a UX call, a destructive cleanup). Documented for future arc finales.
+
+---
+
 ## 2026-05-06 — Phase 3 (web-ui) closed; Phase 4 (cli-completion) kicked off
 
 `/phase-close` ran on the Phase 3 work. All ten sub-steps shipped across the prior multi-session arc (3.1 → 3.10); 3.11 was `/phase-close` itself. Tagged `phase-3-web-ui-closed` (annotated) at the close commit. Phase 4 (cli-completion) scaffolded.
