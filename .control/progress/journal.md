@@ -2,7 +2,16 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
-## 2026-05-06 (latest) — Phase 3 closed (tag: `phase-3-web-ui-closed`); Phase 4 (cli-completion) kicked off
+## 2026-05-06 (latest) — Session end after Phase 3 close
+
+- Single-purpose session: ran `/phase-close` on the Phase 3 (web-ui) work that the prior session left ready (steps 3.1 → 3.10 all closed; 3.11 was `/phase-close` itself).
+- Verification surfaced one gap: issues U006-U010 + U022 were still in ISSUES.md "Open" — folded the resolution-marking into the close commit alongside the structural close work.
+- Phase 3 closed cleanly: tag `phase-3-web-ui-closed` (annotated) at `5fbcfb1`. Phase 4 (cli-completion) scaffolded.
+- One Prettier hiccup during verification: ADR 0029's edits needed a `prettier --write` reflow for table column alignment; reformatted in-place, format:check then clean.
+- All four `pnpm` gates green at /phase-close verification. Workspace test count unchanged at 1080 + 3 skipped.
+- Working tree clean post-close. This session-end commit will create the 9th occurrence of the documented post-session-end self-reference lag-by-1 (STATE.md will reference `5fbcfb1` while HEAD moves to the session-end commit).
+
+## 2026-05-06 — Phase 3 closed (tag: `phase-3-web-ui-closed`); Phase 4 (cli-completion) kicked off
 
 - `/phase-close` ran on Phase 3 work. All ten sub-steps shipped (3.1 → 3.10); 3.11 was `/phase-close` itself.
 - Six issues moved Open → Resolved in `UPGRADE/ISSUES.md` (U006, U007, U008, U009, U010, U022) — all Tier 3 web-UI issues now in the Resolved section.

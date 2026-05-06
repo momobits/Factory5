@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-06 13:05 UTC by `/phase-close` (Phase 3 closed; Phase 4 kicked off)
+**Last updated:** 2026-05-06 13:30 UTC by `/session-end` (post phase-3 close + phase-4 kickoff scaffolds; HEAD at the phase-close commit; this session-end's docs commit will create the documented lag-by-1, ninth occurrence)
 **Current phase:** 4 — cli-completion
 **Current step:** 4.1 — Verify `factory cancel <directive-id>` CLI surface end-to-end (or roll directly into 4.2 if 4.1 is verify-only — operator's call at session start)
 **Status:** ready (clean working tree post phase-close commit; all four `pnpm` gates green; workspace test count 1080 + 3 skipped at phase-3 close baseline)
@@ -27,9 +27,9 @@ Begin Phase 4 (cli-completion). Read [`../phases/phase-4-cli-completion/README.m
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `<phase-3-close commit sha — runbook lag-by-1 expected>` — chore(phase-3): close phase 3, kick off phase 4
-- **Uncommitted changes:** none (clean post phase-close commit; the 9th occurrence of the documented post-session-end self-reference lag-by-1 will land at next `/session-end`)
-- **Last phase tag:** `phase-3-web-ui-closed` (annotated tag at the close commit) — supersedes `phase-2-channel-parity-closed`
+- **Last commit:** `5fbcfb1` — chore(phase-3): close phase 3, kick off phase 4
+- **Uncommitted changes:** none (clean post phase-close commit; this session-end's `docs(state)` commit will create the 9th occurrence of the documented post-session-end self-reference lag-by-1 — STATE.md will then reference `5fbcfb1` while HEAD will point at the session-end commit)
+- **Last phase tag:** `phase-3-web-ui-closed` (annotated tag at `5fbcfb1`) — supersedes `phase-2-channel-parity-closed`
 
 ---
 
@@ -73,7 +73,7 @@ Carry-forward items outside the work cursor (none block 4.x):
 
 ## Recently completed (last 5 steps)
 
-- Phase 3 close — `chore(phase-3)`: close phase 3, kick off phase 4. Tagged `phase-3-web-ui-closed` at the close commit. Resolved issues U006, U007, U008, U009, U010, U022 in `UPGRADE/ISSUES.md` with full Resolution lines pointing at the closing commit per step. Promoted ADR 0029 past gated state — Live verification table shows ✅ for all six event types; the `finding.created` caveat paragraph and `finding.created live verification gap` Negative-consequence bullet retired; future-work list trimmed to active items. Phase 3 README's Deferred section populated with three carry-forward items + ADRs decided section filled in (0027 / 0028 / 0029). Phase 4 scaffolded at `.control/phases/phase-4-cli-completion/{README.md,steps.md}` with goal / outcome / sub-step list filled from `phase-plan.md` Phase 4 entry + tier-4 plan; carry-forward block seeded into Phase 4 README's "Why this phase exists". STATE.md → Phase 4. — 2026-05-06 — `<close-commit-sha>`
+- Phase 3 close — `chore(phase-3)`: close phase 3, kick off phase 4. Tagged `phase-3-web-ui-closed` (annotated) at the close commit. Resolved issues U006, U007, U008, U009, U010, U022 in `UPGRADE/ISSUES.md` with full Resolution lines pointing at the closing commit per step. Promoted ADR 0029 past gated state — Live verification table shows ✅ for all six event types; the `finding.created` caveat paragraph and `finding.created live verification gap` Negative-consequence bullet retired; future-work list trimmed to active items. Phase 3 README's Deferred section populated with three carry-forward items + ADRs decided section filled in (0027 / 0028 / 0029). Phase 4 scaffolded at `.control/phases/phase-4-cli-completion/{README.md,steps.md}` with goal / outcome / sub-step list filled from `phase-plan.md` Phase 4 entry + tier-4 plan; carry-forward block seeded into Phase 4 README's "Why this phase exists". STATE.md → Phase 4. — 2026-05-06 — `5fbcfb1`
 - Step 3.10 close — `refactor(3.10)`: close step 3.10 — logout + connection pip live. Flipped `[x] 3.10` in `phase-3-web-ui/steps.md` and ROADMAP. — 2026-05-05 — `80b9bec`
 - Step 3.10 fix — `fix(3.10)`: surface stale-token case + name the recovery command. Operator smoke surfaced the gap: post-daemon-restart, the page's stored bearer goes stale; the heartbeat's generic 3-failure cycle was misleading because polling can't recover from 401. Short-circuit on 401 to red `disconnected` with terse "Session expired" label + verbose hover tooltip naming `factory ui-token`. ONBOARDING.md §6 troubleshooting entry extended. — 2026-05-05 — `3cecb72`
 - Step 3.10 feat — `feat(3.10)`: explicit logout + connection-status pip in header. Layout-level heartbeat (30 s poll on `/api/v1/status`) drives a colored pip + dual logout buttons. State machine green/amber/red with theme-independent colors; logged-out banner unhides on `?logged-out=1`. — 2026-05-05 — `d544192`
