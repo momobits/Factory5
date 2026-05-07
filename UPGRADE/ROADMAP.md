@@ -86,11 +86,11 @@ Plan: [`plans/tier-5-agent-prompts.md`](plans/tier-5-agent-prompts.md)
 
 Audit all 12 skills in `skills/` against factory5 reality (current ADRs, current code paths, current marker grammars). Rewrite skills where factory2-era assumptions contradict shipped state; drop the "ported from factory2" provenance language once factory5-native. Plus: wire a brain-side parser for the fixer agent's `RESOLUTION <FID> (FIXED|VERIFIED|WONTFIX): ...` markers so the runtime contract Tier 5 documented actually fires `updateFindingStatus`. Estimated **1–2 sessions** (single session if 6.2's audit finds 0–2 rewrites needed and 6.3 has a clean attach point).
 
-- [ ] Open U026 (skills audit) + U027 (fixer parser path)
-- [ ] `skills/` audit pass — per-skill verdict (`clean` / `hot-fix` / `rewrite`); commit body documents the 12-line classification
-- [ ] Wire `RESOLUTION` marker parser in `packages/brain/src/` → calls `updateFindingStatus(...)`; unit test with valid/malformed/ambiguous fixtures; `prompts/agents/fixer.md` updated to drop "no parser today" caveat (closes U027)
-- [ ] Per-skill rewrites (count determined by audit; one commit each)
-- [ ] `docs/SKILLS.md` — drop `Initial skills ported from factory2/skills/` provenance line; apply 6.2-flagged hot-fixes (closes U026)
+- [x] Open U026 (skills audit) + U027 (fixer parser path)
+- [x] `skills/` audit pass — per-skill verdict (4 clean / 2 hot-fix / 6 rewrite); commit body documented the 12-line classification at `97c8e45`
+- [x] Wire `RESOLUTION` marker parser in `packages/worker/src/parse-resolutions.ts` → calls `updateFindingStatus(...)`; 9 unit tests; `prompts/agents/fixer.md` updated to drop "no parser today" caveat at `65729cf` (closes U027)
+- [x] Per-skill rewrites (6 alphabetical: code-review / dependency-install / error-recovery / progress-tracking / scaffolding / work-verification at `1ea2d82` / `1e5a67e` / `d7a9b7e` / `7b409ac` / `f1e1075` / `a4b51e6`)
+- [x] `docs/SKILLS.md` — dropped `Initial skills ported from factory2/skills/` provenance line; applied 6.2-flagged hot-fixes (`brainstorming`, `integration-testing`) at `e942ec7` (closes U026)
 
 Plan: [`plans/tier-6-skills-rewrites.md`](plans/tier-6-skills-rewrites.md)
 
