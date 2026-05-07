@@ -5,7 +5,7 @@
 - [x] 5.3 — `docs/ONBOARDING.md` §5.4 — replace "read-once" + "no project creation" claims with current state (SSE-live, `/app/projects/new` exists)
 - [x] 5.4 — `prompts/agents/reviewer.md` — write factory5-native body (verify FINDING parser source-stamp + advisory tagging in `packages/brain/src/findings/` first)
 - [x] 5.5 — `prompts/agents/fixer.md` — write factory5-native body (verify `markFinding` parser branch first; commit type may re-scope from `docs` to `feat`)
-- [ ] 5.6 — `prompts/agents/investigator.md` — write factory5-native body (read-only constraint with concrete OK/NOT-OK Bash examples; HYPOTHESIS / EVIDENCE / RECOMMENDED NEXT framed as operator conventions, not parser contract)
+- [x] 5.6 — `prompts/agents/investigator.md` — write factory5-native body (read-only constraint with concrete OK/NOT-OK Bash examples; HYPOTHESIS / EVIDENCE / RECOMMENDED NEXT framed as operator conventions, not parser contract)
 - [ ] 5.7 — `prompts/agents/builder.md` — flesh out factory5-native TDD body; preserve venv discipline section byte-for-byte; remove stub marker
 - [ ] 5.8 — `factory logs` — Path A implement minimal (`--component`, `--directive`, `--follow`) OR Path B retire (drop row + command); operator picks before this step starts
 - [ ] 5.9 — `/phase-close` — tag `phase-5-agent-prompts-closed`; append session entry to [`../../../UPGRADE/LOG.md`](../../../UPGRADE/LOG.md); scaffold Phase 6 if a tier-6 plan exists, otherwise re-close the upgrade arc
