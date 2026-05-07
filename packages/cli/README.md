@@ -6,27 +6,27 @@ Every `factory <cmd> --help` lists worked examples and exit codes; `factory --he
 
 ## Subcommands
 
-| Command                                                                         | Status   | Purpose                                                                       |
-| ------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------- |
-| `factory --version`                                                             | **done** | Print version                                                                 |
-| `factory answer <questionId> [text...]`                                         | **done** | Close a pending `askUser`/`escalate_blocked` question                         |
-| `factory ask "<question>" [--json] [--autonomy …]`                              | **done** | Single-shot chat — one directive, one reply, exit                             |
-| `factory budget set <project> --max-usd <n> [--max-steps <n>]`                  | **done** | Per-project budget defaults — per-field merge, matches web UI write path      |
-| `factory build <project> [--autonomy … --concurrency … --inline]`               | **done** | Delegates to factoryd if running, else inline                                 |
-| `factory cancel <directive-id> [--reason <text>]`                               | **done** | Actively cancel a directive — flip to `failed` and kill the worker            |
-| `factory chat [--autonomy …]`                                                   | **done** | Interactive REPL against factoryd (daemon must be up)                         |
-| `factory completion <bash\|zsh\|pwsh>`                                          | **done** | Emit a static tab-completion script                                           |
-| `factory daemon start\|stop\|status\|restart`                                   | **done** | Lifecycle; refuses duplicate starts via pidfile                               |
-| `factory directive mark-blocked <id> [--reason …]`                              | **done** | Flip a stuck `running` directive to `blocked` (manual recovery)               |
-| `factory doctor [--skip-call] [--skip-discord]`                                 | **done** | Provider probe + triage round-trip + optional Discord reachability probe      |
-| `factory findings list\|show\|backfill`                                         | **done** | Cross-project findings registry — list, show one, backfill from workspaces    |
-| `factory init [--discord-token … --discord-application-id … ...]`               | **done** | Writes `config.toml`; populates `[channels.discord]` when `--discord-*` given |
-| `factory project list\|show\|delete <name> [--force --purge]`                   | **done** | Per-project introspection + lifecycle (registry-aware)                        |
-| `factory questions cleanup [--since <iso-date>] [--dry-run]`                    | **done** | Mark un-answered questions on terminated directives as answered (sweep)       |
-| `factory resume <project>`                                                      | **done** | Resume the most recent build for a project                                    |
-| `factory spend [--group-by project\|directive\|day\|model] [--since/--until …]` | **done** | Cross-session spend dashboard — per-project / -directive / -day / -model      |
-| `factory status [--limit N]`                                                    | **done** | Projects + recent directives + per-directive spend                            |
-| `factory ui-token [--token-only]`                                               | **done** | Print the dashboard URL with the live `FACTORY5_UI_TOKEN`                     |
+| Command                                                                         | Status   | Purpose                                                                                                    |
+| ------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| `factory --version`                                                             | **done** | Print version                                                                                              |
+| `factory answer <questionId> [text...]`                                         | **done** | Close a pending `askUser`/`escalate_blocked` question                                                      |
+| `factory ask "<question>" [--json] [--autonomy …]`                              | **done** | Single-shot chat — one directive, one reply, exit                                                          |
+| `factory budget set <project> --max-usd <n> [--max-steps <n>]`                  | **done** | Per-project budget defaults — per-field merge, matches web UI write path                                   |
+| `factory build <project> [--autonomy … --concurrency … --inline]`               | **done** | Delegates to factoryd if running, else inline                                                              |
+| `factory cancel <directive-id> [--reason <text>]`                               | **done** | Actively cancel a directive — flip to `failed` and kill the worker                                         |
+| `factory chat [--autonomy …]`                                                   | **done** | Interactive REPL against factoryd (daemon must be up)                                                      |
+| `factory completion <bash\|zsh\|pwsh>`                                          | **done** | Emit a static tab-completion script                                                                        |
+| `factory daemon start\|stop\|status\|restart`                                   | **done** | Lifecycle; refuses duplicate starts via pidfile                                                            |
+| `factory directive mark-blocked <id> [--reason …]`                              | **done** | Flip a stuck `running` directive to `blocked` (manual recovery)                                            |
+| `factory doctor [--skip-call] [--skip-discord]`                                 | **done** | Provider probe + triage round-trip + optional Discord reachability probe                                   |
+| `factory findings list\|show\|backfill\|mark`                                   | **done** | Cross-project findings registry — list, show one, backfill from workspaces, mark a single finding's status |
+| `factory init [--discord-token … --discord-application-id … ...]`               | **done** | Writes `config.toml`; populates `[channels.discord]` when `--discord-*` given                              |
+| `factory project list\|show\|delete <name> [--force --purge]`                   | **done** | Per-project introspection + lifecycle (registry-aware)                                                     |
+| `factory questions cleanup [--since <iso-date>] [--dry-run]`                    | **done** | Mark un-answered questions on terminated directives as answered (sweep)                                    |
+| `factory resume <project>`                                                      | **done** | Resume the most recent build for a project                                                                 |
+| `factory spend [--group-by project\|directive\|day\|model] [--since/--until …]` | **done** | Cross-session spend dashboard — per-project / -directive / -day / -model                                   |
+| `factory status [--limit N]`                                                    | **done** | Projects + recent directives + per-directive spend                                                         |
+| `factory ui-token [--token-only]`                                               | **done** | Print the dashboard URL with the live `FACTORY5_UI_TOKEN`                                                  |
 
 ## `factory build <project>`
 
@@ -223,7 +223,7 @@ Window flags: `--since` and `--until` accept either a relative duration (`7d`, `
 
 Exit codes: `0` on success (an empty result set is success, not error), `2` on invalid input (bad `--group-by`, malformed `--since` / `--until`, or unknown / ambiguous `--project`).
 
-## `factory findings list|show|backfill`
+## `factory findings list|show|backfill|mark`
 
 Cross-project findings registry surface — `findings_registry` table per ADR 0021; advisory-vs-blocking gating per ADR 0018.
 
@@ -238,6 +238,8 @@ my-cli    F003  HIGH      OPEN    test-failure  tests/auth.test.ts  Login flow r
 `factory findings show <id>` accepts either `<project>/<id>` or a bare `<id>` (the latter must be unambiguous across projects — multi-project matches print a disambiguation list and exit 2). Renders Description + Resolution as wrapped blocks; `--json` emits one JSON object.
 
 `factory findings backfill` walks `<workspace>/<project>/.factory/findings.json` one level deep and upserts every finding into the registry. Idempotent on `(project_id, finding_id)`. `--workspace <path>` overrides the default `~/factory5-workspace`. `--dry-run` reports what would change without writing. Projects without `.factory/project.json` (ADR 0021) are skipped — the operator must run `factory build` once in that project to claim identity. Exit `1` if any per-project errors surfaced; `2` if the workspace itself isn't readable.
+
+`factory findings mark <id> <status>` flips a finding's status (`OPEN | FIXED | VERIFIED | WONTFIX` — case-insensitive on input). The id resolution mirrors `factory findings show`: either `<project>/<id>` for an explicit project, or a bare `<id>` that must be unambiguous (multi-project matches print the same disambiguation list `show` does). `--note <prose>` records a resolution string against the finding — the same field the agent-side `RESOLUTION` parser populates from fixer output. Output is one line: `<id> in <project>: <prevStatus> → <newStatus>`. Idempotent re-flips succeed; `resolvedAt` is set on the first transition into a terminal status and preserved across subsequent flips. Exit `2` on invalid status / not-found / ambiguous bare id; exit `1` on a runtime error (registry/on-disk drift surfaces as a thrown `updateFindingStatus`).
 
 ## `factory questions cleanup`
 

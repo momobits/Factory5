@@ -6,7 +6,12 @@ import { newId, type Finding } from '@factory5/core';
 import { findingsRegistry, openDatabase, runMigrations, type Database } from '@factory5/state';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { runFindingsBackfill, runFindingsList, runFindingsShow } from './findings.js';
+import {
+  runFindingsBackfill,
+  runFindingsList,
+  runFindingsMark,
+  runFindingsShow,
+} from './findings.js';
 
 function mkFinding(overrides: Partial<Finding> & { id: string }): Finding {
   return {
@@ -356,5 +361,131 @@ describe('runFindingsBackfill', () => {
     expect(stdout).toContain('unidentified');
     const count = db.prepare('SELECT COUNT(*) AS c FROM findings_registry').get() as { c: number };
     expect(count.c).toBe(0);
+  });
+});
+
+describe('runFindingsMark', () => {
+  let db: Database;
+  let workspace: string;
+  beforeEach(async () => {
+    db = openDatabase(':memory:');
+    runMigrations(db);
+    workspace = await mkdtemp(join(tmpdir(), 'factory5-mark-'));
+  });
+  afterEach(async () => {
+    db.close();
+    await rm(workspace, { recursive: true, force: true });
+  });
+
+  /**
+   * Set up a real per-project `.factory/findings.json` on disk plus a
+   * registry row pointing at that path. Mirrors the wiki-side
+   * `addFinding` write shape so `updateFindingStatus` can read +
+   * write the same file. Returns the on-disk projectPath so tests can
+   * assert directly against the persisted JSON when needed.
+   */
+  async function seedOnDisk(projectId: string, finding: Finding): Promise<{ projectPath: string }> {
+    const projectPath = join(workspace, projectId);
+    const factoryDir = join(projectPath, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    await writeFile(
+      join(factoryDir, 'findings.json'),
+      JSON.stringify({ nextSequence: 2, findings: [finding] }, null, 2),
+      'utf8',
+    );
+    findingsRegistry.upsert(db, {
+      projectId,
+      projectPath,
+      finding,
+      updatedAt: '2026-05-07T10:00:00.000Z',
+    });
+    return { projectPath };
+  }
+
+  it('bare id resolves and flips OPEN → FIXED', async () => {
+    await seedOnDisk('alpha', mkFinding({ id: 'F001', severity: 'HIGH' }));
+    const { stdout, exitCode } = await runFindingsMark(db, 'F001', 'FIXED', {});
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('F001 in alpha: OPEN → FIXED');
+    const row = findingsRegistry.getByProjectAndId(db, 'alpha', 'F001');
+    expect(row?.finding.status).toBe('FIXED');
+    expect(row?.finding.resolvedAt).toBeDefined();
+  });
+
+  it('<project>/<id> form succeeds even when bare id would be ambiguous', async () => {
+    await seedOnDisk('alpha', mkFinding({ id: 'F001', severity: 'HIGH' }));
+    await seedOnDisk('beta', mkFinding({ id: 'F001', severity: 'LOW' }));
+    const { stdout, exitCode } = await runFindingsMark(db, 'beta/F001', 'WONTFIX', {});
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('F001 in beta: OPEN → WONTFIX');
+    expect(findingsRegistry.getByProjectAndId(db, 'alpha', 'F001')?.finding.status).toBe('OPEN');
+    expect(findingsRegistry.getByProjectAndId(db, 'beta', 'F001')?.finding.status).toBe('WONTFIX');
+  });
+
+  it('bare id reports ambiguity and does not flip anything', async () => {
+    await seedOnDisk('alpha', mkFinding({ id: 'F001', severity: 'HIGH' }));
+    await seedOnDisk('beta', mkFinding({ id: 'F001', severity: 'LOW' }));
+    const { stdout, exitCode } = await runFindingsMark(db, 'F001', 'FIXED', {});
+    expect(exitCode).toBe(2);
+    expect(stdout).toContain('exists in 2 projects');
+    expect(stdout).toContain('Disambiguate');
+    expect(findingsRegistry.getByProjectAndId(db, 'alpha', 'F001')?.finding.status).toBe('OPEN');
+    expect(findingsRegistry.getByProjectAndId(db, 'beta', 'F001')?.finding.status).toBe('OPEN');
+  });
+
+  it('invalid status returns exitCode 2 with the legal set listed', async () => {
+    await seedOnDisk('alpha', mkFinding({ id: 'F001', severity: 'HIGH' }));
+    const { stdout, exitCode } = await runFindingsMark(db, 'F001', 'BORKED', {});
+    expect(exitCode).toBe(2);
+    expect(stdout).toContain('invalid status "BORKED"');
+    expect(stdout).toContain('OPEN | FIXED | VERIFIED | WONTFIX');
+  });
+
+  it('not found returns exitCode 2', async () => {
+    const { stdout, exitCode } = await runFindingsMark(db, 'F999', 'FIXED', {});
+    expect(exitCode).toBe(2);
+    expect(stdout).toContain('no finding with id "F999"');
+    const onProject = await runFindingsMark(db, 'ghost/F001', 'FIXED', {});
+    expect(onProject.exitCode).toBe(2);
+    expect(onProject.stdout).toContain('no finding F001 in project "ghost"');
+  });
+
+  it('--note flows through to the persisted resolution', async () => {
+    await seedOnDisk('alpha', mkFinding({ id: 'F001', severity: 'HIGH' }));
+    const { exitCode } = await runFindingsMark(db, 'F001', 'WONTFIX', {
+      note: 'duplicate of F042',
+    });
+    expect(exitCode).toBe(0);
+    const row = findingsRegistry.getByProjectAndId(db, 'alpha', 'F001');
+    expect(row?.finding.resolution).toBe('duplicate of F042');
+  });
+
+  it('case-insensitive status input renders upper-case output', async () => {
+    await seedOnDisk('alpha', mkFinding({ id: 'F001', severity: 'HIGH' }));
+    const { stdout, exitCode } = await runFindingsMark(db, 'F001', 'verified', {});
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('OPEN → VERIFIED');
+    expect(findingsRegistry.getByProjectAndId(db, 'alpha', 'F001')?.finding.status).toBe(
+      'VERIFIED',
+    );
+  });
+
+  it('idempotent re-flip succeeds and preserves resolvedAt', async () => {
+    const { projectPath } = await seedOnDisk('alpha', mkFinding({ id: 'F001', severity: 'HIGH' }));
+    const first = await runFindingsMark(db, 'F001', 'FIXED', { note: 'first' });
+    expect(first.exitCode).toBe(0);
+    const firstResolvedAt = findingsRegistry.getByProjectAndId(db, 'alpha', 'F001')?.finding
+      .resolvedAt;
+    expect(firstResolvedAt).toBeDefined();
+    const second = await runFindingsMark(db, 'F001', 'FIXED', { note: 'second' });
+    expect(second.exitCode).toBe(0);
+    expect(second.stdout).toContain('FIXED → FIXED');
+    const row = findingsRegistry.getByProjectAndId(db, 'alpha', 'F001');
+    // resolvedAt is set on first terminal transition only — re-flipping
+    // FIXED→FIXED preserves the original timestamp per the
+    // updateFindingStatus contract.
+    expect(row?.finding.resolvedAt).toBe(firstResolvedAt);
+    expect(row?.finding.resolution).toBe('second');
+    expect(projectPath.length).toBeGreaterThan(0); // sanity-check the helper
   });
 });

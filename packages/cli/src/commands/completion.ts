@@ -79,7 +79,7 @@ const NESTED_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = {
   budget: ['set'],
   daemon: ['start', 'stop', 'status', 'restart'],
   directive: ['mark-blocked'],
-  findings: ['list', 'show', 'backfill'],
+  findings: ['list', 'show', 'backfill', 'mark'],
   project: ['list', 'show', 'delete'],
   questions: ['cleanup'],
   completion: ['bash', 'zsh', 'pwsh'],

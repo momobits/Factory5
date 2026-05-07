@@ -99,11 +99,11 @@ Plan: [`plans/tier-6-skills-rewrites.md`](plans/tier-6-skills-rewrites.md)
 Ship the operator-side parallel to Tier 6's agent-side `RESOLUTION` parser. `factory findings mark <id> <status>` flips a finding's status (and optionally records a resolution note) via the same `updateFindingStatus` API the parser dispatches. Composition over existing surface — handler wraps the API, disambiguation copies `factory findings show`, tests mirror the existing findings test shape. Estimated **1 session, ~1 substantive commit**.
 
 - [x] Open U028 (`factory findings mark <id> <status>` CLI verb missing)
-- [ ] Implement `runFindingsMark(db, rawId, rawStatus, opts)` in `packages/cli/src/commands/findings.ts` — wraps `updateFindingStatus`; bare-id disambiguation copies `runFindingsShow`; `--note <prose>` flows to `resolution`
-- [ ] Wire `group.command('mark <id> <status>')` with `addHelpText('after', ...)` worked examples
-- [ ] Unit tests in `findings.test.ts` (happy path / invalid status / ambiguous bare-id / not-found / `<project>/<id>` form / with `--note` / idempotent re-flip)
-- [ ] Update `packages/cli/src/commands/completion.ts` `NESTED_SUBCOMMANDS` (add `mark` to the `findings` row) + `packages/cli/README.md` findings table
-- [ ] Sweep `prompts/agents/fixer.md` for any "no operator CLI" phrasing left over from pre-7.2 reality
+- [x] Implement `runFindingsMark(db, rawId, rawStatus, opts)` in `packages/cli/src/commands/findings.ts` — wraps `updateFindingStatus`; bare-id disambiguation copies `runFindingsShow`; `--note <prose>` flows to `resolution`
+- [x] Wire `group.command('mark <id> <status>')` with `addHelpText('after', ...)` worked examples
+- [x] Unit tests in `findings.test.ts` (happy path / invalid status / ambiguous bare-id / not-found / `<project>/<id>` form / with `--note` / idempotent re-flip)
+- [x] Update `packages/cli/src/commands/completion.ts` `NESTED_SUBCOMMANDS` (add `mark` to the `findings` row) + `packages/cli/README.md` findings table
+- [x] Sweep `prompts/agents/fixer.md` for any "no operator CLI" phrasing left over from pre-7.2 reality
 
 Plan: [`plans/tier-7-findings-mark.md`](plans/tier-7-findings-mark.md)
 

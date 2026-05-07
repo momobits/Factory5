@@ -1,6 +1,6 @@
 /**
  * `factory findings …` — cross-project findings registry surface
- * (Phase 6a). Today's subcommands:
+ * (Phase 6a). Subcommands:
  *
  *   factory findings list
  *     [--severity LOW|MEDIUM|HIGH|CRITICAL]
@@ -18,6 +18,10 @@
  *     [--workspace <path>]                         (default: ~/factory5-workspace)
  *     [--dry-run]
  *
+ *   factory findings mark <project>/<id> <status>
+ *   factory findings mark <id> <status>            (if unambiguous; Tier 7)
+ *     [--note <prose>]
+ *
  * Tabular by default; `--json` emits NDJSON (list) or a single JSON
  * object (show). `--project` accepts a bare name (exact match) or a
  * glob with `*` / `?` wildcards (translated to SQL LIKE).
@@ -25,6 +29,10 @@
  * The backfill subcommand walks `<workspace>/<project>/.factory/findings.json`
  * one level deep and upserts each finding into the registry — idempotent
  * by the composite PK `(project_id, finding_id)`.
+ *
+ * The mark subcommand is the operator-side parallel to Tier 6 step 6.3's
+ * agent-side `RESOLUTION` parser — it wraps the same `updateFindingStatus`
+ * API the parser dispatches.
  *
  * Testability: each subcommand's logic is a pure async `run*` function
  * that takes a `Database` + opts and returns `{ stdout, exitCode }`.
@@ -49,7 +57,12 @@ import {
   type FindingsRegistryEntry,
   type FindingsRegistryListFilter,
 } from '@factory5/state';
-import { ProjectMetadataCorruptError, readProjectMetadata } from '@factory5/wiki';
+import {
+  ProjectMetadataCorruptError,
+  readProjectMetadata,
+  updateFindingStatus,
+  type FindingRegistryBinding,
+} from '@factory5/wiki';
 import type { Command } from 'commander';
 
 const log = createLogger('cli.findings');
@@ -80,6 +93,10 @@ export interface ShowCommandOptions {
 export interface BackfillCommandOptions {
   workspace?: string;
   dryRun?: boolean;
+}
+
+export interface MarkCommandOptions {
+  note?: string;
 }
 
 const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
@@ -326,6 +343,84 @@ export function runFindingsShow(
     stdout: opts.json === true ? renderShowJson(only) : renderFindingDetail(only),
     exitCode: 0,
   };
+}
+
+/**
+ * `factory findings mark <id> <status>` handler. Wraps
+ * {@link updateFindingStatus} from `@factory5/wiki` — the same API the
+ * agent-side `RESOLUTION` parser dispatches (Tier 6 step 6.3). Resolves
+ * `<id>` the same way `runFindingsShow` does: `<project>/<id>` form takes
+ * the explicit project; bare `<id>` must be unambiguous across the
+ * registry. Status normalization is case-insensitive on input; rendered
+ * output uses upper-case to match the rest of the surface.
+ *
+ * `--note <prose>` flows through to `resolution`, mirroring how the
+ * parser populates it from `RESOLUTION` marker prose.
+ *
+ * Exit codes: `0` success, `1` runtime error (registry/on-disk drift —
+ * `updateFindingStatus` throws on a missing finding-id row in
+ * `findings.json` even when the registry says otherwise), `2` invalid
+ * status / not-found / ambiguous-bare-id.
+ */
+export async function runFindingsMark(
+  db: Database,
+  rawId: string,
+  rawStatus: string,
+  opts: MarkCommandOptions,
+): Promise<HandlerResult> {
+  const status = rawStatus.toUpperCase();
+  if (!isStatus(status)) {
+    return {
+      stdout: `factory findings mark: invalid status "${rawStatus}" — expected one of: ${STATUSES.join(' | ')}\n`,
+      exitCode: 2,
+    };
+  }
+  const { projectId, findingId } = splitShowArg(rawId);
+
+  let entry: FindingsRegistryEntry;
+  if (projectId !== undefined) {
+    const found = findingsRegistry.getByProjectAndId(db, projectId, findingId);
+    if (found === undefined) {
+      return {
+        stdout: `factory findings mark: no finding ${findingId} in project "${projectId}"\n`,
+        exitCode: 2,
+      };
+    }
+    entry = found;
+  } else {
+    const matches = findingsRegistry.findByFindingId(db, findingId);
+    if (matches.length === 0) {
+      return {
+        stdout: `factory findings mark: no finding with id "${findingId}"\n`,
+        exitCode: 2,
+      };
+    }
+    if (matches.length > 1) {
+      return { stdout: renderAmbiguity(findingId, matches), exitCode: 2 };
+    }
+    entry = matches[0]!;
+  }
+
+  const prevStatus = entry.finding.status;
+  const registry: FindingRegistryBinding = { db, projectId: entry.projectId };
+  try {
+    const updated = await updateFindingStatus(
+      entry.projectPath,
+      entry.finding.id,
+      status,
+      opts.note,
+      registry,
+    );
+    return {
+      stdout: `${updated.id} in ${entry.projectId}: ${prevStatus} → ${updated.status}\n`,
+      exitCode: 0,
+    };
+  } catch (err) {
+    return {
+      stdout: `factory findings mark: ${(err as Error).message}\n`,
+      exitCode: 1,
+    };
+  }
 }
 
 /**
@@ -611,6 +706,31 @@ Examples:
     )
     .action((rawId: string, opts: ShowCommandOptions) => {
       const result = runWithDb((db) => runFindingsShow(db, rawId, opts)) as HandlerResult;
+      stdout.write(result.stdout);
+      if (result.exitCode !== 0) exit(result.exitCode);
+    });
+
+  group
+    .command('mark <id> <status>')
+    .description(
+      'flip a finding status (OPEN|FIXED|VERIFIED|WONTFIX). <id> is "<project>/F001" or bare "F001" (must be unambiguous)',
+    )
+    .option('--note <prose>', "resolution note (recorded as the finding's `resolution` string)")
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory findings mark my-app/F001 FIXED
+  factory findings mark F001 WONTFIX --note "duplicate of F042"
+  factory findings mark F003 verified                    # status is case-insensitive
+
+Exit codes: 0 success, 1 runtime error (registry/on-disk drift), 2 invalid status / not found / ambiguous bare id.
+`,
+    )
+    .action(async (rawId: string, rawStatus: string, opts: MarkCommandOptions) => {
+      const result = (await runWithDb((db) =>
+        runFindingsMark(db, rawId, rawStatus, opts),
+      )) as HandlerResult;
       stdout.write(result.stdout);
       if (result.exitCode !== 0) exit(result.exitCode);
     });
