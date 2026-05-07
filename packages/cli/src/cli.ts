@@ -22,7 +22,6 @@ import { registerQuestionsCommand } from './commands/questions.js';
 import { registerResumeCommand } from './commands/resume.js';
 import { registerSpendCommand } from './commands/spend.js';
 import { registerStatusCommand } from './commands/status.js';
-import { registerStubCommands } from './commands/stubs.js';
 import { registerUiTokenCommand } from './commands/ui-token.js';
 
 export interface BuildCliOptions {
@@ -72,7 +71,6 @@ Tab completion:
   registerResumeCommand(program);
   registerSpendCommand(program);
   registerStatusCommand(program);
-  registerStubCommands(program);
   registerUiTokenCommand(program);
 
   return program;

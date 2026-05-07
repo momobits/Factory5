@@ -78,7 +78,7 @@ Build new (not ported) factory5-native bodies for the 3 pure stub agent prompts 
 - [x] `prompts/agents/fixer.md` — write factory5-native body (verify `markFinding` parser branch first; may re-scope to `feat`)
 - [x] `prompts/agents/investigator.md` — write factory5-native body (read-only constraint with concrete examples; structural conventions, not parser contract)
 - [x] `prompts/agents/builder.md` — flesh out factory5-native body (preserve Python venv discipline byte-for-byte)
-- [ ] `factory logs` — implement minimal _or_ retire (operator's call before 5.8 starts)
+- [x] `factory logs` — implement minimal _or_ retire (operator's call before 5.8 starts)
 
 Plan: [`plans/tier-5-agent-prompts.md`](plans/tier-5-agent-prompts.md)
 

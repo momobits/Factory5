@@ -67,7 +67,6 @@ const TOP_LEVEL_COMMANDS: readonly string[] = [
   'doctor',
   'findings',
   'init',
-  'logs',
   'project',
   'questions',
   'resume',

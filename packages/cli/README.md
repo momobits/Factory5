@@ -27,7 +27,6 @@ Every `factory <cmd> --help` lists worked examples and exit codes; `factory --he
 | `factory spend [--group-by project\|directive\|day\|model] [--since/--until …]` | **done** | Cross-session spend dashboard — per-project / -directive / -day / -model      |
 | `factory status [--limit N]`                                                    | **done** | Projects + recent directives + per-directive spend                            |
 | `factory ui-token [--token-only]`                                               | **done** | Print the dashboard URL with the live `FACTORY5_UI_TOKEN`                     |
-| `factory logs [--component] [--directive] [--follow]`                           | stub     | Placeholder — prints a hint pointing at `~/.factory5/logs/`                   |
 
 ## `factory build <project>`
 
