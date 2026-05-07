@@ -6,6 +6,82 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-07 — Phase 5 (agent-prompts) closed; upgrade arc complete (again, post-Tier-5 audit pass)
+
+`/phase-close` ran on the Phase 5 work. All nine sub-steps shipped (5.1 → 5.8 in this session, plus the 5.9 close). Tagged `phase-5-agent-prompts-closed` (annotated) at the close commit. **No Phase 6 scaffolded** — `phase-plan.md` defines no Phase 6 entry; the upgrade arc is complete (again) post Tier 5's audit-driven addendum. STATE.md transitions back to "all phases complete".
+
+**Why a Tier 5 was needed at all:** post-Tier-4 audit (2026-05-07) surfaced three categories of staleness in the codebase:
+
+1. **Three pure stub agent prompts ship to the model on every directive** — `prompts/agents/reviewer.md`, `fixer.md`, `investigator.md` were 10-line files with `> **Phase 1 stub. Body to be ported from factory2…**` markers. The brain dispatched the agent's role on a 10-line prompt; the deficient roles do real work in some directive shapes (multi-builder fix passes, novel-problem investigations).
+2. **One hybrid lied about itself** — `builder.md` had substantive Python venv discipline (load-bearing for I007 host-pollution prevention) but still flagged itself as a "Phase 1 stub". A reader hit the marker and assumed the file was empty.
+3. **Two stale doc claims compounded discoverability** — `prompts/agents/README.md` falsely flagged all 9 prompts as "stub" (5 are substantive); `docs/ONBOARDING.md` §5.4 claimed detail pages are read-once + projects can't be created from the SPA — both shipped past in Tier 3 (SSE on `/api/v1/directives/:id/stream`; `/app/projects/new` route).
+
+Plus one carry-over: `factory logs` had shipped as a "stub that prints a hint" since Phase 1 of the original arc.
+
+User directive at session start: **"build new for factory5, don't port from factory2."**
+
+**What shipped in Phase 5** (cumulative across the single-session arc):
+
+- **5.1** — Opened U024 (`prompts/agents/README.md` status table is stale) + U025 (`docs/ONBOARDING.md` §5.4 read-once + project-creation-out-of-scope claims are stale post-Tier-3) in `UPGRADE/ISSUES.md`. Both had Hypothesis lines pointing at the planned remediation. Commit: `chore(5.1): open U024 + U025` at `8fb3b29`.
+- **5.2** — Dropped the stale Status column from `prompts/agents/README.md`; replaced with `File | Role | Purpose` (one-line role descriptions sourced verbatim from `docs/AGENTS.md` so the two docs can't drift). Dropped the "Phase 1 work" trailer. Folded legacy/ rows into a single explanatory paragraph below the table. Closes U024. Commit: `docs(5.2): prompts/agents/README.md — drop stale stub-tracking column` at `e08f062`.
+- **5.3** — Re-titled `docs/ONBOARDING.md` §5.4 from "Today's limitations" to "Live updates + write-mode" (the section now describes capability rather than gaps). Confirmed SSE live updates with the 15s `:keepalive` heartbeat + connect-time backfill + polling fallback (cites ADR 0029). Confirmed full write-mode (build / projects/new / projects/detail budget edit / questions/detail answer / chat) with ADR 0027 reference. Added missing rows to §5.3's page tour table (`/app/chat/`, `/app/projects/new/`); tagged `directives/detail` as SSE-live. Three follow-up flags surfaced (§6.4 polling-fetch reference; §6.1 stale Tier-2-or-4 hint about U005; ADR 0027 §1 doesn't pin POST `/api/v1/projects`). Closes U025. Commit: `docs(5.3): docs/ONBOARDING.md §5.4 — drop read-once claim post-Tier-3` at `27dc6c7`.
+- **5.4** — Wrote `prompts/agents/reviewer.md` from scratch (factory5-native, ~156 lines after prettier). Pre-write homework verified the runtime contract: reviewer findings flow as **blocking** by default per `packages/wiki/src/findings.ts:130`'s `resolveAdvisory` (auto-defaults `advisory: true` only for `source: 'verifier'`). Operational caveat captured: brain's `hadFailures` (`packages/brain/src/loop.ts:435-438`) is gated on assessor `gate.verify` + task exit codes, not finding count, so "blocking" is operator-visibility distinction rather than auto-stop. Adversarial framing + shadow-test affordance + anti-noise gate + severity-evidence-floor table all pinned. Runtime contract pins: marker grammar via `packages/worker/src/parse-findings.ts`; source-string auto-stamped at `run-worker.ts:203`. Tools envelope pinned (Read/Write/Glob/Grep — no Edit, no Bash). No ADR 0030 needed. Commit: `docs(5.4): prompts/agents/reviewer.md — write factory5-native body` at `21bf980`.
+- **5.5** — Wrote `prompts/agents/fixer.md` from scratch (factory5-native, ~158 lines after prettier). Pre-write homework grep-verified that **no agent-output → `updateFindingStatus` parser path exists** anywhere in `packages/brain/src/` or `packages/worker/src/`. Wiki API exists at `findings.ts:196` (only invoked from tests); no CLI `factory findings mark` command. Branch 3 chosen (prose-only); commit type stayed `docs(5.5)`. `RESOLUTION <FID> (FIXED|VERIFIED|WONTFIX)` marker grammar pinned as future-parser lock-on shape (Tier 6 candidate). Finding-by-ID intake contract pinned (cites ADR 0021 cross-project addressing); file-ownership scope rule pinned (target glob is the boundary; `ask_user` required to widen). Commit: `docs(5.5): prompts/agents/fixer.md — write factory5-native body (branch 3, prose-only)` at `839c2c1`.
+- **5.6** — Wrote `prompts/agents/investigator.md` from scratch (factory5-native, ~140 lines after prettier). Read-only constraint pinned with concrete OK / NOT-OK Bash example lists (the load-bearing sections of the prompt). HYPOTHESIS / EVIDENCE / RECOMMENDED NEXT framed as operator-readable conventions (not parsed); the brain has no parser today, but the marker grammar is what a future parser would lock onto. RECOMMENDED NEXT vocabulary pinned (`fixer <project>/<finding-id>` / `architect` / `none — false alarm` / `more investigation needed`). Tools envelope pinned (Read/Glob/Grep/Bash + ask_user; no Write/Edit). Commit: `docs(5.6): prompts/agents/investigator.md — write factory5-native body` at `ae47147`.
+- **5.7** — Fleshed out `prompts/agents/builder.md` (factory5-native, ~185 lines after prettier; comparable to scaffolder 178 / planner 197). **CRITICAL preservation**: the existing Python venv discipline section (load-bearing for I007 host-pollution defence) preserved byte-for-byte, verified via `git diff | grep ^-` showing only 4 removed lines (3 from old frontmatter description + the stub marker). New TDD body added on top (six-step Red-Green-Refactor cycle with builder-specific framing); file ownership scope pinned (planner's `expectedOutputs.files[]` as boundary, `expectedOutputs.signals[]` as done-criterion); BUILD.md prohibition preserved verbatim; "Findings — you cite, you do not raise" rule explicit (builder has Write but shouldn't use it for finding emission). Commit: `docs(5.7): prompts/agents/builder.md — flesh out factory5-native body` at `005e75b`.
+- **5.8** — Path B (retire) chosen for `factory logs` per plan default + auto-mode "make reasonable assumptions". Deleted `packages/cli/src/commands/stubs.ts` (single-purpose file containing only the logs stub). Removed `registerStubCommands` import + call from `packages/cli/src/cli.ts`. Dropped the row from `packages/cli/README.md` (the table now contains zero stub rows). Dropped `'logs'` from `packages/cli/src/commands/completion.ts`'s top-level command vocab. ADR 0002 footnote about `factory logs` (Consequences §) flagged but unedited (CLAUDE.md "do not edit accepted ADRs in `docs/decisions/` — supersede with a new one"; superseding for one footnote is over-engineering). All four `pnpm` gates green post-deletion (build / test 13 packages all passing / lint / format:check). The help-coverage test (`packages/cli/src/help-coverage.test.ts`) walks the Commander tree dynamically and shrunk by one leaf without changes. Commit: `chore(5.8): retire factory logs stub` at `59a684f`.
+- **5.9** — `/phase-close` (this commit's structural close).
+
+**ADRs decided in Phase 5:** none. Pre-write homework for 5.4 (reviewer findings policy) + 5.5 (fixer parser path) both confirmed unambiguous runtime contracts — no ADR 0030 was needed. Cumulative ADR count for the upgrade arc remains **three** (0027 / 0028 / 0029 — all decided in Phase 3).
+
+**Issues closed in Phase 5:** U024 + U025 (both opened by 5.1, closed by 5.2 + 5.3 respectively). Sha-backfill for both resolution lines landed in this phase-close commit (per Tier 5 plan §5.2/§5.3 acceptance: "marked Resolved with this commit's sha"; the lag-by-1 self-reference convention deferred sha backfill from the work commits to /phase-close).
+
+**Test-count delta across Phase 5:** workspace held at **1135 + 3 skipped** throughout. 5.1–5.3 were doc-only; 5.4–5.7 were markdown-only (no test files); 5.8 deleted untested code (the stub command had no tests of its own).
+
+**Cumulative across the upgrade arc** (Tiers 1 → 5):
+
+- **Twenty-five issues moved Open → Resolved** — Tier 1 (U001-U003, U014-U017); Tier 2 (U004, U011-U013, U023); Tier 3 (U006-U010, U022); Tier 4 (U018-U021); Tier 5 (U024, U025). UPGRADE/ISSUES.md "Open" now contains only **U005** again (`factory chat` REPL turn timeout 120s — out-of-arc; the resolution-text "Tier 2 or 4. Pair with the chat surface work." is now stale since both shipped without addressing it; re-tier candidate for Tier 6).
+- **Three new ADRs across the arc:** 0027 / 0028 / 0029 (all from Phase 3). Phase 4 and Phase 5 added zero — the runtime contracts in question were already pinned by 0001-0026 + the three Phase 3 ADRs.
+- **All nine active agent prompts factory5-native:** triage, architect, planner, scaffolder, verifier (substantive pre-Tier-5); reviewer, fixer, investigator (written from scratch in 5.4–5.6); builder (fleshed out in 5.7 with venv preservation). The `prompts/agents/README.md` table now reflects reality.
+- **One CLI command retired** as part of the audit-driven cleanup (`factory logs`, Tier 5 step 5.8). The CLI README's stub column is gone.
+
+**State of `main` at session end:**
+
+- `pnpm build` ✅
+- `pnpm test` ✅ (1135 passing + 3 skipped; 13 packages green; per-package counts unchanged from end-of-Phase-4)
+- `pnpm lint` ✅
+- `pnpm format:check` ✅
+- All four `pnpm` gates re-verified at /phase-close.
+
+**What's next:**
+
+The upgrade arc is complete (again). Operator's options:
+
+1. **Open Tier 6 — skills review + rewrites** (the strongest candidate). All 12 skills in `skills/` are explicitly "ported from factory2/skills/" per `docs/SKILLS.md`. Tier 5's 5.4–5.7 prompt rewrites referenced 6 of those skills (`tdd`, `code-review`, `error-recovery`, `ask-user`, `progress-tracking`, `work-verification`) without surfacing hot-fix-worthy drift; an audit-only pass might confirm they're clean, or might surface drift that warrants rewrites. Sized as 1–2 sessions per `UPGRADE/plans/tier-5-agent-prompts.md` Out-of-scope section. Companion candidate: wire the `fixer→updateFindingStatus` parser path that Tier 5's 5.5 confirmed doesn't exist.
+2. **Promote a carry-forward item** — see `STATE.md` "In-flight work" + the carry-forward list below.
+3. **Park** — surfaces are stable; nothing is gated on more work.
+
+**Carry-forward at arc-end** (none load-bearing, none gating any current work):
+
+- **`fixer→updateFindingStatus` parser path** — Tier 6 companion to skills review; would give the operator/CLI a real "mark FIXED" verb without manual `findings.json` edits.
+- **U005 chat 120s timeout re-tier** — affects channel-chat UX directly; "Tier 2 or 4" resolution text is now stale.
+- **§6.4 ONBOARDING.md "SPA's polling fetch" reference** — chat.astro consumes SSE today; mildly stale, not load-bearing.
+- **ADR 0027 §1 doesn't pin POST `/api/v1/projects`** — ADR-amend candidate; doc-debt only.
+- **ADR 0002 footnote about `factory logs`** — supersede-with-new-ADR candidate; over-engineering for one footnote.
+- **Pause primitive on directive detail** — defer-until-signal.
+- **PageShell + Dashboard `<style is:global>` migration** — 11-page sweep; ~1 commit when authored.
+- **Brain-side `log.line` forwarder** — selective pino-stream tap; ADR 0029 future-work.
+- **Pre-3.5 baseline live-smoke chat-page click-test** — 30s click-test deferred during Phase 3.10 close.
+- **Smoke residue:** `node-sse-smoke` + `smoke-demo` projects in workspace.
+- **Filter-form Apply buttons + "Clear all defaults"** — absorbed by deferred PageShell migration.
+- **Inline `style=` attributes** scattered across web pages — same migration absorbs these.
+- **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
+- **`/session-end` skill structural fix** for the lag-by-1 — now **14 occurrences** with this phase-close commit. Two structural options unchanged.
+
+**Tier 5 in retrospect:** clean execution of an audit-driven addendum to a "complete" arc. 8 work commits in one session + 1 phase-close commit. ~1100 lines added. All 4 `pnpm` gates green throughout. Pre-write homework saved 1–2 ADRs by confirming runtime contracts were already unambiguous. The "build new for factory5, don't port from factory2" directive held — every prompt cites current ADRs (0018, 0021, 0024, 0027, 0028, 0029) + skills (`tdd`, `code-review`, `error-recovery`, `ask-user`, `progress-tracking`, `work-verification`) by name; no factory2 references in any prompt body. The audit pattern itself is reusable: post-arc audits will likely surface similar staleness in any future tier closure, so a periodic Tier-N+1 audit-driven cleanup is a defensible cadence.
+
+---
+
 ## 2026-05-06 — Phase 4 (cli-completion) closed; **factory5 first-class upgrade arc complete**
 
 `/phase-close` ran on the Phase 4 work. All nine sub-steps shipped (4.1 → 4.8 in this and the prior session, plus this 4.9 close). Tagged `phase-4-cli-completion-closed` (annotated) at `28c0188`. **No Phase 5 scaffolded — `phase-plan.md` defines only four phases (doc-sweep / channel-parity / web-ui / cli-completion); the upgrade arc is complete.** STATE.md transitions to "all phases complete".
