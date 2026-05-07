@@ -1,9 +1,14 @@
 # Phase 6 Steps
 
 - [x] 6.1 — Open U026 (`skills/* — 12 ported-from-factory2 skills with no factory5 audit`) + U027 (`Fixer agent output → updateFindingStatus has no parser path`) in [`../../../UPGRADE/ISSUES.md`](../../../UPGRADE/ISSUES.md). ROADMAP rows + phase scaffold pre-authored at scaffold time
-- [ ] 6.2 — Skills audit pass: classify each of the 12 skills as `clean` / `hot-fix` / `rewrite`; commit body documents per-skill verdict; this plan + steps.md updated with explicit per-skill rewrite rows in 6.4..6.N
+- [x] 6.2 — Skills audit pass: classify each of the 12 skills as `clean` / `hot-fix` / `rewrite`; commit body documents per-skill verdict; this plan + steps.md updated with explicit per-skill rewrite rows in 6.4..6.9
 - [ ] 6.3 — Wire `RESOLUTION <FID> (FIXED|VERIFIED|WONTFIX)` marker parser in `packages/brain/src/`; calls `updateFindingStatus(...)` on match; unit test with valid + malformed + ambiguous fixtures; `prompts/agents/fixer.md` updated to drop "no parser today" caveat; closes U027
-- [ ] 6.4..6.N — Per-skill rewrites (count + targets determined by 6.2). Each is its own commit. Frontmatter preserved; body factory5-native; no `factory2` references
+- [ ] 6.4 — `skills/code-review.md` rewrite: drop BUILD.md output surface; replace CRITICAL/WARNING/INFO with `FINDING [LOW|MEDIUM|HIGH|CRITICAL]` grammar matching `pool.ts:111-132` + Tier 5 5.4 reviewer.md; reference ADR 0018 advisory framing
+- [ ] 6.5 — `skills/dependency-install.md` rewrite: drop BUILD.md decision-persistence; switch TypeScript to `pnpm`; drop `--break-system-packages` (venv handles isolation); reference ADR 0026 runtime-agnostic framing
+- [ ] 6.6 — `skills/error-recovery.md` rewrite: drop 3 BUILD.md persistence references; use `HYPOTHESIS / EVIDENCE / RECOMMENDED NEXT` per Tier 5 5.6 investigator + `RESOLUTION <FID>` per Tier 5 5.5 fixer; reference ADR 0024 escalation + ADR 0028 sandbox boundary
+- [ ] 6.7 — `skills/progress-tracking.md` rewrite: ground-up re-frame (currently entirely BUILD.md-centric). Builders emit signals per `expectedOutputs.signals[]`; planners read findings_registry; reference ADR 0021
+- [ ] 6.8 — `skills/scaffolding.md` rewrite: drop BUILD.md scaffolding step; drop `--break-system-packages`; expand TypeScript section (pnpm workspace, tsup/tsc, vitest, ESLint flat); reference ADR 0026 + ADR 0028
+- [ ] 6.9 — `skills/work-verification.md` rewrite: drop `FACTORY_COMPLETE` legacy token; reframe checks as findings (advisory per ADR 0018) emitted to the brain; cross-ref Tier 5 5's verifier.md
 - [ ] 6.last — Drop "Initial skills ported from factory2/skills/" line from `docs/SKILLS.md`; apply 6.2-flagged hot-fixes in a single commit; closes U026
 - [ ] 6.close — `/phase-close` — tag `phase-6-skills-rewrites-closed`; append session entry to [`../../../UPGRADE/LOG.md`](../../../UPGRADE/LOG.md); scaffold Phase 7 if a tier-7 plan exists, otherwise re-close the upgrade arc
 
@@ -37,19 +42,53 @@ Per [`../../../UPGRADE/plans/tier-6-skills-rewrites.md`](../../../UPGRADE/plans/
 
 **Commit:** `feat(6.3): wire fixer→updateFindingStatus parser`
 
-### 6.4..6.N — Per-skill rewrites
+### 6.4 — `skills/code-review.md` rewrite
 
-Explicit per-skill rows added by 6.2 once the audit verdict is known. Each row pins one skill from `skills/` flagged `rewrite` in 6.2.
+Per [`../../../UPGRADE/plans/tier-6-skills-rewrites.md`](../../../UPGRADE/plans/tier-6-skills-rewrites.md) §6.4.
 
-**Per-skill acceptance** (applies to each):
+**Acceptance:** frontmatter preserved; FINDING grammar matches `pool.ts:111-132`; ADR 0018 referenced; no `BUILD.md` workflow references; no `CRITICAL/WARNING/INFO` severity terminology; all four `pnpm` gates clean.
 
-- Frontmatter (`name` + `description`) preserved verbatim.
-- Body factory5-native: current ADR refs, current marker grammars, current paths.
-- No `factory2` / `factory2/skills/` references in the body.
-- Body length comparable to or exceeding the original.
-- All four `pnpm` gates clean.
+**Commit:** `docs(6.4): skills/code-review.md — write factory5-native body`
 
-**Commit shape:** `docs(6.<N>): skills/<name>.md — write factory5-native body`
+### 6.5 — `skills/dependency-install.md` rewrite
+
+Per [`../../../UPGRADE/plans/tier-6-skills-rewrites.md`](../../../UPGRADE/plans/tier-6-skills-rewrites.md) §6.5.
+
+**Acceptance:** frontmatter preserved; pnpm preferred for TypeScript; no `--break-system-packages`; ADR 0026 referenced; runtime-agnostic framing; all four `pnpm` gates clean.
+
+**Commit:** `docs(6.5): skills/dependency-install.md — write factory5-native body`
+
+### 6.6 — `skills/error-recovery.md` rewrite
+
+Per [`../../../UPGRADE/plans/tier-6-skills-rewrites.md`](../../../UPGRADE/plans/tier-6-skills-rewrites.md) §6.6.
+
+**Acceptance:** frontmatter preserved; no BUILD.md persistence references; ADR 0024 + ADR 0028 referenced; investigator/fixer output conventions cite Tier 5 5.5 + 5.6 prompts; all four `pnpm` gates clean.
+
+**Commit:** `docs(6.6): skills/error-recovery.md — write factory5-native body`
+
+### 6.7 — `skills/progress-tracking.md` rewrite
+
+Per [`../../../UPGRADE/plans/tier-6-skills-rewrites.md`](../../../UPGRADE/plans/tier-6-skills-rewrites.md) §6.7.
+
+**Acceptance:** frontmatter preserved; ground-up re-frame around signals + findings_registry; ADR 0021 referenced; no BUILD.md mentions; all four `pnpm` gates clean.
+
+**Commit:** `docs(6.7): skills/progress-tracking.md — write factory5-native body`
+
+### 6.8 — `skills/scaffolding.md` rewrite
+
+Per [`../../../UPGRADE/plans/tier-6-skills-rewrites.md`](../../../UPGRADE/plans/tier-6-skills-rewrites.md) §6.8.
+
+**Acceptance:** frontmatter preserved; no BUILD.md scaffolding step; no `--break-system-packages`; TypeScript section equal-depth to Python; ADR 0026 + ADR 0028 referenced; all four `pnpm` gates clean.
+
+**Commit:** `docs(6.8): skills/scaffolding.md — write factory5-native body`
+
+### 6.9 — `skills/work-verification.md` rewrite
+
+Per [`../../../UPGRADE/plans/tier-6-skills-rewrites.md`](../../../UPGRADE/plans/tier-6-skills-rewrites.md) §6.9.
+
+**Acceptance:** frontmatter preserved; no `FACTORY_COMPLETE` token; checks reframed as advisory findings per ADR 0018; cross-ref Tier 5 5's verifier.md; all four `pnpm` gates clean.
+
+**Commit:** `docs(6.9): skills/work-verification.md — write factory5-native body`
 
 ### 6.last — Drop factory2 provenance + apply hot-fixes
 

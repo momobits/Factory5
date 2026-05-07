@@ -6,7 +6,7 @@
 
 The fixer parser path is co-scoped because it closes the same loop. Tier 5 5.5 confirmed `packages/wiki/src/findings.ts:196` exposes `updateFindingStatus(...)` but nothing in `packages/brain/src/` parses agent output to call it. The fixer prompt ships today with prose-only `RESOLUTION` markers; no automation wires them. Adding the parser turns the prompt's documented contract into a real runtime contract — the agent declaring `FIXED` causes the registry row to flip, no manual `findings.json` editing.
 
-**Estimated effort**: 1 session if 6.2's audit finds 0–2 rewrites needed; 2 sessions if 3+ rewrites are needed (or if 6.3's fixer parser surfaces a non-trivial extension point). Audit is the gate, not a quota.
+**Estimated effort**: 2 sessions. 6.2's audit (run 2026-05-07) classified 4 skills clean (`architect`, `ask-user`, `documentation`, `tdd`), 2 hot-fix (`brainstorming`, `integration-testing`), and 6 rewrite (`code-review`, `dependency-install`, `error-recovery`, `progress-tracking`, `scaffolding`, `work-verification`). Solidly 2-session territory.
 
 **Issues addressed**: U026 (opened by 6.1: `skills/* — 12 ported-from-factory2 skills with no factory5 audit`) and U027 (opened by 6.1: `Fixer agent output → updateFindingStatus has no parser path`).
 
@@ -128,9 +128,9 @@ Verify all four gates pass before starting (`pnpm build && pnpm test && pnpm lin
 
 **Commit**: `feat(6.3): wire fixer→updateFindingStatus parser`
 
-### 6.4..6.N Per-skill rewrites (count from 6.2)
+### Per-skill rewrites — common constraints
 
-**Goal**: every skill flagged `rewrite` in 6.2 ships a factory5-native body in its own commit.
+**Goal**: every skill flagged `rewrite` in 6.2 ships a factory5-native body in its own commit. Rewrites land in alphabetical order (6.4 `code-review` → 6.9 `work-verification`).
 
 **Constraints common to every rewrite**:
 
@@ -138,19 +138,53 @@ Verify all four gates pass before starting (`pnpm build && pnpm test && pnpm lin
 - **Skill body**: factory5-native — references current ADRs, current marker grammars, current paths, current code references where load-bearing. Examples lean factory5 (TS over Python where the skill is language-agnostic; factory5 paths over factory2 paths).
 - **Reference, don't duplicate**: skills are concatenated into agent prompts by `buildAgentSystemPrompt`. Don't mention agent-specific role wording — keep the skill prescriptive (this is HOW; the agent prompt says WHAT).
 - **No `factory2` references** in the body.
-- **Verify the skill is actually consumed** by reading `docs/AGENTS.md` + the agent prompts that wire it before rewriting. A skill not currently consumed is a delete candidate, not a rewrite candidate (raise as a sub-step deviation if the audit surfaces an orphan).
+- **Verify the skill is actually consumed** by reading `docs/AGENTS.md` + the agent prompts that wire it before rewriting. (6.2's audit confirmed all 12 are consumed — no orphans.)
 
 **Per-skill acceptance** (applies to each 6.x):
 
 - Body length comparable to or exceeding the original (rewrites are not abbreviation passes).
 - Frontmatter preserved.
-- No `factory2` / `factory2/skills/` references.
+- No `factory2` / `factory2/skills/` / `BUILD.md` (as a workflow surface) / `FACTORY_COMPLETE` references.
 - All four `pnpm` gates clean.
 - Body reads as standalone — a future agent prompt referencing this skill should get a complete methodology.
 
 **Commit shape**: `docs(6.<N>): skills/<name>.md — write factory5-native body`
 
-> Note: explicit per-skill rows are added by 6.2 once the audit verdict is known. This plan version reserves the 6.4..6.N range without enumerating skills.
+### 6.4 skills/code-review.md rewrite
+
+**Today**: BUILD.md is referenced multiple times as the output persistence surface ("add to BUILD.md Issues"; "add a one-line summary to BUILD.md"); the severity terminology is `CRITICAL / WARNING / INFO`, not factory5's `FINDING [LOW|MEDIUM|HIGH|CRITICAL] target: description` grammar (per `pool.ts:111-132` parser + Tier 5 5.4 reviewer.md prompt body); the skill doesn't reference ADR 0018 (verifier advisory-only — analogous framing for reviewer findings) or `findings_registry` as the persistence surface. Consumed by the `reviewer` agent.
+
+**Wire**: rewrite to (a) persist findings via `findings_registry` (`packages/wiki/src/findings.ts`) — drop BUILD.md output surface; (b) use `FINDING [LOW|MEDIUM|HIGH|CRITICAL] target: description` grammar matching `pool.ts:111-132` parser + Tier 5 5.4 reviewer.md; (c) reference ADR 0018 for advisory-vs-blocking framing — reviewer findings are advisory by default per the prompt body's pinned policy; (d) keep the spec-compliance / code-quality / security / dependencies checklist sections that frame the methodology — those don't drift; (e) cross-reference Tier 5 5.4's reviewer.md as the consuming prompt for grounding examples.
+
+### 6.5 skills/dependency-install.md rewrite
+
+**Today**: BUILD.md is referenced twice as the decision-persistence surface ("Note the workaround in BUILD.md Decisions"; "Note the swap in BUILD.md Decisions"); the TypeScript section uses `npm` not factory5's `pnpm`; uses `--break-system-packages` (line 23) which conflicts with the venv discipline factory5 builder.md preserves byte-for-byte for I007; doesn't reference ADR 0026 (pluggable runtimes — scaffolder/builder should detect the project's runtime rather than hard-code). Consumed by the `scaffolder` and `builder` agents.
+
+**Wire**: rewrite to (a) drop BUILD.md decision-persistence — use a finding (`FINDING [SEV] dependency:<name>: <decision>`) or commit-message rationale; (b) use `pnpm install` for TypeScript (matching factory5 + workspace dep convention) and note `pnpm install --frozen-lockfile` for CI shapes; (c) drop `--break-system-packages` — venv (per factory5 builder.md's preserved discipline) handles isolation properly without requiring the system-Python override; (d) reference ADR 0026 — frame the skill as runtime-agnostic, scout the project's runtime first (Python `pyproject.toml` vs TypeScript `package.json` vs other), then apply the matching pattern; (e) keep the "common failures" cookbook (missing system library, version conflict, package not found) — those generalize across runtimes.
+
+### 6.6 skills/error-recovery.md rewrite
+
+**Today**: BUILD.md referenced 3× as the diagnostic-persistence surface ("Note the decision in BUILD.md" line 42; "Document the error and what you tried in BUILD.md Issues" line 85; "Skip updating BUILD.md because you're frustrated" line 93 in NOT-OK list); doesn't reference ADR 0024 (`ask_user` escalation per the worker-subprocess contract — investigators / fixers should escalate when stuck rather than retry blindly); doesn't reference ADR 0028 worker-sandbox boundaries (file-system access is path-prefix-scoped — that's a contract, not a transient external error). Consumed by the `investigator` and `fixer` agents.
+
+**Wire**: rewrite to (a) drop BUILD.md persistence — investigator emits `HYPOTHESIS / EVIDENCE / RECOMMENDED NEXT` per Tier 5 5.6's prompt body (operator-readable, not parsed); fixer raises findings or marks them via the `RESOLUTION <FID>` markers Tier 5 5.5 wrote (parser wired in 6.3); (b) reference ADR 0024 + the `ask-user` skill for stall-prevention escalation; (c) reference ADR 0028 — clarify that "external errors" (file not found, permission denied) might actually be sandbox-boundary violations, not network/external concerns; (d) keep the diagnostic process (read error → classify → fix and verify → patch vs refactor) — that's the methodology and doesn't drift; (e) drop the "fix forward vs refactor" prescription's BUILD.md commit-message conventions; use plain conventional commit shape.
+
+### 6.7 skills/progress-tracking.md rewrite
+
+**Today**: **entirely BUILD.md-centric**. The whole skill prescribes updating BUILD.md after every task (Build Log / Current State / Findings & Issues / Architecture sections, each with detailed per-section update rules). BUILD.md is dead in factory5 — ADR 0021 made `findings_registry` first-class for finding persistence; the brain's directive lifecycle tracks task progress; agents emit signals via `expectedOutputs.signals[]` (e.g. `tests-green`, `lint-clean`); operator-side narrative lives in the journal/STATE.md. Body needs ground-up re-frame. Consumed by the `builder` and `planner` agents.
+
+**Wire**: rewrite to (a) for builders: emit signals per `expectedOutputs.signals[]` declared by the planner (e.g. `tests-green`, `module-implemented`); raise findings via `FINDING [SEV] target: description` markers (reference ADR 0018 for severity policy + `pool.ts:111-132` for the parser); the brain auto-detects task completion on signal arrival, no manual progress doc; (b) for planners: read `findings_registry` to assess progress; the directive's task DAG tracks itself; cite `packages/wiki/src/findings.ts` for the API surface; (c) reference ADR 0021 for findings_registry as the canonical persistence surface; (d) drop all BUILD.md mentions; the project-side analog (if any) is the per-project `<workspace>/<project>/.factory/` directory which the brain manages, not the agent; (e) drop the "## Architecture" prescription — architecture lives in the project's `docs/` (architect's output), not in a per-iteration progress doc.
+
+### 6.8 skills/scaffolding.md rewrite
+
+**Today**: line 84 prescribes "Create BUILD.md with all modules from CLAUDE.md listed as Remaining" — BUILD.md is dead per ADR 0021; uses `--break-system-packages` (line 41) which conflicts with the venv isolation factory5 builder.md preserves byte-for-byte for I007; TypeScript section sparse (lines 62-71) compared to Python; doesn't reference ADR 0026 (pluggable runtimes — scaffolder should detect runtime from spec rather than hard-code Python-first vs TypeScript-second); doesn't reference ADR 0028 (worker-sandbox path-prefix scoping — scaffolder runs in a worker subprocess with bounded fs access). Consumed by the `scaffolder` agent.
+
+**Wire**: rewrite to (a) drop BUILD.md scaffolding step — factory5 doesn't use BUILD.md; the brain handles directive-side state; (b) drop `--break-system-packages` from the Python flow; the venv handles isolation; (c) frame Python and TypeScript as equal first-class options driven by spec / ADR 0026 runtime detection; (d) expand TypeScript section: pnpm workspace scaffolding, `tsup` or `tsc` build setup, `vitest` test runner, ESLint flat config, `prettier`; mirror the Python section's depth; (e) reference ADR 0028 for the worker-sandbox boundary — scaffolder can only write within the project's path prefix; cross-sibling writes are rejected at the sandbox layer; (f) keep the Makefile / package.json scripts prescription (install, test, lint, clean) as a concrete deliverable; the conventions don't drift.
+
+### 6.9 skills/work-verification.md rewrite
+
+**Today**: prescribes outputting `FACTORY_COMPLETE` token (lines 128-129) — that's a legacy factory2 runtime contract that doesn't exist in factory5. In factory5, the verifier emits `FINDING [SEV]` markers (advisory-only per ADR 0018) plus `tests-green` / `lint-clean` etc. signals via `expectedOutputs.signals[]`; the brain determines completion via signal arrival + finding severity, not a magic token. Tier 5 5's `verifier.md` frames the verifier as advisory-only and doesn't mention `FACTORY_COMPLETE`. Plus: the README + docs/ + LICENSE + .gitignore + secret-scan + clean-git checks remain valuable but should be expressed as findings, not as the gate-on-FACTORY_COMPLETE that dictates whether the project ships. Consumed by the `verifier` agent (per docs/AGENTS.md; historically "all agents" per docs/SKILLS.md description).
+
+**Wire**: rewrite to (a) drop `FACTORY_COMPLETE` token entirely — replace with "raise findings for any failing check; the brain decides completion based on findings + signals per ADR 0018"; (b) reframe "Decision" section: each failing check raises a `FINDING [HIGH|CRITICAL]`; the verifier never gates completion itself, ADR 0018 makes verifier advisory-only; (c) reference ADR 0018 for the advisory framing; (d) keep the 9-check methodology (modules, tests, imports, README, LICENSE, secrets, gitignore, docs, clean git state) — those checks are valuable, just reframe the output shape; (e) for project-level checks (README, LICENSE, .gitignore), note these are project-output checks (the verifier examines the shipped project), separate from factory5-internal verification; (f) cite Tier 5 5's `verifier.md` for the consuming prompt — keep the skill aligned with the prompt's use-site framing.
 
 ### 6.last Drop "ported from factory2" provenance + apply hot-fixes
 
@@ -193,7 +227,7 @@ Run `/phase-close` after all steps green and acceptance criteria met. Tags `phas
 
 ## Risks + decisions
 
-- **Audit-only outcome.** If 6.2's verdict finds all 12 skills clean or hot-fix-only, Tier 6 is a 3-commit affair (6.1, 6.2, 6.3, 6.last, 6.close — 5 commits with the parser; 4 if no hot-fixes either). Don't manufacture rewrites — the audit is the gate.
+- **Audit verdict locked at 6 rewrites + 2 hot-fixes.** 6.2 ran 2026-05-07; verdict in that commit body. Rewrites are well-grounded (BUILD.md drift across 5 of 6; FACTORY_COMPLETE legacy marker for work-verification). Operator can object to specific verdicts before any 6.4..6.9 sub-step starts; default is to proceed in alphabetical order.
 - **Parser attach-point not obvious.** 6.3's homework starts with finding where verifier's `FINDING` markers get parsed today (assumed to exist; the registry knows about findings somehow). If the model handler doesn't have a clean attach point, surface — re-scope 6.3 from `feat` to `feat + refactor` or split into 6.3a (refactor handler to support marker observers) + 6.3b (add the resolution parser). Don't paper over a structural gap with a one-off hook.
 - **Parser regex robustness.** The grammar is `RESOLUTION <FID> (FIXED|VERIFIED|WONTFIX): <prose>` per `prompts/agents/fixer.md`. Real fixer output may include the marker mid-prose, in code blocks, in error messages quoting the marker shape, etc. The regex must match line-anchored (caret + dollar) and reject false positives. Test fixtures must include adversarial shapes.
 - **Orphan skill — delete or keep?** If the audit surfaces a skill not currently consumed by any agent prompt (cross-check `docs/AGENTS.md` + every `prompts/agents/*.md`), the choice is keep-as-reference or delete. Default: keep-as-reference if it's plausibly useful for a future agent role; delete (with an ADR if the deletion changes the loader's expected surface) only if it's clearly stale. If unsure, ask via `ask_user`.
@@ -206,26 +240,21 @@ Run `/phase-close` after all steps green and acceptance criteria met. Tags `phas
 
 ## Suggested commit shape
 
-Determined by 6.2's verdict. Two patterns:
-
-**All-clean / hot-fix-only path** (single session, ~5 commits):
+Determined by 6.2's verdict (6 rewrites). 11-commit tier:
 
 1. `chore(6.1): open U026 + U027`
 2. `docs(6.2): skills audit verdicts + plan/steps refinement`
 3. `feat(6.3): wire fixer→updateFindingStatus parser`
-4. `docs(6.last): drop factory2 provenance + apply skill hot-fixes`
-5. `chore(phase-6): close phase 6`
+4. `docs(6.4): skills/code-review.md — write factory5-native body`
+5. `docs(6.5): skills/dependency-install.md — write factory5-native body`
+6. `docs(6.6): skills/error-recovery.md — write factory5-native body`
+7. `docs(6.7): skills/progress-tracking.md — write factory5-native body`
+8. `docs(6.8): skills/scaffolding.md — write factory5-native body`
+9. `docs(6.9): skills/work-verification.md — write factory5-native body`
+10. `docs(6.last): drop factory2 provenance + apply skill hot-fixes` (covers `brainstorming` + `integration-testing` hot-fixes plus `docs/SKILLS.md` line 7)
+11. `chore(phase-6): close phase 6`
 
-**Rewrites-needed path** (single or two-session, count from 6.2):
-
-1. `chore(6.1): open U026 + U027`
-2. `docs(6.2): skills audit verdicts + plan/steps refinement`
-3. `feat(6.3): wire fixer→updateFindingStatus parser`
-4. `docs(6.4): skills/<name-A>.md — write factory5-native body`
-5. `docs(6.5): skills/<name-B>.md — write factory5-native body`
-   ... (per skill flagged rewrite)
-   N+1. `docs(6.last): drop factory2 provenance + apply skill hot-fixes`
-   N+2. `chore(phase-6): close phase 6`
+Natural session break after 6.5 or 6.6 (mid-rewrite cluster) if 2-session pacing applies.
 
 ---
 
