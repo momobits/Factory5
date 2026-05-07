@@ -1,8 +1,9 @@
 ---
 name: scaffolding
 description: |
-  Set up a new project from scratch. Use when BUILD.md doesn't exist yet
-  or shows no completed items.
+  Set up a new project from scratch. Use when the project's manifest
+  (pyproject.toml / package.json / equivalent) doesn't exist yet, or
+  when the manifest exists but the source tree is still empty.
 ---
 
 # Project Scaffolding

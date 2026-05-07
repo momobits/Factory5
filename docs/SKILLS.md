@@ -4,7 +4,7 @@ Skills are reusable methodology files (markdown) that get injected into agent pr
 
 Skill files live in [`../skills/`](../skills). Format: YAML frontmatter (`name`, `description`) + markdown body.
 
-> Initial skills ported from `factory2/skills/`. New skills follow the same shape.
+> Skills are factory5-native. New skills follow the format below.
 
 | Skill                 | Purpose                                                                                               | Used by                                          |
 | --------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
@@ -42,4 +42,4 @@ Skill files live in [`../skills/`](../skills). Format: YAML frontmatter (`name`,
 
 ## Loading
 
-Skills are loaded by `@factory5/brain` at runtime via the skill loader (analog of `factory2/src/factory/skills.py`). The loader scans the `skills/` directory plus user-specific overrides at `~/.factory5/skills/` and project-specific overrides at `<project>/.factory/skills/`.
+Skills are loaded by `@factory5/brain` at runtime via the skill loader (`packages/brain/src/prompts.ts`'s `loadSkill(id)`). The loader scans the `skills/` directory plus user-specific overrides at `~/.factory5/skills/` and project-specific overrides at `<project>/.factory/skills/`.

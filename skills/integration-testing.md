@@ -91,4 +91,4 @@ class TestPipeline:
    - Shared state: are modules accidentally sharing mutable state?
 3. Fix the wiring, re-run, confirm all pass
 4. Run the full suite (unit + integration) to confirm nothing regressed
-5. Update BUILD.md: `- [x] Integration tests (X pass)`
+5. Emit `tests-green` (or whatever signal the planner declared in `expectedOutputs.signals[]`) on success; raise a `FINDING [HIGH] tests/<file>: <test-name>` for any persistent failure. The brain auto-detects integration completion from signal arrival; agents don't write a separate progress doc.

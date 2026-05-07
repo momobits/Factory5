@@ -9,7 +9,7 @@
 - [x] 6.7 — `skills/progress-tracking.md` rewrite: ground-up re-frame (currently entirely BUILD.md-centric). Builders emit signals per `expectedOutputs.signals[]`; planners read findings_registry; reference ADR 0021
 - [x] 6.8 — `skills/scaffolding.md` rewrite: drop BUILD.md scaffolding step; drop `--break-system-packages`; expand TypeScript section (pnpm workspace, tsup/tsc, vitest, ESLint flat); reference ADR 0026 + ADR 0028
 - [x] 6.9 — `skills/work-verification.md` rewrite: drop `FACTORY_COMPLETE` legacy token; reframe checks as findings (advisory per ADR 0018) emitted to the brain; cross-ref Tier 5 5's verifier.md
-- [ ] 6.last — Drop "Initial skills ported from factory2/skills/" line from `docs/SKILLS.md`; apply 6.2-flagged hot-fixes in a single commit; closes U026
+- [x] 6.last — Drop "Initial skills ported from factory2/skills/" line from `docs/SKILLS.md`; apply 6.2-flagged hot-fixes in a single commit; closes U026
 - [ ] 6.close — `/phase-close` — tag `phase-6-skills-rewrites-closed`; append session entry to [`../../../UPGRADE/LOG.md`](../../../UPGRADE/LOG.md); scaffold Phase 7 if a tier-7 plan exists, otherwise re-close the upgrade arc
 
 ## Step detail

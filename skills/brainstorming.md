@@ -11,7 +11,7 @@ You are expanding a user's feature request into a complete, actionable specifica
 
 ### 1. Understand the Request
 
-Read the user's description alongside the existing project knowledge (wiki, CLAUDE.md, BUILD.md). Identify:
+Read the user's description alongside the existing project knowledge (`docs/knowledge/` wiki, CLAUDE.md, the `findings_registry` for any open findings on adjacent files). Identify:
 
 - What exactly is being asked for (new feature, expansion, redesign)?
 - Which existing modules are affected?
