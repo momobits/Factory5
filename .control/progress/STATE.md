@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-07 16:10 UTC by `/phase-close` at phase-5 close (cursor at "no current phase — upgrade arc closed for the second time"; the `chore(phase-5)` close commit lands ahead of this STATE update — last commit field references the prior `59a684f` while HEAD will move to the new commit; this docs(state)-shaped phase-close commit creates the **14th lag-by-1 self-reference occurrence**)
+**Last updated:** 2026-05-07 16:15 UTC by `/session-end` after phase-5 close (cursor at "no current phase — upgrade arc closed for the second time"; phase-close commit `eeb03ed` already bundled the STATE/journal/LOG/next.md transition, this session-end docs(state) commit only bumps the timestamp + last-commit reference + lag-by-1 counter; this is the **15th lag-by-1 occurrence** — STATE.md inside this commit references `eeb03ed` while HEAD will move to the session-end's sha)
 **Current phase:** none — Tier 5 closed at `phase-5-agent-prompts-closed`. Upgrade arc complete (again). A Tier 6 candidate exists (skills review + rewrites — see Notes), but no plan is authored yet — operator decision required before Phase 6 can scaffold.
 **Current step:** none — awaiting next Tier plan
 **Status:** all phases complete. Phase 5 done-criteria 12/12 green at close. All four `pnpm` gates green throughout the phase.
@@ -39,9 +39,9 @@ If the operator doesn't want a Tier 6, the project is in a clean post-arc parkin
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `59a684f` — chore(5.8): retire factory logs stub (this docs(state)-shaped phase-close commit will move HEAD forward)
-- **Uncommitted changes:** in flight at this STATE.md update — STATE.md cursor refresh + journal append + UPGRADE/LOG.md append + regenerated next.md + ISSUES.md U024/U025 sha backfill + steps.md 5.9 flip
-- **Last phase tag:** `phase-4-cli-completion-closed` (annotated at `28c0188`); will become `phase-5-agent-prompts-closed` once `/phase-close` lands its tag at this commit's sha
+- **Last commit:** `eeb03ed` — chore(phase-5): close phase 5 (this session-end docs(state) commit will move HEAD forward — lag-by-1 #15)
+- **Uncommitted changes:** in flight at this session-end STATE refresh — timestamp + last-commit reference + lag-by-1 counter only; phase-close already bundled the substantive transition
+- **Last phase tag:** `phase-5-agent-prompts-closed` (annotated at `eeb03ed`)
 
 ---
 
@@ -71,7 +71,7 @@ No phase active. Phase 5 closed cleanly. No Phase 6 scaffolded.
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **14 occurrences** with this phase-close commit. Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **15 occurrences** with this session-end commit (phase-close `eeb03ed` was the 14th). Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
@@ -95,7 +95,7 @@ No phase active. Phase 5 closed cleanly. No Phase 6 scaffolded.
 
 ## Recently completed (last 5 steps)
 
-- **Phase 5 close** — `chore(phase-5)`: close phase 5 (no Phase 6 plan; upgrade arc reopens to "all phases complete"). Tagged `phase-5-agent-prompts-closed`. Done-criteria verification: 12/12 green. — 2026-05-07 — `[this commit's sha]`
+- **Phase 5 close** — `chore(phase-5)`: close phase 5 (no Phase 6 plan; upgrade arc reopens to "all phases complete"). Tagged `phase-5-agent-prompts-closed`. Done-criteria verification: 12/12 green. — 2026-05-07 — `eeb03ed`
 - **Step 5.8** — `chore(5.8)`: retire factory logs stub. Path B chosen via auto-mode default per plan §5.8 risks-and-decisions ("If undecided ... default to Path B (retire) — the stub status has been carrying ambiguity since Phase 1"). Deleted `packages/cli/src/commands/stubs.ts`, removed registration from `cli.ts`, dropped row from `packages/cli/README.md`, dropped `'logs'` from completion vocab. ADR 0002 footnote flagged but unedited (CLAUDE.md "do not edit accepted ADRs"). — 2026-05-07 — `59a684f`
 - **Step 5.7** — `docs(5.7)`: prompts/agents/builder.md — flesh out factory5-native body. 185 lines after prettier. Stub marker removed; venv discipline section preserved byte-for-byte (verified via `git diff | grep ^-`: only 4 lines removed, all from old frontmatter description + stub marker). — 2026-05-07 — `005e75b`
 - **Step 5.6** — `docs(5.6)`: prompts/agents/investigator.md — write factory5-native body. 140 lines. Read-only constraint with concrete OK/NOT-OK Bash examples; HYPOTHESIS / EVIDENCE / RECOMMENDED NEXT framed as operator-readable conventions, not parsed. — 2026-05-07 — `ae47147`
