@@ -33,15 +33,6 @@ Severity:
 - **Hypothesis**: Either (a) increase the timeout to something like 10 min and rely on user `Ctrl-C`, or (b) stream partial responses and the daemon emits intermediate progress messages. Option (b) is the better UX but requires daemon-side support.
 - **Resolution**: Tier 2 or 4. Pair with the chat surface work.
 
-### U024 — `prompts/agents/README.md` status table is stale
-
-- **Severity**: low
-- **Tier**: 5
-- **Area**: docs / brain
-- **Description**: `prompts/agents/README.md:14-26` — the Files table lists all nine factory5-native agent prompts as `Status: stub`, but only three are pure stubs (`reviewer.md`, `fixer.md`, `investigator.md` — all 10 lines each). Five have substantive bodies (`triage.md` 99 / `architect.md` 78 / `planner.md` 197 / `scaffolder.md` 177 / `verifier.md` 97 lines), and one is hybrid (`builder.md` 64 lines — Python venv discipline body, no surrounding TDD body). The "Phase 1 work" trailer at lines 46-48 is also stale: Phase 1 long since shipped Tier-1 doc work, not prompt content. Misleads any reader trying to assess prompt completeness.
-- **Hypothesis**: Drop the Status column entirely and replace the table columns with `File | Role | Purpose` (purpose = a one-line summary derived from the prompt body or `docs/AGENTS.md`). Drop the "Phase 1 work" section. The legacy/ rows can keep their factory2-provenance note since that's accurate; consider folding it out of the table into a one-line note above or below.
-- **Resolution**: Tier 5 step 5.2.
-
 ### U025 — `docs/ONBOARDING.md` §5.4 has two stale claims about the web UI
 
 - **Severity**: medium
@@ -229,3 +220,12 @@ Severity:
 - **Area**: cli
 - **Description**: Budget changes go through the web UI's `PUT /api/v1/projects/:id/budget`. The CLI has no sibling. Operators must edit `project.json` by hand or use the web UI.
 - **Resolution**: Resolved 2026-05-06 — Tier 4 step 4.2, commit `fa28e6d`. New `packages/cli/src/commands/budget.ts` writes `<workspace>/<project>/.factory/project.json` `metadata.budgetDefaults` via `@factory5/wiki`'s `updateProjectMetadata` — the same code path the daemon's `PUT /api/v1/projects/:id/budget` route uses (ADR 0027 §1). **Per-field merge** is the distinguishing CLI semantic: passing only `--max-steps` preserves an existing `maxUsd`, so operators never have to re-state the whole budget block (the web UI's PUT remains full-document replacement; divergence intentional and called out in the README). Project ref resolution is name-first / full-ULID-second; ULID-suffix matching intentionally not supported here. 15 unit tests cover per-field merge in both directions, idempotence, both Wiki error classes, and validation rejections.
+
+### U024 — `prompts/agents/README.md` status table is stale
+
+- **Severity**: low
+- **Tier**: 5
+- **Area**: docs / brain
+- **Description**: `prompts/agents/README.md:14-26` — the Files table lists all nine factory5-native agent prompts as `Status: stub`, but only three are pure stubs (`reviewer.md`, `fixer.md`, `investigator.md` — all 10 lines each). Five have substantive bodies (`triage.md` 99 / `architect.md` 78 / `planner.md` 197 / `scaffolder.md` 177 / `verifier.md` 97 lines), and one is hybrid (`builder.md` 64 lines — Python venv discipline body, no surrounding TDD body). The "Phase 1 work" trailer at lines 46-48 is also stale: Phase 1 long since shipped Tier-1 doc work, not prompt content. Misleads any reader trying to assess prompt completeness.
+- **Hypothesis**: Drop the Status column entirely and replace the table columns with `File | Role | Purpose` (purpose = a one-line summary derived from the prompt body or `docs/AGENTS.md`). Drop the "Phase 1 work" section. The legacy/ rows can keep their factory2-provenance note since that's accurate; consider folding it out of the table into a one-line note above or below.
+- **Resolution**: Resolved 2026-05-07 — Tier 5 step 5.2. Dropped the Status column entirely; replaced the table columns with `File | Role | Purpose` (one-line role description per row, sourced from `docs/AGENTS.md` so the two docs can't drift). Dropped the "Phase 1 work" trailer. Dropped the "from factory2" provenance language from the legacy/ rows; folded those rows into a single explanatory paragraph below the table that calls out legacy/ is reference-only and not loaded by `packages/brain/src/agents/registry.ts`.

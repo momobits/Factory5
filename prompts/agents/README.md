@@ -11,19 +11,19 @@ Each file is the agent's system prompt. The brain composes the final prompt at r
 
 ## Files
 
-| File                      | Role           | Status                                     |
-| ------------------------- | -------------- | ------------------------------------------ |
-| `triage.md`               | `triage`       | stub                                       |
-| `architect.md`            | `architect`    | stub                                       |
-| `planner.md`              | `planner`      | stub                                       |
-| `scaffolder.md`           | `scaffolder`   | stub                                       |
-| `builder.md`              | `builder`      | stub                                       |
-| `reviewer.md`             | `reviewer`     | stub                                       |
-| `fixer.md`                | `fixer`        | stub                                       |
-| `investigator.md`         | `investigator` | stub                                       |
-| `verifier.md`             | `verifier`     | stub                                       |
-| `legacy/code-reviewer.md` | reference      | from factory2 — Claude-Code-style subagent |
-| `legacy/test-runner.md`   | reference      | from factory2 — Claude-Code-style subagent |
+| File              | Role           | Purpose                                                |
+| ----------------- | -------------- | ------------------------------------------------------ |
+| `triage.md`       | `triage`       | Classify a free-form directive into an `Intent`        |
+| `architect.md`    | `architect`    | Read CLAUDE.md → write `docs/knowledge/` wiki          |
+| `planner.md`      | `planner`      | Decompose into a Task DAG                              |
+| `scaffolder.md`   | `scaffolder`   | Set up project skeleton, deps, git                     |
+| `builder.md`      | `builder`      | Implement modules using strict TDD                     |
+| `reviewer.md`     | `reviewer`     | Adversarial review — write shadow tests; never fix     |
+| `fixer.md`        | `fixer`        | Fix specific findings by ID; respect existing patterns |
+| `investigator.md` | `investigator` | Diagnose novel problems without changing code          |
+| `verifier.md`     | `verifier`     | Run full verification checklist; generate docs         |
+
+`legacy/code-reviewer.md` and `legacy/test-runner.md` are reference-only Claude-Code-style subagent prompts kept as comparative reading. They are **not loaded by the brain** — `packages/brain/src/agents/registry.ts` references the active prompts only. Safe to delete if they ever grow confusing.
 
 ## Format
 
@@ -42,7 +42,3 @@ description: |
 ## Hot reload
 
 Prompts are read at the start of every directive (no caching across runs). Edit and the next directive picks up the change — no rebuild needed.
-
-## Phase 1 work
-
-The stubs are intentionally minimal. Phase 1 lands the real prompts based on factory2's experience and the OmO Sisyphus/Hephaestus/Prometheus patterns. The stub format is the contract; the body is what evolves.
