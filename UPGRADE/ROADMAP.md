@@ -96,14 +96,14 @@ Plan: [`plans/tier-6-skills-rewrites.md`](plans/tier-6-skills-rewrites.md)
 
 ## Tier 7 — `factory findings mark <id> <status>` CLI command
 
-Ship the operator-side parallel to Tier 6's agent-side `RESOLUTION` parser. `factory findings mark <id> <status>` flips a finding's status (and optionally records a resolution note) via the same `updateFindingStatus` API the parser dispatches. Composition over existing surface — handler wraps the API, disambiguation copies `factory findings show`, tests mirror the existing findings test shape. Estimated **1 session, ~1 substantive commit**.
+Shipped the operator-side parallel to Tier 6's agent-side `RESOLUTION` parser. `factory findings mark <id> <status>` flips a finding's status (and optionally records a resolution note) via the same `updateFindingStatus` API the parser dispatches. Composition over existing surface — handler wraps the API, disambiguation copies `factory findings show`, tests mirror the existing findings test shape. Closed in **1 session** at `phase-7-findings-mark-closed` 2026-05-08.
 
-- [x] Open U028 (`factory findings mark <id> <status>` CLI verb missing)
-- [x] Implement `runFindingsMark(db, rawId, rawStatus, opts)` in `packages/cli/src/commands/findings.ts` — wraps `updateFindingStatus`; bare-id disambiguation copies `runFindingsShow`; `--note <prose>` flows to `resolution`
-- [x] Wire `group.command('mark <id> <status>')` with `addHelpText('after', ...)` worked examples
-- [x] Unit tests in `findings.test.ts` (happy path / invalid status / ambiguous bare-id / not-found / `<project>/<id>` form / with `--note` / idempotent re-flip)
-- [x] Update `packages/cli/src/commands/completion.ts` `NESTED_SUBCOMMANDS` (add `mark` to the `findings` row) + `packages/cli/README.md` findings table
-- [x] Sweep `prompts/agents/fixer.md` for any "no operator CLI" phrasing left over from pre-7.2 reality
+- [x] Open U028 (`factory findings mark <id> <status>` CLI verb missing) at `b1dd5d6`
+- [x] Implement `runFindingsMark(db, rawId, rawStatus, opts)` in `packages/cli/src/commands/findings.ts` — wraps `updateFindingStatus`; bare-id disambiguation copies `runFindingsShow`; `--note <prose>` flows to `resolution`; closes U028 at `0d27925`
+- [x] Wire `group.command('mark <id> <status>')` with `addHelpText('after', ...)` worked examples at `0d27925`
+- [x] Unit tests in `findings.test.ts` (8: bare-id happy path / `<project>/<id>` form when bare would be ambiguous / ambiguous bare-id rejection / invalid status / not-found in both forms / `--note` persistence / case-insensitive input / idempotent re-flip preserves resolvedAt) at `0d27925`
+- [x] Update `packages/cli/src/commands/completion.ts` `NESTED_SUBCOMMANDS` (add `mark` to the `findings` row) + `packages/cli/README.md` findings table at `0d27925`
+- [x] Sweep `prompts/agents/fixer.md` for any "no operator CLI" phrasing left over from pre-7.2 reality — came up empty; Tier 6's 6.3 had already cleared those at `0d27925`
 
 Plan: [`plans/tier-7-findings-mark.md`](plans/tier-7-findings-mark.md)
 

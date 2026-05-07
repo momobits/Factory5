@@ -2,7 +2,7 @@
 
 - [x] 7.1 — Open U028 (`factory findings mark <id> <status>` CLI verb missing) in [`../../../UPGRADE/ISSUES.md`](../../../UPGRADE/ISSUES.md). ROADMAP rows + phase scaffold pre-authored at scaffold time
 - [x] 7.2 — Implement `runFindingsMark(db, rawId, rawStatus, opts)` in `packages/cli/src/commands/findings.ts`; wire `group.command('mark <id> <status>')` with `--note <prose>` and `addHelpText('after', ...)` examples; add unit tests (happy path / invalid status / ambiguous bare-id / not-found / `<project>/<id>` form / with `--note` / idempotent re-flip); update `packages/cli/src/commands/completion.ts` `NESTED_SUBCOMMANDS` and `packages/cli/README.md` findings table; sweep `prompts/agents/fixer.md` for stale "no operator CLI" phrasing; closes U028
-- [ ] 7.close — `/phase-close` — tag `phase-7-findings-mark-closed`; append session entry to [`../../../UPGRADE/LOG.md`](../../../UPGRADE/LOG.md); scaffold Phase 8 if a tier-8 plan exists, otherwise re-close the upgrade arc
+- [x] 7.close — `/phase-close` — tag `phase-7-findings-mark-closed`; append session entry to [`../../../UPGRADE/LOG.md`](../../../UPGRADE/LOG.md); scaffold Phase 8 if a tier-8 plan exists, otherwise re-close the upgrade arc
 
 ## Step detail
 

@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-07 by `chore(phase-7): scaffold tier 7 findings-mark CLI` — kicks off the Tier 7 work that STATE.md flagged as the most-likely Phase 6 carry-forward. This scaffold commit bundles: `UPGRADE/plans/tier-7-findings-mark.md`, Phase 7 row + summary in `.control/architecture/phase-plan.md`, Tier 7 section in `UPGRADE/ROADMAP.md`, `.control/phases/phase-7-findings-mark/{README.md,steps.md}`, this STATE.md cursor flip from arc-complete → Phase 7 active at 7.1, and the regenerated `next.md`. Drift-fix `436887a` immediately preceded; that is HEAD as STATE.md is being written for this commit.
-**Current phase:** phase 7 — `findings-mark` (operator-side CLI verb for `factory findings mark <id> <status>`, paralleling Tier 6's agent-side `RESOLUTION` parser)
-**Current step:** 7.1 — Open U028 (`factory findings mark <id> <status>` CLI verb missing)
-**Status:** Phase 7 scaffolded; 7.1 is the next sub-step. All four `pnpm` gates green entering the phase. Workspace 1144 + 3 skipped (carried forward from phase-6 close — no code touched yet in Tier 7).
+**Last updated:** 2026-05-08 by `/phase-close` of Phase 7. Tier 7 `findings-mark` shipped in 3 work commits (scaffold `ee970e8` + 7.1 `b1dd5d6` + 7.2 `0d27925`); `factory findings mark <id> <status>` is now a real CLI verb wrapping `updateFindingStatus` — the operator-side parallel to Tier 6's agent-side `RESOLUTION` parser. All 4 pnpm gates green at close; workspace 1144 → 1152 + 3 skipped (+8 from 7.2's mark tests). No Phase 8 plan exists in `phase-plan.md`; upgrade arc closes for the **fourth** time. STATE.md transitions back to "all phases complete".
+**Current phase:** none — Tier 7 closed at `phase-7-findings-mark-closed`. Upgrade arc complete (fourth time). No Tier 8 plan authored.
+**Current step:** none — awaiting next Tier plan
+**Status:** all phases complete. Phase 7 done-criteria all green at close. All four `pnpm` gates green throughout the phase. Workspace 1152 + 3 skipped (was 1144 + 3 pre-Tier-7; +8 from 7.2's mark tests).
 
 ---
 
@@ -20,26 +20,36 @@
 
 ## Next action
 
-**Phase 7 active.** Scaffold landed; 7.1 is next.
+**No active phase.** Upgrade arc closed for the fourth time. Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; the audit-driven Tier 5 reopened the arc 2026-05-07 at `c0869d6` and closed at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 reopened 2026-05-07 at `542f99a` and closed at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 reopened 2026-05-07 at `ee970e8` and closed at `phase-7-findings-mark-closed` 2026-05-08 at this commit.
 
-**7.1 — Open U028.** Add a new entry to `UPGRADE/ISSUES.md` Open section: `U028 — factory findings mark <id> <status> CLI verb missing` (Severity: low; Tier: 7; Area: cli). Hypothesis: pure composition over the existing `updateFindingStatus` API at `packages/wiki/src/findings.ts:196` plus the disambiguation pattern `runFindingsShow` already implements via `findingsRegistry.findByFindingId`. Phase scaffold + ROADMAP rows pre-authored; verify both exist before opening the issue.
+If the operator wants to continue, the carry-forward candidates from Phase 7's Deferred section are (ordered by demand-signal likelihood):
 
-Commit shape: `chore(7.1): open U028`. All four `pnpm` gates should be green before and after (no code touched yet).
+1. **U005 chat 120 s timeout re-tier** — affects channel-chat UX directly. Carry-forward from Phase 2's Tier-2-or-4 designation; both shipped without addressing it. Most actionable demand signal.
+2. **`factory skills list / show <name>` CLI commands** — skill discovery surface. Composition-style tier; CLI runs `loadSkill(id)` against the per-user/per-project override paths the brain already uses.
+3. **PageShell + Dashboard `<style is:global>` migration** — 11-page sweep absorbing filter-form Apply / "Clear all defaults" + inline-style audit. Self-contained ~1 commit.
+4. **Bulk findings-mark surface** — defer-until-signal. Tier 7's `factory findings mark` is single-id by design; bulk-mark only worth building if an audit-cleanup workflow needs it.
+5. **Findings history surface** — defer-until-signal. Current `resolution` + `updatedAt` cover the common case; first-class history is a real undertaking.
+6. **ADR amendments** — 0027 §1 missing route pin (POST `/api/v1/projects`), 0002 footnote stale post-Tier-5. Doc-debt; not load-bearing.
+7. **Structural `/session-end` lag-by-1 fix** — STATE.md tracking "last work commit" rather than HEAD, or amending STATE.md post-commit. 19 occurrences accumulated through this session-end.
 
-**Then 7.2** — Implement `runFindingsMark(db, rawId, rawStatus, opts)` in `packages/cli/src/commands/findings.ts`; wire `group.command('mark <id> <status>')` with `--note <prose>`; add 6+ unit tests in `findings.test.ts`; update `packages/cli/src/commands/completion.ts` `NESTED_SUBCOMMANDS` (add `mark` to the `findings` row); update `packages/cli/README.md` findings table; sweep `prompts/agents/fixer.md` for any stale "no operator CLI" phrasing; mark U028 Resolved. Commit shape: `feat(7.2): factory findings mark <id> <status> CLI command`.
+To kick off Phase 8:
 
-**Then 7.close** — `/phase-close`.
+1. Operator drafts `UPGRADE/plans/tier-8-<name>.md` with goal, sub-steps, acceptance.
+2. Add a Phase 8 row to `.control/architecture/phase-plan.md`.
+3. Add a Tier 8 section to `UPGRADE/ROADMAP.md`.
+4. Scaffold `.control/phases/phase-8-<name>/{README.md,steps.md}` from `.control/templates/`.
+5. Then start working through the sub-steps.
 
-Plan: [`../../UPGRADE/plans/tier-7-findings-mark.md`](../../UPGRADE/plans/tier-7-findings-mark.md). Phase scaffold: [`phase-7-findings-mark/`](../phases/phase-7-findings-mark).
+If the operator doesn't want a Tier 8, the project is in a clean post-arc parking state — there's no queued work in the upgrade arc.
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `436887a` — docs(state): bump last-commit pointer to a5c23ab (drift-fix). The scaffold commit `chore(phase-7): scaffold tier 7 findings-mark CLI` will land immediately after this STATE.md edit and move HEAD forward (this scaffold's content includes the cursor flip; the lag-by-1 carries into the next session-start as #19 if uncaught).
-- **Uncommitted changes:** in flight as part of the Tier 7 scaffold bundle — `UPGRADE/plans/tier-7-findings-mark.md`, `.control/architecture/phase-plan.md` (Phase 7 row + summary), `UPGRADE/ROADMAP.md` (Tier 7 section), `.control/phases/phase-7-findings-mark/{README.md,steps.md}`, this STATE.md cursor flip, and `next.md` regenerated by the SessionStart hook
-- **Last phase tag:** `phase-6-skills-rewrites-closed` (annotated at `69380e2`)
+- **Last commit:** `0d27925` — feat(7.2): factory findings mark <id> <status> CLI command. The phase-close commit (`chore(phase-7): close phase 7`) will land immediately after this STATE.md edit and move HEAD forward — lag-by-1 #19 carries into next session-start unless the operator amends STATE.md or fixes the structural cause.
+- **Uncommitted changes:** in flight as part of the phase-close bundle — STATE.md cursor flip Phase 7 active → arc-complete; steps.md 7.close checkbox flip; ROADMAP Tier 7 close note; `UPGRADE/LOG.md` Tier 7 session entry; `next.md` regenerated by the SessionStart hook
+- **Last phase tag:** `phase-7-findings-mark-closed` (annotated at this commit)
 
 ---
 
@@ -51,11 +61,14 @@ Plan: [`../../UPGRADE/plans/tier-7-findings-mark.md`](../../UPGRADE/plans/tier-7
 
 ## In-flight work
 
-Phase 7 scaffold bundle in flight at this STATE refresh — see "Uncommitted changes" above for the file list. 7.1 (open U028) is the next sub-step once the scaffold commit lands.
+No phase active. Phase 7 closed cleanly. No Phase 8 scaffolded.
 
-**Carry-forward items outside Phase 7 scope** (none load-bearing for 7.x; ordered by likelihood a demand signal surfaces):
+**Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 
 - **U005** — `factory chat` REPL 120s timeout (still in `UPGRADE/ISSUES.md` Open). Tier 8 candidate; carry-forward from Phase 2's Tier-2-or-4 designation.
+- **`factory skills list / show <name>` CLI commands** — skill discovery surface. Composition-style tier; CLI wraps `loadSkill(id)` from `packages/brain/src/prompts.ts`. Tier 8 candidate.
+- **Bulk findings-mark surface** — defer-until-signal. Tier 7's `factory findings mark` is single-id by design.
+- **Findings history surface** — defer-until-signal. Real first-class who/when/why log per finding, beyond the current `resolution` + `updatedAt` shape.
 - **§6.4 ONBOARDING.md "SPA's polling fetch" reference** — chat.astro consumes SSE for token-by-token reply rendering today (per 5.3's flag). Mildly stale, not load-bearing.
 - **ADR 0027 §1 doesn't pin the POST `/api/v1/projects` route** — discovered in 5.3's check; the route exists at `packages/daemon/src/server.ts:923` but isn't in ADR 0027's pinned route table. ADR-amend candidate; doc-debt only.
 - **ADR 0002 footnote stale.** `docs/decisions/0002-two-binary-split.md:49` mentions the unified `factory logs` view as a mitigation for two-log-streams; 5.8 retired the command. Per CLAUDE.md the ADR cannot be edited; supersede with a future ADR if anyone cares (over-engineering for this one footnote).
@@ -67,13 +80,13 @@ Phase 7 scaffold bundle in flight at this STATE refresh — see "Uncommitted cha
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **18 occurrences** with this session-end commit (phase-close `69380e2` was the 17th; phase-6 scaffold `542f99a` was the 16th; phase-5 session-end `1cd0c9a` was the 15th; phase-5 close `eeb03ed` was the 14th). Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **19 occurrences** with this phase-close commit (drift-fix `436887a` caught up #18 within this session, but the phase-close itself reintroduces the lag at #19). Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
 ## Test / eval status
 
-- **Last test run:** 2026-05-07 (during phase-close verification) — full workspace passes, all four `pnpm` gates green: build / test / lint / format:check. Per-package: state 157, channels 175, daemon 173, brain 101, worker 47 (+9 from 6.3 parse-resolutions tests), worker-sandbox 86 + 3 skipped, assessor 79, wiki 74, cli 133, providers 39, ipc 28, events 3, core 14, logger 20, worker-mcp 15. **Workspace total 1144 passing + 3 skipped** (was 1135 + 3 pre-Tier-6; +9 from 6.3's parse-resolutions.test.ts fixtures: empty / single FIXED / VERIFIED + WONTFIX / case-insensitive / multi-line / malformed rejection / mid-line anti-prose / whitespace tolerance / back-to-back).
+- **Last test run:** 2026-05-08 (during phase-close verification) — full workspace passes, all four `pnpm` gates green: build / test / lint / format:check. Per-package: state 157, channels 175, daemon 173, brain 101, worker 47, worker-sandbox 86 + 3 skipped, assessor 79, wiki 74, cli 141 (+8 from 7.2's mark tests), providers 39, ipc 28, events 3, core 14, logger 20, worker-mcp 15. **Workspace total 1152 passing + 3 skipped** (was 1144 + 3 pre-Tier-7; +8 from 7.2's mark-handler test fixtures: bare-id happy path / `<project>/<id>` form / ambiguous bare-id / invalid status / not-found in both forms / `--note` persistence / case-insensitive input / idempotent re-flip preserves resolvedAt).
 - **Eval score** (agent phases only): n/a
 - **Regression tests:** unit + integration only; no eval harness. ADR 0029 still in promoted state.
 
@@ -91,8 +104,11 @@ Phase 7 scaffold bundle in flight at this STATE refresh — see "Uncommitted cha
 
 ## Recently completed (last 5 steps)
 
+- **Phase 7 close** — `chore(phase-7)`: close phase 7 (no Phase 8 plan; upgrade arc reopens to "all phases complete" — fourth time). Tagged `phase-7-findings-mark-closed`. All 14 done-criteria green at close (criteria 4–6 — manual mark verb verification — taken via unit-test coverage at the handler level since the 8 unit tests use real `mkdtemp` projects with on-disk `.factory/findings.json`; bare CLI surface verified via `factory findings mark --help` examples render and `factory completion bash` shows `mark` in the findings vocab). — 2026-05-08 — this commit
+- **Step 7.2** — `feat(7.2)`: factory findings mark <id> <status> CLI command. `runFindingsMark` handler in `packages/cli/src/commands/findings.ts` wraps `updateFindingStatus` from `@factory5/wiki` with case-insensitive status input + `--note <prose>` flowing to `resolution`; bare-id disambiguation copies `runFindingsShow` exactly (`renderAmbiguity` block reused); idempotent re-flip preserves `resolvedAt`. 8 new unit tests in `findings.test.ts` against real `mkdtemp` workspaces with on-disk `.factory/findings.json`. `completion.ts` `NESTED_SUBCOMMANDS.findings` grew by `'mark'`; `packages/cli/README.md` findings table + section updated; top-of-file doc block in `findings.ts` updated. CLI 133 → 141 tests; workspace 1144 → 1152 + 3 skipped. Closes U028. — 2026-05-07 — `0d27925`
+- **Step 7.1** — `chore(7.1)`: open U028 (`factory findings mark <id> <status>` CLI verb missing) in `UPGRADE/ISSUES.md` Open section. Severity low; Tier 7; Area cli. Hypothesis: pure composition over existing `updateFindingStatus` API + `runFindingsShow` disambiguation pattern. — 2026-05-07 — `b1dd5d6`
+- **Phase 7 scaffold** — `chore(phase-7)`: scaffold tier 7 findings-mark CLI. Bundle: `UPGRADE/plans/tier-7-findings-mark.md` (~150 lines, 3 sub-tasks); phase-plan.md Phase 7 row + summary; ROADMAP Tier 7 section + intro count "Six tiers → Seven tiers"; `.control/phases/phase-7-findings-mark/{README.md,steps.md}`; STATE.md cursor flip arc-complete → Phase 7 active at 7.1; regenerated next.md. — 2026-05-07 — `ee970e8`
 - **Drift-fix** — `docs(state)`: bump last-commit pointer to `a5c23ab` (drift-fix). Catches STATE.md up to HEAD after the prior session's session-end lag-by-1 (#18). Pure session-start reconciliation; no phase work. — 2026-05-07 — `436887a`
-- **Phase 6 close** — `chore(phase-6)`: close phase 6 (no Phase 7 plan; upgrade arc reopens to "all phases complete" — third time). Tagged `phase-6-skills-rewrites-closed`. Done-criteria all green at close (1 partial: manual integration verification of marker → flip path acknowledged as deferred to next live fixer directive; criterion's "or" language permits unit-test coverage which the 9 parse-resolutions tests provide). — 2026-05-07 — `69380e2`
 - **Step 6.last** — `docs(phase-6)`: drop factory2 provenance + apply skill hot-fixes (6.last). `docs/SKILLS.md:7` "Initial skills ported from factory2/skills/" replaced with "Skills are factory5-native"; `docs/SKILLS.md:45` historical "analog of factory2/src/factory/skills.py" replaced with the actual factory5 surface (`packages/brain/src/prompts.ts`'s `loadSkill(id)`); `brainstorming.md` line 14 BUILD.md from source list dropped; `integration-testing.md` line 94 BUILD.md completion-marker replaced with tests-green signal + FINDING; `scaffolding.md` frontmatter description's BUILD.md-as-project-state-signal framing replaced with manifest-presence framing. Closes U026. Commit-msg hook required `(phase-6)` scope since "last" isn't numeric. — 2026-05-07 — `e942ec7`
 - **Step 6.9** — `docs(6.9)`: skills/work-verification.md — write factory5-native body. Dropped `FACTORY_COMPLETE` legacy token; reframed 9-check methodology around FINDING emission with per-check severity grades (CRITICAL/HIGH/MEDIUM/LOW); ADR 0018 advisory framing; cross-ref Tier 5 5's verifier.md. — 2026-05-07 — `a4b51e6`
 - **Step 6.8** — `docs(6.8)`: skills/scaffolding.md — write factory5-native body. Dropped BUILD.md scaffolding step + `--break-system-packages` antipattern; expanded TypeScript section to factory5-equal depth (pnpm workspace, tsup, vitest, ESLint flat); ADR 0026 + ADR 0028 references. — 2026-05-07 — `f1e1075`
@@ -106,7 +122,13 @@ Phase 7 scaffold bundle in flight at this STATE refresh — see "Uncommitted cha
 
 ## Attempts that didn't work (current step only)
 
-None yet — Phase 7 just scaffolded; 7.1 (open U028) hasn't started.
+None — no active step. Cleared at phase close.
+
+**Worth recording from Phase 7 for future reference** (not load-bearing for any active step but notable):
+
+- **Status-enum cast had no surprises.** Earlier Tier 6 retro flagged the worry that `STATUSES = ['OPEN', 'FIXED', 'VERIFIED', 'WONTFIX'] as const` (CLI-side) and `FindingStatus` (core-side) might drift. They didn't — the `isStatus(status)` type-guard narrows to the union without an explicit cast, and TypeScript accepts it directly into `updateFindingStatus`'s `status: FindingStatus` slot. No `as` cast required.
+- **Manual smoke deferred at done-criteria evaluation.** Criteria 4–6 say "works end-to-end against a seeded registry" — the 8 unit tests use real `mkdtemp` workspaces + actual `updateFindingStatus` writes through the real wiki API, which IS end-to-end at the handler level. The Commander wrapper (`process.exit` / `stdout.write`) is the only layer the unit tests don't exercise; verified manually via `factory findings mark --help` rendering examples + `factory completion bash` showing `mark` in the vocab. Future operator can run a live mark against a real workspace as a confidence check; not gating this close.
+- **Prettier reformatted 3 files post-edit.** First gate run flagged `packages/cli/{README.md,src/commands/findings.ts,src/commands/findings.test.ts}` as needing format. Ran `pnpm prettier --write` on the trio; minor whitespace/wrap. Same pattern as Tier 6's prettier deviations — author writes draft, prettier normalizes. Not a code-quality issue, just a one-extra-step in the gate-pass cadence.
 
 **Worth recording from Phase 6 for future reference** (not load-bearing for any active step but notable):
 
@@ -139,30 +161,27 @@ None yet — Phase 7 just scaffolded; 7.1 (open U028) hasn't started.
 
 ## Notes for next session
 
-**Phase 7 active at 7.1.** Scaffold landed in this commit. Next session resumes by opening U028 and shipping `factory findings mark`.
+**No active phase.** The upgrade arc closed at `phase-7-findings-mark-closed`. To resume work, the operator can either:
 
-**Sub-step plan (3 commits):**
+1. **Author a Tier 8 plan** — most likely candidate per demand signal: **U005 chat 120 s timeout re-tier** (the highest-impact carry-forward; affects channel-chat UX directly). Or `factory skills list / show <name>` CLI commands (composition-style; wraps `loadSkill(id)` from `packages/brain/src/prompts.ts`). To start: draft `UPGRADE/plans/tier-8-<name>.md`, add a Phase 8 row to `.control/architecture/phase-plan.md`, add a Tier 8 section to `UPGRADE/ROADMAP.md`, scaffold `.control/phases/phase-8-<name>/{README.md,steps.md}`.
 
-1. **7.1 — Open U028.** Append to `UPGRADE/ISSUES.md` Open section: `U028 — factory findings mark <id> <status> CLI verb missing`. Severity low; Tier 7; Area cli. Mirror U027's hypothesis-line shape. No code touched. Commit: `chore(7.1): open U028`.
+2. **Promote a carry-forward item** — see `## In-flight work` above. Order-of-likelihood (most likely demand signal first):
+   - **U005 chat 120 s timeout re-tier** — affects channel-chat UX directly.
+   - **`factory skills list / show <name>` CLI** — composition-style; ~1 commit if narrowly scoped.
+   - **PageShell + Dashboard `<style is:global>` migration** — absorbs filter-form Apply / "Clear all defaults" + inline-style audit; self-contained ~1 commit.
+   - **Structural `/session-end` lag-by-1 fix** — 19 occurrences accumulated. Real engineering work, not a one-liner.
 
-2. **7.2 — Implement the verb.** Pure handler `runFindingsMark(db, rawId, rawStatus, opts)` in `packages/cli/src/commands/findings.ts`; mirrors `runFindingsShow`'s disambiguation (`findingsRegistry.findByFindingId` for bare id; `getByProjectAndId` for `<project>/<id>` form); calls `updateFindingStatus(entry.projectPath, finding.id, status, opts.note)`; returns `{ stdout, exitCode }`. Commander wiring with `--note <prose>` + `addHelpText('after', ...)` examples. 6+ unit tests in `findings.test.ts` (happy path / invalid status / ambiguous bare-id / not-found / `<project>/<id>` form / `--note` / idempotent re-flip). Update `completion.ts` `NESTED_SUBCOMMANDS` + `packages/cli/README.md` findings table. Sweep `prompts/agents/fixer.md` for stale "no operator CLI" phrasing. Mark U028 Resolved. Commit: `feat(7.2): factory findings mark <id> <status> CLI command`.
-
-3. **7.close — `/phase-close`.** Tags `phase-7-findings-mark-closed`. Appends LOG entry. No Phase 8 plan exists; upgrade arc closes again.
-
-**Pre-write verification for 7.2** (homework before the commit):
-
-- Confirm `runFindingsShow`'s disambiguation pattern matches what 7.2 plans to copy.
-- Read `updateFindingStatus`'s `registry?` parameter semantics — if the existing handlers pass it, `mark` should too.
-- Confirm `findings.test.ts` seeding pattern (`findingsRegistry.upsert` with `projectPath`).
-- Sanity-check `runFindingsBackfill`'s registry-passing path is the model.
+3. **Park** — surfaces are stable; nothing is gated on more work.
 
 **Read first** when next session resumes:
 
-- [`UPGRADE/plans/tier-7-findings-mark.md`](../../UPGRADE/plans/tier-7-findings-mark.md) — full plan (richer than `steps.md`); read this before starting 7.1.
-- [`.control/phases/phase-7-findings-mark/README.md`](../phases/phase-7-findings-mark/README.md) — phase context + done criteria.
-- [`UPGRADE/LOG.md`](../../UPGRADE/LOG.md) — full upgrade-side narrative; Tier 7 entry will be appended at session-end.
+- [`UPGRADE/LOG.md`](../../UPGRADE/LOG.md) — full upgrade-side narrative across all seven tiers (Tier 7 entry appended at this close).
 - [`.control/progress/journal.md`](journal.md) — session-by-session control narrative.
 - This file (`STATE.md`).
+
+**Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav.
+
+**Tier 7 in retrospect:** 4 work commits this session (drift-fix `436887a` + scaffold `ee970e8` + 7.1 `b1dd5d6` + 7.2 `0d27925`) plus the phase-close commit. Tier 7 itself was pure composition: `factory findings mark` wraps the existing `updateFindingStatus` API with `runFindingsShow`-style disambiguation. Total Tier 7 code: ~80 lines of handler + 90 lines of Commander wiring + 130 lines of test fixtures. All 4 `pnpm` gates green throughout. Workspace count grew 1144 → 1152 from 7.2's 8 mark tests. No new ADRs (composition tier; no structural ambiguity). Drift fix #18 caught up mid-session via `docs(state)`; the phase-close commit reintroduces the lag at #19, structural fix still pending.
 
 **Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav.
 
