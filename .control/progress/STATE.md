@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-07 by `/phase-close` after phase-6 close (cursor flipped to "no current phase — upgrade arc closed for the third time"; this phase-close commit bundles the STATE/journal/LOG/next.md transition + Tier 6 ROADMAP checkbox flips + steps.md 6.close flip + the annotated `phase-6-skills-rewrites-closed` tag; **17th lag-by-1 self-reference occurrence** — STATE.md references previous HEAD `e942ec7` while this commit will move HEAD forward)
+**Last updated:** 2026-05-07 by `/session-end` after phase-6 close (cursor at "no current phase — upgrade arc closed for the third time"; phase-close commit `69380e2` already bundled the STATE/journal/LOG/next.md transition + ROADMAP checkbox flips + steps.md 6.close flip + the `phase-6-skills-rewrites-closed` tag, this session-end docs(state) commit only bumps the timestamp + last-commit reference + lag-by-1 counter; this is the **18th lag-by-1 occurrence** — STATE.md inside this commit references `226d705` while HEAD will move to the session-end's sha)
 **Current phase:** none — Tier 6 closed at `phase-6-skills-rewrites-closed`. Upgrade arc complete (third time). No Tier 7 plan authored.
 **Current step:** none — awaiting next Tier plan
 **Status:** all phases complete. Phase 6 done-criteria all green at close. All four `pnpm` gates green throughout the phase. Workspace 1144 + 3 skipped (was 1135 + 3 pre-Tier-6; +9 from 6.3's parser tests).
@@ -44,9 +44,9 @@ If the operator doesn't want a Tier 7, the project is in a clean post-arc parkin
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `e942ec7` — docs(phase-6): drop factory2 provenance + apply skill hot-fixes (6.last) (this phase-close commit will move HEAD forward — lag-by-1 #17)
-- **Uncommitted changes:** in flight at this phase-close commit — STATE.md cursor flip arc-active → arc-closed, ROADMAP Tier 6 checkbox flips (5 rows ticked), steps.md 6.close flip, UPGRADE/LOG.md prepended Tier 6 entry, regenerated next.md, annotated `phase-6-skills-rewrites-closed` tag against this commit
-- **Last phase tag:** `phase-6-skills-rewrites-closed` (annotated at this commit; previous tag `phase-5-agent-prompts-closed` at `eeb03ed`)
+- **Last commit:** `226d705` — docs(state): append phase-6 close journal entry (this session-end docs(state) commit will move HEAD forward — lag-by-1 #18)
+- **Uncommitted changes:** in flight at this session-end STATE refresh — timestamp + last-commit reference + lag-by-1 counter only; phase-close `69380e2` already bundled the substantive transition (STATE cursor flip, ROADMAP ticks, steps.md 6.close, LOG entry, next.md regen, tag)
+- **Last phase tag:** `phase-6-skills-rewrites-closed` (annotated at `69380e2`)
 
 ---
 
@@ -75,7 +75,7 @@ No phase active. Phase 6 closed cleanly. No Phase 7 scaffolded.
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **17 occurrences** with this phase-close commit (#16 was the Phase 6 scaffold bundle, #15 was the Phase 5 session-end). Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **18 occurrences** with this session-end commit (phase-close `69380e2` was the 17th; phase-6 scaffold `542f99a` was the 16th; phase-5 session-end `1cd0c9a` was the 15th; phase-5 close `eeb03ed` was the 14th). Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
@@ -99,7 +99,7 @@ No phase active. Phase 6 closed cleanly. No Phase 7 scaffolded.
 
 ## Recently completed (last 5 steps)
 
-- **Phase 6 close** — `chore(phase-6)`: close phase 6 (no Phase 7 plan; upgrade arc reopens to "all phases complete" — third time). Tagged `phase-6-skills-rewrites-closed`. Done-criteria all green at close (1 partial: manual integration verification of marker → flip path acknowledged as deferred to next live fixer directive; criterion's "or" language permits unit-test coverage which the 9 parse-resolutions tests provide). — 2026-05-07 — `[this commit's sha]`
+- **Phase 6 close** — `chore(phase-6)`: close phase 6 (no Phase 7 plan; upgrade arc reopens to "all phases complete" — third time). Tagged `phase-6-skills-rewrites-closed`. Done-criteria all green at close (1 partial: manual integration verification of marker → flip path acknowledged as deferred to next live fixer directive; criterion's "or" language permits unit-test coverage which the 9 parse-resolutions tests provide). — 2026-05-07 — `69380e2`
 - **Step 6.last** — `docs(phase-6)`: drop factory2 provenance + apply skill hot-fixes (6.last). `docs/SKILLS.md:7` "Initial skills ported from factory2/skills/" replaced with "Skills are factory5-native"; `docs/SKILLS.md:45` historical "analog of factory2/src/factory/skills.py" replaced with the actual factory5 surface (`packages/brain/src/prompts.ts`'s `loadSkill(id)`); `brainstorming.md` line 14 BUILD.md from source list dropped; `integration-testing.md` line 94 BUILD.md completion-marker replaced with tests-green signal + FINDING; `scaffolding.md` frontmatter description's BUILD.md-as-project-state-signal framing replaced with manifest-presence framing. Closes U026. Commit-msg hook required `(phase-6)` scope since "last" isn't numeric. — 2026-05-07 — `e942ec7`
 - **Step 6.9** — `docs(6.9)`: skills/work-verification.md — write factory5-native body. Dropped `FACTORY_COMPLETE` legacy token; reframed 9-check methodology around FINDING emission with per-check severity grades (CRITICAL/HIGH/MEDIUM/LOW); ADR 0018 advisory framing; cross-ref Tier 5 5's verifier.md. — 2026-05-07 — `a4b51e6`
 - **Step 6.8** — `docs(6.8)`: skills/scaffolding.md — write factory5-native body. Dropped BUILD.md scaffolding step + `--break-system-packages` antipattern; expanded TypeScript section to factory5-equal depth (pnpm workspace, tsup, vitest, ESLint flat); ADR 0026 + ADR 0028 references. — 2026-05-07 — `f1e1075`
