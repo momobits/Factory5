@@ -11,8 +11,9 @@ Derived from [`../SPEC.md`](../SPEC.md). Per-phase implementation detail lives i
 | 3   | web-ui         | phase 2 (cancel plumbing reused) | ~2-3               | Live directive updates via SSE, Astro component library, web chat, web cancel, web new-project, spend charts, mobile responsive                      |
 | 4   | cli-completion | phase 2 (cancel shell)           | ~1                 | `factory cancel/budget/project/ask` + tab completion + `--help` examples on every command                                                             |
 | 5   | agent-prompts  | —                                | ~1                 | All active agent prompts substantive + factory5-native; stale doc claims (prompts README + ONBOARDING §5.4) aligned with Tier-1–4 reality; `factory logs` either implemented minimally or retired |
+| 6   | skills-rewrites | phase 5 (closes the agent-prompts arc) | ~1-2               | All 12 skills in `skills/` audited against factory5 reality; rewrites where needed; "ported from factory2" provenance dropped from `docs/SKILLS.md`. Plus: brain-side parser for fixer's `RESOLUTION` markers so `updateFindingStatus` fires on agent declaration |
 
-Phases 3 and 4 share no critical code — order is operator preference once Phase 2 closes. Phase 5 has no code dependencies (pure docs + prompts + an optional small CLI command); shippable after Phase 4 closes (the natural sequence) or independently.
+Phases 3 and 4 share no critical code — order is operator preference once Phase 2 closes. Phase 5 has no code dependencies (pure docs + prompts + an optional small CLI command); shippable after Phase 4 closes (the natural sequence) or independently. Phase 6 is the natural continuation of Phase 5 — closes the agent-prompts arc by auditing the skills the prompts cite + wiring the fixer marker grammar Phase 5 documented.
 
 ## Per-phase summaries
 
@@ -65,6 +66,16 @@ Full plan: [`../../UPGRADE/plans/tier-4-cli-completion.md`](../../UPGRADE/plans/
 Full plan: [`../../UPGRADE/plans/tier-5-agent-prompts.md`](../../UPGRADE/plans/tier-5-agent-prompts.md). Issues addressed: U024, U025.
 
 **Done criteria highlights:** all four `pnpm` gates clean; `prompts/agents/README.md` accurately reflects every prompt's role + purpose with no transient status field; the 4 deficient prompts (reviewer / fixer / investigator / builder) carry factory5-native bodies with no `Phase 1 stub` markers and no `factory2` references; `docs/ONBOARDING.md` §5.4 reflects post-Tier-3 SSE + project-creation reality; no half-stub `factory logs` row in CLI README.
+
+### Phase 6 — skills-rewrites
+
+**Goal:** Every skill in `skills/` is factory5-native — audited against current architecture (current ADRs, current code paths, current marker grammars), and either confirmed clean or rewritten. The "ported from factory2" provenance language in `docs/SKILLS.md` is gone. Plus: the fixer agent's `RESOLUTION <FID> (FIXED|VERIFIED|WONTFIX): ...` marker grammar — documented prose-only in Tier 5 — gets a brain-side parser so the registry actually flips on agent declaration.
+
+**Key steps:** Open U026 (skills audit) + U027 (fixer parser path); 12-skill audit pass with per-skill verdict (`clean` / `hot-fix` / `rewrite`); wire `RESOLUTION` marker parser in `packages/brain/src/` calling `updateFindingStatus(...)` (closes U027); per-skill rewrites for skills flagged `rewrite` in the audit; drop `Initial skills ported from factory2/skills/` line from `docs/SKILLS.md` + apply hot-fixes (closes U026).
+
+Full plan: [`../../UPGRADE/plans/tier-6-skills-rewrites.md`](../../UPGRADE/plans/tier-6-skills-rewrites.md). Issues addressed: U026, U027.
+
+**Done criteria highlights:** all four `pnpm` gates clean; no skill body in `skills/` references `factory2`; `docs/SKILLS.md` line 7 forward-looking; `prompts/agents/fixer.md` no longer carries "no parser today" caveat; new parser function with at least one unit test; manual or integration verification that a `RESOLUTION` marker in agent output flips a `findings.json` row.
 
 ## Guidance
 

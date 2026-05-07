@@ -1,6 +1,6 @@
 # Roadmap — factory5 first-class upgrade
 
-Four tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small.
+Six tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5 and 6 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closes the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents.
 
 ## Status legend
 
@@ -82,6 +82,18 @@ Build new (not ported) factory5-native bodies for the 3 pure stub agent prompts 
 
 Plan: [`plans/tier-5-agent-prompts.md`](plans/tier-5-agent-prompts.md)
 
+## Tier 6 — Skills review + rewrites + fixer parser path
+
+Audit all 12 skills in `skills/` against factory5 reality (current ADRs, current code paths, current marker grammars). Rewrite skills where factory2-era assumptions contradict shipped state; drop the "ported from factory2" provenance language once factory5-native. Plus: wire a brain-side parser for the fixer agent's `RESOLUTION <FID> (FIXED|VERIFIED|WONTFIX): ...` markers so the runtime contract Tier 5 documented actually fires `updateFindingStatus`. Estimated **1–2 sessions** (single session if 6.2's audit finds 0–2 rewrites needed and 6.3 has a clean attach point).
+
+- [ ] Open U026 (skills audit) + U027 (fixer parser path)
+- [ ] `skills/` audit pass — per-skill verdict (`clean` / `hot-fix` / `rewrite`); commit body documents the 12-line classification
+- [ ] Wire `RESOLUTION` marker parser in `packages/brain/src/` → calls `updateFindingStatus(...)`; unit test with valid/malformed/ambiguous fixtures; `prompts/agents/fixer.md` updated to drop "no parser today" caveat (closes U027)
+- [ ] Per-skill rewrites (count determined by audit; one commit each)
+- [ ] `docs/SKILLS.md` — drop `Initial skills ported from factory2/skills/` provenance line; apply 6.2-flagged hot-fixes (closes U026)
+
+Plan: [`plans/tier-6-skills-rewrites.md`](plans/tier-6-skills-rewrites.md)
+
 ## Out of scope (now)
 
 Items the audit raised that are deferred:
@@ -92,9 +104,13 @@ Items the audit raised that are deferred:
 - **Multi-tenant SaaS daemon** — out of charter.
 - **VS Code extension** — out of charter.
 - **Hosted "factory cloud"** — out of charter.
-- **Skills review + rewrites (Tier 6 candidate)** — all 12 skills in `skills/` are explicitly "ported from factory2/skills/" per `docs/SKILLS.md`; if Tier 5 surfaces fit issues during prompt writing, draft `plans/tier-6-skills-rewrites.md` then.
+- **U005 chat 120 s timeout re-tier** — Tier 7 candidate; carry-forward from Phase 2's Tier-2-or-4 designation.
+- **`factory findings mark <id> <status>` CLI command** — operator-side parallel to Tier 6's agent-side parser; Tier 7 candidate.
+- **`factory skills list / show <name>` CLI commands** — skill discovery surface; Tier 8 candidate.
+- **PageShell + Dashboard `<style is:global>` migration** — 11-page sweep absorbing filter-form Apply / "Clear all defaults" + inline-style audit pass; self-contained ~1 commit.
+- **ADR amendments** — 0027 §1 missing route pin (POST `/api/v1/projects`), 0002 footnote stale post-Tier-5; doc-debt only.
 
-These can be promoted to Tier 6+ if/when the demand signal arrives.
+These can be promoted to Tier 7+ if/when the demand signal arrives.
 
 ## Dependencies between tiers
 
