@@ -1,6 +1,6 @@
 # Phase 5 Steps
 
-- [ ] 5.1 — Open U024 + U025 in [`../../../UPGRADE/ISSUES.md`](../../../UPGRADE/ISSUES.md) (ROADMAP rows + phase scaffold pre-authored at scaffold time)
+- [x] 5.1 — Open U024 + U025 in [`../../../UPGRADE/ISSUES.md`](../../../UPGRADE/ISSUES.md) (ROADMAP rows + phase scaffold pre-authored at scaffold time)
 - [ ] 5.2 — `prompts/agents/README.md` — drop stale stub-tracking column; replace table with `File | Role | Purpose`; drop "Phase 1 work" section + "from factory2" provenance
 - [ ] 5.3 — `docs/ONBOARDING.md` §5.4 — replace "read-once" + "no project creation" claims with current state (SSE-live, `/app/projects/new` exists)
 - [ ] 5.4 — `prompts/agents/reviewer.md` — write factory5-native body (verify FINDING parser source-stamp + advisory tagging in `packages/brain/src/findings/` first)

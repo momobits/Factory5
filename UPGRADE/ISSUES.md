@@ -33,6 +33,24 @@ Severity:
 - **Hypothesis**: Either (a) increase the timeout to something like 10 min and rely on user `Ctrl-C`, or (b) stream partial responses and the daemon emits intermediate progress messages. Option (b) is the better UX but requires daemon-side support.
 - **Resolution**: Tier 2 or 4. Pair with the chat surface work.
 
+### U024 — `prompts/agents/README.md` status table is stale
+
+- **Severity**: low
+- **Tier**: 5
+- **Area**: docs / brain
+- **Description**: `prompts/agents/README.md:14-26` — the Files table lists all nine factory5-native agent prompts as `Status: stub`, but only three are pure stubs (`reviewer.md`, `fixer.md`, `investigator.md` — all 10 lines each). Five have substantive bodies (`triage.md` 99 / `architect.md` 78 / `planner.md` 197 / `scaffolder.md` 177 / `verifier.md` 97 lines), and one is hybrid (`builder.md` 64 lines — Python venv discipline body, no surrounding TDD body). The "Phase 1 work" trailer at lines 46-48 is also stale: Phase 1 long since shipped Tier-1 doc work, not prompt content. Misleads any reader trying to assess prompt completeness.
+- **Hypothesis**: Drop the Status column entirely and replace the table columns with `File | Role | Purpose` (purpose = a one-line summary derived from the prompt body or `docs/AGENTS.md`). Drop the "Phase 1 work" section. The legacy/ rows can keep their factory2-provenance note since that's accurate; consider folding it out of the table into a one-line note above or below.
+- **Resolution**: Tier 5 step 5.2.
+
+### U025 — `docs/ONBOARDING.md` §5.4 has two stale claims about the web UI
+
+- **Severity**: medium
+- **Tier**: 5
+- **Area**: docs
+- **Description**: `docs/ONBOARDING.md:206` — "The detail pages are **read-once**: they don't refresh as the brain progresses through tasks. … Live updates via SSE land in Tier 3 of the upgrade." Tier 3 shipped (`phase-3-web-ui-closed`); step 3.1 + 3.2 put SSE on `GET /api/v1/directives/:id/stream` and wired `directives/detail.astro` to consume it (closes U006). `docs/ONBOARDING.md:208` — "The build form **refuses to create new projects** — the project must already exist on disk … ADR 0025 / Phase 11 charter put project creation explicitly out of scope for the SPA." But `apps/factory-web/src/pages/projects/new.astro` exists and `/app/projects/new` is wired live. Both claims are stale post-Tier-3.
+- **Hypothesis**: Sweep §5.4 to reflect Tier-3 reality — drop the read-once paragraph and describe the SSE live-update path (point at ADR 0029 which pinned the protocol); drop the "build form refuses" paragraph and describe `/app/projects/new` with whatever guardrails actually apply. The "Today's limitations" section title may need a re-think since the limitations enumerated there no longer exist; let 5.3 pick.
+- **Resolution**: Tier 5 step 5.3.
+
 ## Resolved
 
 ### U001 — packages/cli/README.md is stale
