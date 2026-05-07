@@ -3,7 +3,7 @@
 - [x] 5.1 — Open U024 + U025 in [`../../../UPGRADE/ISSUES.md`](../../../UPGRADE/ISSUES.md) (ROADMAP rows + phase scaffold pre-authored at scaffold time)
 - [x] 5.2 — `prompts/agents/README.md` — drop stale stub-tracking column; replace table with `File | Role | Purpose`; drop "Phase 1 work" section + "from factory2" provenance
 - [x] 5.3 — `docs/ONBOARDING.md` §5.4 — replace "read-once" + "no project creation" claims with current state (SSE-live, `/app/projects/new` exists)
-- [ ] 5.4 — `prompts/agents/reviewer.md` — write factory5-native body (verify FINDING parser source-stamp + advisory tagging in `packages/brain/src/findings/` first)
+- [x] 5.4 — `prompts/agents/reviewer.md` — write factory5-native body (verify FINDING parser source-stamp + advisory tagging in `packages/brain/src/findings/` first)
 - [ ] 5.5 — `prompts/agents/fixer.md` — write factory5-native body (verify `markFinding` parser branch first; commit type may re-scope from `docs` to `feat`)
 - [ ] 5.6 — `prompts/agents/investigator.md` — write factory5-native body (read-only constraint with concrete OK/NOT-OK Bash examples; HYPOTHESIS / EVIDENCE / RECOMMENDED NEXT framed as operator conventions, not parser contract)
 - [ ] 5.7 — `prompts/agents/builder.md` — flesh out factory5-native TDD body; preserve venv discipline section byte-for-byte; remove stub marker
