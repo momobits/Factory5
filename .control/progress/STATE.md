@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-07 by `/session-end` after phase-6 close (cursor at "no current phase — upgrade arc closed for the third time"; phase-close commit `69380e2` already bundled the STATE/journal/LOG/next.md transition + ROADMAP checkbox flips + steps.md 6.close flip + the `phase-6-skills-rewrites-closed` tag, this session-end docs(state) commit only bumps the timestamp + last-commit reference + lag-by-1 counter; this is the **18th lag-by-1 occurrence** — STATE.md inside this commit references `226d705` while HEAD will move to the session-end's sha)
+**Last updated:** 2026-05-07 by next session start — drift-fix bump of "Last commit" pointer from `226d705` to `a5c23ab` (the prior session's `/session-end` lag-by-1 caught up). Substantive transition (cursor flip, ROADMAP ticks, steps.md 6.close, LOG entry, next.md regen, tag) was bundled in phase-close `69380e2`; the session-end docs(state) commit `a5c23ab` only added the timestamp / counter / journal entry pair. This bump aligns STATE.md with HEAD before kicking off the next tier.
 **Current phase:** none — Tier 6 closed at `phase-6-skills-rewrites-closed`. Upgrade arc complete (third time). No Tier 7 plan authored.
 **Current step:** none — awaiting next Tier plan
 **Status:** all phases complete. Phase 6 done-criteria all green at close. All four `pnpm` gates green throughout the phase. Workspace 1144 + 3 skipped (was 1135 + 3 pre-Tier-6; +9 from 6.3's parser tests).
@@ -44,8 +44,8 @@ If the operator doesn't want a Tier 7, the project is in a clean post-arc parkin
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `226d705` — docs(state): append phase-6 close journal entry (this session-end docs(state) commit will move HEAD forward — lag-by-1 #18)
-- **Uncommitted changes:** in flight at this session-end STATE refresh — timestamp + last-commit reference + lag-by-1 counter only; phase-close `69380e2` already bundled the substantive transition (STATE cursor flip, ROADMAP ticks, steps.md 6.close, LOG entry, next.md regen, tag)
+- **Last commit:** `a5c23ab` — docs(state): session end after phase-6 close (the prior session's session-end commit; this drift-fix bump catches STATE.md up to HEAD)
+- **Uncommitted changes:** in flight at this drift-fix bump — timestamp + last-commit pointer only; this bump itself will move HEAD forward by one commit (lag-by-1 #18 caught up by the next-session bump rather than amended into `a5c23ab`)
 - **Last phase tag:** `phase-6-skills-rewrites-closed` (annotated at `69380e2`)
 
 ---
