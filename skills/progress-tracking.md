@@ -1,72 +1,119 @@
 ---
 name: progress-tracking
 description: |
-  Track build progress in BUILD.md. Update the Build Log, Current State,
-  and Findings sections after every task. BUILD.md is the single source
-  of truth — it enables restart, human review, and intervention.
+  Report progress via the runtime contract: emit declared signals from
+  expectedOutputs.signals[], raise findings via FINDING markers, cite
+  finding IDs when relevant. The brain tracks completion automatically
+  from these emissions — there is no per-iteration progress doc to update.
 ---
 
 # Progress Tracking
 
-You MUST update BUILD.md after every task. This file is the project's memory
-between iterations. Humans also read it to understand progress and give direction.
+Factory5's progress signal is **runtime emission**, not a per-iteration
+progress doc. The brain consumes:
 
-## At the START of every iteration
+- **Signals** declared by the planner in `expectedOutputs.signals[]`
+  per task (e.g. `tests-green`, `module-implemented`, `lint-clean`),
+  emitted by the builder via the `TaskResult.signalsEmitted` field
+  (`packages/core/src/schemas.ts`).
+- **Findings** raised by reviewer / verifier / fixer agents via the
+  `FINDING [SEV] target: description` marker grammar, parsed by
+  `packages/worker/src/parse-findings.ts`, persisted via
+  `addFinding` to the per-project `findings.json` and the
+  cross-project `findings_registry` (per ADR 0021).
+- **Resolutions** emitted by the fixer via the
+  `RESOLUTION <FID> (FIXED|VERIFIED|WONTFIX): <prose>` marker
+  grammar, parsed by `packages/worker/src/parse-resolutions.ts`,
+  dispatched through `updateFindingStatus`.
+- **Files changed**, recorded automatically by the worker via
+  `TaskResult.filesChanged` (the worktree's git diff against the
+  parent branch).
 
-1. Read BUILD.md — especially ## Current State, ## Architecture, and ## Human Directives
-2. If there are Human Directives, follow them — they override other priorities
-3. Read the Architecture section for the module you are about to work on
-4. Check the Build Log for context on what was tried before (especially for FIX tasks)
+You don't write a `BUILD.md`-style progress document. The brain's
+directive lifecycle plus the registry is the durable record; the
+operator's narrative lives in `<workspace>/<project>/.factory/` under
+the brain's management. Your job is to emit cleanly so the brain can
+track.
 
-## What to Update After Each Task
+## At the START of a task
 
-### ## Build Log
+1. Read the task's `inputs` block — what the planner is asking you to
+   do (`task.inputs.context`, `task.inputs.files`).
+2. Read the task's `expectedOutputs` — both the file scope you may
+   write (`expectedOutputs.files[]`) and the signals you are expected
+   to emit (`expectedOutputs.signals[]`). Both are the contract; the
+   brain checks completion by observing them.
+3. Read open findings on this project via the worker's auto-injected
+   context block (`# Context` in your user prompt). Findings already
+   raised against files you'll touch are signals: avoid duplicating;
+   cite their IDs (`F003`) when relevant in commit messages or
+   resolution markers.
 
-Append an entry:
+## At the END of a task
 
-```markdown
-### Iteration N — STATE task — YYYY-MM-DD HH:MM
+Your `TaskResult` carries the durable record:
 
-- What you did (specific actions, not vague descriptions)
-- Tests written: X, Tests passing: Y/Z
-- Review result: SHIP IT / NEEDS FIXES
-- Decisions made: (any choices you had to make)
-- Result: PASS / FAIL / ESCALATED
-```
+- `signalsEmitted` — the signals you actually completed. Match against
+  `expectedOutputs.signals[]`; missing signals are how the brain
+  knows the task is incomplete.
+- `findingsRaised` — populated automatically from your `FINDING`
+  markers by the worker.
+- `filesChanged` — populated automatically from the worktree diff.
+- `exitCode` — `0` for clean completion; non-zero if the provider
+  errored.
 
-### ## Current State
+Don't manufacture signals you didn't earn. Emitting `tests-green`
+without running tests creates a silent regression the brain will
+trust.
 
-Update all fields:
+## Builder-specific framing (per the `tdd` skill)
 
-```markdown
-## Current State
+The `tdd` skill governs the builder's discipline. Progress within a
+task = test-first cycles green. Progress across a task = the signals
+declared in `expectedOutputs.signals[]` emit on completion. Don't
+batch multiple signal emissions until the end if the planner declared
+intermediate ones; emit each as it earns.
 
-- Phase: BUILD
-- Next task: build src/formatter.py
-- Modules: 3/5 complete
-- Tests: 18 pass, 0 fail
-- Iteration: 10/30
-```
+If the builder cannot land the task cleanly:
 
-### ## Findings & Issues
+- Spec ambiguity, ballooning scope, or genuinely-stuck failure modes
+  → escalate via `ask_user` (per ADR 0024 + the `ask-user` skill).
+- Don't emit a signal you didn't actually achieve to "get unstuck".
 
-Add any:
+## Planner-specific framing
 
-- Bugs discovered in other modules while working on this one
-- Design problems (circular deps, interface mismatches)
-- Workarounds applied and why
-- Dependency issues encountered
+The planner reads the `findings_registry` (cross-project) and the
+per-project `findings.json` to see what previous directives raised.
+That's how the planner knows whether to schedule a fixer pass on
+existing OPEN findings or only build new modules.
 
-### ## Architecture
+The planner doesn't update progress docs either. Its output is the
+Task DAG (`Plan.tasks[]`); the brain stores it; subsequent agents
+read their assigned `Task` from the brain's state.
 
-Only the ARCHITECT updates this section. If you find an interface mismatch
-during BUILD or FIX, note it in Findings & Issues — do NOT modify Architecture.
+## Citing findings
+
+When your work relates to an existing finding, cite the ID:
+
+- In commit messages: `fix(F003): clamp profile index in src/auth.ts`
+- In resolution markers (fixer): `RESOLUTION F003 (FIXED): ...`
+- In task summary prose: "addresses F003 by …"
+
+The ID resolves through `findingId` in `@factory5/core`; the registry
+links findings to the directive that raised them. Citation makes the
+trail readable for the operator and the next agent without
+duplicating context.
 
 ## Rules
 
-- NEVER skip updating BUILD.md
-- NEVER mark something done without running its tests
-- Note test pass counts — "tests: 4 pass" not just "done"
-- Log decisions so future iterations understand why
-- Log blockers in Findings & Issues so they aren't re-discovered
-- Commit BUILD.md changes with your other changes, not separately
+- Never invent a signal that wasn't in `expectedOutputs.signals[]`.
+- Never claim a signal you didn't earn (test failed → don't emit
+  `tests-green`).
+- Never write a `BUILD.md` from your own task. The factory5 worker
+  appends a small build-log line per task automatically; that is the
+  brain's surface, not the agent's.
+- Don't create a per-task progress doc. The brain's directive
+  lifecycle + the registry is the durable record.
+- If you discover a problem on this project that's outside the
+  current task's scope, raise a `FINDING` rather than silently
+  expanding scope.
