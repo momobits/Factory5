@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-07T13:14:12Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-07T13:38:04Z by
 > `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.

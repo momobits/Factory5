@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-07 by `chore(phase-5)` kickoff bundle (Phase 5 scaffolded ahead of sub-step 5.1; this kickoff commit bundles the scaffold + post-arc README rewrite + STATE.md cursor + regenerated next.md, creating the 12th lag-by-1 self-reference occurrence — STATE.md references previous HEAD `f3fd6ed` while this commit will move HEAD forward)
-**Current phase:** phase-5-agent-prompts (kicked off 2026-05-07)
-**Current step:** 5.1 — open U024 + U025
-**Status:** in flight (Phase 5 scaffold landed; sub-step 5.1 about to start; all four `pnpm` gates green pre-kickoff at `f3fd6ed`; workspace test count 1135 passing + 3 skipped — no test deltas in scaffold-only commit)
+**Last updated:** 2026-05-07 13:14 UTC by `/session-end` at phase-5 kickoff (cursor at 5.1; phase-5 kickoff `c0869d6` landed this session — scaffold + README rewrite + STATE.md cursor bundle; this docs(state) commit creates the 13th lag-by-1 self-reference occurrence — STATE.md references `c0869d6` while HEAD will move to the new commit)
+**Current phase:** phase-5-agent-prompts (kicked off 2026-05-07 at `c0869d6`)
+**Current step:** 5.1 — open U024 + U025 (about to start)
+**Status:** in flight (Phase 5 scaffold landed at `c0869d6`; sub-step 5.1 ready to start in next session; all four `pnpm` gates green at `c0869d6`; workspace test count 1135 passing + 3 skipped — no test deltas, kickoff bundle is docs/scaffold only)
 
 ---
 
@@ -43,8 +43,8 @@ Full Tier 5 plan: [`../../UPGRADE/plans/tier-5-agent-prompts.md`](../../UPGRADE/
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `f3fd6ed` — docs(state): session end for step 4.9 — phase-4 closed; upgrade arc complete (the kickoff commit being prepared right now will move HEAD forward)
-- **Uncommitted changes:** in flight at this STATE.md update — five Tier-5 scaffold artifacts (Tier 5 plan, ROADMAP Tier 5 section, phase-plan.md row + summary, phase-5 directory with README + steps), README.md day-1 rewrite, this STATE.md, regenerated next.md
+- **Last commit:** `c0869d6` — chore(phase-5): scaffold phase 5 + refresh README + state cursor (this docs(state) session-end commit will move HEAD forward)
+- **Uncommitted changes:** in flight at this STATE.md update — STATE.md cursor refresh + journal entry append + regenerated next.md
 - **Last phase tag:** `phase-4-cli-completion-closed` (annotated at `28c0188`; Phase 5 is in flight, no tag yet — the next phase tag will be `phase-5-agent-prompts-closed`)
 
 ---
@@ -80,7 +80,7 @@ Carry-forward items outside Phase 5 scope (still un-promoted; ordered by likelih
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **U005** — `factory chat` REPL 120 s timeout (still in `UPGRADE/ISSUES.md` Open).
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **12 occurrences** with this kickoff commit (the prior 11 were /session-end commits; this is the first kickoff-commit lag-by-1 — same root cause, different trigger). Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **13 occurrences** with this docs(state) commit (kickoff `c0869d6` was the 12th — the first non-/session-end commit to trigger lag-by-1; this one returns to the /session-end shape). Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
@@ -104,7 +104,7 @@ No new ADRs in Phase 4. Phase 5 likely candidate: ADR 0030 if 5.4's runtime-code
 
 ## Recently completed (last 5 steps)
 
-- **Phase 5 kickoff bundle** — `chore(phase-5)`: scaffold phase 5 + refresh README + state cursor. Lands the 5 Tier-5 scaffold artifacts (plan, ROADMAP section, phase-plan row + summary, phase-5 directory with README + steps), the post-arc README day-1 rewrite (~145 lines, 2 mermaid diagrams), and this STATE.md cursor transition + regenerated next.md. — 2026-05-07 — `<this-sha>`
+- **Phase 5 kickoff bundle** — `chore(phase-5)`: scaffold phase 5 + refresh README + state cursor. Landed the 5 Tier-5 scaffold artifacts (plan, ROADMAP section, phase-plan row + summary, phase-5 directory with README + steps), the post-arc README day-1 rewrite (~145 lines, 2 mermaid diagrams), and the STATE.md cursor transition + regenerated next.md. 8 files changed, +727/-121. — 2026-05-07 — `c0869d6`
 - Step 4.9 close — `chore(phase-4)`: close phase 4 (final phase — upgrade arc complete). Tagged `phase-4-cli-completion-closed`. No `phase-plan.md` entry for Phase 5 → no scaffolding at /phase-close (Phase 5 is now scaffolded post-arc by this kickoff commit). Done-criteria verification: 11/11 green. — 2026-05-06 — `28c0188`
 - Step 4.8 close — `chore(4.8)`: resolve U018-U021 + verify Tier 4 ROADMAP. Moved U018 (`91eebca`), U019 (`9340cfd`), U020 (`9da25ba`), U021 (`fa28e6d`) from Open to Resolved. — 2026-05-06 — `1d1f6a9`
 - Step 4.7 close — `docs(4.7)`: packages/cli/README.md — refresh after Tier 4. Five new rows + dedicated sections (cancel, ask, budget set, project, completion) + Tab completion section with bash/zsh/pwsh install one-liners. — 2026-05-06 — `4902480`
