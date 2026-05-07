@@ -33,6 +33,24 @@ Severity:
 - **Hypothesis**: Either (a) increase the timeout to something like 10 min and rely on user `Ctrl-C`, or (b) stream partial responses and the daemon emits intermediate progress messages. Option (b) is the better UX but requires daemon-side support.
 - **Resolution**: Tier 2 or 4. Pair with the chat surface work.
 
+### U026 — `skills/*` — 12 ported-from-factory2 skills with no factory5 audit
+
+- **Severity**: low
+- **Tier**: 6
+- **Area**: docs / skills
+- **Description**: All 12 skills in `skills/` (`architect.md`, `ask-user.md`, `brainstorming.md`, `code-review.md`, `dependency-install.md`, `documentation.md`, `error-recovery.md`, `integration-testing.md`, `progress-tracking.md`, `scaffolding.md`, `tdd.md`, `work-verification.md`) carry the "Initial skills ported from factory2/skills/. New skills follow the same shape." provenance line in `docs/SKILLS.md:7` without an audit pass against factory5 architecture. Tier 5 5.4–5.7 prompt rewrites referenced six of those skills (`tdd`, `code-review`, `error-recovery`, `ask-user`, `progress-tracking`, `work-verification`) by name without deep-reading their bodies; reference-only inspection at use-site can miss body-level claims that contradict factory5 reality.
+- **Hypothesis**: At least some skill bodies carry factory2-era assumptions that contradict current factory5 architecture — likely candidates per Tier 5's "Risks + decisions" section: references to `BUILD.md` workflow that ADR 0021's `findings_registry` superseded; GitHub flow primitives (PR review, branch protection, `gh pr ...`) that ADR 0019 retired; pre-pluggable-runtime defaults from before ADR 0026; factory2-specific paths (`factory2/`, `~/.factory2/`); marker grammars that have changed (e.g. raw `FINDING:` without severity, where factory5 uses `FINDING [SEV] target: ...`). Tier 6 6.2 is the audit pass — classify each skill as `clean` / `hot-fix` / `rewrite`; rewrites scoped per-skill in 6.4..6.N; provenance line + hot-fixes land in 6.last.
+- **Resolution**: (filled when 6.last lands)
+
+### U027 — Fixer agent output → `updateFindingStatus` has no parser path
+
+- **Severity**: medium
+- **Tier**: 6
+- **Area**: brain
+- **Description**: `prompts/agents/fixer.md` (written in Tier 5 5.5) documents `RESOLUTION <FID> (FIXED|VERIFIED|WONTFIX): <prose>` as the fixer agent's output marker grammar, but no code in `packages/brain/src/` parses agent output for those markers. `packages/wiki/src/findings.ts:196` exports `updateFindingStatus(fid, status, resolution)` but it's only invoked from tests. When the fixer agent declares a finding fixed today, the operator must hand-edit `findings.json` (or run a CLI command that doesn't exist) to flip the row. The prompt body explicitly acknowledges this prose-only contract.
+- **Hypothesis**: A line-anchored regex matching the marker grammar (per `fixer.md`), wired into wherever agent-output streams in (likely the same handler that parses verifier's `FINDING` markers — that path exists somewhere since the registry knows about findings emitted by verifier today), can dispatch `updateFindingStatus(...)` on match. Reject malformed lines silently (return null from the parse step). Test fixtures cover valid marker + malformed line + ambiguous prose. If the agent-output handler doesn't have a clean attach point, surface as a structural gap and split into refactor (6.3a) + parser (6.3b) commits rather than papering over with a one-off hook. `prompts/agents/fixer.md` body needs a small edit to drop the "no parser today" caveat once the parser ships.
+- **Resolution**: (filled when 6.3 lands)
+
 ## Resolved
 
 ### U001 — packages/cli/README.md is stale

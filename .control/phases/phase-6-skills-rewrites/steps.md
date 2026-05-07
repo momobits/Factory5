@@ -1,6 +1,6 @@
 # Phase 6 Steps
 
-- [ ] 6.1 — Open U026 (`skills/* — 12 ported-from-factory2 skills with no factory5 audit`) + U027 (`Fixer agent output → updateFindingStatus has no parser path`) in [`../../../UPGRADE/ISSUES.md`](../../../UPGRADE/ISSUES.md). ROADMAP rows + phase scaffold pre-authored at scaffold time
+- [x] 6.1 — Open U026 (`skills/* — 12 ported-from-factory2 skills with no factory5 audit`) + U027 (`Fixer agent output → updateFindingStatus has no parser path`) in [`../../../UPGRADE/ISSUES.md`](../../../UPGRADE/ISSUES.md). ROADMAP rows + phase scaffold pre-authored at scaffold time
 - [ ] 6.2 — Skills audit pass: classify each of the 12 skills as `clean` / `hot-fix` / `rewrite`; commit body documents per-skill verdict; this plan + steps.md updated with explicit per-skill rewrite rows in 6.4..6.N
 - [ ] 6.3 — Wire `RESOLUTION <FID> (FIXED|VERIFIED|WONTFIX)` marker parser in `packages/brain/src/`; calls `updateFindingStatus(...)` on match; unit test with valid + malformed + ambiguous fixtures; `prompts/agents/fixer.md` updated to drop "no parser today" caveat; closes U027
 - [ ] 6.4..6.N — Per-skill rewrites (count + targets determined by 6.2). Each is its own commit. Frontmatter preserved; body factory5-native; no `factory2` references
