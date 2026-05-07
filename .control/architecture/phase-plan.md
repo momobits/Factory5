@@ -4,14 +4,15 @@ Derived from [`../SPEC.md`](../SPEC.md). Per-phase implementation detail lives i
 
 ## Phase ordering
 
-| #   | Name           | Depends on                                  | Estimated sessions | Outcome                                                                                                                              |
-| --- | -------------- | ------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | doc-sweep      | —                                           | ~1                 | All package READMEs current; `docs/ONBOARDING.md` covers web UI + chat; new `docs/WORKFLOWS.md`                                      |
-| 2   | channel-parity | phase 1                                     | ~2                 | Discord slash commands + Telegram `setMyCommands` + button UX for pending-questions + `factory cancel` (real worker kill) + 8-intent triage |
-| 3   | web-ui         | phase 2 (cancel plumbing reused)            | ~2-3               | Live directive updates via SSE, Astro component library, web chat, web cancel, web new-project, spend charts, mobile responsive    |
-| 4   | cli-completion | phase 2 (cancel shell)                      | ~1                 | `factory cancel/budget/project/ask` + tab completion + `--help` examples on every command                                            |
+| #   | Name           | Depends on                       | Estimated sessions | Outcome                                                                                                                                               |
+| --- | -------------- | -------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | doc-sweep      | —                                | ~1                 | All package READMEs current; `docs/ONBOARDING.md` covers web UI + chat; new `docs/WORKFLOWS.md`                                                       |
+| 2   | channel-parity | phase 1                          | ~2                 | Discord slash commands + Telegram `setMyCommands` + button UX for pending-questions + `factory cancel` (real worker kill) + 8-intent triage           |
+| 3   | web-ui         | phase 2 (cancel plumbing reused) | ~2-3               | Live directive updates via SSE, Astro component library, web chat, web cancel, web new-project, spend charts, mobile responsive                      |
+| 4   | cli-completion | phase 2 (cancel shell)           | ~1                 | `factory cancel/budget/project/ask` + tab completion + `--help` examples on every command                                                             |
+| 5   | agent-prompts  | —                                | ~1                 | All active agent prompts substantive + factory5-native; stale doc claims (prompts README + ONBOARDING §5.4) aligned with Tier-1–4 reality; `factory logs` either implemented minimally or retired |
 
-Phases 3 and 4 share no critical code — order is operator preference once Phase 2 closes.
+Phases 3 and 4 share no critical code — order is operator preference once Phase 2 closes. Phase 5 has no code dependencies (pure docs + prompts + an optional small CLI command); shippable after Phase 4 closes (the natural sequence) or independently.
 
 ## Per-phase summaries
 
@@ -55,10 +56,20 @@ Full plan: [`../../UPGRADE/plans/tier-4-cli-completion.md`](../../UPGRADE/plans/
 
 **Done criteria highlights:** all new commands have unit tests; tab completion produces valid bash/zsh/pwsh completion scripts; every `factory <cmd> --help` shows at least one worked example; all four `pnpm` gates clean.
 
+### Phase 5 — agent-prompts
+
+**Goal:** Every active agent prompt in `prompts/agents/` is substantive and factory5-native (built for current architecture, not ported wholesale from factory2). Stale doc claims that conflict with what shipped through Tiers 1–4 are corrected. The single CLI stub-by-design (`factory logs`) is either implemented minimally or retired.
+
+**Key steps:** Open U024 (prompts README is stale) + U025 (ONBOARDING §5.4 read-once claim is stale post-Tier-3) + add Tier 5 to ROADMAP; drop the stale stub-tracking column from `prompts/agents/README.md` (replace with `File | Role | Purpose`); correct ONBOARDING §5.4's "read-once" + "no project creation in SPA" claims that Tier 3 shipped past; write `reviewer.md` / `fixer.md` / `investigator.md` from scratch (not ported — factory5-native against current ADRs and the existing FINDING marker contract); flesh out `builder.md` factory5-native TDD body while preserving the venv discipline section byte-for-byte (it prevents I007 host-pollution); decide and execute on `factory logs` (Path A implement-minimal vs Path B retire).
+
+Full plan: [`../../UPGRADE/plans/tier-5-agent-prompts.md`](../../UPGRADE/plans/tier-5-agent-prompts.md). Issues addressed: U024, U025.
+
+**Done criteria highlights:** all four `pnpm` gates clean; `prompts/agents/README.md` accurately reflects every prompt's role + purpose with no transient status field; the 4 deficient prompts (reviewer / fixer / investigator / builder) carry factory5-native bodies with no `Phase 1 stub` markers and no `factory2` references; `docs/ONBOARDING.md` §5.4 reflects post-Tier-3 SSE + project-creation reality; no half-stub `factory logs` row in CLI README.
+
 ## Guidance
 
 - Each phase is sized for 1-3 operator working hours where possible. Phase 3 may split into 3a/3b/3c per the plan if the session count exceeds 3.
-- Phases close with verifiable end-to-end outcomes (live build smoke for Phase 3; Discord live test for Phase 2). Internal-refactor-only phases aren't allowed.
+- Phases close with verifiable end-to-end outcomes (live build smoke for Phase 3; Discord live test for Phase 2). Internal-refactor-only phases aren't allowed. Phase 5 is the soft exception — prompt content is verified by the brain consuming it on the next directive run + by inspection (substantive content, correct frontmatter, references that resolve), rather than by a single smoke test.
 - Every phase has a rollback plan documented in its `README.md` (default: `git reset --hard phase-<N-1>-<prev-name>-closed`).
-- After Phase 2 closes, Phases 3 and 4 are independent — pick either based on operator preference.
+- After Phase 2 closes, Phases 3 and 4 are independent — pick either based on operator preference. Phase 5 has no hard dependency on prior phases (only references their work in doc fixes).
 - New issues discovered during a phase append to [`../../UPGRADE/ISSUES.md`](../../UPGRADE/ISSUES.md). Resolved issues move to the bottom-of-file "Resolved" section with a date.

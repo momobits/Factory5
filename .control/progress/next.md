@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-06T21:44:40Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-07T13:14:12Z by
 > `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
@@ -16,36 +16,42 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-The factory5 first-class upgrade arc that ran from Tier 1 (doc-sweep) through Tier 4 (cli-completion) is complete. Four operator surfaces — CLI, Discord, Telegram, web dashboard — now reach feature parity for the eight-intent vocabulary; live SSE wiring on the web side; tab completion + rich `--help` on the CLI side; one Astro component library; one shared chat protocol. ADRs 0027 / 0028 / 0029 codify the pinned contracts.
+Run sub-step **5.1**: open two issues in `UPGRADE/ISSUES.md` per Tier 5 plan §5.1.
 
-No new phase is scaffolded. Operator's options:
+- `U024 — prompts/agents/README.md status table is stale` (Severity: low, Tier: 5, Area: docs / brain). 5 of 9 prompts listed as "stub" but have substantive bodies (triage / architect / planner / scaffolder / verifier).
+- `U025 — docs/ONBOARDING.md §5.4 claims web detail pages are read-once` (Severity: medium, Tier: 5, Area: docs). Tier 3 step 3.1+3.2 shipped SSE on `/api/v1/directives/:id/stream` and wired `directives/detail.astro` to consume it; doc lies.
 
-1. **Open a new arc** — author a fresh `UPGRADE/plans/tier-5-<name>.md`, add a Phase 5 row to `.control/architecture/phase-plan.md`, then run `/phase-add` (if Control supports it) or hand-scaffold `.control/phases/phase-5-<name>/{README.md,steps.md}` from `.control/templates/`.
-2. **Promote a carry-forward item to a Tier-5+ ROADMAP entry** — see "In-flight work" below; each is small and self-contained, ships as ~1 commit when authored.
-3. **Park** — surfaces are stable; nothing is gated on more work.
+Each issue follows the existing `### UNNN — Short title` template (severity / tier / area / description / hypothesis). Append to the Open section. Then commit `chore(5.1): open U024 + U025`.
 
-**Session-end ran** (this commit) — STATE.md / journal.md / next.md / UPGRADE/LOG.md have all transitioned to the post-arc state. The phase-close commit `28c0188` landed the structural transition; this docs(state) commit records the operator-side handoff for whoever picks up next.
+After 5.1 lands, proceed to **5.2** (drop the stale stub-tracking column from `prompts/agents/README.md`; replace with `File | Role | Purpose`; drop "Phase 1 work" section + "from factory2" provenance — closes U024) and **5.3** (sweep `docs/ONBOARDING.md` §5.4 — closes U025).
+
+**Two pre-write homework items lurking** for 5.4 and 5.5 (read first, don't assume):
+
+- **5.4 reviewer findings policy** — read `packages/brain/src/findings/` (or wherever `findings_registry.advisory` is set on insert) to confirm whether reviewer findings flow advisory or blocking. `pool.ts:111-132` shows `finding.advisory` defaults to false (blocking); locate where `advisory: true` gets set per-source. If genuinely ambiguous, write ADR 0030 before 5.4's body lands.
+- **5.5 fixer output contract** — grep `packages/brain/src/` for any agent-output → `markFinding` parser path. Three branches (existing parser → match grammar; clean extension point → re-scope `docs(5.5)` to `feat(5.5)` and ship parser; no path → prose-only flow + Tier 6 candidate). Pin the branch in commit body and prompt body.
+
+**5.8 is operator-decision** — `factory logs` Path A (implement minimal `--component`/`--directive`/`--follow` tail) vs Path B (retire). Default to retire if undecided when 5.8 starts.
+
+Full Tier 5 plan: [`../../UPGRADE/plans/tier-5-agent-prompts.md`](../../UPGRADE/plans/tier-5-agent-prompts.md). Phase scaffold: [`../phases/phase-5-agent-prompts/{README.md,steps.md}`](../phases/phase-5-agent-prompts/).
 
 ## Notes for next session
 
-The factory5 first-class upgrade arc (Tiers 1 → 4) is complete. There is no scheduled Phase 5. The operator opens the next arc when a demand signal surfaces.
+Phase 5 (`phase-5-agent-prompts`) is in flight. The plan, ROADMAP, and phase scaffold are all in place; sub-step 5.1 is the next concrete action.
 
-If you want to continue working on factory5, the cleanest paths are:
+**Sub-step queue:**
 
-**A. Promote one of the carry-forward items.** Each is small and self-contained:
+- **5.1** — Open U024 (`prompts/agents/README.md` status table stale) + U025 (`docs/ONBOARDING.md` §5.4 read-once claim stale post-Tier-3) in `UPGRADE/ISSUES.md`. ROADMAP rows + phase scaffold pre-authored. Commit: `chore(5.1): open U024 + U025`.
+- **5.2** — Drop the stale stub-tracking column from `prompts/agents/README.md`; replace with `File | Role | Purpose`; drop "Phase 1 work" section + "from factory2" provenance. Closes U024. Commit: `docs(5.2): prompts/agents/README.md — drop stale stub-tracking column`.
+- **5.3** — Sweep `docs/ONBOARDING.md` §5.4: drop "read-once" claim and "no project creation" claim; reflect post-Tier-3 reality. Closes U025. Commit: `docs(5.3): docs/ONBOARDING.md §5.4 — drop read-once claim post-Tier-3`.
+- **5.4** — Write `prompts/agents/reviewer.md` from scratch (factory5-native). **Pre-write homework**: read `packages/brain/src/findings/` to pin reviewer's advisory-vs-blocking severity policy. Comparable in depth to `verifier.md` (97 lines) or `architect.md` (79). Commit: `docs(5.4): prompts/agents/reviewer.md — write factory5-native body`.
+- **5.5** — Write `prompts/agents/fixer.md` from scratch. **Pre-write homework**: grep `packages/brain/src/` for any agent-output → `markFinding` parser path. Three branches; commit type may re-scope `docs(5.5)` → `feat(5.5)`.
+- **5.6** — Write `prompts/agents/investigator.md` from scratch. Read-only constraint with concrete OK/NOT-OK Bash examples; HYPOTHESIS / EVIDENCE / RECOMMENDED NEXT framed as operator-readable conventions (not parsed).
+- **5.7** — Flesh out `prompts/agents/builder.md`. **CRITICAL preservation**: the existing Python venv discipline section (~65 lines) prevents I007 host-pollution — copy verbatim into the new structure; verify with diff.
+- **5.8** — **Operator-decision required before this step starts**: `factory logs` Path A (implement minimal `--component`/`--directive`/`--follow`) vs Path B (retire). Default to retire if undecided.
+- **5.9** — `/phase-close` — tags `phase-5-agent-prompts-closed`; appends LOG.md entry; if a Tier 6 plan exists scaffold it, otherwise close out the upgrade arc again.
 
-- _Pause primitive on directive detail_ — when a real workflow signal surfaces, decide between extending `directivesQ.status` with `paused`/resume vs reusing `markBlocked` with `blockedReason: 'paused-by-operator'`.
-- _PageShell migration + Dashboard `<style is:global>`_ — 11-page sweep, absorbs filter-form Apply / "Clear all defaults" unstyled-button issue + inline-style audit pass; ships as ~1 commit.
-- _Brain-side `log.line` forwarder_ — selective pino-stream tap; ADR 0029 future-work item.
-- _Chat-page click-test_ — 30-second smoke; final piece of Phase 3.5's pre-existing baseline.
-- _U005 `factory chat` 120 s timeout_ — extend or replace with streaming.
-- _Control framework 2.2.3 publish_ at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- _`/session-end` skill structural fix_ for the "Last commit" lag-by-1 (now 11 occurrences). Two structural options unchanged: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+**Tier 6 candidate (out of Phase 5 scope):** Skills review + rewrites — all 12 skills in `skills/` are "ported from factory2/skills/" per `docs/SKILLS.md`. If 5.4-5.7 surface fit issues with skills (`tdd`, `code-review`, `error-recovery`, `ask-user`, `progress-tracking`, `work-verification`), draft `UPGRADE/plans/tier-6-skills-rewrites.md` then. Inline hot-fix only allowed for one-line factual errors with a journal note.
 
-**B. Author a new tier.** If a larger arc surfaces (e.g., persistent-session resumption, multi-tenant operator auth, Linux+Mac CI matrix, Pause primitive once a demand signal lands, eval harness for triage / architect / verify), draft a `UPGRADE/plans/tier-5-<name>.md`, add a Phase 5 row to `phase-plan.md`, then run `/phase-add` (or scaffold by hand) to bring the cursor back online.
+**Read first:** [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across all four prior tiers, [`../../UPGRADE/plans/tier-5-agent-prompts.md`](../../UPGRADE/plans/tier-5-agent-prompts.md) for the full implementation plan, [`../phases/phase-5-agent-prompts/{README.md,steps.md}`](../phases/phase-5-agent-prompts/) for the phase scaffold.
 
-**C. Park.** Nothing is gated. Walking away is fine; the surfaces are stable and document themselves.
-
-Read [`../../UPGRADE/LOG.md`](../../UPGRADE/LOG.md) for the upgrade-side narrative across all four tiers (~10 sessions). Read [`../../UPGRADE/ROADMAP.md`](../../UPGRADE/ROADMAP.md) for the per-tier acceptance picture.
-
-**Frontend-design judgement calls** carried from Phase 3 — not load-bearing (no current web work) but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav.
+**Frontend-design judgement calls** carried from Phase 3 — not load-bearing for Phase 5 (no web work) but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav.

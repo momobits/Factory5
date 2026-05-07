@@ -68,6 +68,20 @@ Polish. Estimated **1 session**.
 
 Plan: [`plans/tier-4-cli-completion.md`](plans/tier-4-cli-completion.md)
 
+## Tier 5 — Agent prompts + targeted doc sweep
+
+Build new (not ported) factory5-native bodies for the 3 pure stub agent prompts + flesh out the 1 hybrid; drop the stale stub-tracking column from `prompts/agents/README.md`; correct stale `docs/ONBOARDING.md` §5.4 claims surfaced post-Tier-3; resolve the `factory logs` stub. Estimated **1 session**.
+
+- [ ] `prompts/agents/README.md` — drop stale stub-tracking column (replace with `File | Role | Purpose`)
+- [ ] `docs/ONBOARDING.md` §5.4 — drop read-once + project-creation-out-of-scope claims (both shipped past in Tier 3)
+- [ ] `prompts/agents/reviewer.md` — write factory5-native body (advisory-vs-blocking policy pinned, FINDING marker contract verified)
+- [ ] `prompts/agents/fixer.md` — write factory5-native body (verify `markFinding` parser branch first; may re-scope to `feat`)
+- [ ] `prompts/agents/investigator.md` — write factory5-native body (read-only constraint with concrete examples; structural conventions, not parser contract)
+- [ ] `prompts/agents/builder.md` — flesh out factory5-native body (preserve Python venv discipline byte-for-byte)
+- [ ] `factory logs` — implement minimal _or_ retire (operator's call before 5.8 starts)
+
+Plan: [`plans/tier-5-agent-prompts.md`](plans/tier-5-agent-prompts.md)
+
 ## Out of scope (now)
 
 Items the audit raised that are deferred:
@@ -78,8 +92,9 @@ Items the audit raised that are deferred:
 - **Multi-tenant SaaS daemon** — out of charter.
 - **VS Code extension** — out of charter.
 - **Hosted "factory cloud"** — out of charter.
+- **Skills review + rewrites (Tier 6 candidate)** — all 12 skills in `skills/` are explicitly "ported from factory2/skills/" per `docs/SKILLS.md`; if Tier 5 surfaces fit issues during prompt writing, draft `plans/tier-6-skills-rewrites.md` then.
 
-These can be promoted to Tier 5+ if/when the demand signal arrives.
+These can be promoted to Tier 6+ if/when the demand signal arrives.
 
 ## Dependencies between tiers
 
