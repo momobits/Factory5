@@ -188,24 +188,26 @@ It hits the loopback-only `/ui-token` IPC route and prints the dashboard URL wit
 
 ### 5.3 Tour the pages
 
-| Page                              | What it shows                                                                                               |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `/app/`                           | Overview cards — recent directives, open-question count, spend headline                                     |
-| `/app/build/`                     | New-build form — pick project from the registry dropdown, set autonomy / budget, POST kicks off a directive |
-| `/app/directives/`                | Paged directive list with a status filter; click a row to open the detail                                   |
-| `/app/directives/detail/?id=<id>` | Inflight tasks, open pending questions, spend + call-count rollup for a single directive                    |
-| `/app/projects/`                  | Project registry list (most-recently-touched first)                                                         |
-| `/app/projects/detail/?id=<id>`   | Project detail with budget-defaults editor (PUT writes `metadata.budgetDefaults` per ADR 0027)              |
-| `/app/questions/`                 | Pending-question list — `open` / `answered` / `all` scopes                                                  |
-| `/app/questions/detail/?id=<id>`  | Question detail with the answer form (POST closes the loop; same write path the channel collectors take)    |
-| `/app/spend/`                     | Spend dashboard — per-project / -directive / -day / -model rollups                                          |
-| `/app/findings/`                  | Cross-project findings list with severity + status filters                                                  |
+| Page                              | What it shows                                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `/app/`                           | Overview cards — recent directives, open-question count, spend headline                                       |
+| `/app/build/`                     | New-build form — pick project from the registry dropdown, set autonomy / budget, POST kicks off a directive   |
+| `/app/chat/`                      | Browser chat surface — same shape as `factory chat`; SSE token-by-token reply rendering                       |
+| `/app/directives/`                | Paged directive list with a status filter; click a row to open the detail                                     |
+| `/app/directives/detail/?id=<id>` | Inflight tasks, open pending questions, spend + call-count rollup for a single directive (SSE-live; see §5.4) |
+| `/app/projects/`                  | Project registry list (most-recently-touched first)                                                           |
+| `/app/projects/new/`              | New-project form — claim identity from the SPA (POST `/api/v1/projects` writes `project.json` + registers it) |
+| `/app/projects/detail/?id=<id>`   | Project detail with budget-defaults editor (PUT writes `metadata.budgetDefaults` per ADR 0027)                |
+| `/app/questions/`                 | Pending-question list — `open` / `answered` / `all` scopes                                                    |
+| `/app/questions/detail/?id=<id>`  | Question detail with the answer form (POST closes the loop; same write path the channel collectors take)      |
+| `/app/spend/`                     | Spend dashboard — per-project / -directive / -day / -model rollups                                            |
+| `/app/findings/`                  | Cross-project findings list with severity + status filters                                                    |
 
-### 5.4 Today's limitations
+### 5.4 Live updates + write-mode
 
-The detail pages are **read-once**: they don't refresh as the brain progresses through tasks. Reload the page to see the latest state. Live updates via SSE land in Tier 3 of the upgrade (see [`UPGRADE/ROADMAP.md`](../UPGRADE/ROADMAP.md)). In the meantime, the daemon's logs (`tail -f ~/.factory5/logs/*.log`) carry the live trace.
+Detail pages stream live updates via SSE on `GET /api/v1/directives/:id/stream` — tasks transitioning, findings appearing, spend ticking up all render as they happen, no reload needed. The page subscribes on load (the connection backfills any events emitted before subscribe so connect-after-build is idempotent), maintains a 15 s `:keepalive` heartbeat, and falls back to polling on `/api/v1/directives/:id` for SSE-stripped proxies. ADR 0029 pins the protocol.
 
-The build form **refuses to create new projects** — the project must already exist on disk before its name shows up in the dropdown. Run `factory init` (or `factory build <name>` once from the CLI) to claim identity, then the SPA can drive subsequent builds. ADR 0025 / Phase 11 charter put project creation explicitly out of scope for the SPA.
+The dashboard is fully write-capable today: kick off builds (`/app/build/`), claim new projects (`/app/projects/new/`), edit budget defaults (`/app/projects/detail`), close pending questions (`/app/questions/detail`), and chat with the brain (`/app/chat/`). All writes go through the same brain-side state package the CLI uses — a build started in the SPA is indistinguishable from one started via `factory build`. ADR 0027 covers the mutation surface (auth, idempotency, error envelope).
 
 ---
 

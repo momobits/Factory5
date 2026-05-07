@@ -73,7 +73,7 @@ Plan: [`plans/tier-4-cli-completion.md`](plans/tier-4-cli-completion.md)
 Build new (not ported) factory5-native bodies for the 3 pure stub agent prompts + flesh out the 1 hybrid; drop the stale stub-tracking column from `prompts/agents/README.md`; correct stale `docs/ONBOARDING.md` §5.4 claims surfaced post-Tier-3; resolve the `factory logs` stub. Estimated **1 session**.
 
 - [x] `prompts/agents/README.md` — drop stale stub-tracking column (replace with `File | Role | Purpose`)
-- [ ] `docs/ONBOARDING.md` §5.4 — drop read-once + project-creation-out-of-scope claims (both shipped past in Tier 3)
+- [x] `docs/ONBOARDING.md` §5.4 — drop read-once + project-creation-out-of-scope claims (both shipped past in Tier 3)
 - [ ] `prompts/agents/reviewer.md` — write factory5-native body (advisory-vs-blocking policy pinned, FINDING marker contract verified)
 - [ ] `prompts/agents/fixer.md` — write factory5-native body (verify `markFinding` parser branch first; may re-scope to `feat`)
 - [ ] `prompts/agents/investigator.md` — write factory5-native body (read-only constraint with concrete examples; structural conventions, not parser contract)
