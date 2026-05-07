@@ -33,6 +33,15 @@ Severity:
 - **Hypothesis**: Either (a) increase the timeout to something like 10 min and rely on user `Ctrl-C`, or (b) stream partial responses and the daemon emits intermediate progress messages. Option (b) is the better UX but requires daemon-side support.
 - **Resolution**: Tier 2 or 4. Pair with the chat surface work.
 
+### U028 — `factory findings mark <id> <status>` CLI verb missing
+
+- **Severity**: low
+- **Tier**: 7
+- **Area**: cli
+- **Description**: Tier 6 step 6.3 wired the agent-side `RESOLUTION` parser at `packages/worker/src/parse-resolutions.ts` so fixer agent output like `RESOLUTION F001 (FIXED): <prose>` causes `updateFindingStatus(F001, FIXED, "<prose>")` to fire. The operator-side parallel doesn't exist — there's no `factory findings mark <id> <status>` CLI verb. When a fixer agent doesn't run (or the operator wants to mark something `WONTFIX` directly without invoking the fixer), today's only path is hand-editing `<workspace>/<project>/.factory/findings.json`. The existing `factory findings` group has `list` / `show` / `backfill` subcommands; `mark` is the missing 4th.
+- **Hypothesis**: Pure composition. New `runFindingsMark(db, rawId, rawStatus, opts)` handler in `packages/cli/src/commands/findings.ts` mirrors `runFindingsShow`'s disambiguation pattern (`findingsRegistry.findByFindingId` for bare ids; `getByProjectAndId` for `<project>/<id>` form), then calls `updateFindingStatus(entry.projectPath, finding.id, status, opts.note)` against the existing `packages/wiki/src/findings.ts:196` API. Status enum `OPEN | FIXED | VERIFIED | WONTFIX` matches the runtime; `--note <prose>` flows to the `resolution` parameter the same way the parser populates it from `RESOLUTION` marker prose. No new dependencies; no new ADRs expected. Tests mirror `findings.test.ts`'s table-driven shape.
+- **Resolution**: (filled when work completes)
+
 ## Resolved
 
 ### U001 — packages/cli/README.md is stale
