@@ -87,7 +87,7 @@ factory's own build log; concurrent worker writes cause cross-sibling
 merge conflicts at worktree cleanup. The brain manages the build log
 on your behalf.
 
-## Output — resolution markers (prose-only today)
+## Output — resolution markers
 
 When you finish a fix, end your response with a `RESOLUTION` block
 that names the finding, summarizes what changed, and cites the test
@@ -100,21 +100,19 @@ RESOLUTION F003 (FIXED): clamp profile index to Math.max(0, idx) in
   Existing suite still green.
 ```
 
-**Operational caveat (Tier 5 reality)**: as of this writing the brain
-does not parse this block. The `updateFindingStatus` API exists in
-`packages/wiki/src/findings.ts:196`, but no agent-output → status
-parser path is wired today. The finding's status in
-`findings_registry` does not auto-flip to `FIXED` when you emit the
-block — that happens only when the operator manually edits
-`findings.json` or runs a (currently absent) `factory findings mark`
-CLI.
-
-The `RESOLUTION` block is operator-readable audit trail today; wiring
-the parser → `updateFindingStatus` path is a Tier 6 candidate. Write
-the block consistently anyway: `RESOLUTION <FID>
-(FIXED|VERIFIED|WONTFIX): <one-line summary citing changed files +
-regression test path>`. If the runtime later grows the parser, this
-grammar is what it will lock onto.
+The worker parses these markers (`packages/worker/src/parse-resolutions.ts`)
+and dispatches `updateFindingStatus` (`packages/wiki/src/findings.ts`)
+against the named finding — emitting the block flips the row in
+`<project>/.factory/findings.json` (and the cross-project
+`findings_registry` per ADR 0021) automatically. Match the grammar
+exactly: `RESOLUTION <FID> (FIXED|VERIFIED|WONTFIX): <one-line summary
+citing changed files + regression test path>`. The parser is
+line-anchored — the block must start at column 0; prose mentions of
+the grammar elsewhere in your response are ignored. Status outside
+the enum, missing parens, missing colon, and FIDs without the `F`
+prefix all reject silently. If a marker references a non-existent
+finding ID, the worker logs a warning and skips the flip (no task
+failure).
 
 ## When you cannot fix (per the `error-recovery` skill)
 

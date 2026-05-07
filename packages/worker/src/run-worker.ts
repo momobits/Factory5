@@ -43,6 +43,7 @@ import {
   findRepoTemplatesDir,
   listFindings,
   readWiki,
+  updateFindingStatus,
   type FindingRegistryBinding,
 } from '@factory5/wiki';
 import { buildMcpConfig, getServerScriptPath } from '@factory5/worker-mcp';
@@ -55,6 +56,7 @@ import {
 import { simpleGit } from 'simple-git';
 
 import { parseFindings } from './parse-findings.js';
+import { parseResolutions } from './parse-resolutions.js';
 import { allocateWorktree, cleanupWorktree, type WorktreeHandle } from './worktree.js';
 
 const log = createLogger('worker');
@@ -219,6 +221,58 @@ async function persistFindings(
 }
 
 /**
+ * Parse `RESOLUTION <FID> (FIXED|VERIFIED|WONTFIX): <prose>` markers from
+ * agent output and dispatch {@link updateFindingStatus} for each one. The
+ * fixer is the canonical emitter (per `prompts/agents/fixer.md`); other
+ * agents typically don't emit, but the parser runs unconditionally to
+ * stay future-proof — output without markers is a no-op.
+ *
+ * If a marker references a finding ID that doesn't exist (typo, stale
+ * ref), `updateFindingStatus` throws. We log + skip rather than failing
+ * the task — the operator can read the agent's response text to see the
+ * orphan marker.
+ *
+ * Sequenced after {@link persistFindings} at the call site because both
+ * operate on `<project>/.factory/findings.json` via read-modify-write;
+ * concurrent execution would race.
+ */
+async function persistResolutions(
+  projectPath: string,
+  agent: AgentRole,
+  taskId: string,
+  responseText: string,
+  findingRegistry: FindingRegistryBinding | undefined,
+): Promise<string[]> {
+  const flippedIds: string[] = [];
+  if (responseText.length === 0) return flippedIds;
+  const parsed = parseResolutions(responseText);
+  for (const p of parsed) {
+    try {
+      const f = await updateFindingStatus(
+        projectPath,
+        p.fid,
+        p.status,
+        p.resolution,
+        findingRegistry,
+      );
+      flippedIds.push(f.id);
+    } catch (err) {
+      log.warn(
+        { err, projectPath, fid: p.fid, status: p.status, taskId, agent },
+        'worker: RESOLUTION marker references unknown or invalid finding — skipping',
+      );
+    }
+  }
+  if (flippedIds.length > 0) {
+    await appendBuildLog(
+      projectPath,
+      `${agent} (task ${taskId}) flipped ${String(flippedIds.length)} finding(s)`,
+    );
+  }
+  return flippedIds;
+}
+
+/**
  * Write the per-task mcp-config JSON to a tmp file and return its path.
  * Tmp directory rather than the worktree because the worktree is git-tracked
  * and we don't want a transient config file showing up in the agent's
@@ -348,6 +402,13 @@ async function runReadOnly(opts: WorkerOptions, fullUserPrompt: string): Promise
   }
 
   const findingIds = await persistFindings(
+    opts.projectPath,
+    opts.task.agent,
+    opts.task.id,
+    responseText,
+    opts.findingRegistry,
+  );
+  await persistResolutions(
     opts.projectPath,
     opts.task.agent,
     opts.task.id,
@@ -519,6 +580,13 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
   const durationMs = Date.now() - started;
   const filesChanged = error === undefined ? await listChangedFiles(worktree) : [];
   const findingIds = await persistFindings(
+    opts.projectPath,
+    opts.task.agent,
+    opts.task.id,
+    responseText,
+    opts.findingRegistry,
+  );
+  await persistResolutions(
     opts.projectPath,
     opts.task.agent,
     opts.task.id,
