@@ -12,8 +12,9 @@ Derived from [`../SPEC.md`](../SPEC.md). Per-phase implementation detail lives i
 | 4   | cli-completion | phase 2 (cancel shell)           | ~1                 | `factory cancel/budget/project/ask` + tab completion + `--help` examples on every command                                                             |
 | 5   | agent-prompts  | —                                | ~1                 | All active agent prompts substantive + factory5-native; stale doc claims (prompts README + ONBOARDING §5.4) aligned with Tier-1–4 reality; `factory logs` either implemented minimally or retired |
 | 6   | skills-rewrites | phase 5 (closes the agent-prompts arc) | ~1-2               | All 12 skills in `skills/` audited against factory5 reality; rewrites where needed; "ported from factory2" provenance dropped from `docs/SKILLS.md`. Plus: brain-side parser for fixer's `RESOLUTION` markers so `updateFindingStatus` fires on agent declaration |
+| 7   | findings-mark   | phase 6 (composes with the agent-side parser) | ~1                 | `factory findings mark <id> <status>` CLI command — operator-side parallel to Tier 6's agent-side `RESOLUTION` parser. Composition over existing `updateFindingStatus` API; bare-id disambiguation matches `factory findings show`; `--note` records resolution prose |
 
-Phases 3 and 4 share no critical code — order is operator preference once Phase 2 closes. Phase 5 has no code dependencies (pure docs + prompts + an optional small CLI command); shippable after Phase 4 closes (the natural sequence) or independently. Phase 6 is the natural continuation of Phase 5 — closes the agent-prompts arc by auditing the skills the prompts cite + wiring the fixer marker grammar Phase 5 documented.
+Phases 3 and 4 share no critical code — order is operator preference once Phase 2 closes. Phase 5 has no code dependencies (pure docs + prompts + an optional small CLI command); shippable after Phase 4 closes (the natural sequence) or independently. Phase 6 is the natural continuation of Phase 5 — closes the agent-prompts arc by auditing the skills the prompts cite + wiring the fixer marker grammar Phase 5 documented. Phase 7 is the operator-side composition of Phase 6's agent-side parser — single CLI verb that wraps the same `updateFindingStatus` call the parser dispatches.
 
 ## Per-phase summaries
 
@@ -76,6 +77,16 @@ Full plan: [`../../UPGRADE/plans/tier-5-agent-prompts.md`](../../UPGRADE/plans/t
 Full plan: [`../../UPGRADE/plans/tier-6-skills-rewrites.md`](../../UPGRADE/plans/tier-6-skills-rewrites.md). Issues addressed: U026, U027.
 
 **Done criteria highlights:** all four `pnpm` gates clean; no skill body in `skills/` references `factory2`; `docs/SKILLS.md` line 7 forward-looking; `prompts/agents/fixer.md` no longer carries "no parser today" caveat; new parser function with at least one unit test; manual or integration verification that a `RESOLUTION` marker in agent output flips a `findings.json` row.
+
+### Phase 7 — findings-mark
+
+**Goal:** ship the operator-side parallel to Tier 6's agent-side `RESOLUTION` parser. `factory findings mark <id> <status>` flips a finding's status (and optionally records a resolution note) via the same `updateFindingStatus` API the parser already dispatches.
+
+**Key steps:** open U028; add `runFindingsMark(db, rawId, rawStatus, opts)` in `packages/cli/src/commands/findings.ts` mirroring `runFindingsShow`'s disambiguation pattern; wire `group.command('mark <id> <status>')` with `--note <prose>`; add unit tests covering happy path / invalid status / ambiguous / not-found / with-note / idempotent re-flip; update `packages/cli/src/commands/completion.ts` `NESTED_SUBCOMMANDS` and `packages/cli/README.md`.
+
+Full plan: [`../../UPGRADE/plans/tier-7-findings-mark.md`](../../UPGRADE/plans/tier-7-findings-mark.md). Issues addressed: U028.
+
+**Done criteria highlights:** all four `pnpm` gates clean; `factory findings mark <id> <status>` works for the four legal statuses; bare-id disambiguation matches `factory findings show`; `--note` flows through to `updateFindingStatus(..., resolution)`; tab completion picks up `mark`.
 
 ## Guidance
 

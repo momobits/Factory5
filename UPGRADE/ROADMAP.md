@@ -1,6 +1,6 @@
 # Roadmap — factory5 first-class upgrade
 
-Six tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5 and 6 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closes the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents.
+Seven tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 ships the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb).
 
 ## Status legend
 
@@ -94,6 +94,19 @@ Audit all 12 skills in `skills/` against factory5 reality (current ADRs, current
 
 Plan: [`plans/tier-6-skills-rewrites.md`](plans/tier-6-skills-rewrites.md)
 
+## Tier 7 — `factory findings mark <id> <status>` CLI command
+
+Ship the operator-side parallel to Tier 6's agent-side `RESOLUTION` parser. `factory findings mark <id> <status>` flips a finding's status (and optionally records a resolution note) via the same `updateFindingStatus` API the parser dispatches. Composition over existing surface — handler wraps the API, disambiguation copies `factory findings show`, tests mirror the existing findings test shape. Estimated **1 session, ~1 substantive commit**.
+
+- [ ] Open U028 (`factory findings mark <id> <status>` CLI verb missing)
+- [ ] Implement `runFindingsMark(db, rawId, rawStatus, opts)` in `packages/cli/src/commands/findings.ts` — wraps `updateFindingStatus`; bare-id disambiguation copies `runFindingsShow`; `--note <prose>` flows to `resolution`
+- [ ] Wire `group.command('mark <id> <status>')` with `addHelpText('after', ...)` worked examples
+- [ ] Unit tests in `findings.test.ts` (happy path / invalid status / ambiguous bare-id / not-found / `<project>/<id>` form / with `--note` / idempotent re-flip)
+- [ ] Update `packages/cli/src/commands/completion.ts` `NESTED_SUBCOMMANDS` (add `mark` to the `findings` row) + `packages/cli/README.md` findings table
+- [ ] Sweep `prompts/agents/fixer.md` for any "no operator CLI" phrasing left over from pre-7.2 reality
+
+Plan: [`plans/tier-7-findings-mark.md`](plans/tier-7-findings-mark.md)
+
 ## Out of scope (now)
 
 Items the audit raised that are deferred:
@@ -104,13 +117,12 @@ Items the audit raised that are deferred:
 - **Multi-tenant SaaS daemon** — out of charter.
 - **VS Code extension** — out of charter.
 - **Hosted "factory cloud"** — out of charter.
-- **U005 chat 120 s timeout re-tier** — Tier 7 candidate; carry-forward from Phase 2's Tier-2-or-4 designation.
-- **`factory findings mark <id> <status>` CLI command** — operator-side parallel to Tier 6's agent-side parser; Tier 7 candidate.
+- **U005 chat 120 s timeout re-tier** — Tier 8 candidate; carry-forward from Phase 2's Tier-2-or-4 designation.
 - **`factory skills list / show <name>` CLI commands** — skill discovery surface; Tier 8 candidate.
 - **PageShell + Dashboard `<style is:global>` migration** — 11-page sweep absorbing filter-form Apply / "Clear all defaults" + inline-style audit pass; self-contained ~1 commit.
 - **ADR amendments** — 0027 §1 missing route pin (POST `/api/v1/projects`), 0002 footnote stale post-Tier-5; doc-debt only.
 
-These can be promoted to Tier 7+ if/when the demand signal arrives.
+These can be promoted to Tier 8+ if/when the demand signal arrives.
 
 ## Dependencies between tiers
 
