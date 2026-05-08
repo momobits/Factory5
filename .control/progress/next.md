@@ -1,7 +1,7 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-08T15:59:58Z by
-> `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-08T16:58:02Z by
+> `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
 
@@ -27,7 +27,7 @@ If the operator wants to continue, the carry-forward candidates from Phase 8's D
 5. **`factory questions list / show <id>` CLI** — subcommands don't exist today; only `cleanup` is wired. Composition-style tier.
 6. **`factory skills list / show <name>` CLI** — skill discovery surface. Composition-style; CLI runs `loadSkill(id)` against the per-user/per-project override paths the brain already uses.
 7. **PageShell + Dashboard `<style is:global>` migration** — 11-page sweep absorbing filter-form Apply / "Clear all defaults" + inline-style audit. Self-contained ~1 commit.
-8. **Structural `/session-end` lag-by-1 fix** — STATE.md tracking "last work commit" rather than HEAD, or amending STATE.md post-commit. **20 occurrences** accumulated through this session-end. Real engineering work.
+8. **Structural `/session-end` lag-by-1 fix** — STATE.md tracking "last work commit" rather than HEAD, or amending STATE.md post-commit. **23 occurrences** accumulated through this session-end. Real engineering work.
 9. **Agent-class-specialized auto-answer prompts** — defer-until-signal. Quality data on the generic Tier 8 prompt should drive any specialization.
 10. **Channel-side `answered_by` badge** — Discord/Telegram historic embed rendering. Low value.
 11. **ADR amendments** — 0027 §1 missing route pin (POST `/api/v1/projects`), 0002 footnote stale post-Tier-5. Doc-debt; not load-bearing.
@@ -42,6 +42,7 @@ To kick off Phase 9:
 
 If the operator doesn't want a Tier 9, the project is in a clean post-arc parking state — there's no queued work in the upgrade arc.
 
+
 ## Notes for next session
 
 **No active phase.** The upgrade arc closed at `phase-8-question-auto-answer-closed`. To resume work, the operator can either:
@@ -53,7 +54,7 @@ If the operator doesn't want a Tier 9, the project is in a clean post-arc parkin
    - **`factory questions list / show <id>` CLI** — composition over existing query helpers; ~1 commit if narrowly scoped. Now that Tier 8 made `answered_by` real, the CLI list/show would render the badge end-to-end (closing one of the tier 8 plan-deviation gaps).
    - **`factory config get / set <key>` CLI** — operator surface for the Tier 8 config file.
    - **PageShell + Dashboard `<style is:global>` migration** — absorbs filter-form Apply / "Clear all defaults" + inline-style audit; self-contained ~1 commit.
-   - **Structural `/session-end` lag-by-1 fix** — 20 occurrences accumulated. Real engineering work, not a one-liner.
+   - **Structural `/session-end` lag-by-1 fix** — 23 occurrences accumulated. Real engineering work, not a one-liner.
 
 3. **Park** — surfaces are stable; nothing is gated on more work.
 

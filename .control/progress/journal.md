@@ -2,7 +2,17 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
-## 2026-05-08 (latest) — Phase 8 closed; scaffold + 8.1 → 8.7 + /phase-close in one session; upgrade arc complete (fifth time)
+## 2026-05-08 (latest) — Drift-fix only; no phase work; lag-by-1 #21 caught up
+
+- Single-session pickup at HEAD `ca054c4` (the prior session's session-end). Operator path: `/session-start` narrate drift (commit-mismatch was lag-by-1 #21, the well-known pattern) → operator chose option 1 (catch-up commit) → drift-fix `173bcbc` → `/session-end` at this commit. Two commits this session, both `docs(state)`-shape.
+- **Per-commit shas:** drift-fix `173bcbc` docs(state) bump last-commit pointer to ca054c4 · session-end at this commit.
+- **No code work, no phase, no tier 9 plan.** Project remains parked at `phase-8-question-auto-answer-closed`. All carry-forward items unchanged from Phase 8's deferred list.
+- **Lag count: 22 → 23.** Drift-fix caught up #21 and was itself #22; this session-end reintroduces the lag at #23. Structural fix (`/session-end` skill tracking "last work commit" or amending STATE.md post-commit) remains a Tier 9+ candidate.
+- **Issues opened / closed:** none. UPGRADE/ISSUES.md "Open" still contains only U005 (twice-deferred chat REPL cancel UX, path (a+) sketched).
+- **No new ADRs.** No structural surface to pin.
+- **Working tree clean at session-end commit.** No code touched; tests not re-run (last green at `d863ea0` phase-close: workspace 1182 + 3 skipped, all 4 pnpm gates).
+
+## 2026-05-08 — Phase 8 closed; scaffold + 8.1 → 8.7 + /phase-close in one session; upgrade arc complete (fifth time)
 
 - Single-session continuation that picked up post-Phase-7-close at HEAD `cf9d4f9` (the prior session's session-end). Operator path: `/session-start --why` narrate drift (commit-mismatch was the well-known lag-by-1 #19) → operator asked "recommendation" → I recommended Tier 8 around U005 chat 120s; operator pushed back asking for the why; I grounded in `UPGRADE/ISSUES.md` (U005 is the only OPEN issue) and walked through path (a)/path (b)/UX implications → operator pivoted: not U005, but a brand-new feature for `ask_user` deadline + LLM auto-answer when the human doesn't reply → /plan mode → tier-8-question-auto-answer.md drafted + reviewed → /auto mode → 8 work commits + this phase-close.
 - **Per-step commit shas:** scaffold `8453086` chore(phase-8) tier 8 question-auto-answer · 8.1 `93a7c9a` chore(8.1) open U029 · 8.2 `cd08976` feat(8.2) pending_questions.answered_by column + backfill · 8.3 `8365b6a` docs(8.3) ADR 0030 · 8.4 `d894aaa` feat(8.4) loadConfig + askUserDeadlineMs · 8.5 `dd25d78` feat(8.5) brain stamps deadline_at · 8.6 `89f58c8` feat(8.6) auto-answer dispatcher + sweep · 8.7 `992affa` feat(8.7) web surfaces · /phase-close at this commit.
