@@ -1,6 +1,6 @@
 # Roadmap — factory5 first-class upgrade
 
-Seven tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 ships the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb).
+Eight tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent.
 
 ## Status legend
 
@@ -107,6 +107,20 @@ Shipped the operator-side parallel to Tier 6's agent-side `RESOLUTION` parser. `
 
 Plan: [`plans/tier-7-findings-mark.md`](plans/tier-7-findings-mark.md)
 
+## Tier 8 — `ask_user` deadline + LLM auto-answer
+
+When an `ask_user` pending-question goes unanswered past its deadline and the parent directive is still active, factory makes an LLM call with the question + surrounding context, writes the answer back, marks it `answered_by = 'agent'`, and lets the directive proceed. Today an unanswered question blocks indefinitely (until the orphan sweep runs after the directive itself terminates) — autonomous runs stall waiting on a human who isn't there. Estimated **2 sessions**.
+
+- [ ] Open U029 (unanswered `ask_user` blocks directive; no auto-answer fallback)
+- [ ] Migration 009 — `pending_questions.answered_by` column (`'user' | 'agent' | 'agent-failed' | 'orphan-sweep'`) + backfill orphan-sweep + user rows
+- [ ] ADR 0030 — pending-question auto-answer contract (enum semantics, daemon-wide config home, LLM dispatcher failure path, no-override-after-auto-answer rule)
+- [ ] `@factory5/core` `loadConfig()` reader for `<dataDir>/config.json` (`askUserDeadlineMs` default 5 min; configurable without code changes)
+- [ ] Brain stamps `deadline_at` from config on every new `ask_user`
+- [ ] Brain tick-loop sweep + LLM auto-answer dispatcher (`packages/brain/src/auto-answer.ts`); retry once → write `'agent-failed'` synthetic on second failure
+- [ ] Surface `answered_by` in CLI `factory questions list/show` and web `/app/questions/*`
+
+Plan: [`plans/tier-8-question-auto-answer.md`](plans/tier-8-question-auto-answer.md)
+
 ## Out of scope (now)
 
 Items the audit raised that are deferred:
@@ -117,12 +131,14 @@ Items the audit raised that are deferred:
 - **Multi-tenant SaaS daemon** — out of charter.
 - **VS Code extension** — out of charter.
 - **Hosted "factory cloud"** — out of charter.
-- **U005 chat 120 s timeout re-tier** — Tier 8 candidate; carry-forward from Phase 2's Tier-2-or-4 designation.
-- **`factory skills list / show <name>` CLI commands** — skill discovery surface; Tier 8 candidate.
+- **U005 chat REPL cancel UX path (a+)** — twice-deferred carry-forward; Tier 9 candidate. Path (a+): bump REPL daemon-reply timeout to 10 min + print directive id + heartbeat + SIGINT handler + clean exit prompt.
+- **Per-project deadline override** — CLAUDE.md frontmatter or `<project>/.factory/project.json` `metadata.askUserDeadlineMs`. Non-breaking to add atop Tier 8's daemon-wide config; deferred until demand signal.
+- **`factory config get / set <key>` CLI** — operator surface for editing `<dataDir>/config.json` without hand-editing the JSON. Add when other config keys need editing too.
+- **`factory skills list / show <name>` CLI commands** — skill discovery surface; carry-forward; no demand signal.
 - **PageShell + Dashboard `<style is:global>` migration** — 11-page sweep absorbing filter-form Apply / "Clear all defaults" + inline-style audit pass; self-contained ~1 commit.
 - **ADR amendments** — 0027 §1 missing route pin (POST `/api/v1/projects`), 0002 footnote stale post-Tier-5; doc-debt only.
 
-These can be promoted to Tier 8+ if/when the demand signal arrives.
+These can be promoted to Tier 9+ if/when the demand signal arrives.
 
 ## Dependencies between tiers
 
@@ -133,5 +149,6 @@ These can be promoted to Tier 8+ if/when the demand signal arrives.
 | Tier 3 SSE stream                                      | Independent (can ship before Tier 2)                                    |
 | Tier 4 CLI cancel                                      | Tier 2 brain hook (worker-kill plumbing)                                |
 | Tier 4 CLI budget                                      | Independent (already wired on web side)                                 |
+| Tier 8 deadline sweep                                  | Independent of Tiers 2–7; extends ADR 0024's `ask_user` flow            |
 
-So Tier 1 → Tier 2 → Tier 3 + Tier 4 in parallel works. Tier 3 and Tier 4 share no critical code, so a session can pick either.
+So Tier 1 → Tier 2 → Tier 3 + Tier 4 in parallel works. Tier 3 and Tier 4 share no critical code, so a session can pick either. Tier 8 has no code dependency on prior tiers — it extends the `ask_user` flow that has been live since the original architecture.

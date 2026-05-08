@@ -13,8 +13,9 @@ Derived from [`../SPEC.md`](../SPEC.md). Per-phase implementation detail lives i
 | 5   | agent-prompts  | —                                | ~1                 | All active agent prompts substantive + factory5-native; stale doc claims (prompts README + ONBOARDING §5.4) aligned with Tier-1–4 reality; `factory logs` either implemented minimally or retired |
 | 6   | skills-rewrites | phase 5 (closes the agent-prompts arc) | ~1-2               | All 12 skills in `skills/` audited against factory5 reality; rewrites where needed; "ported from factory2" provenance dropped from `docs/SKILLS.md`. Plus: brain-side parser for fixer's `RESOLUTION` markers so `updateFindingStatus` fires on agent declaration |
 | 7   | findings-mark   | phase 6 (composes with the agent-side parser) | ~1                 | `factory findings mark <id> <status>` CLI command — operator-side parallel to Tier 6's agent-side `RESOLUTION` parser. Composition over existing `updateFindingStatus` API; bare-id disambiguation matches `factory findings show`; `--note` records resolution prose |
+| 8   | question-auto-answer | phase 7 (independent code; soft-sequenced after the upgrade-arc close) | ~2 | LLM auto-answer for unanswered `ask_user` pending-questions past their deadline. New `pending_questions.answered_by` column (`'user' | 'agent' | 'agent-failed' | 'orphan-sweep'`); daemon-wide config in `<dataDir>/config.json` (default 5-min deadline); brain tick-loop sweep + LLM dispatcher with one-retry failure path; CLI + web surface the answerer; ADR 0030 pins the contract |
 
-Phases 3 and 4 share no critical code — order is operator preference once Phase 2 closes. Phase 5 has no code dependencies (pure docs + prompts + an optional small CLI command); shippable after Phase 4 closes (the natural sequence) or independently. Phase 6 is the natural continuation of Phase 5 — closes the agent-prompts arc by auditing the skills the prompts cite + wiring the fixer marker grammar Phase 5 documented. Phase 7 is the operator-side composition of Phase 6's agent-side parser — single CLI verb that wraps the same `updateFindingStatus` call the parser dispatches.
+Phases 3 and 4 share no critical code — order is operator preference once Phase 2 closes. Phase 5 has no code dependencies (pure docs + prompts + an optional small CLI command); shippable after Phase 4 closes (the natural sequence) or independently. Phase 6 is the natural continuation of Phase 5 — closes the agent-prompts arc by auditing the skills the prompts cite + wiring the fixer marker grammar Phase 5 documented. Phase 7 is the operator-side composition of Phase 6's agent-side parser — single CLI verb that wraps the same `updateFindingStatus` call the parser dispatches. Phase 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — autonomous-run unblock when the human is absent.
 
 ## Per-phase summaries
 
@@ -87,6 +88,16 @@ Full plan: [`../../UPGRADE/plans/tier-6-skills-rewrites.md`](../../UPGRADE/plans
 Full plan: [`../../UPGRADE/plans/tier-7-findings-mark.md`](../../UPGRADE/plans/tier-7-findings-mark.md). Issues addressed: U028.
 
 **Done criteria highlights:** all four `pnpm` gates clean; `factory findings mark <id> <status>` works for the four legal statuses; bare-id disambiguation matches `factory findings show`; `--note` flows through to `updateFindingStatus(..., resolution)`; tab completion picks up `mark`.
+
+### Phase 8 — question-auto-answer
+
+**Goal:** when an `ask_user` pending-question goes unanswered past its deadline and the parent directive is still active, factory makes an LLM call with the question + surrounding context, writes the answer back, marks it `answered_by = 'agent'`, and lets the directive proceed. Today an unanswered question blocks indefinitely until the orphan sweep runs after the directive itself terminates — autonomous runs stall waiting on a human who isn't there.
+
+**Key steps:** open U029; migration 009 adds `pending_questions.answered_by` column with backfill (orphan-sweep prefix → `'orphan-sweep'`; everything else answered → `'user'`); ADR 0030 pins the auto-answer contract + config-home decision; new `loadConfig()` in `@factory5/core` reads `<dataDir>/config.json` (`askUserDeadlineMs`, default 5 min); brain stamps `deadline_at` on every new `ask_user`; new `packages/brain/src/auto-answer.ts` dispatcher hooks into the brain tick loop, builds prompt from question + directive + CLAUDE.md + task log + findings + Q&A history, dispatches via existing model/provider, retries once on failure, writes `'agent'` / `'agent-failed'`; CLI `factory questions list/show` and web `/app/questions/*` surface the answerer.
+
+Full plan: [`../../UPGRADE/plans/tier-8-question-auto-answer.md`](../../UPGRADE/plans/tier-8-question-auto-answer.md). Issues addressed: U029.
+
+**Done criteria highlights:** all four `pnpm` gates clean; migration 009 backfill verified by test; `<dataDir>/config.json` deadline override works without code changes (default 5 min); end-to-end test demonstrates deadline → auto-answer → directive-proceeds path with fake clock + mocked provider; LLM-failure retry-then-`'agent-failed'` path covered; CLI + web surfaces render the answerer for all four enum values; ADR 0030 lands.
 
 ## Guidance
 
