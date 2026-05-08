@@ -187,7 +187,7 @@ Three per directive (ADR 0005):
 - **`assisted`** _(default)_ — confirm at phase boundaries
 - **`autonomous`** — run to done; pause / escalate only when ambiguous or stuck
 
-Mid-flight engagement primitives (ADR 0015): `askUser` (pauses, posts to channel, awaits reply, survives brain restart) and `escalateBlocked` (fires when retry budget exhausted).
+Mid-flight engagement primitives (ADR 0015): `askUser` (pauses, posts to channel, awaits reply, survives brain restart) and `escalateBlocked` (fires when retry budget exhausted). If no human reply lands by `pending_questions.deadline_at` (default 5 min, configurable via `<dataDir>/config.json` `askUserDeadlineMs`), the brain dispatches an LLM auto-answer; provenance is recorded on `pending_questions.answered_by` (`'human'` / `'agent (auto)'` / `'agent (LLM failed)'` / `'orphan-sweep'`) per ADR 0030.
 
 ## Budget enforcement
 
@@ -204,4 +204,4 @@ Three-tier merge (`resolveDirectiveLimits` in `@factory5/wiki`): per-flag → pe
 | [`SKILLS.md`](SKILLS.md)             | Skill catalog — methodology files injected into agent prompts                                                                   |
 | [`AGENTS.md`](AGENTS.md)             | Agent role catalog — `triage`, `architect`, `planner`, `builder`, `reviewer`, `fixer`, `investigator`, `verifier`, `scaffolder` |
 | [`ONBOARDING.md`](ONBOARDING.md)     | Clone-to-first-build walkthrough                                                                                                |
-| [`decisions/`](decisions)            | 28 ADRs + INDEX                                                                                                                 |
+| [`decisions/`](decisions)            | 30 ADRs + INDEX                                                                                                                 |

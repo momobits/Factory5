@@ -1,6 +1,6 @@
 # @factory5/state
 
-SQLite-backed runtime state for factory5. Wraps `better-sqlite3` (synchronous, fast, prebuilt binaries on Win/Linux/Mac).
+SQLite-backed runtime state for factory5. Wraps `better-sqlite3` (synchronous, fast, prebuilt binaries on Win/Linux/Mac). Also owns a small daemon-wide JSON config sidecar (`<dataDir>/config.json`) for tunables that don't belong in `config.toml`.
 
 > Per-project state lives in **files** (the wiki, BUILD.md, findings); this package handles only **factory runtime state** (the durable bus, sessions, dedup). See ADR 0003.
 
@@ -64,6 +64,25 @@ reconcileOrphanedDirectives(db, log);
 Both paths record the reason in the new `blocked_reason TEXT` column
 (migration 002) so `factory status` / later inspection explain why a
 row was flipped.
+
+## Daemon-wide config (`<dataDir>/config.json`)
+
+Small JSON sidecar for tunables that don't fit `config.toml`'s channels-and-providers shape. Schema + the `DEFAULT_ASK_USER_DEADLINE_MS = 300_000` constant live in `@factory5/core`; the I/O lives here so `core` stays fs-free (per Tier 8 plan deviation; ADR 0030).
+
+```ts
+import { loadConfig, writeConfig } from '@factory5/state';
+
+const cfg = loadConfig(); // returns the parsed config or defaults if absent / unreadable
+await writeConfig({ ...cfg, askUserDeadlineMs: 600_000 }); // atomic write
+```
+
+Today's keys:
+
+| Key                 | Type   | Default   | Purpose                                                                                                        |
+| ------------------- | ------ | --------- | -------------------------------------------------------------------------------------------------------------- |
+| `askUserDeadlineMs` | number | `300_000` | How long `pending_questions` rows wait for a human reply before the brain auto-answers them via LLM (ADR 0030) |
+
+`loadConfig` is forgiving: corrupt JSON or schema-mismatched files log a `warn` and fall back to defaults rather than crashing the brain mid-`askUser`.
 
 ## Conventions
 
