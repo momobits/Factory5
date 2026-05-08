@@ -264,6 +264,17 @@ export const pendingQuestionSchema = z.object({
    * chat (I012).
    */
   botMessageId: z.string().min(1).optional(),
+  /**
+   * Who (or what) wrote the answer. Populated when `answeredAt` is set.
+   * `'user'` is the operator-driven answer (CLI / channel / web); `'agent'`
+   * is the Tier 8 LLM auto-answer (ADR 0030); `'agent-failed'` is the
+   * synthetic written when the auto-answer LLM call failed both attempts;
+   * `'orphan-sweep'` is the retroactive close from `factory questions
+   * cleanup`. NULL on unanswered rows. Read-side stays optional for
+   * forward compatibility with pre-Tier-8 datasets that may carry NULL on
+   * historically-answered rows the migration backfill missed.
+   */
+  answeredBy: z.enum(['user', 'agent', 'agent-failed', 'orphan-sweep']).optional(),
 });
 
 // -----------------------------------------------------------------------------

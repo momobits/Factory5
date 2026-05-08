@@ -20,6 +20,7 @@ interface Row {
   answered_at: string | null;
   answer: string | null;
   bot_message_id: string | null;
+  answered_by: string | null;
 }
 
 function rowToQuestion(row: Row): PendingQuestion {
@@ -36,8 +37,12 @@ function rowToQuestion(row: Row): PendingQuestion {
     ...(row.answered_at !== null ? { answeredAt: row.answered_at } : {}),
     ...(row.answer !== null ? { answer: row.answer } : {}),
     ...(row.bot_message_id !== null ? { botMessageId: row.bot_message_id } : {}),
+    ...(row.answered_by !== null ? { answeredBy: row.answered_by } : {}),
   });
 }
+
+/** Provenance for `answered_by` — see schema definition for the contract. */
+export type AnsweredBy = 'user' | 'agent' | 'agent-failed' | 'orphan-sweep';
 
 /** Insert a new pending question. */
 export function create(db: Database, q: PendingQuestion): void {
@@ -45,8 +50,8 @@ export function create(db: Database, q: PendingQuestion): void {
   db.prepare(
     `INSERT INTO pending_questions
        (id, directive_id, task_id, question, options_json, channel, channel_ref,
-        created_at, deadline_at, answered_at, answer, bot_message_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        created_at, deadline_at, answered_at, answer, bot_message_id, answered_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     validated.id,
     validated.directiveId,
@@ -60,6 +65,7 @@ export function create(db: Database, q: PendingQuestion): void {
     validated.answeredAt ?? null,
     validated.answer ?? null,
     validated.botMessageId ?? null,
+    validated.answeredBy ?? null,
   );
 }
 
@@ -170,13 +176,31 @@ export function listPaged(db: Database, filter: ListPagedFilter = {}): ListPaged
   return { items: rows.map(rowToQuestion), total: countRow.count };
 }
 
-/** Record an answer. */
-export function answer(db: Database, id: string, answer: string, when: string): void {
-  db.prepare('UPDATE pending_questions SET answered_at = ?, answer = ? WHERE id = ?').run(
-    when,
-    answer,
-    id,
-  );
+/**
+ * Record an answer. `answeredBy` defaults to `'user'` — channel collectors,
+ * `factory answer`, and the web UI's POST `/pending-questions/:id/answer`
+ * route all flow through this default. The Tier 8 auto-answer dispatcher
+ * passes `'agent'` / `'agent-failed'` explicitly; `markOrphanAnswered`
+ * passes `'orphan-sweep'` (ADR 0030).
+ *
+ * No-ops on rows that already have a non-null `answered_by` — the auto-
+ * answer race-mitigation contract: once an agent (or anyone) has
+ * answered, subsequent writes are discarded. Caller can detect this via
+ * the row-affected count from the underlying `BetterSqlite3.RunResult`
+ * if it needs to surface a "we lost the race" warning.
+ */
+export function answer(
+  db: Database,
+  id: string,
+  answer: string,
+  when: string,
+  answeredBy: AnsweredBy = 'user',
+): void {
+  db.prepare(
+    `UPDATE pending_questions
+        SET answered_at = ?, answer = ?, answered_by = ?
+      WHERE id = ? AND answered_by IS NULL`,
+  ).run(when, answer, answeredBy, id);
 }
 
 /**
@@ -276,6 +300,8 @@ export function markOrphanAnswered(
 ): void {
   const note = `[orphaned by factory questions cleanup at ${when}: directive ${orphan.directiveId} ended ${orphan.directiveStatus}]`;
   db.prepare(
-    'UPDATE pending_questions SET answered_at = ?, answer = ? WHERE id = ? AND answered_at IS NULL',
+    `UPDATE pending_questions
+        SET answered_at = ?, answer = ?, answered_by = 'orphan-sweep'
+      WHERE id = ? AND answered_at IS NULL`,
   ).run(when, note, orphan.id);
 }
