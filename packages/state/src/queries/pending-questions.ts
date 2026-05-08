@@ -232,6 +232,90 @@ export function detectOrphanedAnswer(
 }
 
 // -----------------------------------------------------------------------------
+// Auto-answer deadline sweep (Tier 8 / ADR 0030)
+// -----------------------------------------------------------------------------
+
+/**
+ * Find unanswered questions past their deadline whose parent directive
+ * is still active (not in a terminal state). Sorted by deadline_at ASC
+ * so the oldest-overdue is dispatched first. The optional `limit` caps
+ * the dispatch batch per sweep tick — defaults to 10 to keep a single
+ * sweep bounded even if many deadlines elapse together.
+ *
+ * Used by the brain's tick loop (`packages/brain/src/auto-answer.ts`)
+ * to drive {@link autoAnswerPendingQuestion}. A row matched here is a
+ * candidate for auto-answer; the dispatcher uses
+ * {@link claimForAutoAnswer} as a race-mitigation sentinel before the
+ * LLM call.
+ */
+export function findOpenPastDeadline(db: Database, now: string, limit = 10): PendingQuestion[] {
+  const rows = db
+    .prepare(
+      `SELECT pq.*
+         FROM pending_questions pq
+         JOIN directives d ON d.id = pq.directive_id
+        WHERE pq.answered_at IS NULL
+          AND pq.answered_by IS NULL
+          AND pq.deadline_at IS NOT NULL
+          AND pq.deadline_at < ?
+          AND d.status NOT IN ('complete','failed','blocked')
+        ORDER BY pq.deadline_at ASC
+        LIMIT ?`,
+    )
+    .all(now, Math.max(1, limit)) as Row[];
+  return rows.map(rowToQuestion);
+}
+
+/**
+ * Race-mitigation sentinel for the Tier 8 auto-answer dispatcher.
+ * Atomically writes `answered_by = 'agent'` + a `[in flight]`
+ * placeholder answer, but only when the row is still unclaimed.
+ * Returns `true` if this caller won the claim; `false` if a concurrent
+ * human reply (or another auto-answer attempt) got there first.
+ *
+ * On a successful claim, the dispatcher proceeds to the LLM call and
+ * later calls {@link finalizeAutoAnswer} to overwrite the placeholder
+ * with the real reply (or a `[auto-answer failed: ...]` synthetic).
+ *
+ * On a failed claim, the dispatcher discards the LLM call and logs at
+ * `warn` so an operator can correlate "I typed an answer and the agent
+ * still got there first" with the dispatcher's race-loser path.
+ */
+export function claimForAutoAnswer(db: Database, id: string, when: string): boolean {
+  const result = db
+    .prepare(
+      `UPDATE pending_questions
+          SET answered_by = 'agent', answer = '[in flight]', answered_at = ?
+        WHERE id = ? AND answered_by IS NULL`,
+    )
+    .run(when, id);
+  return result.changes > 0;
+}
+
+/**
+ * Finalize a successful auto-answer: replace the `[in flight]`
+ * placeholder with the real LLM-produced reply text, and set the
+ * canonical `answered_at` timestamp. Caller must have already won
+ * the claim via {@link claimForAutoAnswer}.
+ *
+ * On the failure path (LLM call failed twice), pass the synthetic
+ * `[auto-answer failed: <reason>]` text and `answeredBy = 'agent-failed'`.
+ */
+export function finalizeAutoAnswer(
+  db: Database,
+  id: string,
+  answer: string,
+  when: string,
+  answeredBy: 'agent' | 'agent-failed',
+): void {
+  db.prepare(
+    `UPDATE pending_questions
+        SET answer = ?, answered_at = ?, answered_by = ?
+      WHERE id = ?`,
+  ).run(answer, when, answeredBy, id);
+}
+
+// -----------------------------------------------------------------------------
 // Orphan sweep (Phase 14.4)
 // -----------------------------------------------------------------------------
 

@@ -27,12 +27,23 @@ import type { DirectiveEventEmitter } from '@factory5/ipc';
 import type { ProviderRegistry } from '@factory5/providers';
 import { directives as directivesQ, type Database } from '@factory5/state';
 
+import { runAutoAnswerSweep } from './auto-answer.js';
 import { registerCancellation } from './cancellation.js';
 
 const log = createLogger('brain.serve');
 
 /** Default polling cadence when no doorbell is wired (or to catch missed events). */
 const DEFAULT_POLL_INTERVAL_MS = 250;
+
+/**
+ * Minimum interval between Tier 8 auto-answer sweep passes. The serve
+ * loop ticks at `pollIntervalMs` (250 ms by default) but the sweep only
+ * runs at most once every `AUTO_ANSWER_SWEEP_INTERVAL_MS` to avoid
+ * pointless DB scans. The sweep query itself is cheap (one indexed
+ * SELECT) but the cumulative cost of running it 4×/sec is wasted work
+ * against deadlines that change on a minute-or-longer scale.
+ */
+const AUTO_ANSWER_SWEEP_INTERVAL_MS = 5000;
 
 /**
  * Hook the caller uses to register a "new work" signal. The registered
@@ -114,8 +125,23 @@ export async function runServe(opts: ServeOptions): Promise<void> {
     'serve: started',
   );
 
+  let lastAutoAnswerSweepAt = 0;
+
   try {
     while (!opts.signal.aborted) {
+      // Tier 8 auto-answer sweep (ADR 0030). Throttled to at most once
+      // every AUTO_ANSWER_SWEEP_INTERVAL_MS so the serve loop's 250 ms
+      // tick doesn't burn cycles re-scanning unchanged state. Errors
+      // here are caught + logged so the sweep never breaks the directive
+      // claim path.
+      const now = Date.now();
+      if (now - lastAutoAnswerSweepAt >= AUTO_ANSWER_SWEEP_INTERVAL_MS) {
+        lastAutoAnswerSweepAt = now;
+        runAutoAnswerSweep({ db: opts.db, registry: opts.registry }).catch((err: unknown) => {
+          log.warn({ err }, 'serve: auto-answer sweep threw');
+        });
+      }
+
       // Dispatch as many pending directives as we have slots for.
       while (inflight.size < concurrency && !opts.signal.aborted) {
         const directive = directivesQ.claimNext(opts.db, { claimedBy });
