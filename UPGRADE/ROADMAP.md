@@ -113,7 +113,7 @@ When an `ask_user` pending-question goes unanswered past its deadline and the pa
 
 - [x] Open U029 (unanswered `ask_user` blocks directive; no auto-answer fallback)
 - [x] Migration 009 — `pending_questions.answered_by` column (`'user' | 'agent' | 'agent-failed' | 'orphan-sweep'`) + backfill orphan-sweep + user rows
-- [ ] ADR 0030 — pending-question auto-answer contract (enum semantics, daemon-wide config home, LLM dispatcher failure path, no-override-after-auto-answer rule)
+- [x] ADR 0030 — pending-question auto-answer contract (enum semantics, daemon-wide config home, LLM dispatcher failure path, no-override-after-auto-answer rule)
 - [ ] `@factory5/core` `loadConfig()` reader for `<dataDir>/config.json` (`askUserDeadlineMs` default 5 min; configurable without code changes)
 - [ ] Brain stamps `deadline_at` from config on every new `ask_user`
 - [ ] Brain tick-loop sweep + LLM auto-answer dispatcher (`packages/brain/src/auto-answer.ts`); retry once → write `'agent-failed'` synthetic on second failure
