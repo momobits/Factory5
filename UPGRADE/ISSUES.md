@@ -27,11 +27,20 @@ Severity:
 ### U005 — `factory chat` REPL turn timeout is 120 s
 
 - **Severity**: medium
-- **Tier**: 2 or 4
+- **Tier**: 2 or 4 (now Tier 9 candidate)
 - **Area**: cli
-- **Description**: `packages/cli/src/commands/chat.ts:42` — `TURN_TIMEOUT_MS = 120_000`. For chat directives that route through architect / planner / builder agents, 2 minutes is often too short and the user sees _"(no reply within 2 min — directive may still be running)"_.
-- **Hypothesis**: Either (a) increase the timeout to something like 10 min and rely on user `Ctrl-C`, or (b) stream partial responses and the daemon emits intermediate progress messages. Option (b) is the better UX but requires daemon-side support.
-- **Resolution**: Tier 2 or 4. Pair with the chat surface work.
+- **Description**: `packages/cli/src/commands/chat.ts:55` — `DEFAULT_TURN_TIMEOUT_MS = 120_000`. For chat directives that route through architect / planner / builder agents, 2 minutes is often too short and the user sees _"(no reply within 2 min — directive may still be running)"_.
+- **Hypothesis**: Path (a+) bumps the timeout to ~10 min AND prints the directive id when minted AND adds a periodic "still working..." heartbeat AND adds a SIGINT handler so first Ctrl-C cancels just the in-flight directive (returns to `you>`) and second Ctrl-C exits the REPL AND prompts before exiting if a directive is still in flight. Bare path (a) — bump only — would actually make UX worse (longer staring at a dead prompt). Path (b) — daemon-side streaming partial responses — is the better UX but requires daemon-side support and is a multi-step tier.
+- **Resolution**: Tier 9 candidate. Twice-deferred (Phase 2 → Phase 4 → still open). Parked at Phase 8 scaffold time per operator decision; promote when the false-timeout pain surfaces in real use.
+
+### U029 — Unanswered `ask_user` blocks directive; no auto-answer fallback
+
+- **Severity**: medium
+- **Tier**: 8
+- **Area**: brain
+- **Description**: When the brain emits an `ask_user` pending-question, the parent directive blocks waiting for a human reply. Today there's no "the human isn't coming back" path — the question sits open until the parent directive itself terminates, at which point `factory questions cleanup` retroactively writes a `[orphaned by ...]` synthetic answer (`packages/state/src/queries/pending-questions.ts:272`'s `markOrphanAnswered`). That's forensic cleanup, not progress. Autonomous runs stall waiting on a human who isn't there. The schema already has a `deadline_at` field on `pending_questions` but nothing reads it, and there's no provenance column to distinguish a user answer from an agent answer beyond a `[bracketed]` text-prefix convention used only by the orphan sweep.
+- **Hypothesis**: Pure composition + one schema migration + one ADR + one new dispatcher. (1) Add `pending_questions.answered_by` column (`'user' | 'agent' | 'agent-failed' | 'orphan-sweep'`) via migration 009 with backfill for pre-existing rows. (2) New `<dataDir>/config.json` with `askUserDeadlineMs` (default 5 min, configurable without code changes) read via new `loadConfig()` in `@factory5/core`. (3) Brain stamps `deadline_at = now() + askUserDeadlineMs` on every `ask_user`. (4) New brain tick-loop sweep `findOpenPastDeadline` selects open questions with elapsed deadlines whose parent directive is still active; for each, dispatcher in `packages/brain/src/auto-answer.ts` builds a prompt (question + options + parent directive + project CLAUDE.md + linked task log + recent findings + past Q&A in this directive) → dispatches via the existing model/provider abstraction → writes `answered_by = 'agent'` on success or `'agent-failed'` after one retry. (5) Sentinel race-mitigation write before LLM dispatch so a concurrent human reply hits a no-op UPDATE. (6) Spend recorded against parent directive on success. (7) ADR 0030 pins the contract. (8) CLI + web surfaces render the answerer.
+- **Resolution**: Tier 8 step 8.7 closes this. Spec lives at `UPGRADE/plans/tier-8-question-auto-answer.md`.
 
 ## Resolved
 

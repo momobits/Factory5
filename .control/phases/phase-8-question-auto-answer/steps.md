@@ -1,6 +1,6 @@
 # Phase 8 Steps
 
-- [ ] 8.1 — Open U029 (unanswered `ask_user` blocks directive; no auto-answer fallback) in [`../../../UPGRADE/ISSUES.md`](../../../UPGRADE/ISSUES.md). ROADMAP rows + phase scaffold pre-authored at scaffold time
+- [x] 8.1 — Open U029 (unanswered `ask_user` blocks directive; no auto-answer fallback) in [`../../../UPGRADE/ISSUES.md`](../../../UPGRADE/ISSUES.md). ROADMAP rows + phase scaffold pre-authored at scaffold time
 - [ ] 8.2 — Migration 009 — `pending_questions.answered_by` column + backfill (orphan-sweep rows from `[orphaned by ...]` prefix; all other answered rows → `'user'`); update `pendingQuestionSchema` (`@factory5/core`) with optional `answeredBy` field; extend `pendingQuestions.answer` to accept `answeredBy` parameter (default `'user'`); update `markOrphanAnswered` to set `'orphan-sweep'` going forward
 - [ ] 8.3 — ADR 0030 — pending-question auto-answer contract: pins `answered_by` enum, deadline-config home (`<dataDir>/config.json`), LLM dispatcher failure semantics, no-override-after-auto-answer rule; update `INDEX.md`; cross-reference ADR 0024
 - [ ] 8.4 — `@factory5/core` `loadConfig()` reader for `<dataDir>/config.json` (Zod-validated; missing file returns defaults; partial file fills missing keys); export `DEFAULT_ASK_USER_DEADLINE_MS = 300_000`; `writeConfig(partial)` for tests + future operator commands; 6+ unit tests

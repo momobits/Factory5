@@ -111,7 +111,7 @@ Plan: [`plans/tier-7-findings-mark.md`](plans/tier-7-findings-mark.md)
 
 When an `ask_user` pending-question goes unanswered past its deadline and the parent directive is still active, factory makes an LLM call with the question + surrounding context, writes the answer back, marks it `answered_by = 'agent'`, and lets the directive proceed. Today an unanswered question blocks indefinitely (until the orphan sweep runs after the directive itself terminates) — autonomous runs stall waiting on a human who isn't there. Estimated **2 sessions**.
 
-- [ ] Open U029 (unanswered `ask_user` blocks directive; no auto-answer fallback)
+- [x] Open U029 (unanswered `ask_user` blocks directive; no auto-answer fallback)
 - [ ] Migration 009 — `pending_questions.answered_by` column (`'user' | 'agent' | 'agent-failed' | 'orphan-sweep'`) + backfill orphan-sweep + user rows
 - [ ] ADR 0030 — pending-question auto-answer contract (enum semantics, daemon-wide config home, LLM dispatcher failure path, no-override-after-auto-answer rule)
 - [ ] `@factory5/core` `loadConfig()` reader for `<dataDir>/config.json` (`askUserDeadlineMs` default 5 min; configurable without code changes)
