@@ -278,6 +278,37 @@ export const pendingQuestionSchema = z.object({
 });
 
 // -----------------------------------------------------------------------------
+// Daemon-wide config file (ADR 0030)
+// -----------------------------------------------------------------------------
+
+/**
+ * Default `ask_user` deadline, milliseconds. ADR 0030 §2 — 5 minutes.
+ * Pre-Tier-8 deployments without `<dataDir>/config.json` use this; missing
+ * keys in a present file fall back to this too.
+ */
+export const DEFAULT_ASK_USER_DEADLINE_MS = 300_000;
+
+/**
+ * The shape `<dataDir>/config.json` is parsed against. All fields are
+ * optional on disk; readers fill in defaults for any missing keys. Adding
+ * a new key here must update the resolved {@link FactoryConfig} shape too.
+ */
+export const factoryConfigFileSchema = z.object({
+  /** ADR 0030 §2 — auto-answer deadline. Positive integer milliseconds. */
+  askUserDeadlineMs: z.number().int().positive().optional(),
+});
+
+/**
+ * The fully-resolved shape returned to callers — every field present,
+ * defaults applied. Distinct from {@link factoryConfigFileSchema} which
+ * mirrors the on-disk shape (every field optional).
+ */
+export interface FactoryConfig {
+  /** ADR 0030 §2 — auto-answer deadline in ms. Defaults to 5 min. */
+  askUserDeadlineMs: number;
+}
+
+// -----------------------------------------------------------------------------
 // Project registry
 // -----------------------------------------------------------------------------
 
