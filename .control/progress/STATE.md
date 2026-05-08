@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-08 by `/session-end` after phase-8 close (cursor stays at "no current phase — upgrade arc complete (fifth time)"; phase-close commit `d863ea0` already bundled the STATE/journal/LOG/next.md transition + ROADMAP checkbox flips + steps.md 8.close flip + the `phase-8-question-auto-answer-closed` tag, this session-end docs(state) commit only bumps the timestamp + last-commit reference + lag-by-1 counter; this is the **20th lag-by-1 occurrence caught up** — STATE.md inside this commit references `d863ea0` while HEAD will move to the session-end's sha, making #21 the new pending lag).
+**Last updated:** 2026-05-08 by session-start drift-fix catching STATE.md up to `ca054c4` (the prior session-end `docs(state)`). This is the **21st lag-by-1 occurrence caught up** — the same well-known structural pattern that has now accumulated 21 times. STATE.md inside this commit references `ca054c4`; HEAD will move to this drift-fix's sha, making #22 the new pending lag (structural fix still deferred).
 **Current phase:** none — Tier 8 closed at `phase-8-question-auto-answer-closed`. Upgrade arc complete (fifth time). No Tier 9 plan authored.
 **Current step:** none — awaiting next Tier plan
 **Status:** all phases complete. Phase 8 done-criteria all green at close. All four `pnpm` gates green throughout the phase. Workspace 1182 + 3 skipped (was 1152 + 3 pre-Tier-8; +30 from 8.2's migration tests + 8.4's config tests + 8.5's deadline-stamp tests + 8.6's auto-answer dispatcher tests).
@@ -31,7 +31,7 @@ If the operator wants to continue, the carry-forward candidates from Phase 8's D
 5. **`factory questions list / show <id>` CLI** — subcommands don't exist today; only `cleanup` is wired. Composition-style tier.
 6. **`factory skills list / show <name>` CLI** — skill discovery surface. Composition-style; CLI runs `loadSkill(id)` against the per-user/per-project override paths the brain already uses.
 7. **PageShell + Dashboard `<style is:global>` migration** — 11-page sweep absorbing filter-form Apply / "Clear all defaults" + inline-style audit. Self-contained ~1 commit.
-8. **Structural `/session-end` lag-by-1 fix** — STATE.md tracking "last work commit" rather than HEAD, or amending STATE.md post-commit. **20 occurrences** accumulated through this session-end. Real engineering work.
+8. **Structural `/session-end` lag-by-1 fix** — STATE.md tracking "last work commit" rather than HEAD, or amending STATE.md post-commit. **22 occurrences** accumulated through this drift-fix. Real engineering work.
 9. **Agent-class-specialized auto-answer prompts** — defer-until-signal. Quality data on the generic Tier 8 prompt should drive any specialization.
 10. **Channel-side `answered_by` badge** — Discord/Telegram historic embed rendering. Low value.
 11. **ADR amendments** — 0027 §1 missing route pin (POST `/api/v1/projects`), 0002 footnote stale post-Tier-5. Doc-debt; not load-bearing.
@@ -51,8 +51,8 @@ If the operator doesn't want a Tier 9, the project is in a clean post-arc parkin
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `d863ea0` — `chore(phase-8): close phase 8 (upgrade arc complete — fifth time)` (this session-end docs(state) commit will move HEAD forward — lag-by-1 #21, with #20 caught up by this very commit)
-- **Uncommitted changes:** in flight at this session-end STATE refresh — timestamp + last-commit reference + lag-by-1 counter only; phase-close `d863ea0` already bundled the substantive transition (STATE cursor flip, ROADMAP ticks, steps.md 8.close, LOG entry, journal entry, next.md regen, tag)
+- **Last commit:** `ca054c4` — `docs(state): session end after phase-8 close` (the prior session-end commit; this drift-fix `docs(state)` commit will move HEAD forward — lag-by-1 #22, with #21 caught up by this very commit)
+- **Uncommitted changes:** in flight at this session-start drift-fix — STATE.md (timestamp + last-commit pointer + lag counter + this Recently-completed entry) + `next.md` (SessionStart-hook timestamp regeneration). Pure session-start reconciliation; no phase work.
 - **Last phase tag:** `phase-8-question-auto-answer-closed` (annotated at `d863ea0`)
 
 ---
@@ -88,7 +88,7 @@ No phase active. Phase 8 closed cleanly. No Phase 9 scaffolded.
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **21 occurrences** with this session-end commit (this docs(state) catches STATE.md up to `d863ea0` for #20, but the session-end itself reintroduces the lag at #21). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **22 occurrences** with this drift-fix commit (this docs(state) catches STATE.md up to `ca054c4` for #21, but the drift-fix itself reintroduces the lag at #22). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
@@ -110,6 +110,8 @@ No phase active. Phase 8 closed cleanly. No Phase 9 scaffolded.
 
 ## Recently completed (last 5 steps)
 
+- **Drift-fix** — `docs(state)`: bump last-commit pointer to `ca054c4` (drift-fix). Catches STATE.md up to HEAD after the prior session's session-end lag-by-1 (#21). Pure session-start reconciliation; no phase work. Folds in `next.md`'s SessionStart-hook timestamp regen. — 2026-05-08
+- **Session-end** — `docs(state)`: session end after phase-8 close. Bumped timestamp + last-commit reference + lag-by-1 counter (caught up #20, reintroduced #21). — 2026-05-08 — `ca054c4`
 - **Phase 8 close** — `chore(phase-8)`: close phase 8 (no Phase 9 plan; upgrade arc reopens to "all phases complete" — fifth time). Tagged `phase-8-question-auto-answer-closed`. All 16 done-criteria green at close (migration backfill, config defaults, brain stamping, sweep+dispatcher, web surfaces, ADR 0030, U029 Resolved, U005 stays parked, ROADMAP rows ticked, all four `pnpm` gates clean). — 2026-05-08 — `d863ea0`
 - **Step 8.7** — `feat(8.7)`: surface answered_by in questions web UI. `apps/factory-web/src/pages/questions/index.astro` adds an "Answered by" column rendering 'human' / 'agent (auto)' / 'agent (LLM failed)' / 'orphan sweep'; `/app/questions/detail` adds an "Answered by" meta row (only on answered rows). IPC schemas reuse `pendingQuestionSchema` from core so `answeredBy` flows through automatically. CLI list/show deferred — those subcommands don't exist today. Closes U029. — 2026-05-08 — `992affa`
 - **Step 8.6** — `feat(8.6)`: brain auto-answer dispatcher + deadline sweep. Three new query helpers (`findOpenPastDeadline`, `claimForAutoAnswer`, `finalizeAutoAnswer`) in `pending-questions.ts`; new `packages/brain/src/auto-answer.ts` with `runAutoAnswerSweep` + `autoAnswerOne` + `buildAutoAnswerPrompt`; wired into `runServe` loop with 5s throttle. Race-mitigation sentinel claim before LLM call; spend recorded under category 'quick' on success only. Generic prompt covers question + options + parent directive + past Q&A; CLAUDE.md/task_log/findings dropped from first-ship context per ADR 0030 alternatives. 10 tests covering all four auto-answer paths (success, retry-then-success, double-failure, claim-lost) + sweep ordering + terminal-directive skip + 2 prompt-shape tests. — 2026-05-08 — `89f58c8`
@@ -191,7 +193,7 @@ None — no active step. Cleared at phase close.
    - **`factory questions list / show <id>` CLI** — composition over existing query helpers; ~1 commit if narrowly scoped. Now that Tier 8 made `answered_by` real, the CLI list/show would render the badge end-to-end (closing one of the tier 8 plan-deviation gaps).
    - **`factory config get / set <key>` CLI** — operator surface for the Tier 8 config file.
    - **PageShell + Dashboard `<style is:global>` migration** — absorbs filter-form Apply / "Clear all defaults" + inline-style audit; self-contained ~1 commit.
-   - **Structural `/session-end` lag-by-1 fix** — 20 occurrences accumulated. Real engineering work, not a one-liner.
+   - **Structural `/session-end` lag-by-1 fix** — 22 occurrences accumulated. Real engineering work, not a one-liner.
 
 3. **Park** — surfaces are stable; nothing is gated on more work.
 
