@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-08 by Phase 8 scaffold (cursor flipped no-active-phase → Phase 8 active at 8.1; this scaffold commit bundles tier-8 plan + phase-plan row + ROADMAP section + phase-8 dir + STATE flip + next.md regen; STATE.md inside this commit references `cf9d4f9` while HEAD will move to the scaffold's own sha — lag-by-1 #20).
-**Current phase:** Phase 8 question-auto-answer ([`../phases/phase-8-question-auto-answer/README.md`](../phases/phase-8-question-auto-answer/README.md))
-**Current step:** 8.1 — open U029 (unanswered `ask_user` blocks directive; no auto-answer fallback)
-**Status:** Phase 8 scaffolded; cursor flipped; no work commits yet on Phase 8. Workspace at 1152 + 3 skipped (last verified at `phase-7-findings-mark-closed`); all four `pnpm` gates green at the prior phase close.
+**Last updated:** 2026-05-08 by `/phase-close` after Phase 8 close (cursor flipped Phase 8 → "no current phase — upgrade arc complete (fifth time)"; this phase-close commit bundles steps.md 8.close flip + ROADMAP final ticks + STATE cursor flip + LOG entry + journal entry + next.md regen + the `phase-8-question-auto-answer-closed` tag).
+**Current phase:** none — Tier 8 closed at `phase-8-question-auto-answer-closed`. Upgrade arc complete (fifth time). No Tier 9 plan authored.
+**Current step:** none — awaiting next Tier plan
+**Status:** all phases complete. Phase 8 done-criteria all green at close. All four `pnpm` gates green throughout the phase. Workspace 1182 + 3 skipped (was 1152 + 3 pre-Tier-8; +30 from 8.2's migration tests + 8.4's config tests + 8.5's deadline-stamp tests + 8.6's auto-answer dispatcher tests).
 
 ---
 
@@ -20,30 +20,40 @@
 
 ## Next action
 
-**Step 8.1 — open U029.**
+**No active phase.** Upgrade arc closed for the fifth time. Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; the audit-driven Tier 5 reopened the arc 2026-05-07 at `c0869d6` and closed at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 reopened 2026-05-07 at `542f99a` and closed at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 reopened 2026-05-07 at `ee970e8` and closed at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 reopened 2026-05-08 at `8453086` and closed at `phase-8-question-auto-answer-closed` 2026-05-08 at this commit.
 
-Open `U029 — unanswered ask_user blocks directive; no auto-answer fallback` in `UPGRADE/ISSUES.md` Open section. Severity: medium. Tier: 8. Area: brain. Hypothesis: brain stamps `deadline_at` on every `ask_user` from config (default 5 min); new tick-loop sweep dispatches LLM call for any open question past deadline + active parent directive; writes answer with `answered_by = 'agent'` (or `'agent-failed'` after one retry); directive proceeds. New schema column + ADR 0030 for the contract.
+If the operator wants to continue, the carry-forward candidates from Phase 8's Deferred section are (ordered by demand-signal likelihood):
 
-After 8.1 commits, advance to 8.2 (migration 009 — `pending_questions.answered_by` column + backfill).
+1. **U005 chat REPL cancel UX path (a+)** — twice-deferred (Phase 2 → Phase 4 → still open). Bumps timeout to 10 min + adds heartbeat + SIGINT handler + directive-id print + exit-with-cancel prompt. Tier 9 candidate. Highest-impact carry-forward.
+2. **Per-project deadline override** — CLAUDE.md frontmatter or `metadata.askUserDeadlineMs`. Non-breaking to add atop Tier 8's daemon-wide config; defer-until-signal that different projects want different deadlines.
+3. **`factory config get / set <key>` CLI** — operator surface for editing `<dataDir>/config.json`. Add when other config keys justify it.
+4. **Override after auto-answer** — `factory questions answer --force <id>`. Pin via ADR if it ships; Tier 8 holds the simpler immutable-after-auto-answer invariant.
+5. **`factory questions list / show <id>` CLI** — subcommands don't exist today; only `cleanup` is wired. Composition-style tier.
+6. **`factory skills list / show <name>` CLI** — skill discovery surface. Composition-style; CLI runs `loadSkill(id)` against the per-user/per-project override paths the brain already uses.
+7. **PageShell + Dashboard `<style is:global>` migration** — 11-page sweep absorbing filter-form Apply / "Clear all defaults" + inline-style audit. Self-contained ~1 commit.
+8. **Structural `/session-end` lag-by-1 fix** — STATE.md tracking "last work commit" rather than HEAD, or amending STATE.md post-commit. **20 occurrences** accumulated through this session-end. Real engineering work.
+9. **Agent-class-specialized auto-answer prompts** — defer-until-signal. Quality data on the generic Tier 8 prompt should drive any specialization.
+10. **Channel-side `answered_by` badge** — Discord/Telegram historic embed rendering. Low value.
+11. **ADR amendments** — 0027 §1 missing route pin (POST `/api/v1/projects`), 0002 footnote stale post-Tier-5. Doc-debt; not load-bearing.
 
-Full plan: [`../../UPGRADE/plans/tier-8-question-auto-answer.md`](../../UPGRADE/plans/tier-8-question-auto-answer.md).
-Phase scaffold: [`../phases/phase-8-question-auto-answer/`](../phases/phase-8-question-auto-answer/).
+To kick off Phase 9:
 
-**Operator decisions baked in at scaffold time** (no further input needed for the in-scope sub-tasks):
+1. Operator drafts `UPGRADE/plans/tier-9-<name>.md` with goal, sub-steps, acceptance.
+2. Add a Phase 9 row to `.control/architecture/phase-plan.md`.
+3. Add a Tier 9 section to `UPGRADE/ROADMAP.md`.
+4. Scaffold `.control/phases/phase-9-<name>/{README.md,steps.md}` from `.control/templates/`.
+5. Then start working through the sub-steps.
 
-- Provenance via new `answered_by` column (option A) — `'user' | 'agent' | 'agent-failed' | 'orphan-sweep'`.
-- Default deadline 5 minutes, configurable via `<dataDir>/config.json` (`askUserDeadlineMs`); not hardcoded.
-- No override after auto-answer — agent answer is final; race-loser human reply discarded with a log warning.
-- U005 stays parked as Tier 9 candidate (path (a+): bump REPL daemon-reply timeout to 10 min + print directive id + heartbeat + SIGINT handler + clean exit prompt).
+If the operator doesn't want a Tier 9, the project is in a clean post-arc parking state — there's no queued work in the upgrade arc.
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `cf9d4f9` — `docs(state): session end after phase-7 close` (this Phase 8 scaffold commit will move HEAD forward — lag-by-1 #20)
-- **Uncommitted changes:** Phase 8 scaffold bundle in flight — `UPGRADE/plans/tier-8-question-auto-answer.md` (~270 lines), `.control/architecture/phase-plan.md` (Phase 8 row + summary + intro update), `UPGRADE/ROADMAP.md` (Tier 8 section + intro count "Seven tiers → Eight tiers" + dependency-table row), `.control/phases/phase-8-question-auto-answer/{README.md,steps.md}`, this STATE.md flip (no-active-phase → Phase 8 active at 8.1), regenerated `next.md`
-- **Last phase tag:** `phase-7-findings-mark-closed` (annotated at `40a78a8`)
+- **Last commit:** `992affa` — `feat(8.7): surface answered_by in questions web UI` (this phase-close commit will move HEAD forward + place the `phase-8-question-auto-answer-closed` tag — lag-by-1 #20)
+- **Uncommitted changes:** Phase 8 close bundle in flight — steps.md 8.close flip, ROADMAP final ticks, this STATE.md cursor flip (Phase 8 → no current phase), LOG entry, journal entry, regenerated next.md
+- **Last phase tag:** `phase-8-question-auto-answer-closed` (annotated at this commit)
 
 ---
 
@@ -55,11 +65,15 @@ Phase scaffold: [`../phases/phase-8-question-auto-answer/`](../phases/phase-8-qu
 
 ## In-flight work
 
-Phase 8 active at 8.1. Plan + scaffold landed in this commit; first work commit (`chore(8.1): open U029`) is the next operator action.
+No phase active. Phase 8 closed cleanly. No Phase 9 scaffolded.
 
-**Carry-forward items outside Phase 8 scope** (now Tier 9+ candidates; ordered by likelihood a demand signal surfaces):
+**Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 
-- **U005** — `factory chat` REPL 120s timeout (still in `UPGRADE/ISSUES.md` Open). Tier 9 candidate; path (a+) sketched in conversation: bump REPL daemon-reply timeout to 10 min + print directive id + heartbeat + SIGINT handler + clean exit prompt.
+- **U005** — `factory chat` REPL 120s timeout (still in `UPGRADE/ISSUES.md` Open). Tier 9 candidate; path (a+) sketched in Phase 8 conversation: bump REPL daemon-reply timeout to 10 min + print directive id + heartbeat + SIGINT handler + clean exit prompt.
+- **Per-project `askUserDeadlineMs` override** — CLAUDE.md frontmatter or `<project>/.factory/project.json` `metadata`. Non-breaking to add atop Tier 8's daemon-wide config; defer-until-signal.
+- **`factory config get / set <key>` CLI** — operator surface for editing `<dataDir>/config.json`. Tier 9+ candidate.
+- **Override after auto-answer** — `factory questions answer --force <id>`. Pin via ADR if it ships; Tier 9+ candidate.
+- **`factory questions list / show <id>` CLI** — subcommands don't exist today; only `cleanup` exists. Tier 9+ candidate.
 - **`factory skills list / show <name>` CLI commands** — skill discovery surface. Composition-style tier; CLI wraps `loadSkill(id)` from `packages/brain/src/prompts.ts`. Tier 9+ candidate.
 - **Bulk findings-mark surface** — defer-until-signal. Tier 7's `factory findings mark` is single-id by design.
 - **Findings history surface** — defer-until-signal. Real first-class who/when/why log per finding, beyond the current `resolution` + `updatedAt` shape.
@@ -74,13 +88,13 @@ Phase 8 active at 8.1. Plan + scaffold landed in this commit; first work commit 
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **20 occurrences** with this Phase 8 scaffold commit. Same two structural options as before: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — **20 occurrences** with this Phase 8 close. Same two structural options as before: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
 ## Test / eval status
 
-- **Last test run:** 2026-05-08 (during phase-close verification) — full workspace passes, all four `pnpm` gates green: build / test / lint / format:check. Per-package: state 157, channels 175, daemon 173, brain 101, worker 47, worker-sandbox 86 + 3 skipped, assessor 79, wiki 74, cli 141 (+8 from 7.2's mark tests), providers 39, ipc 28, events 3, core 14, logger 20, worker-mcp 15. **Workspace total 1152 passing + 3 skipped** (was 1144 + 3 pre-Tier-7; +8 from 7.2's mark-handler test fixtures: bare-id happy path / `<project>/<id>` form / ambiguous bare-id / invalid status / not-found in both forms / `--note` persistence / case-insensitive input / idempotent re-flip preserves resolvedAt).
+- **Last test run:** 2026-05-08 (during Phase 8 phase-close verification) — full workspace passes, all four `pnpm` gates green: build / test / lint / format:check. Per-package: state 174 (+17 from 8.2/8.4), channels 175, daemon 173, brain 114 (+13 from 8.5/8.6), worker 47, worker-sandbox 86 + 3 skipped, assessor 79, wiki 74, cli 141, providers 39, ipc 28, events 3, core 14, logger 20, worker-mcp 15. **Workspace total 1182 passing + 3 skipped** (was 1152 + 3 pre-Tier-8; +30 across migration, config, deadline-stamp, and dispatcher tests).
 - **Eval score** (agent phases only): n/a
 - **Regression tests:** unit + integration only; no eval harness. ADR 0029 still in promoted state.
 
@@ -88,18 +102,23 @@ Phase 8 active at 8.1. Plan + scaffold landed in this commit; first work commit 
 
 ## Recent decisions (last 3 ADRs)
 
+- **ADR 0030 — pending-question-auto-answer** (Accepted 2026-05-08; landed in Phase 8 step 8.3 at `8365b6a`). Pins the `answered_by` enum, daemon-wide config home, LLM dispatcher failure path, race mitigation, spend treatment, no-override-after-auto-answer.
 - **ADR 0029 — directive-stream-protocol** (Accepted 2026-05-05; promoted past gated state at Phase 3 close 2026-05-06)
 - **ADR 0028 — worker-sandbox-contract** (per-spawn fs scoping)
-- **ADR 0027 — web-ui-mutation-surface** (`POST /api/v1/builds`, `POST /api/v1/pending-questions/:id/answer`, `PUT /api/v1/projects/:id/budget`)
-
-**ADR 0030 drafts in Phase 8 step 8.3** — `pending-question-auto-answer` will pin the `answered_by` enum semantics, the daemon-wide config home (`<dataDir>/config.json`), the LLM dispatcher failure path, and the no-override-after-auto-answer rule. Cross-references ADR 0024 (worker-subprocess `ask_user`) which Phase 8 extends rather than supersedes.
 
 ---
 
 ## Recently completed (last 5 steps)
 
-- **Phase 8 scaffold** — `chore(phase-8)`: scaffold tier 8 question-auto-answer. Bundle: `UPGRADE/plans/tier-8-question-auto-answer.md` (~270 lines, 7 work sub-tasks + close); phase-plan.md Phase 8 row + summary section + intro update; ROADMAP Tier 8 section + intro count "Seven tiers → Eight tiers" + dependency-table row + carry-forward updates (U005 → Tier 9 candidate); `.control/phases/phase-8-question-auto-answer/{README.md,steps.md}`; STATE.md cursor flip arc-complete → Phase 8 active at 8.1; regenerated next.md. Operator decisions baked in at scaffold time: provenance via new `answered_by` column (option A); 5-min default deadline configurable via `<dataDir>/config.json`; no override after auto-answer; U005 stays parked. — 2026-05-08 — this commit
-- **Phase 7 close** — `chore(phase-7)`: close phase 7 (no Phase 8 plan; upgrade arc reopens to "all phases complete" — fourth time). Tagged `phase-7-findings-mark-closed`. All 14 done-criteria green at close (criteria 4–6 — manual mark verb verification — taken via unit-test coverage at the handler level since the 8 unit tests use real `mkdtemp` projects with on-disk `.factory/findings.json`; bare CLI surface verified via `factory findings mark --help` examples render and `factory completion bash` shows `mark` in the findings vocab). — 2026-05-08 — `40a78a8`
+- **Phase 8 close** — `chore(phase-8)`: close phase 8 (no Phase 9 plan; upgrade arc reopens to "all phases complete" — fifth time). Tagged `phase-8-question-auto-answer-closed`. All 16 done-criteria green at close (migration backfill, config defaults, brain stamping, sweep+dispatcher, web surfaces, ADR 0030, U029 Resolved, U005 stays parked, ROADMAP rows ticked, all four `pnpm` gates clean). — 2026-05-08 — this commit
+- **Step 8.7** — `feat(8.7)`: surface answered_by in questions web UI. `apps/factory-web/src/pages/questions/index.astro` adds an "Answered by" column rendering 'human' / 'agent (auto)' / 'agent (LLM failed)' / 'orphan sweep'; `/app/questions/detail` adds an "Answered by" meta row (only on answered rows). IPC schemas reuse `pendingQuestionSchema` from core so `answeredBy` flows through automatically. CLI list/show deferred — those subcommands don't exist today. Closes U029. — 2026-05-08 — `992affa`
+- **Step 8.6** — `feat(8.6)`: brain auto-answer dispatcher + deadline sweep. Three new query helpers (`findOpenPastDeadline`, `claimForAutoAnswer`, `finalizeAutoAnswer`) in `pending-questions.ts`; new `packages/brain/src/auto-answer.ts` with `runAutoAnswerSweep` + `autoAnswerOne` + `buildAutoAnswerPrompt`; wired into `runServe` loop with 5s throttle. Race-mitigation sentinel claim before LLM call; spend recorded under category 'quick' on success only. Generic prompt covers question + options + parent directive + past Q&A; CLAUDE.md/task_log/findings dropped from first-ship context per ADR 0030 alternatives. 10 tests covering all four auto-answer paths (success, retry-then-success, double-failure, claim-lost) + sweep ordering + terminal-directive skip + 2 prompt-shape tests. — 2026-05-08 — `89f58c8`
+- **Step 8.5** — `feat(8.5)`: brain stamps ask_user deadline_at from config. Single production call site (`packages/brain/src/ask-user.ts:213`); audit confirmed daemon-side `askUser({...})` flows through it. Caller-provided `deadlineAt` wins; absent → auto-stamped from cached config (`resetDeadlineCache()` exposed for tests). Logged-fallback on corrupt config. 3 new tests. — 2026-05-08 — `dd25d78`
+- **Step 8.4** — `feat(8.4)`: `@factory5/state loadConfig + askUserDeadlineMs default`. Schema + `DEFAULT_ASK_USER_DEADLINE_MS = 300_000` exported from `@factory5/core` (pure types/schemas); reader/writer I/O lives in `packages/state/src/config.ts` (plan-deviation: state vs core for I/O). 11 unit tests covering missing file, empty file, schema mismatch, round-trip, merge-preserves-unrelated-keys, atomic writes, etc. — 2026-05-08 — `d894aaa`
+- **Step 8.3** — `docs(8.3)`: ADR 0030 — pending-question auto-answer contract. Six-part decision (provenance enum, daemon-wide config, LLM dispatcher failure semantics, race mitigation, spend treatment, no-override). INDEX.md updated. ADR 0024 not edited per CLAUDE.md "do not edit accepted ADRs". — 2026-05-08 — `8365b6a`
+- **Step 8.2** — `feat(8.2)`: pending_questions.answered_by column + backfill. Migration 009 with CHECK constraint over four-value enum; idempotent backfill split between orphan-sweep prefix matches and remaining user rows. `pendingQuestionSchema` extended; `pendingQuestions.answer()` race-loser-safe via `WHERE answered_by IS NULL`; `markOrphanAnswered` updated. 6 new migration-shape tests + 3 pre-existing migration tests grew expected arrays by 9. — 2026-05-08 — `cd08976`
+- **Step 8.1** — `chore(8.1)`: open U029. Severity medium; Tier 8; Area brain. — 2026-05-08 — `93a7c9a`
+- **Phase 8 scaffold** — `chore(phase-8)`: scaffold tier 8 question-auto-answer. Plan + phase-plan row + ROADMAP section + phase dir + STATE flip + next.md regen. — 2026-05-08 — `8453086`
 - **Step 7.2** — `feat(7.2)`: factory findings mark <id> <status> CLI command. `runFindingsMark` handler in `packages/cli/src/commands/findings.ts` wraps `updateFindingStatus` from `@factory5/wiki` with case-insensitive status input + `--note <prose>` flowing to `resolution`; bare-id disambiguation copies `runFindingsShow` exactly (`renderAmbiguity` block reused); idempotent re-flip preserves `resolvedAt`. 8 new unit tests in `findings.test.ts` against real `mkdtemp` workspaces with on-disk `.factory/findings.json`. `completion.ts` `NESTED_SUBCOMMANDS.findings` grew by `'mark'`; `packages/cli/README.md` findings table + section updated; top-of-file doc block in `findings.ts` updated. CLI 133 → 141 tests; workspace 1144 → 1152 + 3 skipped. Closes U028. — 2026-05-07 — `0d27925`
 - **Step 7.1** — `chore(7.1)`: open U028 (`factory findings mark <id> <status>` CLI verb missing) in `UPGRADE/ISSUES.md` Open section. Severity low; Tier 7; Area cli. Hypothesis: pure composition over existing `updateFindingStatus` API + `runFindingsShow` disambiguation pattern. — 2026-05-07 — `b1dd5d6`
 - **Phase 7 scaffold** — `chore(phase-7)`: scaffold tier 7 findings-mark CLI. Bundle: `UPGRADE/plans/tier-7-findings-mark.md` (~150 lines, 3 sub-tasks); phase-plan.md Phase 7 row + summary; ROADMAP Tier 7 section + intro count "Six tiers → Seven tiers"; `.control/phases/phase-7-findings-mark/{README.md,steps.md}`; STATE.md cursor flip arc-complete → Phase 7 active at 7.1; regenerated next.md. — 2026-05-07 — `ee970e8`
@@ -117,7 +136,14 @@ Phase 8 active at 8.1. Plan + scaffold landed in this commit; first work commit 
 
 ## Attempts that didn't work (current step only)
 
-None yet — Phase 8 work hasn't started; 8.1 is next.
+None — no active step. Cleared at phase close.
+
+**Worth recording from Phase 8 for future reference** (not load-bearing for any active step but notable):
+
+- **`@factory5/core` placement deviation.** Plan §8.4 prescribed putting `loadConfig`/`writeConfig` in `@factory5/core`. On implementation, putting fs operations there would have introduced the first I/O in core and pulled in fs-related deps to a package every other package depends on. Moved I/O to `@factory5/state` (alongside the existing `defaultDbPath` + `dataDir()` plumbing) while keeping the schema + `DEFAULT_ASK_USER_DEADLINE_MS` constant in core. Public surface unchanged because state re-exports both. Future config readers should follow this same split — schema in core, I/O in state.
+- **Three pre-existing migration tests had hard-coded applied-id arrays.** Tests in `003-findings-registry.test.ts`, `004-model-usage-mode.test.ts`, `006-project-identity.test.ts` all assert `[1, 2, 3, 4, 5, 6, 7, 8]` literally on the migrations table contents after `runMigrations`. Each new migration breaks all three. Tier 8 grew them to `[1..9]`; Tier 9+ will need to do the same. Worth noting in case a future tier wants to refactor to a "≥ N applied" assertion that doesn't break with each new migration.
+- **Plan-prescribed prompt context proved overgenerous.** ADR 0030 §3 enumerated question + options + parent directive + project CLAUDE.md + linked task log + recent findings + past Q&A. First-ship implementation kept question + options + directive + past Q&A; dropped CLAUDE.md / task_log / findings as load-bearing for first ship. The auto-answer is a best-effort fallback, not a perfect-context decision; over-stuffing the prompt risks token bloat without measurable quality lift. Specialization deferred to a follow-up tier with quality data.
+- **Race-mitigation sentinel write doubles as "claim lost" detector.** `claimForAutoAnswer` returns boolean from `result.changes > 0`. The dispatcher uses this directly to bail out without an LLM call. Cleaner than a separate "is this row still claimable?" pre-check that would have a TOCTOU window.
 
 **Worth recording from Phase 7 for future reference** (not load-bearing for any active step but notable):
 
@@ -156,35 +182,28 @@ None yet — Phase 8 work hasn't started; 8.1 is next.
 
 ## Notes for next session
 
-**Phase 8 active at 8.1.** Run the next session-start as usual; the cursor will land on 8.1 (open U029).
+**No active phase.** The upgrade arc closed at `phase-8-question-auto-answer-closed`. To resume work, the operator can either:
 
-**Step 8.1 first commit shape:** `chore(8.1): open U029` — append the issue entry to `UPGRADE/ISSUES.md` Open section. No code edits; the ROADMAP rows + phase scaffold are pre-authored at this scaffold commit, so 8.1 is purely the issue-tracker entry.
+1. **Author a Tier 9 plan** — most likely candidate per demand signal: **U005 chat REPL cancel UX path (a+)** (twice-deferred carry-forward; full path-(a+) sketch exists from the Phase 8 conversation). Or one of the Phase 8-introduced carry-forwards: per-project deadline override, `factory config get/set`, override-after-auto-answer. To start: draft `UPGRADE/plans/tier-9-<name>.md`, add a Phase 9 row to `.control/architecture/phase-plan.md`, add a Tier 9 section to `UPGRADE/ROADMAP.md`, scaffold `.control/phases/phase-9-<name>/{README.md,steps.md}`.
 
-**Pre-write homework before 8.2 (migration):**
+2. **Promote a carry-forward item** — see `## In-flight work` above. Order-of-likelihood (most likely demand signal first):
+   - **U005 chat REPL cancel UX path (a+)** — twice-deferred; the operator-felt bug.
+   - **`factory questions list / show <id>` CLI** — composition over existing query helpers; ~1 commit if narrowly scoped. Now that Tier 8 made `answered_by` real, the CLI list/show would render the badge end-to-end (closing one of the tier 8 plan-deviation gaps).
+   - **`factory config get / set <key>` CLI** — operator surface for the Tier 8 config file.
+   - **PageShell + Dashboard `<style is:global>` migration** — absorbs filter-form Apply / "Clear all defaults" + inline-style audit; self-contained ~1 commit.
+   - **Structural `/session-end` lag-by-1 fix** — 20 occurrences accumulated. Real engineering work, not a one-liner.
 
-- Re-read `packages/state/src/migrations/008-pending-questions-bot-message-id.ts` for the migration shape (ADD COLUMN + index pattern).
-- Confirm `pendingQuestionSchema`'s location in `@factory5/core` and Zod's optional() semantics for the new field.
-- Check the orphan-sweep `[orphaned by ...]` prefix string — confirm it's stable enough for the LIKE backfill SQL (it is per current `markOrphanAnswered` body).
-
-**Pre-write homework before 8.5 (brain stamp):**
-
-- `grep -rn "pendingQuestions.create\|insert.*pending_questions" packages/brain/src/ packages/worker/src/` — enumerate every `ask_user`-emitting call site.
-
-**Pre-write homework before 8.6 (dispatcher + sweep):**
-
-- Identify the brain's tick-loop entry — where the existing directive poll + orphan sweep live.
-- Confirm the model/provider abstraction the brain uses for triage (auto-answer reuses it).
-- Confirm `spend.record` signature for charging the auto-answer LLM call against the parent directive.
+3. **Park** — surfaces are stable; nothing is gated on more work.
 
 **Read first** when next session resumes:
 
-- [`UPGRADE/LOG.md`](../../UPGRADE/LOG.md) — full upgrade-side narrative across all seven closed tiers (Tier 8 entry will be appended at session-end).
-- [`UPGRADE/plans/tier-8-question-auto-answer.md`](../../UPGRADE/plans/tier-8-question-auto-answer.md) — full Tier 8 plan; richest source.
-- [`.control/phases/phase-8-question-auto-answer/README.md`](../phases/phase-8-question-auto-answer/README.md) + [`steps.md`](../phases/phase-8-question-auto-answer/steps.md) — phase cursor.
+- [`UPGRADE/LOG.md`](../../UPGRADE/LOG.md) — full upgrade-side narrative across all eight closed tiers (Tier 8 entry now at the top).
 - [`.control/progress/journal.md`](journal.md) — session-by-session control narrative.
 - This file (`STATE.md`).
 
 **Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav.
+
+**Tier 8 in retrospect:** 8 work commits this session (scaffold + 8.1 → 8.7) plus this phase-close commit. Tier 8 was a real structural addition: schema migration + new ADR + new config home + brain-side LLM dispatcher with race mitigation + web surface. Total Tier 8 code: ~1900 lines added across the codebase (heaviest in 8.6's dispatcher + tests + 8.3's ADR + 8.2's migration). All 4 `pnpm` gates green throughout. Workspace count grew 1152 → 1182 + 3 skipped (+30 across migration, config, deadline-stamp, and dispatcher tests). New ADR (0030) — Tier 8 had real structural decisions to pin (provenance shape, config home, race mitigation, no-override). Two intentional plan deviations both noted in commit bodies + LOG: (1) `loadConfig` I/O placed in `@factory5/state` not `@factory5/core` to keep core fs-free; (2) prompt context pruned to question + options + directive + past Q&A for first ship per ADR 0030's "alternatives considered" — re-add when quality data shows the generic prompt underperforms. Drift fix #19 was carried into the scaffold commit (STATE.md inside scaffold referenced `cf9d4f9` while HEAD moved to `8453086`); the phase-close commit reintroduces the lag at #20, structural fix still pending.
 
 **Tier 7 in retrospect:** 4 work commits this session (drift-fix `436887a` + scaffold `ee970e8` + 7.1 `b1dd5d6` + 7.2 `0d27925`) plus the phase-close commit. Tier 7 itself was pure composition: `factory findings mark` wraps the existing `updateFindingStatus` API with `runFindingsShow`-style disambiguation. Total Tier 7 code: ~80 lines of handler + 90 lines of Commander wiring + 130 lines of test fixtures. All 4 `pnpm` gates green throughout. Workspace count grew 1144 → 1152 from 7.2's 8 mark tests. No new ADRs (composition tier; no structural ambiguity). Drift fix #18 caught up mid-session via `docs(state)`; the phase-close commit reintroduces the lag at #19, structural fix still pending.
 
