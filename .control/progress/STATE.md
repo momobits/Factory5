@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-08 by `/phase-close` after Phase 8 close (cursor flipped Phase 8 → "no current phase — upgrade arc complete (fifth time)"; this phase-close commit bundles steps.md 8.close flip + ROADMAP final ticks + STATE cursor flip + LOG entry + journal entry + next.md regen + the `phase-8-question-auto-answer-closed` tag).
+**Last updated:** 2026-05-08 by `/session-end` after phase-8 close (cursor stays at "no current phase — upgrade arc complete (fifth time)"; phase-close commit `d863ea0` already bundled the STATE/journal/LOG/next.md transition + ROADMAP checkbox flips + steps.md 8.close flip + the `phase-8-question-auto-answer-closed` tag, this session-end docs(state) commit only bumps the timestamp + last-commit reference + lag-by-1 counter; this is the **20th lag-by-1 occurrence caught up** — STATE.md inside this commit references `d863ea0` while HEAD will move to the session-end's sha, making #21 the new pending lag).
 **Current phase:** none — Tier 8 closed at `phase-8-question-auto-answer-closed`. Upgrade arc complete (fifth time). No Tier 9 plan authored.
 **Current step:** none — awaiting next Tier plan
 **Status:** all phases complete. Phase 8 done-criteria all green at close. All four `pnpm` gates green throughout the phase. Workspace 1182 + 3 skipped (was 1152 + 3 pre-Tier-8; +30 from 8.2's migration tests + 8.4's config tests + 8.5's deadline-stamp tests + 8.6's auto-answer dispatcher tests).
@@ -51,9 +51,9 @@ If the operator doesn't want a Tier 9, the project is in a clean post-arc parkin
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `992affa` — `feat(8.7): surface answered_by in questions web UI` (this phase-close commit will move HEAD forward + place the `phase-8-question-auto-answer-closed` tag — lag-by-1 #20)
-- **Uncommitted changes:** Phase 8 close bundle in flight — steps.md 8.close flip, ROADMAP final ticks, this STATE.md cursor flip (Phase 8 → no current phase), LOG entry, journal entry, regenerated next.md
-- **Last phase tag:** `phase-8-question-auto-answer-closed` (annotated at this commit)
+- **Last commit:** `d863ea0` — `chore(phase-8): close phase 8 (upgrade arc complete — fifth time)` (this session-end docs(state) commit will move HEAD forward — lag-by-1 #21, with #20 caught up by this very commit)
+- **Uncommitted changes:** in flight at this session-end STATE refresh — timestamp + last-commit reference + lag-by-1 counter only; phase-close `d863ea0` already bundled the substantive transition (STATE cursor flip, ROADMAP ticks, steps.md 8.close, LOG entry, journal entry, next.md regen, tag)
+- **Last phase tag:** `phase-8-question-auto-answer-closed` (annotated at `d863ea0`)
 
 ---
 
@@ -88,7 +88,7 @@ No phase active. Phase 8 closed cleanly. No Phase 9 scaffolded.
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — **20 occurrences** with this Phase 8 close. Same two structural options as before: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **21 occurrences** with this session-end commit (this docs(state) catches STATE.md up to `d863ea0` for #20, but the session-end itself reintroduces the lag at #21). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
@@ -110,7 +110,7 @@ No phase active. Phase 8 closed cleanly. No Phase 9 scaffolded.
 
 ## Recently completed (last 5 steps)
 
-- **Phase 8 close** — `chore(phase-8)`: close phase 8 (no Phase 9 plan; upgrade arc reopens to "all phases complete" — fifth time). Tagged `phase-8-question-auto-answer-closed`. All 16 done-criteria green at close (migration backfill, config defaults, brain stamping, sweep+dispatcher, web surfaces, ADR 0030, U029 Resolved, U005 stays parked, ROADMAP rows ticked, all four `pnpm` gates clean). — 2026-05-08 — this commit
+- **Phase 8 close** — `chore(phase-8)`: close phase 8 (no Phase 9 plan; upgrade arc reopens to "all phases complete" — fifth time). Tagged `phase-8-question-auto-answer-closed`. All 16 done-criteria green at close (migration backfill, config defaults, brain stamping, sweep+dispatcher, web surfaces, ADR 0030, U029 Resolved, U005 stays parked, ROADMAP rows ticked, all four `pnpm` gates clean). — 2026-05-08 — `d863ea0`
 - **Step 8.7** — `feat(8.7)`: surface answered_by in questions web UI. `apps/factory-web/src/pages/questions/index.astro` adds an "Answered by" column rendering 'human' / 'agent (auto)' / 'agent (LLM failed)' / 'orphan sweep'; `/app/questions/detail` adds an "Answered by" meta row (only on answered rows). IPC schemas reuse `pendingQuestionSchema` from core so `answeredBy` flows through automatically. CLI list/show deferred — those subcommands don't exist today. Closes U029. — 2026-05-08 — `992affa`
 - **Step 8.6** — `feat(8.6)`: brain auto-answer dispatcher + deadline sweep. Three new query helpers (`findOpenPastDeadline`, `claimForAutoAnswer`, `finalizeAutoAnswer`) in `pending-questions.ts`; new `packages/brain/src/auto-answer.ts` with `runAutoAnswerSweep` + `autoAnswerOne` + `buildAutoAnswerPrompt`; wired into `runServe` loop with 5s throttle. Race-mitigation sentinel claim before LLM call; spend recorded under category 'quick' on success only. Generic prompt covers question + options + parent directive + past Q&A; CLAUDE.md/task_log/findings dropped from first-ship context per ADR 0030 alternatives. 10 tests covering all four auto-answer paths (success, retry-then-success, double-failure, claim-lost) + sweep ordering + terminal-directive skip + 2 prompt-shape tests. — 2026-05-08 — `89f58c8`
 - **Step 8.5** — `feat(8.5)`: brain stamps ask_user deadline_at from config. Single production call site (`packages/brain/src/ask-user.ts:213`); audit confirmed daemon-side `askUser({...})` flows through it. Caller-provided `deadlineAt` wins; absent → auto-stamped from cached config (`resetDeadlineCache()` exposed for tests). Logged-fallback on corrupt config. 3 new tests. — 2026-05-08 — `dd25d78`
