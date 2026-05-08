@@ -65,6 +65,7 @@ import Alert from '../../components/Alert.astro';
       getToken,
     } from '../../lib/api';
 
+    type AnsweredBy = 'user' | 'agent' | 'agent-failed' | 'orphan-sweep';
     interface PendingQuestion {
       id: string;
       directiveId: string;
@@ -77,6 +78,7 @@ import Alert from '../../components/Alert.astro';
       deadlineAt?: string;
       answeredAt?: string;
       answer?: string;
+      answeredBy?: AnsweredBy;
     }
     interface DetailResp {
       question: PendingQuestion;
@@ -150,6 +152,16 @@ import Alert from '../../components/Alert.astro';
       return tr;
     };
 
+    /**
+     * Render `answered_by` as operator-readable text. Tier 8 / ADR 0030.
+     */
+    const renderAnsweredBy = (by: AnsweredBy): string => {
+      if (by === 'user') return 'human';
+      if (by === 'agent') return 'agent (auto-answered after deadline)';
+      if (by === 'agent-failed') return 'agent (LLM failed; synthetic placeholder)';
+      return 'orphan sweep (directive ended unanswered)';
+    };
+
     const renderSuggestedAnswers = (q: PendingQuestion): void => {
       const slot = document.getElementById('suggested-answers');
       const ta = document.getElementById('answer') as HTMLTextAreaElement | null;
@@ -210,6 +222,9 @@ import Alert from '../../components/Alert.astro';
         tbody.appendChild(
           buildMetaRow('Status', q.answeredAt !== undefined ? `Answered at ${q.answeredAt}` : 'Open'),
         );
+        if (q.answeredBy !== undefined) {
+          tbody.appendChild(buildMetaRow('Answered by', renderAnsweredBy(q.answeredBy)));
+        }
         if (q.answer !== undefined) tbody.appendChild(buildMetaRow('Answer', q.answer));
       }
 

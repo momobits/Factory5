@@ -117,7 +117,7 @@ When an `ask_user` pending-question goes unanswered past its deadline and the pa
 - [x] `loadConfig()` / `writeConfig()` reader+writer for `<dataDir>/config.json` (`askUserDeadlineMs` default 5 min; configurable without code changes; schema/types in `@factory5/core`, I/O in `@factory5/state`)
 - [x] Brain stamps `deadline_at` from config on every new `ask_user`
 - [x] Brain tick-loop sweep + LLM auto-answer dispatcher (`packages/brain/src/auto-answer.ts`); retry once → write `'agent-failed'` synthetic on second failure; sentinel race-mitigation claim; throttled to 5s in `runServe`
-- [ ] Surface `answered_by` in CLI `factory questions list/show` and web `/app/questions/*`
+- [x] Surface `answered_by` in web `/app/questions/index` (column) and `/app/questions/detail` (meta row); CLI list/show deferred (subcommands don't exist today)
 
 Plan: [`plans/tier-8-question-auto-answer.md`](plans/tier-8-question-auto-answer.md)
 

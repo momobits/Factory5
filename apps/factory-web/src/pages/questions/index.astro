@@ -30,6 +30,7 @@ import Table from '../../components/Table.astro';
       { key: 'channel', label: 'Channel' },
       { key: 'directive', label: 'Directive' },
       { key: 'answer', label: 'Answer' },
+      { key: 'answered_by', label: 'Answered by' },
     ]}
     rows={[]}
     loading
@@ -44,6 +45,7 @@ import Table from '../../components/Table.astro';
       ApiError,
     } from '../../lib/api';
 
+    type AnsweredBy = 'user' | 'agent' | 'agent-failed' | 'orphan-sweep';
     interface PendingQuestion {
       id: string;
       directiveId: string;
@@ -52,6 +54,7 @@ import Table from '../../components/Table.astro';
       createdAt: string;
       answeredAt?: string;
       answer?: string;
+      answeredBy?: AnsweredBy;
     }
     interface ListResp {
       items: PendingQuestion[];
@@ -116,8 +119,26 @@ import Table from '../../components/Table.astro';
         answerTd.textContent = q.answer ?? '';
         tr.appendChild(answerTd);
 
+        const answeredByTd = document.createElement('td');
+        answeredByTd.textContent = renderAnsweredBy(q.answeredBy);
+        tr.appendChild(answeredByTd);
+
         tbody.appendChild(tr);
       }
+    };
+
+    /**
+     * Render the answered_by column. Empty when unanswered (so open-status
+     * rows render a blank cell instead of "(unknown)"); structured tag
+     * otherwise so the operator can spot agent vs human answers at a glance.
+     * Tier 8 / ADR 0030.
+     */
+    const renderAnsweredBy = (by: AnsweredBy | undefined): string => {
+      if (by === undefined) return '';
+      if (by === 'user') return 'human';
+      if (by === 'agent') return 'agent (auto)';
+      if (by === 'agent-failed') return 'agent (LLM failed)';
+      return 'orphan sweep';
     };
 
     const mountPath = (): string => {
