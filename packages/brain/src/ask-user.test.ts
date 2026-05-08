@@ -14,12 +14,17 @@ import {
   runMigrations,
 } from '@factory5/state';
 
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import {
   askUser,
   defaultAskUserOutbound,
   defaultEscalateOutbound,
   escalateBlocked,
   openQuestionsForDirective,
+  resetDeadlineCache,
 } from './ask-user.js';
 
 function freshDb(): ReturnType<typeof openDatabase> {
@@ -233,6 +238,114 @@ describe('askUser', () => {
     pendingQuestions.answer(db, open[0]?.id as string, 'ok', new Date().toISOString());
     await pending;
     db.close();
+  });
+
+  describe('deadline_at stamping (Tier 8 / ADR 0030)', () => {
+    it('auto-stamps deadlineAt from <dataDir>/config.json.askUserDeadlineMs', async () => {
+      const db = freshDb();
+      const directiveId = seedDirective(db);
+      const configDir = mkdtempSync(join(tmpdir(), 'factory5-askuser-cfg-'));
+      try {
+        writeFileSync(
+          join(configDir, 'config.json'),
+          JSON.stringify({ askUserDeadlineMs: 90_000 }),
+          'utf8',
+        );
+        resetDeadlineCache();
+
+        const fixedNow = Date.parse('2026-05-08T12:00:00.000Z');
+        const expectedDeadline = new Date(fixedNow + 90_000).toISOString();
+
+        const pending = askUser({
+          db,
+          directiveId,
+          question: 'How long do we wait?',
+          pollIntervalMs: 5,
+          now: () => fixedNow,
+          configDataDir: configDir,
+        });
+        await new Promise((r) => setTimeout(r, 20));
+
+        const open = pendingQuestions.openForDirective(db, directiveId);
+        expect(open).toHaveLength(1);
+        expect(open[0]?.deadlineAt).toBe(expectedDeadline);
+
+        pendingQuestions.answer(db, open[0]?.id as string, 'go', new Date().toISOString());
+        await pending;
+      } finally {
+        rmSync(configDir, { recursive: true, force: true });
+        resetDeadlineCache();
+        db.close();
+      }
+    });
+
+    it('falls back to DEFAULT_ASK_USER_DEADLINE_MS when config file is absent', async () => {
+      const db = freshDb();
+      const directiveId = seedDirective(db);
+      const configDir = mkdtempSync(join(tmpdir(), 'factory5-askuser-default-'));
+      try {
+        resetDeadlineCache();
+
+        const fixedNow = Date.parse('2026-05-08T12:00:00.000Z');
+        const expectedDeadline = new Date(fixedNow + 300_000).toISOString();
+
+        const pending = askUser({
+          db,
+          directiveId,
+          question: 'No config file?',
+          pollIntervalMs: 5,
+          now: () => fixedNow,
+          configDataDir: configDir,
+        });
+        await new Promise((r) => setTimeout(r, 20));
+
+        const open = pendingQuestions.openForDirective(db, directiveId);
+        expect(open[0]?.deadlineAt).toBe(expectedDeadline);
+
+        pendingQuestions.answer(db, open[0]?.id as string, 'go', new Date().toISOString());
+        await pending;
+      } finally {
+        rmSync(configDir, { recursive: true, force: true });
+        resetDeadlineCache();
+        db.close();
+      }
+    });
+
+    it('caller-provided deadlineAt wins over the config default', async () => {
+      const db = freshDb();
+      const directiveId = seedDirective(db);
+      const configDir = mkdtempSync(join(tmpdir(), 'factory5-askuser-explicit-'));
+      try {
+        writeFileSync(
+          join(configDir, 'config.json'),
+          JSON.stringify({ askUserDeadlineMs: 60_000 }),
+          'utf8',
+        );
+        resetDeadlineCache();
+
+        const explicitDeadline = '2026-12-31T23:59:59.000Z';
+
+        const pending = askUser({
+          db,
+          directiveId,
+          question: 'Explicit deadline',
+          pollIntervalMs: 5,
+          deadlineAt: explicitDeadline,
+          configDataDir: configDir,
+        });
+        await new Promise((r) => setTimeout(r, 20));
+
+        const open = pendingQuestions.openForDirective(db, directiveId);
+        expect(open[0]?.deadlineAt).toBe(explicitDeadline);
+
+        pendingQuestions.answer(db, open[0]?.id as string, 'go', new Date().toISOString());
+        await pending;
+      } finally {
+        rmSync(configDir, { recursive: true, force: true });
+        resetDeadlineCache();
+        db.close();
+      }
+    });
   });
 });
 

@@ -115,7 +115,7 @@ When an `ask_user` pending-question goes unanswered past its deadline and the pa
 - [x] Migration 009 — `pending_questions.answered_by` column (`'user' | 'agent' | 'agent-failed' | 'orphan-sweep'`) + backfill orphan-sweep + user rows
 - [x] ADR 0030 — pending-question auto-answer contract (enum semantics, daemon-wide config home, LLM dispatcher failure path, no-override-after-auto-answer rule)
 - [x] `loadConfig()` / `writeConfig()` reader+writer for `<dataDir>/config.json` (`askUserDeadlineMs` default 5 min; configurable without code changes; schema/types in `@factory5/core`, I/O in `@factory5/state`)
-- [ ] Brain stamps `deadline_at` from config on every new `ask_user`
+- [x] Brain stamps `deadline_at` from config on every new `ask_user`
 - [ ] Brain tick-loop sweep + LLM auto-answer dispatcher (`packages/brain/src/auto-answer.ts`); retry once → write `'agent-failed'` synthetic on second failure
 - [ ] Surface `answered_by` in CLI `factory questions list/show` and web `/app/questions/*`
 

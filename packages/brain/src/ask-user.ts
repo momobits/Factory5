@@ -35,7 +35,9 @@ import type { Directive } from '@factory5/core';
 import { newId } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import {
+  DEFAULT_ASK_USER_DEADLINE_MS,
   directives as directivesQ,
+  loadConfig,
   outbound,
   pendingQuestions,
   type Database,
@@ -45,6 +47,33 @@ const log = createLogger('brain.ask-user');
 
 /** Default cadence for polling `pending_questions.answered_at`. */
 const DEFAULT_POLL_INTERVAL_MS = 1000;
+
+/**
+ * Cached `<dataDir>/config.json.askUserDeadlineMs`. Set on first call to
+ * {@link askUser} so we don't read+parse the config file on every emission.
+ * The brain process is long-lived; the config file is hand-edited via a
+ * daemon restart, so a process-lifetime cache is acceptable. Tests reset
+ * via {@link resetDeadlineCache}.
+ */
+let cachedDeadlineMs: number | undefined = undefined;
+
+/** Test-only: clear the deadline cache so a fresh config read fires. */
+export function resetDeadlineCache(): void {
+  cachedDeadlineMs = undefined;
+}
+
+function resolveDeadlineMs(configDataDir?: string): number {
+  if (cachedDeadlineMs !== undefined) return cachedDeadlineMs;
+  try {
+    cachedDeadlineMs = loadConfig(configDataDir).askUserDeadlineMs;
+  } catch (err) {
+    // Corrupt config file is operator-visible; log and fall back to default
+    // rather than crash the brain on every ask_user emission.
+    log.warn({ err }, 'askUser: config.json read failed — using DEFAULT_ASK_USER_DEADLINE_MS');
+    cachedDeadlineMs = DEFAULT_ASK_USER_DEADLINE_MS;
+  }
+  return cachedDeadlineMs;
+}
 
 export interface AskUserOptions {
   db: Database;
@@ -81,6 +110,17 @@ export interface AskUserOptions {
    * helper.
    */
   onQuestionResolved?: (questionId: string) => void;
+  /**
+   * Test injection for the deadline-stamping clock. Production callers omit
+   * and {@link Date.now} is used. Affects only the auto-stamped deadline
+   * (when `deadlineAt` isn't passed); the abort+poll loop uses real time.
+   */
+  now?: () => number;
+  /**
+   * Test injection for the config-file lookup. Production callers omit and
+   * `<dataDir>/config.json` is read. Affects only the auto-stamped deadline.
+   */
+  configDataDir?: string;
 }
 
 export interface AskUserRenderContext {
@@ -209,7 +249,13 @@ export async function askUser(opts: AskUserOptions): Promise<AskUserResult> {
   } else {
     // 3. New question: create row + enqueue outbound.
     questionId = newId();
-    const createdAt = new Date().toISOString();
+    const now = opts.now ?? ((): number => Date.now());
+    const createdAt = new Date(now()).toISOString();
+    // Stamp deadline (ADR 0030 §2): caller-provided `deadlineAt` wins;
+    // otherwise default from `<dataDir>/config.json.askUserDeadlineMs`
+    // (5 min default). The brain reads config once per process and caches.
+    const deadlineAt =
+      opts.deadlineAt ?? new Date(now() + resolveDeadlineMs(opts.configDataDir)).toISOString();
     pendingQuestions.create(opts.db, {
       id: questionId,
       directiveId: directive.id,
@@ -219,7 +265,7 @@ export async function askUser(opts: AskUserOptions): Promise<AskUserResult> {
       channel: directive.source,
       channelRef: directive.channelRef,
       createdAt,
-      ...(opts.deadlineAt !== undefined ? { deadlineAt: opts.deadlineAt } : {}),
+      deadlineAt,
     });
     const outboundText = (opts.renderOutbound ?? defaultAskUserOutbound)({
       questionId,
