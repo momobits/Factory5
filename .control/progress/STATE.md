@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-08 by docs-catch-up after the post-session-end docs commit `30118b0` (`docs(adr): document ADR 0030 surfaces in ARCHITECTURE + state README`). The doc-update commit landed without updating STATE.md (lag #24); this catch-up commit catches that up to `30118b0` and itself becomes lag #25. Same well-known structural pattern, fix still deferred.
-**Current phase:** none — Tier 8 closed at `phase-8-question-auto-answer-closed`. Upgrade arc complete (fifth time). No Tier 9 plan authored.
-**Current step:** none — awaiting next Tier plan
-**Status:** all phases complete. Phase 8 done-criteria all green at close. All four `pnpm` gates green throughout the phase. Workspace 1182 + 3 skipped (was 1152 + 3 pre-Tier-8; +30 from 8.2's migration tests + 8.4's config tests + 8.5's deadline-stamp tests + 8.6's auto-answer dispatcher tests).
+**Last updated:** 2026-05-15 by Phase 9 control-room redesign session. Reopens the upgrade arc post-Phase-8-close for a single-session frontend aesthetic overhaul (informal cadence — no per-step commits, no ADR). Code complete; working tree dirty pending operator commit + `/phase-close`.
+**Current phase:** 9 — control-room-redesign (code complete, awaiting `/phase-close`)
+**Current step:** 9.close pending (all sub-steps done; operator-gated commit + tag)
+**Status:** Phase 9 work landed as a single working-tree change set in `apps/factory-web/`: `Dashboard.astro` inline-style rewrite + 8 component primitives re-wired to new CSS custom-property design tokens (Fraunces + Bricolage Grotesque + JetBrains Mono; vermillion `#ff4d1c` signal; dual-theme via `prefers-color-scheme`). All four `pnpm` gates green: build / test / lint / format:check. Workspace test counts unchanged (1182 + 3 skipped — `.astro` style changes don't add tests). Operator owns: (1) live browser verification (assistant cannot open a browser); (2) commit of the working tree; (3) `/phase-close` to tag `phase-9-control-room-redesign-closed`.
 
 ---
 
@@ -20,7 +20,13 @@
 
 ## Next action
 
-**No active phase.** Upgrade arc closed for the fifth time. Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; the audit-driven Tier 5 reopened the arc 2026-05-07 at `c0869d6` and closed at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 reopened 2026-05-07 at `542f99a` and closed at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 reopened 2026-05-07 at `ee970e8` and closed at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 reopened 2026-05-08 at `8453086` and closed at `phase-8-question-auto-answer-closed` 2026-05-08 at this commit.
+**Phase 9 code complete, awaiting `/phase-close`.** Reopens upgrade arc post-Phase-8-close at this session (informal cadence — single-session redesign, no scaffold-before-coding workflow, no per-step commits, no ADR). Operator steps to close:
+
+1. **Live browser verification** — run `factoryd` + `factory ui-token`, open the URL, click through all 8 sections (Overview / Projects / Build / Chat / Directives / Questions / Spend / Findings), toggle OS theme between light + dark, verify both render correctly. Assistant cannot open a browser; this gate is operator-owned.
+2. **Commit** — single bundled commit captures the redesign + the `.control` recordkeeping that landed in this session. Suggested message in [`UPGRADE/plans/tier-9-control-room-redesign.md`](../../UPGRADE/plans/tier-9-control-room-redesign.md) under "Commit message". Recommended scope `feat(phase-9): ...` (whole-phase bundle since no per-step commits) or `redesign(phase-9): ...`.
+3. **`/phase-close`** — verify all done-criteria checkboxes flip; tag `phase-9-control-room-redesign-closed`; append final session entry to `UPGRADE/LOG.md`.
+
+**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; the audit-driven Tier 5 reopened the arc 2026-05-07 at `c0869d6` and closed at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 reopened 2026-05-07 at `542f99a` and closed at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 reopened 2026-05-07 at `ee970e8` and closed at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 reopened 2026-05-08 at `8453086` and closed at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`. Tier 9 reopens 2026-05-15 at this session — first tier in the arc that ships visual-design work without an underlying contract change.
 
 If the operator wants to continue, the carry-forward candidates from Phase 8's Deferred section are (ordered by demand-signal likelihood):
 
@@ -51,9 +57,9 @@ If the operator doesn't want a Tier 9, the project is in a clean post-arc parkin
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `30118b0` — `docs(adr): document ADR 0030 surfaces in ARCHITECTURE + state README` (post-session-end docs catch-up; this docs(state) commit catching it up will move HEAD forward — lag-by-1 #25, with #24 caught up by this very commit)
-- **Uncommitted changes:** in flight at this docs-catch-up — STATE.md (timestamp + last-commit pointer + lag counter + Recently-completed entry) + `next.md` (regenerated). Operator asked for state catch-up after the post-session-end docs commit landed without STATE flip.
-- **Last phase tag:** `phase-8-question-auto-answer-closed` (annotated at `d863ea0`)
+- **Last commit:** `30118b0` — `docs(adr): document ADR 0030 surfaces in ARCHITECTURE + state README` (Phase 8-era; no commit landed this session — Phase 9 work is uncommitted in the working tree)
+- **Uncommitted changes:** Phase 9 redesign (`apps/factory-web/src/layouts/Dashboard.astro` + 8 components in `apps/factory-web/src/components/`) plus the `.control` recordkeeping that this session added (`.control/phases/phase-9-control-room-redesign/{README.md, steps.md}`, `UPGRADE/plans/tier-9-control-room-redesign.md`, `.control/architecture/phase-plan.md` Phase 9 row, `UPGRADE/ROADMAP.md` Tier 9 section + count bump, `.control/progress/STATE.md` this update, `.control/progress/journal.md` session entry, `UPGRADE/LOG.md` Tier 9 entry). Operator owns the bundled commit.
+- **Last phase tag:** `phase-8-question-auto-answer-closed` (annotated at `d863ea0`) — Tier 9 tag arrives at `/phase-close`
 
 ---
 

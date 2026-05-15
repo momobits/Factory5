@@ -47,7 +47,7 @@ function renderCell(value: unknown): string {
 
 {
   rows.length === 0 && !loading ? (
-    <p class="empty">{emptyMessage}</p>
+    <p class="empty">— {emptyMessage} —</p>
   ) : (
     <div class="table-wrap">
       <table id={id}>
@@ -67,8 +67,8 @@ function renderCell(value: unknown): string {
         <tbody>
           {loading ? (
             <tr>
-              <td colspan={columns.length} class="empty">
-                Loading…
+              <td colspan={columns.length} class="empty-cell">
+                Loading transmission…
               </td>
             </tr>
           ) : (
@@ -95,46 +95,23 @@ function renderCell(value: unknown): string {
 
 <style>
   .table-wrap {
-    /* Allow wide tables to scroll horizontally inside the wrap rather than
-       forcing the whole page to h-scroll on narrow viewports. Invisible at
-       desktop widths because the table fits its container. */
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    border-radius: 2px;
   }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
-  }
-  caption {
+  table caption {
     text-align: left;
-    font-size: 0.85rem;
-    color: color-mix(in srgb, currentColor 60%, transparent);
-    margin-bottom: 0.4rem;
+    font-family: var(--f-mono);
+    font-size: 10px;
+    color: var(--mute);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-cap);
+    margin-bottom: 8px;
   }
-  th,
-  td {
-    text-align: left;
-    padding: 0.4rem 0.6rem;
-    border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
-  }
-  th {
-    font-weight: 600;
-    background: color-mix(in srgb, currentColor 4%, transparent);
-  }
-  td.num,
-  th.num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-  .align-right {
-    text-align: right;
-  }
-  .align-center {
-    text-align: center;
-  }
-  .empty {
-    color: color-mix(in srgb, currentColor 60%, transparent);
+  .empty-cell {
+    color: var(--mute);
     font-style: italic;
+    text-align: center !important;
+    padding: 18px !important;
   }
 </style>

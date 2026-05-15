@@ -7,8 +7,10 @@
  * (Astro components are server-rendered, so a button-driven submit
  * stays a client concern).
  *
- * `wide` removes the 36rem max-width for forms that need to span the
+ * `wide` removes the 38rem max-width for forms that need to span the
  * page (e.g., a CLAUDE.md textarea).
+ *
+ * Styling lives in Dashboard.astro's global stylesheet.
  */
 interface Props {
   /** Optional `id` so a page script can `document.getElementById(id)` it. */
@@ -17,7 +19,7 @@ interface Props {
   action?: string;
   /** Native form method. Defaults to `POST`. */
   method?: 'get' | 'post' | 'GET' | 'POST';
-  /** Drop the 36rem max-width (use full page width). */
+  /** Drop the 38rem max-width (use full page width). */
   wide?: boolean;
 }
 
@@ -32,27 +34,3 @@ const { id, action, method = 'POST', wide = false } = Astro.props;
 >
   <slot />
 </form>
-
-<style>
-  form.form {
-    display: grid;
-    gap: 1rem;
-    max-width: 36rem;
-    margin-top: 1rem;
-  }
-  form.form.wide {
-    max-width: none;
-  }
-  /* Two-column row helper for paired fields (e.g., language + autonomy). */
-  form.form :global(.form-row) {
-    display: grid;
-    gap: 1rem;
-    grid-template-columns: 1fr 1fr;
-  }
-  form.form :global(.form-actions) {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-</style>

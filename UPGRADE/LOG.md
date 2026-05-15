@@ -6,6 +6,56 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-15 — Phase 9 (Control Room redesign — factory-web editorial port) code complete; awaiting `/phase-close`
+
+Reopens the upgrade arc post-Phase-8-close for a frontend aesthetic overhaul. First tier in the arc that ships visual-design work without an underlying contract change. **No commits this session** — the redesign landed as a single working-tree change set across `apps/factory-web/` plus post-hoc `.control` recordkeeping; the operator owns the bundled commit + `/phase-close`.
+
+**Operator request at session start:** port the "Editorial Control Room" aesthetic from the sibling conductor project (`G:/Projects/Small-Projects/Harness/conductor`, Phase 19) to factory5's `apps/factory-web` dashboard, and record the work in the Control system. Conductor's port committed dark-only; factory5 already supports light + dark via `color-scheme: light dark` (`color-mix(currentColor)` everywhere) and Phase 3 frontend-design judgement calls in STATE.md argued for _"inherit-don't-invent"_, theme-independent status semantics, and native HTML over custom widgets. Operator chose **dual-theme** to preserve those values, **informal cadence** (single change set, no per-step commits, no ADR) to match the conductor session's tempo, and **fresh Tier 9 framing** over promoting the Phase 8 "PageShell + Dashboard `<style is:global>` migration" carry-forward verbatim.
+
+**Why this tier was needed:** the current dashboard is functional but visually generic — system-font sans, `color-mix(currentColor)` chrome, GitHub-ish neutral surfaces. The conductor port demonstrated that editorial / mission-control aesthetics work for control-plane UIs without sacrificing readability or accessibility, and operator wanted the two control planes to share a visual identity. Additionally, Phase 8's Deferred section had been carrying _"PageShell + Dashboard `<style is:global>` migration — 11-page sweep absorbing filter-form Apply / 'Clear all defaults' + inline-style audit. Self-contained ~1 commit"_ since the upgrade arc's fifth close — Tier 9 absorbs that work _de facto_ and goes considerably further (aesthetic overhaul rather than structural deduplication).
+
+**What landed in `apps/factory-web/`:**
+
+- **`src/layouts/Dashboard.astro`** — full inline `<style is:global>` rewrite (~660 lines). New CSS custom-property token layer:
+  - Type: `--f-display` (Fraunces, variable opsz 9..144), `--f-body` (Bricolage Grotesque, variable opsz 12..96), `--f-mono` (JetBrains Mono).
+  - Accents (persist across themes): `--signal` `#ff4d1c` vermillion, `--signal-2` lighter for hover, `--amber`, `--acid`, `--halt`, `--cool`.
+  - Surfaces / foreground (theme-switched): `--bg / --bg-2 / --surface / --surface-2 / --ink / --ink-2 / --mute / --mute-2 / --hairline / --hairline-2 / --grain-opacity`. Light: warm parchment `#f4ecd9` on `#fffaef` surfaces, ink `#1a1a1d`, hairline `#d8cdb0`. Dark: ink-black `#0c0c0e` on `#16161a` surfaces, parchment `#f3ece0`, hairline `#2b2b32`.
+  - `@media (prefers-color-scheme: dark)` swaps the surface/ink/hairline block; type tokens + accents shared.
+  - Status semantic colors (`#2a8b54 / #b87c1a / #c0263a` for connected / reconnecting / disconnected) held literal in the status-pip rules — theme-independent for at-a-glance recognition (Phase 3 frontend-design rule).
+  - Markup re-laid: masthead-top row (brand: `§` mark + `factory5` + italic `/ Control Room` strapline; edition stamp on right with "Vol. V · {title}") → masthead-rule (double horizontal stroke à la magazine masthead) → masthead-meta row (numbered nav `01 OVERVIEW` … `08 FINDINGS` with monospaced numerals in vermillion; status pip; sign-out; hamburger drawer for ≤768px).
+  - Page-title block (`.page-title` inside `main.shell`) — `h2` in italic Fraunces opsz 144 weight 700, clamped 1.7–2.4rem, `letter-spacing: -0.02em`, 36×2px vermillion underscore rule. Picks up every page's `title` prop without requiring page-side migration to `<PageShell>`.
+  - Paper-grain atmosphere — `body::before` carries a 22×22 dot-grid (radial-gradient on `--ink` at 4% alpha) + a vermillion radial in the top-right + an amber radial in the bottom-left, all using `color-mix`. `body::after` overlays an SVG-data-URI fractal-noise grain at `--grain-opacity` with `mix-blend-mode: overlay`.
+  - Pulse animation on the status-pip dot via `@keyframes pulse-pip` (2.2s ease-in-out shadow-expansion).
+  - Connection heartbeat script, logout banner toggle, drawer-hamburger interaction — all preserved verbatim; only the surrounding chrome restyled. The "Connecting…" / "Connected" / "Reconnecting…" labels became "Tuning…" / "Live" / "Reconnecting…" / "Disconnected" / "Signed out" / "Session expired" to match the editorial tone.
+
+- **`src/components/` — 8 primitives re-wired:**
+  - `Card.astro` — scoped block dropped entirely. Letterpress border-left rule, vermillion hover state with translateY(-1px) + signal-coloured underscore growing from 2px → 3px, oversized Fraunces opsz 72 weight 900 numeral all live in Dashboard's global `.card` rules. Pages that hand-roll `<div class="card">` markup pick up the same look without changes.
+  - `Table.astro` — scoped block trimmed to caption + custom `.empty-cell` (centered "Loading transmission…"). Editorial table chrome (uppercase monospaced thead, vermillion-tinted row hover via `color-mix(in srgb, var(--signal) 4%, transparent)`, amber link borders, monospaced 12px body) in global.
+  - `Alert.astro` — scoped block dropped. Editorial `.alert` with italic Fraunces opsz 36 weight 700 `h4`; `.alert--success` h4 in `#2a8b54`, `.alert--conflict` h4 in `#c0263a`, `.alert--info` neutral.
+  - `Field.astro / Form.astro / Submit.astro` — scoped blocks dropped. Form scaffolding in global: labels as monospaced 10px uppercase eyebrow; inputs with `--bg-2` background, vermillion focus ring; `.btn-primary` filled vermillion (`color: var(--bg)`) with hover transitioning to filled `--ink`; `.btn` neutral outline; `.btn-danger` red outline.
+  - `EmptyState.astro` — scoped block rewritten editorially: monospaced "No records on file" eyebrow in vermillion above the title; italic Fraunces opsz 36 weight 700 title; 28×2px vermillion underscore rule; vermillion-filled CTA button transitioning to `--ink` on hover.
+  - `PageShell.astro` — h2 → h3 (Dashboard's `.page-title` h2 owns the page heading now). Kept for pages that want a sub-section header + description block.
+
+- **Pages untouched.** All 12 pages (Overview, Projects×3, Build, Spend, Directives×2, Findings, Questions×2, Chat) pick up the new aesthetic via the global stylesheet because they reference shared classes (`.card`, `.alert`, `.empty`, `.form-field`, `.btn`, table chrome) rather than carrying their own styles. The PageShell migration carry-forward is therefore absorbed _de facto_. Remaining inline `style=` attributes (e.g. `index.astro:15` `style="margin-top: 1.5rem;"`) are cosmetic-only and not load-bearing.
+
+**Tier 9 in retrospect:** 0 commits this session — informal cadence at operator request. Total session output: ~660 lines of new CSS in `Dashboard.astro` + net-negative across the 8 component files (scoped blocks dropped, only `EmptyState`'s grew). The `.control` recordkeeping (this LOG entry + plan + phase folder + ROADMAP/phase-plan deltas + STATE.md flip + journal entry) is ~600 lines of doc — heavier than the code change because of the audit-trail discipline factory5 carries. All four `pnpm` gates green: build / test / lint / format:check. Workspace test counts unchanged at 1182 + 3 skipped (`.astro` style changes don't add tests). No new ADR — the dual-theme decision was a session-time judgement call following Phase 3's existing frontend rules, not a structural pinning. If a future tier wants to lean on the design tokens, ADR 0031 — Editorial Control Room aesthetic + dual-theme token contract — could formalize it retrospectively.
+
+**Manual verification still owed:** assistant cannot open a browser from this environment. Operator should run `factoryd` + `factory ui-token`, open the URL, click through all 8 sections, toggle OS theme between light + dark, verify both render correctly. The four `pnpm` gates verified everything code-side; live pixel-verification is operator-owned.
+
+**Next session:** operator-gated. Recommended sequence:
+
+1. Browser verification.
+2. Bundled commit of the working tree (suggested message in `UPGRADE/plans/tier-9-control-room-redesign.md` under "Commit message").
+3. `/phase-close` to tag `phase-9-control-room-redesign-closed`; append the final entry to this LOG; transition STATE back to "all phases complete" unless a Tier 10 demand signal arrives.
+
+**Tier 9 carry-forward candidates after close:**
+
+- **Inline-style audit on the 12 pages** — handful of cosmetic-only `style="margin-top: …"` remaining. Self-contained ~30-min sweep.
+- **ADR 0031 — Editorial Control Room aesthetic + dual-theme token contract** — formalizes the design decision retrospectively.
+- All Phase 8-era carry-forwards remain intact (U005 chat REPL cancel, per-project deadline override, `factory config get/set`, override-after-auto-answer, etc.).
+
+---
+
 ## 2026-05-08 — Phase 8 (`ask_user` deadline + LLM auto-answer) closed; upgrade arc complete (fifth time)
 
 `/phase-close` ran on Phase 8. Eight commits shipped this session (scaffold + 8.1 → 8.7 + this 8.close). Tagged `phase-8-question-auto-answer-closed` (annotated) at the close commit. **No Phase 9 scaffolded** — `phase-plan.md` defines no Phase 9 entry; the upgrade arc closes again. STATE.md transitions back to "all phases complete" (fifth occurrence — Tier 4 original close, Tier 5 reopened post-prompt-audit, Tier 6 reopened post-skills-audit, Tier 7 reopened to ship operator-side parallel of 6.3's parser, Tier 8 reopened to unblock autonomous runs when the human is absent, this close is again terminal unless a Tier 9 demand signal arrives).

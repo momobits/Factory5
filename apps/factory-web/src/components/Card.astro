@@ -42,53 +42,9 @@ const trendArrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : trend ===
   )
 }
 
-<style>
-  .card {
-    display: block;
-    padding: 1rem;
-    border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
-    border-radius: 6px;
-    color: inherit;
-    text-decoration: none;
-  }
-  .card--link {
-    transition: background 0.12s ease-out;
-  }
-  .card--link:hover {
-    background: color-mix(in srgb, currentColor 4%, transparent);
-  }
-  .card h3 {
-    margin: 0 0 0.25rem 0;
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: color-mix(in srgb, currentColor 70%, transparent);
-  }
-  .card .value {
-    font-size: 1.75rem;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    display: flex;
-    align-items: baseline;
-    gap: 0.4rem;
-    flex-wrap: wrap;
-  }
-  .card .unit {
-    font-size: 0.95rem;
-    font-weight: 400;
-    color: color-mix(in srgb, currentColor 60%, transparent);
-  }
-  .card .trend {
-    font-size: 0.95rem;
-    font-weight: 500;
-  }
-  .card .trend--up {
-    color: #22824d;
-  }
-  .card .trend--down {
-    color: #c24;
-  }
-  .card .trend--flat {
-    color: color-mix(in srgb, currentColor 55%, transparent);
-  }
-</style>
+<!--
+  Card visuals live in the global stylesheet (Dashboard.astro) so the
+  letterpress border-left rule, vermillion hover state, and editorial
+  numeral typography can be reused by pages that hand-roll `<div class="card">`
+  markup. This file kept for the markup contract only.
+-->

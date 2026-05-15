@@ -20,6 +20,7 @@ const { title, body, cta } = Astro.props;
 ---
 
 <div class="empty-state">
+  <span class="eyebrow">No records on file</span>
   <h3>{title}</h3>
   <p>{body}</p>
   {
@@ -33,37 +34,69 @@ const { title, body, cta } = Astro.props;
 
 <style>
   .empty-state {
-    padding: 1.5rem;
-    border: 1px dashed color-mix(in srgb, currentColor 18%, transparent);
-    border-radius: 6px;
-    background: color-mix(in srgb, currentColor 3%, transparent);
-    max-width: 36rem;
+    padding: 26px 28px;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    border-radius: 2px;
+    max-width: 42rem;
     text-align: left;
+    position: relative;
+  }
+  .empty-state .eyebrow {
+    display: block;
+    font-family: var(--f-mono);
+    font-size: 9px;
+    color: var(--signal);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-cap);
+    margin-bottom: 8px;
   }
   .empty-state h3 {
-    margin: 0 0 0.4rem 0;
-    font-size: 1rem;
+    margin: 0 0 6px 0;
+    font-family: var(--f-display);
+    font-style: italic;
+    font-weight: 700;
+    font-variation-settings: 'opsz' 36;
+    font-size: 22px;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+  }
+  .empty-state h3::after {
+    content: '';
+    display: block;
+    width: 28px;
+    height: 2px;
+    background: var(--signal);
+    margin: 8px 0 12px;
   }
   .empty-state p {
-    margin: 0;
-    font-size: 0.9rem;
-    color: color-mix(in srgb, currentColor 70%, transparent);
+    margin: 0 0 14px;
+    font-family: var(--f-body);
+    font-size: 13px;
+    color: var(--ink-2);
+    line-height: 1.55;
   }
   .empty-state-cta {
     display: inline-block;
-    margin-top: 0.85rem;
-    font-size: 0.9rem;
-    padding: 0.4rem 0.85rem;
-    border-radius: 4px;
-    /* CanvasText, not currentColor: `color: Canvas` rebinds currentColor to
-       Canvas, collapsing background and text to the same colour. CanvasText
-       is the system pair to Canvas, guaranteed to contrast. */
-    background: color-mix(in srgb, CanvasText 85%, transparent);
-    color: Canvas;
+    font-family: var(--f-body);
+    font-weight: 500;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-cap);
+    padding: 9px 16px;
+    border-radius: 2px;
+    background: var(--signal);
+    color: var(--bg);
     text-decoration: none;
-    border: 1px solid transparent;
+    border: 1px solid var(--signal);
+    transition:
+      background 180ms ease,
+      color 180ms ease,
+      border-color 180ms ease;
   }
   .empty-state-cta:hover {
-    background: color-mix(in srgb, CanvasText 95%, transparent);
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--bg);
   }
 </style>

@@ -1,6 +1,6 @@
 # Roadmap — factory5 first-class upgrade
 
-Eight tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent.
+Nine tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent. Tier 9 reopens the arc again for the first frontend aesthetic overhaul in the project — porting the "Editorial Control Room" aesthetic from the sibling conductor project to `apps/factory-web` as a single-session, dual-theme redesign (informal cadence — no per-step commits, no ADR).
 
 ## Status legend
 
@@ -121,6 +121,18 @@ When an `ask_user` pending-question goes unanswered past its deadline and the pa
 
 Plan: [`plans/tier-8-question-auto-answer.md`](plans/tier-8-question-auto-answer.md)
 
+## Tier 9 — Control Room redesign (factory-web editorial port)
+
+Port the "Editorial Control Room" aesthetic from the sibling conductor project (`G:/Projects/Small-Projects/Harness/conductor`, Phase 19) to `apps/factory-web`. Fraunces display serif + Bricolage Grotesque body + JetBrains Mono data; vermillion (`#ff4d1c`) signal accent; hairline rules; paper-grain backdrop; letterpress card tiles; numbered nav; oversized italic page titles; monospaced status pip with pulse. Dual-theme via `prefers-color-scheme` — warm parchment + ink in light, ink-black + paper in dark — with status semantics (green / amber / red) held theme-independent. First tier in the arc that ships visual-design work without an underlying contract change. Estimated **1 session** (delivered in 1 — informal cadence, no per-step commits).
+
+- [x] Rewrite `apps/factory-web/src/layouts/Dashboard.astro` inline `<style is:global>` block — new CSS custom-property design tokens flipped by `prefers-color-scheme`; editorial masthead (brand mark + brand name + italic strapline + edition stamp + double rule); numbered nav (`01 OVERVIEW` … `08 FINDINGS`); monospaced status pip with pulse animation; paper-grain SVG noise + radial-gradient atmosphere; `.page-title` block so all 12 pages get the new italic Fraunces page heading without page-side changes
+- [x] Re-wire 8 component primitives (Card, Table, Alert, Field, Form, Submit, EmptyState, PageShell) to the new tokens — most scoped styles dropped, visual treatment lives in Dashboard's global stylesheet so pages that hand-roll `<div class="card">` / `<form class="form">` markup pick up the look automatically
+- [x] Dual-theme tokens — light defaults at `:root`, dark override block inside `@media (prefers-color-scheme: dark)`; vermillion + status semantics held identical across themes
+- [x] All four `pnpm` gates green: build / test / lint / format:check
+- [x] Absorbs the Phase 8 carry-forward "PageShell + Dashboard `<style is:global>` migration" — global stylesheet now carries the look pages have always referenced
+
+Plan: [`plans/tier-9-control-room-redesign.md`](plans/tier-9-control-room-redesign.md)
+
 ## Out of scope (now)
 
 Items the audit raised that are deferred:
@@ -135,7 +147,7 @@ Items the audit raised that are deferred:
 - **Per-project deadline override** — CLAUDE.md frontmatter or `<project>/.factory/project.json` `metadata.askUserDeadlineMs`. Non-breaking to add atop Tier 8's daemon-wide config; deferred until demand signal.
 - **`factory config get / set <key>` CLI** — operator surface for editing `<dataDir>/config.json` without hand-editing the JSON. Add when other config keys need editing too.
 - **`factory skills list / show <name>` CLI commands** — skill discovery surface; carry-forward; no demand signal.
-- **PageShell + Dashboard `<style is:global>` migration** — 11-page sweep absorbing filter-form Apply / "Clear all defaults" + inline-style audit pass; self-contained ~1 commit.
+- **Inline-style audit on the 12 pages** — Tier 9's editorial port absorbed the PageShell + Dashboard `<style is:global>` migration de facto, but a handful of cosmetic-only `style=` attributes remain on pages (e.g. `index.astro:15` `style="margin-top: 1.5rem;"`). Self-contained ~30-min sweep when motivated.
 - **ADR amendments** — 0027 §1 missing route pin (POST `/api/v1/projects`), 0002 footnote stale post-Tier-5; doc-debt only.
 
 These can be promoted to Tier 9+ if/when the demand signal arrives.

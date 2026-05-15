@@ -2,7 +2,24 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
-## 2026-05-08 (latest) — Drift-fix only; no phase work; lag-by-1 #21 caught up
+## 2026-05-15 — Phase 9 control-room-redesign code complete (informal cadence)
+
+- Reopens upgrade arc post-Phase-8-close for a frontend aesthetic overhaul — first tier in the arc that ships visual-design work without an underlying contract change. Operator request: port the "Editorial Control Room" aesthetic from the sibling conductor project (`G:/Projects/Small-Projects/Harness/conductor`, Phase 19) to `apps/factory-web`.
+- **Operator decisions at session start:**
+  - **Dual-theme** over dark-only (preserves factory5's `color-scheme: light dark` discipline + Phase 3 "inherit-don't-invent" rule).
+  - **Informal cadence** — single working-tree change set; no scaffold-before-coding workflow, no per-step commits, no ADR. The `.control` recordkeeping lands post-hoc in this same session.
+  - **Fresh Tier 9 framing** over promoting the Phase 8 "PageShell + Dashboard `<style is:global>` migration" carry-forward verbatim.
+- **What landed in `apps/factory-web/`:**
+  - `Dashboard.astro` — full inline `<style is:global>` rewrite (~660 lines). New CSS custom-property token layer (`--bg / --surface / --ink / --hairline / --signal / --amber / --acid / --halt / --cool / --f-display / --f-body / --f-mono / --grain-opacity`). `@media (prefers-color-scheme: dark)` swaps surface/ink/hairline tokens. Editorial masthead (brand mark `§` + brand name + italic strapline `/ Control Room` + edition stamp + double horizontal rule), numbered nav (`01 OVERVIEW` … `08 FINDINGS`), monospaced status pip with pulse animation, paper-grain SVG noise + radial-gradient atmosphere via `body::before / body::after`, `.page-title` block inside `main.shell` so all 12 existing pages get the new italic Fraunces page heading without page-side changes. Connection heartbeat + logout banner + hamburger drawer JS preserved verbatim.
+  - 8 component primitives re-wired (Card, Table, Alert, Field, Form, Submit, EmptyState, PageShell) — most scoped styles dropped (visuals live in Dashboard's global stylesheet so pages that hand-roll `<div class="card">` / `<form class="form">` markup pick up the look automatically). Status semantic colors (`#2a8b54 / #b87c1a / #c0263a` for connected / reconnecting / disconnected) held theme-independent.
+- **Absorbs Phase 8 carry-forward** "PageShell + Dashboard `<style is:global>` migration" *de facto* — global stylesheet now carries the look that pages have always referenced via shared classes (`.card`, `.alert`, `.empty`, `.form-field`, `.btn`, etc.). Page-level markup untouched.
+- **`.control` recordkeeping this session:** `.control/phases/phase-9-control-room-redesign/{README.md, steps.md}` (all sub-steps pre-checked since redesign landed as single change set); `UPGRADE/plans/tier-9-control-room-redesign.md` (full plan + outcome + suggested commit message); `.control/architecture/phase-plan.md` Phase 9 row added + 9-tier guidance text; `UPGRADE/ROADMAP.md` Tier 9 section + count bump "Eight tiers → Nine tiers" + carry-forward note updated; this STATE.md flip; this journal entry; LOG.md Tier 9 entry.
+- **Gates green:** `pnpm build` clean (factory-web built 12 pages), `pnpm test` clean (workspace unchanged at 1182 + 3 skipped), `pnpm lint` clean, `pnpm format:check` clean (`.astro` is not in prettier's glob so the style changes don't touch the gate).
+- **Operator owns:** (1) live browser verification — click through all 8 sections, toggle OS theme between light + dark; (2) bundled commit of the working tree; (3) `/phase-close` to tag `phase-9-control-room-redesign-closed`.
+- **No commits this session.** Working tree dirty across `apps/factory-web/` + `.control/` + `UPGRADE/`. The "lag-by-1" structural pattern doesn't apply this time (no commit landed at all).
+- **Next:** operator verifies in browser → bundled commit → `/phase-close`.
+
+## 2026-05-08 (previous) — Drift-fix only; no phase work; lag-by-1 #21 caught up
 
 - Single-session pickup at HEAD `ca054c4` (the prior session's session-end). Operator path: `/session-start` narrate drift (commit-mismatch was lag-by-1 #21, the well-known pattern) → operator chose option 1 (catch-up commit) → drift-fix `173bcbc` → `/session-end` at this commit. Two commits this session, both `docs(state)`-shape.
 - **Per-commit shas:** drift-fix `173bcbc` docs(state) bump last-commit pointer to ca054c4 · session-end at this commit.

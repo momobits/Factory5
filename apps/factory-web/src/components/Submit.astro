@@ -1,13 +1,15 @@
 ---
 /**
  * Submit / action button. `variant` picks the visual treatment:
- * - `primary` (default) — filled accent
+ * - `primary` (default) — filled vermillion accent
  * - `default` — neutral outline
  * - `danger` — red outline (for cancel / delete actions)
  *
  * Always renders as `type="submit"`; for non-submit actions, use a
  * raw `<button>` directly — the form's submit semantics are why
  * this primitive exists.
+ *
+ * Visual treatment lives in Dashboard.astro's global `.btn` rules.
  */
 interface Props {
   label: string;
@@ -28,42 +30,3 @@ const { label, variant = 'primary', disabled = false, id } = Astro.props;
 >
   {label}
 </button>
-
-<style>
-  .btn {
-    font: inherit;
-    font-size: 0.9rem;
-    padding: 0.45rem 1rem;
-    border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-    border-radius: 4px;
-    background: color-mix(in srgb, currentColor 4%, transparent);
-    color: inherit;
-    cursor: pointer;
-  }
-  .btn:hover:not(:disabled) {
-    background: color-mix(in srgb, currentColor 10%, transparent);
-  }
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  .btn-primary {
-    /* CanvasText, not currentColor: `color: Canvas` on this rule rebinds
-       currentColor to Canvas, so the background and text would otherwise
-       both resolve to Canvas (invisible). CanvasText is the system pair
-       to Canvas, guaranteed to contrast under color-scheme: light dark. */
-    background: color-mix(in srgb, CanvasText 85%, transparent);
-    color: Canvas;
-    border-color: transparent;
-  }
-  .btn-primary:hover:not(:disabled) {
-    background: color-mix(in srgb, CanvasText 95%, transparent);
-  }
-  .btn-danger {
-    border-color: color-mix(in srgb, #c24 50%, transparent);
-    color: #c24;
-  }
-  .btn-danger:hover:not(:disabled) {
-    background: color-mix(in srgb, #c24 8%, transparent);
-  }
-</style>
