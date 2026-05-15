@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-15 by Phase 9 close. Upgrade arc closed for the **sixth time** at `phase-9-control-room-redesign-closed`. Three commits this session: bundled redesign + recordkeeping `397637c`; gitignore tweak for smoke artifacts `307d79c`; this phase-close.
+**Last updated:** 2026-05-15 — session end after Phase 9 close. Upgrade arc closed for the **sixth time** at `phase-9-control-room-redesign-closed`. Four commits this session: bundled redesign + recordkeeping `397637c`; gitignore tweak for smoke artifacts `307d79c`; phase-close `9e8ee5c`; next.md regen `faeb209`. This session-end will reintroduce lag-by-1 #26 (STATE references `faeb209` at commit time; HEAD moves to the session-end commit's own sha — same structural pattern).
 **Current phase:** none (arc-complete)
 **Current step:** none
 **Status:** Phase 9 closed cleanly. All 8 done-criteria green at close, including live browser verification via Playwright MCP (operator request — completed this session, no longer operator-side only). All four `pnpm` gates green: build / test / lint / format:check. Workspace test counts unchanged (1182 + 3 skipped — pure visual change, no test deltas).
@@ -45,9 +45,9 @@ If the operator doesn't want a Tier 10, the project is in a clean post-arc parki
 ## Git state
 
 - **Branch:** main
-- **Last commit:** this commit — `chore(phase-9): close phase 9, kick off arc-complete (sixth time)`
-- **Uncommitted changes:** none (working tree clean post-close, smoke artifacts gitignored via `307d79c`)
-- **Last phase tag:** `phase-9-control-room-redesign-closed` (annotated at this commit)
+- **Last commit:** `faeb209` — `docs(state): regenerate next.md after phase-9 close` (this session-end commit will reintroduce lag #26)
+- **Uncommitted changes:** none at session-end (smoke artifacts gitignored via `307d79c`)
+- **Last phase tag:** `phase-9-control-room-redesign-closed` (annotated at `9e8ee5c`)
 
 ---
 
@@ -104,7 +104,9 @@ No phase active. Phase 9 closed cleanly. No Phase 10 scaffolded.
 
 ## Recently completed (last 5 steps)
 
-- **Phase 9 close (this commit)** — `chore(phase-9)`: close phase 9, kick off arc-complete (sixth time). Tagged `phase-9-control-room-redesign-closed`. All 8 done-criteria green at close (4 `pnpm` gates clean, dual-theme verified by CSS inspection, status pip semantics theme-independent, heartbeat + logout + drawer scripts preserved verbatim, live browser smoke completed this session via Playwright MCP — operator-side gate satisfied in-session). — 2026-05-15
+- **Session-end (this commit)** — `docs(state)`: session end for Phase 9 close. STATE.md timestamp bump + last-commit pointer to `faeb209` + lag counter (#26 reintroduced). — 2026-05-15
+- **next.md regen** — `docs(state)`: regenerate next.md after phase-9 close. — 2026-05-15 — `faeb209`
+- **Phase 9 close** — `chore(phase-9)`: close phase 9, kick off arc-complete (sixth time). Tagged `phase-9-control-room-redesign-closed`. All 8 done-criteria green at close (4 `pnpm` gates clean, dual-theme verified by CSS inspection, status pip semantics theme-independent, heartbeat + logout + drawer scripts preserved verbatim, live browser smoke completed this session via Playwright MCP — operator-side gate satisfied in-session). — 2026-05-15 — `9e8ee5c`
 - **Gitignore tweak** — `chore(phase-9)`: ignore Playwright MCP scratch + smoke screenshots. `.playwright-mcp/` (session-local snapshot/log dir) and `/smoke-*.png` (browser-smoke screenshots at repo root) excluded so they don't pollute future `git status` runs. — 2026-05-15 — `307d79c`
 - **Phase 9 bundle** — `feat(phase-9)`: editorial control room redesign — dual-theme port of factory-web. Whole-phase bundled commit (no per-step commits since informal cadence). `Dashboard.astro` full inline-style rewrite (~660 lines) + 8 component primitives rewired to new CSS custom-property design tokens (Fraunces + Bricolage Grotesque + JetBrains Mono; vermillion `#ff4d1c` signal; dual-theme via `prefers-color-scheme`). Absorbs Phase 8's `<style is:global>` migration carry-forward de facto. — 2026-05-15 — `397637c`
 - **State-catch-up** — `docs(state)`: bump last-commit pointer to `30118b0`. Operator-requested STATE flip after the post-session-end docs commit landed without updating STATE. Caught up #24; itself becomes lag #25. — 2026-05-08 — `6152291`
@@ -184,26 +186,29 @@ None — no active step. Cleared at phase close.
 
 ## Notes for next session
 
-**No active phase.** The upgrade arc closed at `phase-8-question-auto-answer-closed`. To resume work, the operator can either:
+**No active phase.** The upgrade arc closed at `phase-9-control-room-redesign-closed` 2026-05-15. To resume work, the operator can either:
 
-1. **Author a Tier 9 plan** — most likely candidate per demand signal: **U005 chat REPL cancel UX path (a+)** (twice-deferred carry-forward; full path-(a+) sketch exists from the Phase 8 conversation). Or one of the Phase 8-introduced carry-forwards: per-project deadline override, `factory config get/set`, override-after-auto-answer. To start: draft `UPGRADE/plans/tier-9-<name>.md`, add a Phase 9 row to `.control/architecture/phase-plan.md`, add a Tier 9 section to `UPGRADE/ROADMAP.md`, scaffold `.control/phases/phase-9-<name>/{README.md,steps.md}`.
+1. **Author a Tier 10 plan** — most-likely candidate per demand signal: **U005 chat REPL cancel UX path (a+)** (now thrice-deferred — was the operator-felt bug pre-Tier-8). Or one of the Phase 8-introduced carry-forwards (per-project deadline override, `factory config get/set`, override-after-auto-answer) or one of the Tier-9-deferred items (inline-style audit on the 12 pages, ADR 0031 for the editorial aesthetic). To start: draft `UPGRADE/plans/tier-10-<name>.md`, add a Phase 10 row to `.control/architecture/phase-plan.md`, add a Tier 10 section to `UPGRADE/ROADMAP.md`, scaffold `.control/phases/phase-10-<name>/{README.md,steps.md}`.
 
 2. **Promote a carry-forward item** — see `## In-flight work` above. Order-of-likelihood (most likely demand signal first):
-   - **U005 chat REPL cancel UX path (a+)** — twice-deferred; the operator-felt bug.
-   - **`factory questions list / show <id>` CLI** — composition over existing query helpers; ~1 commit if narrowly scoped. Now that Tier 8 made `answered_by` real, the CLI list/show would render the badge end-to-end (closing one of the tier 8 plan-deviation gaps).
+   - **U005 chat REPL cancel UX path (a+)** — thrice-deferred; the operator-felt bug.
+   - **`factory questions list / show <id>` CLI** — composition over existing query helpers; ~1 commit if narrowly scoped. Tier 8 made `answered_by` real; CLI list/show would render the badge end-to-end.
    - **`factory config get / set <key>` CLI** — operator surface for the Tier 8 config file.
-   - **PageShell + Dashboard `<style is:global>` migration** — absorbs filter-form Apply / "Clear all defaults" + inline-style audit; self-contained ~1 commit.
-   - **Structural `/session-end` lag-by-1 fix** — 25 occurrences accumulated. Real engineering work, not a one-liner.
+   - **Inline-style audit on the 12 pages** — Tier 9 absorbed the PageShell migration de facto but cosmetic-only `style=` attributes remain (e.g. `index.astro:15` `style="margin-top: 1.5rem;"`). ~30-min sweep.
+   - **ADR 0031 — Editorial Control Room aesthetic + dual-theme tokens** — pin Tier 9's design system retrospectively if a follow-up tier wants to lean on it.
+   - **Structural `/session-end` lag-by-1 fix** — 26 occurrences accumulated. Real engineering work, not a one-liner.
 
 3. **Park** — surfaces are stable; nothing is gated on more work.
 
 **Read first** when next session resumes:
 
-- [`UPGRADE/LOG.md`](../../UPGRADE/LOG.md) — full upgrade-side narrative across all eight closed tiers (Tier 8 entry now at the top).
+- [`UPGRADE/LOG.md`](../../UPGRADE/LOG.md) — full upgrade-side narrative across all nine closed tiers (Tier 9 entry now at the top).
 - [`.control/progress/journal.md`](journal.md) — session-by-session control narrative.
 - This file (`STATE.md`).
 
-**Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav.
+**Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav. **Tier 9 added** a new vocabulary on top: vermillion (`#ff4d1c`) as the singular signal color; Fraunces italic display + Bricolage Grotesque body + JetBrains Mono data; CSS custom-property tokens (`--bg / --surface / --ink / --hairline / --signal / --amber / --acid / --halt / --cool`) flipped by `prefers-color-scheme`; paper-grain SVG atmosphere via `body::before / body::after`; editorial masthead with brand mark `§` + numbered nav + monospaced status pip + pulse animation.
+
+**Tier 9 in retrospect:** Four commits this session — bundled redesign + recordkeeping `397637c`, gitignore tweak `307d79c`, phase-close `9e8ee5c`, next.md regen `faeb209`. First aesthetic-only tier in the upgrade arc; no tests added (visual change only), no new APIs, no new packages, workspace count unchanged at 1182 + 3 skipped. The "informal cadence" (no per-step commits, no ADR, post-hoc recordkeeping) worked because the redesign was a single-author single-session concept transfer from a sibling project — per-step commits would have added friction without information. Live browser smoke completed via Playwright MCP in-session, satisfying the operator-side gate that the README originally said couldn't be assistant-driven. Two false positives investigated and dismissed during smoke (Playwright cursor hover-retention on the nav active-state, Chrome `currentColor` cache from pre-injection paint on dark-mode body copy); neither is a production bug. Absorbed Phase 8's "PageShell + Dashboard `<style is:global>` migration" de facto — global stylesheet now carries the look pages have always referenced via shared classes.
 
 **Tier 8 in retrospect:** 8 work commits this session (scaffold + 8.1 → 8.7) plus this phase-close commit. Tier 8 was a real structural addition: schema migration + new ADR + new config home + brain-side LLM dispatcher with race mitigation + web surface. Total Tier 8 code: ~1900 lines added across the codebase (heaviest in 8.6's dispatcher + tests + 8.3's ADR + 8.2's migration). All 4 `pnpm` gates green throughout. Workspace count grew 1152 → 1182 + 3 skipped (+30 across migration, config, deadline-stamp, and dispatcher tests). New ADR (0030) — Tier 8 had real structural decisions to pin (provenance shape, config home, race mitigation, no-override). Two intentional plan deviations both noted in commit bodies + LOG: (1) `loadConfig` I/O placed in `@factory5/state` not `@factory5/core` to keep core fs-free; (2) prompt context pruned to question + options + directive + past Q&A for first ship per ADR 0030's "alternatives considered" — re-add when quality data shows the generic prompt underperforms. Drift fix #19 was carried into the scaffold commit (STATE.md inside scaffold referenced `cf9d4f9` while HEAD moved to `8453086`); the phase-close commit reintroduces the lag at #20, structural fix still pending.
 
