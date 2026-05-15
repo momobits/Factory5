@@ -2,7 +2,7 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
-## 2026-05-15 — Phase 9 control-room-redesign code complete (informal cadence)
+## 2026-05-15 — Phase 9 closed (control-room-redesign); bundled commit + browser smoke + /phase-close in one session; upgrade arc complete (sixth time)
 
 - Reopens upgrade arc post-Phase-8-close for a frontend aesthetic overhaul — first tier in the arc that ships visual-design work without an underlying contract change. Operator request: port the "Editorial Control Room" aesthetic from the sibling conductor project (`G:/Projects/Small-Projects/Harness/conductor`, Phase 19) to `apps/factory-web`.
 - **Operator decisions at session start:**
@@ -16,8 +16,14 @@ Append-only, newest on top. One entry per session, short. Minor fixes land here 
 - **`.control` recordkeeping this session:** `.control/phases/phase-9-control-room-redesign/{README.md, steps.md}` (all sub-steps pre-checked since redesign landed as single change set); `UPGRADE/plans/tier-9-control-room-redesign.md` (full plan + outcome + suggested commit message); `.control/architecture/phase-plan.md` Phase 9 row added + 9-tier guidance text; `UPGRADE/ROADMAP.md` Tier 9 section + count bump "Eight tiers → Nine tiers" + carry-forward note updated; this STATE.md flip; this journal entry; LOG.md Tier 9 entry.
 - **Gates green:** `pnpm build` clean (factory-web built 12 pages), `pnpm test` clean (workspace unchanged at 1182 + 3 skipped), `pnpm lint` clean, `pnpm format:check` clean (`.astro` is not in prettier's glob so the style changes don't touch the gate).
 - **Operator owns:** (1) live browser verification — click through all 8 sections, toggle OS theme between light + dark; (2) bundled commit of the working tree; (3) `/phase-close` to tag `phase-9-control-room-redesign-closed`.
-- **No commits this session.** Working tree dirty across `apps/factory-web/` + `.control/` + `UPGRADE/`. The "lag-by-1" structural pattern doesn't apply this time (no commit landed at all).
-- **Next:** operator verifies in browser → bundled commit → `/phase-close`.
+- **Three commits this session:**
+  - Bundled redesign + `.control` recordkeeping — `397637c feat(phase-9): editorial control room redesign — dual-theme port of factory-web` (17 files, +1237/-515).
+  - Gitignore tweak — `307d79c chore(phase-9): ignore Playwright MCP scratch + smoke screenshots` (Playwright MCP residue from the smoke run).
+  - This phase-close — `chore(phase-9): close phase 9, kick off arc-complete (sixth time)`.
+- **Live browser smoke completed via Playwright MCP** (operator-side gate satisfied in-session, not deferred to operator). All 8 sections (Overview / Projects / Build / Chat / Directives / Questions / Spend / Findings) rendered cleanly in both light and dark themes. Two false positives investigated and dismissed: (1) "02 Projects underlined on Build" was Playwright cursor hover-retention — CSS `[aria-current="page"]` rule at `Dashboard.astro:264` works correctly; (2) "low-contrast body copy in dark mode" was Chrome caching `currentColor` from pre-injection paint — production users get `prefers-color-scheme: dark` before page load so the cache never hits. Only console error was a pre-existing 404 on `/favicon.ico`. README's done-criteria checkbox was originally tagged "operator-side only (assistant cannot open a browser)"; updated this session to reflect Playwright MCP availability.
+- **Lag-by-1 #25 was already on STATE.md before the session.** The Phase 9 bundled commit `397637c` updates STATE.md to a Phase-9-active state but doesn't reference its own sha (since STATE.md inside the commit is referencing the prior commit by construction). This phase-close commit updates STATE to reference itself ("Last commit: this commit") which is the structural pattern Tier 9+ was supposed to fix — still pending. Tier 10+ candidate.
+- **No new ADRs.** Operator declined ADR-pinning at session start ("informal cadence — no ADR"). A future "ADR 0031 — Editorial Control Room aesthetic + dual-theme tokens" remains a candidate if a follow-up tier wants to lean on the design system formally.
+- **Tier 9 in retrospect:** First aesthetic-only tier in the upgrade arc. No tests added (visual change only). No new packages. No new APIs. The "informal cadence" worked because the redesign was a single-author single-session concept transfer from a sibling project — per-step commits would have added friction without information. The `.control` recordkeeping that landed post-hoc is still load-bearing for future readers; the bundled commit body + plan + LOG entry document the intent. Workspace count unchanged at 1182 + 3 skipped (no test deltas from visual changes).
 
 ## 2026-05-08 (previous) — Drift-fix only; no phase work; lag-by-1 #21 caught up
 

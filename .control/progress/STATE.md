@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-15 by Phase 9 control-room redesign session. Reopens the upgrade arc post-Phase-8-close for a single-session frontend aesthetic overhaul (informal cadence — no per-step commits, no ADR). Code complete; working tree dirty pending operator commit + `/phase-close`.
-**Current phase:** 9 — control-room-redesign (code complete, awaiting `/phase-close`)
-**Current step:** 9.close pending (all sub-steps done; operator-gated commit + tag)
-**Status:** Phase 9 work landed as a single working-tree change set in `apps/factory-web/`: `Dashboard.astro` inline-style rewrite + 8 component primitives re-wired to new CSS custom-property design tokens (Fraunces + Bricolage Grotesque + JetBrains Mono; vermillion `#ff4d1c` signal; dual-theme via `prefers-color-scheme`). All four `pnpm` gates green: build / test / lint / format:check. Workspace test counts unchanged (1182 + 3 skipped — `.astro` style changes don't add tests). Operator owns: (1) live browser verification (assistant cannot open a browser); (2) commit of the working tree; (3) `/phase-close` to tag `phase-9-control-room-redesign-closed`.
+**Last updated:** 2026-05-15 by Phase 9 close. Upgrade arc closed for the **sixth time** at `phase-9-control-room-redesign-closed`. Three commits this session: bundled redesign + recordkeeping `397637c`; gitignore tweak for smoke artifacts `307d79c`; this phase-close.
+**Current phase:** none (arc-complete)
+**Current step:** none
+**Status:** Phase 9 closed cleanly. All 8 done-criteria green at close, including live browser verification via Playwright MCP (operator request — completed this session, no longer operator-side only). All four `pnpm` gates green: build / test / lint / format:check. Workspace test counts unchanged (1182 + 3 skipped — pure visual change, no test deltas).
 
 ---
 
@@ -20,46 +20,34 @@
 
 ## Next action
 
-**Phase 9 code complete, awaiting `/phase-close`.** Reopens upgrade arc post-Phase-8-close at this session (informal cadence — single-session redesign, no scaffold-before-coding workflow, no per-step commits, no ADR). Operator steps to close:
+**No active phase. Upgrade arc closed for the sixth time** at `phase-9-control-room-redesign-closed` 2026-05-15. Phase 9 (control-room-redesign) closed cleanly with all 8 done-criteria green, including live browser verification via Playwright MCP — completed this session (no longer operator-side only as the README originally noted). All four `pnpm` gates green.
 
-1. **Live browser verification** — run `factoryd` + `factory ui-token`, open the URL, click through all 8 sections (Overview / Projects / Build / Chat / Directives / Questions / Spend / Findings), toggle OS theme between light + dark, verify both render correctly. Assistant cannot open a browser; this gate is operator-owned.
-2. **Commit** — single bundled commit captures the redesign + the `.control` recordkeeping that landed in this session. Suggested message in [`UPGRADE/plans/tier-9-control-room-redesign.md`](../../UPGRADE/plans/tier-9-control-room-redesign.md) under "Commit message". Recommended scope `feat(phase-9): ...` (whole-phase bundle since no per-step commits) or `redesign(phase-9): ...`.
-3. **`/phase-close`** — verify all done-criteria checkboxes flip; tag `phase-9-control-room-redesign-closed`; append final session entry to `UPGRADE/LOG.md`.
+To resume work, the operator can:
 
-**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; the audit-driven Tier 5 reopened the arc 2026-05-07 at `c0869d6` and closed at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 reopened 2026-05-07 at `542f99a` and closed at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 reopened 2026-05-07 at `ee970e8` and closed at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 reopened 2026-05-08 at `8453086` and closed at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`. Tier 9 reopens 2026-05-15 at this session — first tier in the arc that ships visual-design work without an underlying contract change.
+1. **Author a Tier 10 plan** — most-likely candidate per demand signal: **U005 chat REPL cancel UX path (a+)** (now thrice-deferred through Tier 9 — was the operator-felt bug pre-Tier-8). Or one of the Phase 8-introduced carry-forwards (per-project deadline override, `factory config get/set`, override-after-auto-answer) or one of the Tier-9-deferred items (inline-style audit on the 12 pages, ADR 0031 for the editorial aesthetic).
+2. **Promote a carry-forward item** — see `## In-flight work` below.
+3. **Park** — surfaces are stable; nothing is gated on more work.
 
-If the operator wants to continue, the carry-forward candidates from Phase 8's Deferred section are (ordered by demand-signal likelihood):
+**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; the audit-driven Tier 5 reopened the arc 2026-05-07 at `c0869d6` and closed at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 reopened 2026-05-07 at `542f99a` and closed at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 reopened 2026-05-07 at `ee970e8` and closed at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 reopened 2026-05-08 at `8453086` and closed at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`. Tier 9 reopened 2026-05-15 at `397637c` and closed at `phase-9-control-room-redesign-closed` 2026-05-15 at this commit — first tier in the arc that shipped visual-design work without an underlying contract change.
 
-1. **U005 chat REPL cancel UX path (a+)** — twice-deferred (Phase 2 → Phase 4 → still open). Bumps timeout to 10 min + adds heartbeat + SIGINT handler + directive-id print + exit-with-cancel prompt. Tier 9 candidate. Highest-impact carry-forward.
-2. **Per-project deadline override** — CLAUDE.md frontmatter or `metadata.askUserDeadlineMs`. Non-breaking to add atop Tier 8's daemon-wide config; defer-until-signal that different projects want different deadlines.
-3. **`factory config get / set <key>` CLI** — operator surface for editing `<dataDir>/config.json`. Add when other config keys justify it.
-4. **Override after auto-answer** — `factory questions answer --force <id>`. Pin via ADR if it ships; Tier 8 holds the simpler immutable-after-auto-answer invariant.
-5. **`factory questions list / show <id>` CLI** — subcommands don't exist today; only `cleanup` is wired. Composition-style tier.
-6. **`factory skills list / show <name>` CLI** — skill discovery surface. Composition-style; CLI runs `loadSkill(id)` against the per-user/per-project override paths the brain already uses.
-7. **PageShell + Dashboard `<style is:global>` migration** — 11-page sweep absorbing filter-form Apply / "Clear all defaults" + inline-style audit. Self-contained ~1 commit.
-8. **Structural `/session-end` lag-by-1 fix** — STATE.md tracking "last work commit" rather than HEAD, or amending STATE.md post-commit. **25 occurrences** accumulated through this state-catch-up. Real engineering work.
-9. **Agent-class-specialized auto-answer prompts** — defer-until-signal. Quality data on the generic Tier 8 prompt should drive any specialization.
-10. **Channel-side `answered_by` badge** — Discord/Telegram historic embed rendering. Low value.
-11. **ADR amendments** — 0027 §1 missing route pin (POST `/api/v1/projects`), 0002 footnote stale post-Tier-5. Doc-debt; not load-bearing.
+To kick off Phase 10:
 
-To kick off Phase 9:
-
-1. Operator drafts `UPGRADE/plans/tier-9-<name>.md` with goal, sub-steps, acceptance.
-2. Add a Phase 9 row to `.control/architecture/phase-plan.md`.
-3. Add a Tier 9 section to `UPGRADE/ROADMAP.md`.
-4. Scaffold `.control/phases/phase-9-<name>/{README.md,steps.md}` from `.control/templates/`.
+1. Operator drafts `UPGRADE/plans/tier-10-<name>.md` with goal, sub-steps, acceptance.
+2. Add a Phase 10 row to `.control/architecture/phase-plan.md`.
+3. Add a Tier 10 section to `UPGRADE/ROADMAP.md`.
+4. Scaffold `.control/phases/phase-10-<name>/{README.md,steps.md}` from `.control/templates/`.
 5. Then start working through the sub-steps.
 
-If the operator doesn't want a Tier 9, the project is in a clean post-arc parking state — there's no queued work in the upgrade arc.
+If the operator doesn't want a Tier 10, the project is in a clean post-arc parking state.
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `30118b0` — `docs(adr): document ADR 0030 surfaces in ARCHITECTURE + state README` (Phase 8-era; no commit landed this session — Phase 9 work is uncommitted in the working tree)
-- **Uncommitted changes:** Phase 9 redesign (`apps/factory-web/src/layouts/Dashboard.astro` + 8 components in `apps/factory-web/src/components/`) plus the `.control` recordkeeping that this session added (`.control/phases/phase-9-control-room-redesign/{README.md, steps.md}`, `UPGRADE/plans/tier-9-control-room-redesign.md`, `.control/architecture/phase-plan.md` Phase 9 row, `UPGRADE/ROADMAP.md` Tier 9 section + count bump, `.control/progress/STATE.md` this update, `.control/progress/journal.md` session entry, `UPGRADE/LOG.md` Tier 9 entry). Operator owns the bundled commit.
-- **Last phase tag:** `phase-8-question-auto-answer-closed` (annotated at `d863ea0`) — Tier 9 tag arrives at `/phase-close`
+- **Last commit:** this commit — `chore(phase-9): close phase 9, kick off arc-complete (sixth time)`
+- **Uncommitted changes:** none (working tree clean post-close, smoke artifacts gitignored via `307d79c`)
+- **Last phase tag:** `phase-9-control-room-redesign-closed` (annotated at this commit)
 
 ---
 
@@ -71,7 +59,7 @@ If the operator doesn't want a Tier 9, the project is in a clean post-arc parkin
 
 ## In-flight work
 
-No phase active. Phase 8 closed cleanly. No Phase 9 scaffolded.
+No phase active. Phase 9 closed cleanly. No Phase 10 scaffolded.
 
 **Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 
@@ -100,7 +88,7 @@ No phase active. Phase 8 closed cleanly. No Phase 9 scaffolded.
 
 ## Test / eval status
 
-- **Last test run:** 2026-05-08 (during Phase 8 phase-close verification) — full workspace passes, all four `pnpm` gates green: build / test / lint / format:check. Per-package: state 174 (+17 from 8.2/8.4), channels 175, daemon 173, brain 114 (+13 from 8.5/8.6), worker 47, worker-sandbox 86 + 3 skipped, assessor 79, wiki 74, cli 141, providers 39, ipc 28, events 3, core 14, logger 20, worker-mcp 15. **Workspace total 1182 passing + 3 skipped** (was 1152 + 3 pre-Tier-8; +30 across migration, config, deadline-stamp, and dispatcher tests).
+- **Last test run:** 2026-05-15 (Phase 9 phase-close verification) — full workspace passes, all four `pnpm` gates green: build / test / lint / format:check. Workspace counts unchanged from Phase 8 close at **1182 passing + 3 skipped** since Phase 9 was a pure visual change (no test deltas).
 - **Eval score** (agent phases only): n/a
 - **Regression tests:** unit + integration only; no eval harness. ADR 0029 still in promoted state.
 
@@ -116,7 +104,10 @@ No phase active. Phase 8 closed cleanly. No Phase 9 scaffolded.
 
 ## Recently completed (last 5 steps)
 
-- **State-catch-up (this commit)** — `docs(state)`: bump last-commit pointer to `30118b0`. Operator-requested STATE flip after the post-session-end docs commit landed without updating STATE. Caught up #24; itself becomes lag #25. — 2026-05-08
+- **Phase 9 close (this commit)** — `chore(phase-9)`: close phase 9, kick off arc-complete (sixth time). Tagged `phase-9-control-room-redesign-closed`. All 8 done-criteria green at close (4 `pnpm` gates clean, dual-theme verified by CSS inspection, status pip semantics theme-independent, heartbeat + logout + drawer scripts preserved verbatim, live browser smoke completed this session via Playwright MCP — operator-side gate satisfied in-session). — 2026-05-15
+- **Gitignore tweak** — `chore(phase-9)`: ignore Playwright MCP scratch + smoke screenshots. `.playwright-mcp/` (session-local snapshot/log dir) and `/smoke-*.png` (browser-smoke screenshots at repo root) excluded so they don't pollute future `git status` runs. — 2026-05-15 — `307d79c`
+- **Phase 9 bundle** — `feat(phase-9)`: editorial control room redesign — dual-theme port of factory-web. Whole-phase bundled commit (no per-step commits since informal cadence). `Dashboard.astro` full inline-style rewrite (~660 lines) + 8 component primitives rewired to new CSS custom-property design tokens (Fraunces + Bricolage Grotesque + JetBrains Mono; vermillion `#ff4d1c` signal; dual-theme via `prefers-color-scheme`). Absorbs Phase 8's `<style is:global>` migration carry-forward de facto. — 2026-05-15 — `397637c`
+- **State-catch-up** — `docs(state)`: bump last-commit pointer to `30118b0`. Operator-requested STATE flip after the post-session-end docs commit landed without updating STATE. Caught up #24; itself becomes lag #25. — 2026-05-08 — `6152291`
 - **Post-session-end docs** — `docs(adr)`: document ADR 0030 surfaces in ARCHITECTURE + state README. `docs/ARCHITECTURE.md` askUser narrative now includes the deadline-driven LLM auto-answer fallback (line 190) + the `answered_by` enum + cross-ref to ADR 0030; ADR count bumped 28 → 30. `packages/state/README.md` adds a `<dataDir>/config.json` section with `loadConfig`/`writeConfig` usage + current-keys table + corrupt-file fallback note. format:check + lint clean. — 2026-05-08 — `30118b0`
 - **Session-end** — `docs(state)`: session end after drift-fix `173bcbc`. No phase work; pure docs (STATE timestamp + last-commit pointer + lag counter + journal entry + next.md regen). — 2026-05-08 — `e04032c`
 - **Drift-fix** — `docs(state)`: bump last-commit pointer to `ca054c4` (drift-fix). Catches STATE.md up to HEAD after the prior session's session-end lag-by-1 (#21). Pure session-start reconciliation; no phase work. Folds in `next.md`'s SessionStart-hook timestamp regen. — 2026-05-08 — `173bcbc`

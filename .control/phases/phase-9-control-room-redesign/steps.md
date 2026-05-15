@@ -18,7 +18,7 @@ All steps pre-checked: the redesign landed as a single uncommitted working-tree 
 
 - [x] 9.records — `.control` system updated post-hoc: this phase folder; Phase 9 row added to `.control/architecture/phase-plan.md`; Tier 9 section added to `UPGRADE/ROADMAP.md` (count bumped "Eight tiers → Nine tiers"); STATE.md flipped arc-complete → Phase 9 (awaiting `/phase-close`); journal + LOG entries appended.
 
-- [ ] 9.close — `/phase-close` — tag `phase-9-control-room-redesign-closed`, append final session entry to LOG, transition STATE back to "all phases complete" (sixth time) unless a Tier 10 demand signal arrives. **Not run yet — operator-gated.**
+- [x] 9.close — `/phase-close` — tag `phase-9-control-room-redesign-closed`, append final session entry to LOG, transition STATE back to "all phases complete" (sixth time). Browser smoke completed this session via Playwright MCP.
 
 ## Step detail
 

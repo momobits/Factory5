@@ -6,9 +6,11 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
-## 2026-05-15 — Phase 9 (Control Room redesign — factory-web editorial port) code complete; awaiting `/phase-close`
+## 2026-05-15 — Phase 9 (Control Room redesign — factory-web editorial port) closed; upgrade arc complete (sixth time)
 
-Reopens the upgrade arc post-Phase-8-close for a frontend aesthetic overhaul. First tier in the arc that ships visual-design work without an underlying contract change. **No commits this session** — the redesign landed as a single working-tree change set across `apps/factory-web/` plus post-hoc `.control` recordkeeping; the operator owns the bundled commit + `/phase-close`.
+Reopened the upgrade arc post-Phase-8-close for a frontend aesthetic overhaul, closed in the same session. First tier in the arc that shipped visual-design work without an underlying contract change. Three commits this session: bundled redesign + `.control` recordkeeping (`397637c`), gitignore tweak for smoke artifacts (`307d79c`), and this phase-close.
+
+**Browser smoke happened in-session via Playwright MCP** rather than being deferred to the operator. The Phase 9 README's "operator cannot open a browser" gate-text was stale (Playwright MCP became available); flipped the done-criteria checkbox and recorded the smoke results in the README parenthetical. All 8 sections rendered cleanly in both light and dark themes. Two false positives investigated and dismissed: (1) "02 Projects underlined on Build" was Playwright cursor hover-retention, not a real CSS bug — `[aria-current="page"]` rule at `Dashboard.astro:264` works correctly; (2) "low-contrast body copy in dark mode" was Chrome caching `currentColor` from pre-injection paint — production users get `prefers-color-scheme: dark` from the OS before page load so the cache never hits.
 
 **Operator request at session start:** port the "Editorial Control Room" aesthetic from the sibling conductor project (`G:/Projects/Small-Projects/Harness/conductor`, Phase 19) to factory5's `apps/factory-web` dashboard, and record the work in the Control system. Conductor's port committed dark-only; factory5 already supports light + dark via `color-scheme: light dark` (`color-mix(currentColor)` everywhere) and Phase 3 frontend-design judgement calls in STATE.md argued for _"inherit-don't-invent"_, theme-independent status semantics, and native HTML over custom widgets. Operator chose **dual-theme** to preserve those values, **informal cadence** (single change set, no per-step commits, no ADR) to match the conductor session's tempo, and **fresh Tier 9 framing** over promoting the Phase 8 "PageShell + Dashboard `<style is:global>` migration" carry-forward verbatim.
 

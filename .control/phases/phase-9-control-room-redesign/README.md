@@ -45,7 +45,7 @@ See [`steps.md`](steps.md) — all sub-steps pre-checked since the redesign land
 - [x] Dual-theme verified by CSS inspection (light defaults at `:root`, dark override at `@media (prefers-color-scheme: dark)`)
 - [x] Status pip retains semantic colors on both themes
 - [x] Connection heartbeat + logout banner + hamburger drawer markup logic preserved verbatim
-- [ ] Live browser verification — operator-side only (assistant cannot open a browser). Run `factoryd` + open `factory ui-token` URL, click through all 8 sections, toggle OS theme.
+- [x] Live browser verification — completed this session via Playwright MCP. All 8 sections (Overview / Projects / Build / Chat / Directives / Questions / Spend / Findings) rendered cleanly in both light and dark themes. Two false positives investigated and dismissed: (1) "02 Projects underlined on Build" was Playwright cursor hover-retention; CSS `[aria-current="page"]` rule at `Dashboard.astro:264` works correctly; (2) "low-contrast body copy in dark mode" was Chrome caching `currentColor` from pre-injection paint — production users get `prefers-color-scheme: dark` before page load, so the cache never hits.
 
 ## Rollback
 
