@@ -68,3 +68,9 @@ notes.md
 # Per-operator MCP server scratch (Serena's activate_project drops a
 # project descriptor here; not shared, not part of the build).
 .serena/
+
+# Playwright MCP scratch dir (snapshot YAMLs, console logs) — session-local.
+.playwright-mcp/
+
+# Browser-smoke screenshots dropped at repo root by Playwright MCP runs.
+/smoke-*.png
