@@ -2,6 +2,14 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-16 (evening) — Phase 11 (directive-log-persistence) closed; Phase 12 (budget-ux) active
+
+- 11.3 → 11.7 shipped in one session continuation from the afternoon. Five new commits: `81a0c74` 11.3 state queries (+7 tests), `49cc4e5` 11.4 hub tee (+4 tests in new `directive-stream.test.ts`, hub constructor gained `db: Database`), `93c1c85` 11.5 GET `/api/v1/directives/:id/logs` (+5 tests; plan said 3, added 404 + empty-list), `f95da1b` 11.6 FE replay + fixed join-cursor (plan-deviation: cursor stays FIXED, not advancing — advancing variant drops ms-collision live events), this phase-close commit.
+- **Live browser smoke (Playwright MCP)** — smoke-demo project, $1.00 cap, real spend $0.6238 (well under last smoke's $0.7241). All three Tier 11 scenarios passed: refresh on running directive restored activity panel from `/logs`; tab 2 opened mid-build showed identical 7 events to tab 1; terminal `blocked` directive reloaded showed full 9-event narrative. The directive auto-terminated on budget — no manual cancel needed.
+- **Workspace totals.** Tests 1200 → 1216 + 3 skipped (+16). State 174 → 187 (+13 across 11.2's shape + 11.3's queries); daemon 181 → 190 (+9 across 11.4's stream tests + 11.5's route tests). Full LOG entry in `UPGRADE/LOG.md`.
+- **No new ADR.** Persistence is straightforward — two interesting decisions (fan-out-after-persist; fixed cursor) live in commit bodies + code comments. Tier 12 will bring ADR 0033 (budget UX paradigm).
+- **Tag**: `phase-11-directive-log-persistence-closed`. **Next**: Phase 12 (budget-ux), already scaffolded; first step 12.1 opens U032.
+
 ## 2026-05-16 (afternoon) — Tier 10 follow-up + Tier 11/12 scaffold + 11.1-11.2; Phase 11 in flight
 
 - Post-Phase-10 session driven by operator-felt smoke gaps. Six commits this session, four discrete pieces of work: pre-tier FE fix (`fa2f800`); Tier 11 + Tier 12 scaffold (`c22cb71`); 11.1 recordkeeping (`edbdf1d`); 11.2 migration 010 (`69bd145`); this session-end.

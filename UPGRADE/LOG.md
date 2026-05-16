@@ -6,6 +6,44 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-16 — Phase 11 (directive-log-persistence) closed; Phase 12 (budget-ux) active
+
+Tier 11 closed the same day as Tier 10's post-close smoke surfaced the gap: `log.line` SSE events were ephemeral, so the directive-detail activity panel went blank on refresh, split across tabs, and rendered empty post-mortem on terminal directives. U031 captured the three failure modes. Tier 11 closes them by persisting events to disk and replaying on connect.
+
+**Seven commits this session (post-Tier-10):**
+
+- `81a0c74` — `feat(11.3)`: state queries — `appendLogLine` + `listForDirective` + 7 unit tests; `directiveLogLineSchema` + `directiveLogLineInputSchema` added to `@factory5/core`.
+- `49cc4e5` — `feat(11.4)`: `DirectiveStreamHub` constructor takes `db: Database`; `emit` tees `log.line` to disk in try/catch + warn-on-failure before fan-out; 4 integration tests in new `directive-stream.test.ts`. Hub instantiation moved past `openDatabase` in daemon's `startDaemon`; stop path optional-chains the shutdown call.
+- `93c1c85` — `feat(11.5)`: `GET /api/v1/directives/:id/logs?since=<iso>&limit=<n>` daemon route with bearer-auth, 404 on unknown directive, default limit 5000; `apiV1DirectiveLogsQuerySchema` + `apiV1DirectiveLogsResponseSchema` in `@factory5/ipc`; 5 integration tests (plan said 3 — added 404 + empty-list).
+- `f95da1b` — `feat(11.6)`: FE `bootstrap()` in `apps/factory-web/src/pages/directives/detail.astro` fetches `/logs?limit=5000` between snapshot and SSE attach, seeds `state.logLines`, pins `joinCursor` to `historic.last.ts`. Plan-deviation: cursor stays FIXED (plan's advancing variant drops ms-collision live events sharing a ts with a previously-accepted live event). Live cap bumped 500 → 5000 to match replay seed.
+- This phase-close commit — `chore(phase-11)`: tag `phase-11-directive-log-persistence-closed`; close U031; flip STATE → Phase 12 active.
+
+(Pre-Tier-11 commits this calendar day already documented in the Tier 10 entry below: `fa2f800` Tier 10 follow-up, `c22cb71` Tier 11+12 scaffold, `edbdf1d` 11.1 open U031, `69bd145` 11.2 migration 010, `0182f3b` session-end after 11.2.)
+
+**Live browser smoke (Playwright MCP)** — smoke-demo project, autonomous mode, $1.00 USD cap. Build auto-terminated as `blocked: budget_exceeded_usd: spent=$0.6238 ceiling=$1.00 est=$0.6418 calls=4 agent=builder` — bounded under cap and well under last smoke's $0.7241 (Tier 10). Three acceptance scenarios verified end-to-end:
+
+1. **Refresh-survives** — directive `01KRSAR1TSCA8447FWRKYSDW75` was running with 2 events visible (triage + architect-calling). Hard reload → activity panel still showed 2 events, restored from `/logs`. Pre-Tier-11 this would have been empty.
+2. **Multi-tab consistency** — opened a second tab while architect-calling was in flight. After both tabs settled, tab 1 (open since start, fed by SSE) and tab 2 (opened mid-build, fed by replay + SSE) BOTH showed the same 7 events in the same order: triage, architect ×3, planner ×2, pool.
+3. **Terminal post-mortem visibility** — after the directive flipped to `blocked` (9 total events), a fresh navigation to the same URL showed all 9 events with full narrative (triage → architect → planner → pool → loop). Pre-Tier-11 this would have been empty because no live SSE consumer exists on a terminal directive.
+
+**Notable detail discovered during smoke** — Playwright's `browser_tabs new` opens the new tab in a fresh context, so the token captured by the first tab's `captureTokenFromUrl()` doesn't carry. Resolved by passing the `?t=<token>` query string in the new tab's URL explicitly. Not a production bug — real users open tabs from the same browser context (cookies/localStorage shared); the smoke harness happens to isolate them.
+
+**Workspace totals this session:**
+
+- Test count: 1200 → 1216 + 3 skipped (+16 tests). State 174 → 187 (+13 across 11.2's 6 shape + 11.3's 7 query); daemon 181 → 190 (+9 across 11.4's 4 + 11.5's 5).
+- 16 commits across 2026-05-16 from the Tier-10 close through this phase-close. The session blew past the usual "1 session ≈ 1 tier" pacing — Tier 10 closed and Tier 11 closed the same calendar day, with smoke proving end-to-end correctness for both.
+
+**One ADR-less tier.** Unlike Tier 8 (ADR 0030) and Tier 10 (ADR 0031), Tier 11 didn't pin a new ADR. The persistence design is straightforward: SQLite table + tee site + replay endpoint. The two interesting decisions — fan-out-after-persist (vs concurrent write) and fixed-cursor (vs advancing) — both live in code comments + commit bodies. If Tier 11 had needed cross-tier policy (e.g. retention sweep), an ADR would be warranted; deferred to Tier 12+ if/when the table grows meaningfully.
+
+**Two operator-felt issues stay open** for future tiers, both deliberately scoped out:
+
+- **Mid-flight tab-2-only race** — between when the replay GET returns and the SSE EventSource attaches, brain emits a log.line that hits DB (tee) and fans out — but tab 2 isn't subscribed yet, AND the replay already returned. Tab 2 would miss that event. Mitigation: re-fetch `/logs?since=<joinCursor>` after SSE attach as a belt-and-suspenders sweep. Defer-until-signal — would need ≥1 ms emit-during-attach in the wild.
+- **Retention policy** — `directive_log_lines` grows ~1.5 KB per directive event (rough average) × N events/directive. At 100 directives/day × 50 events × 150 bytes ≈ 750 KB/day, 275 MB/year. Acceptable for now; revisit when the SQLite db crosses 1 GB or a heavy-narrative tier (e.g. brain-side pino transport tap, ADR 0031 deferred item) lands.
+
+**Next:** Tier 12 (budget-ux) is already scaffolded (commit `c22cb71`). Plan at `UPGRADE/plans/tier-12-budget-ux.md`; steps at `.control/phases/phase-12-budget-ux/steps.md`. First step 12.1 opens U032 (operator-invisible turn budgets; hard-fail without retry-question escalation).
+
+---
+
 ## 2026-05-16 — Phase 10 (resume-and-activity-feed) closed; upgrade arc complete (seventh time)
 
 Tier 10 reopened the upgrade arc 2026-05-16 and closed the same day. Two operator-feels-blind gaps fixed: (1) no UI surface for `factory resume`; (2) directive-detail's activity panel silent on `build` directives because the brain only emitted one `log.line` SSE event today.

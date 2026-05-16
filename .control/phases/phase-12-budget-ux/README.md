@@ -25,6 +25,12 @@ Phase 11 closed by persisting `log.line` events so the activity panel survives r
 
 ## Why this phase exists
 
+Carried forward from Phase 11:
+- **Auto-prune retention policy** — sweep that drops log lines older than N days (configurable). Defer-until-signal that the table is growing meaningfully.
+- **Search / filter in the activity panel** — free-text grep + level + component filters. UX polish, not load-bearing.
+- **Persist task / finding / spend events too** — unify replay across all six SSE event types. Today the snapshot route handles those; would unify the code path.
+- **CLI tail** — `factory directive tail <id>` consumes the new logs endpoint and prints live. Composition.
+
 Operator complaint, verbatim 2026-05-16: *"why are we failing instead of asking the user if we should continue over the budget? why do we have a cost limit? why do we have a max cost and max steps that we ask the user and have other limits the user does not see?"*
 
 The codebase has at least 15 hardcoded budgets and timeouts. Operators control 2 (maxUsd, maxSteps). Per-task `maxTurns` failures surface as silent "Task failed" with a generic askUser that doesn't carry the bump-suggestion context. The `error_max_turns` from claude-cli on the automl scaffolder (Tier 10 close smoke) was the canonical example.

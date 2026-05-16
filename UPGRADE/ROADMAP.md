@@ -157,7 +157,7 @@ Close two operator-felt gaps from Tier 10's post-close smoke: (1) activity panel
 - [x] Daemon hub tees `log.line` to DB on emit; integration test asserts read-back
 - [x] `GET /api/v1/directives/:id/logs?since=<iso>&limit=<n>` daemon route; bearer-auth; 5 integration tests (3 from the plan + 404 + empty-list)
 - [x] FE replay + dedup — fetch historic before attaching SSE; events with `ts <= joinCursor` are dropped (fixed cursor — see plan-deviation in steps.md)
-- [ ] U031 closes
+- [x] U031 closes
 
 Plan: [`plans/tier-11-directive-log-persistence.md`](plans/tier-11-directive-log-persistence.md)
 
