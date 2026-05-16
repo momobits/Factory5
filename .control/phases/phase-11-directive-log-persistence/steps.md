@@ -1,6 +1,6 @@
 # Phase 11 Steps
 
-- [ ] 11.1 — Open U031 in `UPGRADE/ISSUES.md` Open section. Severity medium; Tier 11; Area state + daemon + web.
+- [x] 11.1 — Open U031 in `UPGRADE/ISSUES.md` Open section. Severity medium; Tier 11; Area state + daemon + web.
 - [ ] 11.2 — Migration 010 (`directive_log_lines` table). Schema per the plan. Update the three pre-existing migration shape tests (`003-findings-registry.test.ts`, `004-model-usage-mode.test.ts`, `006-project-identity.test.ts`) to expect `[1..10]`.
 - [ ] 11.3 — State queries — `packages/state/src/queries/directive-log-lines.ts` with `appendLogLine` + `listForDirective`. Schema in `@factory5/core` (`directiveLogLineSchema`). Unit tests cover append + read-back, sinceTs filter, ordering, limit, large attrs roundtrip.
 - [ ] 11.4 — Daemon hub tees `log.line` to DB. `DirectiveStreamHub.emit` calls `appendLogLine` before fanning out when `event.type === 'log.line'`. Hub gets a `Database` handle via constructor (plumbed from `IpcServerOptions`). Failure handling: log `warn` + continue (emission must not block on persistence). Integration test in `server.test.ts` emits 3 events, asserts queryable.
