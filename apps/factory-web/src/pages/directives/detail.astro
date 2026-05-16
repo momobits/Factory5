@@ -87,6 +87,24 @@ import Dashboard from '../../layouts/Dashboard.astro';
       msg: string;
     }
 
+    // Tier 11 / 11.5 — response shape for `GET /api/v1/directives/:id/logs`.
+    // Mirrors `apiV1DirectiveLogsResponseSchema` in `@factory5/ipc` — kept
+    // inline here (same pattern as the snapshot shape above) so this page
+    // doesn't need a full IPC-schema import on the FE.
+    interface LogsReplayItem {
+      id: number;
+      ts: string;
+      level: string;
+      component: string;
+      msg: string;
+      attrs?: Record<string, unknown>;
+    }
+    interface LogsReplay {
+      items: LogsReplayItem[];
+      count: number;
+      limit: number;
+    }
+
     // ----- mount + state ----------------------------------------------------
 
     captureTokenFromUrl();
@@ -142,6 +160,19 @@ import Dashboard from '../../layouts/Dashboard.astro';
 
     // Auto-scroll-pin tracking for log tail.
     let logTailPaused = false;
+
+    // Tier 11 / 11.6 — fixed boundary between replayed history and live
+    // SSE for `log.line` events. Set ONCE to the ts of the last historic
+    // item the replay fetch returned (or stays `undefined` if the replay
+    // returned nothing, in which case every live event is accepted). The
+    // SSE `log.line` handler drops events with `ts <= joinCursor` so a
+    // live event already covered by the replay doesn't double-render at
+    // the join. NOT advanced as live events arrive — advancing would
+    // drop ms-collision live events that happen to share a timestamp
+    // with the boundary (the brain emits multiple events inside a single
+    // millisecond on stage transitions). Plan §11.6 sketched an advancing
+    // cursor; that variant loses one-of-two live events at ms boundaries.
+    let joinCursor: string | undefined;
 
     // ----- render helpers ---------------------------------------------------
 
@@ -636,15 +667,23 @@ import Dashboard from '../../layouts/Dashboard.astro';
           break;
         }
         case 'log.line': {
+          // Tier 11 / 11.6 — drop events the replay fetch already
+          // covered (see `joinCursor` declaration above). Live events
+          // emitted after the boundary always pass.
+          if (joinCursor !== undefined && ev.ts <= joinCursor) {
+            break;
+          }
           state.logLines.push({
             ts: ev.ts,
             level: ev.level,
             component: ev.component,
             msg: ev.msg,
           });
-          // Cap memory: keep the last 500 lines.
-          if (state.logLines.length > 500) {
-            state.logLines.splice(0, state.logLines.length - 500);
+          // Cap memory: keep the last 5000 lines. Matches the replay
+          // fetch's `limit=5000` so the historic seed isn't trimmed by
+          // the first live event after bootstrap.
+          if (state.logLines.length > 5000) {
+            state.logLines.splice(0, state.logLines.length - 5000);
           }
           break;
         }
@@ -718,7 +757,32 @@ import Dashboard from '../../layouts/Dashboard.astro';
         return;
       }
 
-      // 2. Subscribe to the live stream. apiStream handles token-auth,
+      // 2. Tier 11 / 11.6 — replay persisted log.line history. The SSE
+      //    handler does NOT backfill log.line on connect (only tasks +
+      //    directive.completed), so without this fetch the activity
+      //    panel would render empty on refresh + on every new-tab join
+      //    + on every post-mortem visit to a terminal directive (U031).
+      //    Failure is non-fatal — we proceed without a seed and rely on
+      //    live SSE alone; the operator gets a degraded experience
+      //    rather than a broken page.
+      try {
+        const replay = await apiFetch<LogsReplay>(
+          `/api/v1/directives/${encodeURIComponent(directiveId)}/logs?limit=5000`,
+        );
+        state.logLines = replay.items.map(({ ts, level, component, msg }) => ({
+          ts,
+          level,
+          component,
+          msg,
+        }));
+        joinCursor = replay.items.at(-1)?.ts;
+        render();
+      } catch (err: unknown) {
+        // Non-fatal — log to console; live SSE alone still works.
+        console.warn('[logs replay] fetch failed; falling back to live-only', err);
+      }
+
+      // 3. Subscribe to the live stream. apiStream handles token-auth,
       //    Zod validation, reconnect, and degrades to pollOnce() every
       //    5 s if the EventSource gives up retrying.
       apiStream(`/api/v1/directives/${encodeURIComponent(directiveId)}/stream`, {
