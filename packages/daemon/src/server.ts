@@ -926,6 +926,13 @@ function registerRoutes(
         projectPath,
         workspace,
         ...(language !== undefined ? { language } : {}),
+        // Tier 12 / ADR 0032 §6 — persist the operator-supplied partial as-is
+        // (only the axes the operator overrode). The brain's resolver fills
+        // missing axes from BUDGET_DEFAULTS at consumption time; storing
+        // overrides-only here preserves intent for resume inheritance.
+        ...(body.budgets !== undefined && Object.keys(body.budgets).length > 0
+          ? { budgets: body.budgets }
+          : {}),
       },
       autonomy,
       createdAt: nowIso,

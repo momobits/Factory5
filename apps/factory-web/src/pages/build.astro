@@ -1,9 +1,49 @@
 ---
-import Dashboard from '../layouts/Dashboard.astro';
-import Form from '../components/Form.astro';
-import Field from '../components/Field.astro';
-import Submit from '../components/Submit.astro';
+// Tier 12 — import budget metadata via the `./budgets` sub-path, NOT the
+// root. The root pulls `ulid`, which runs a crypto check at module init
+// time that fails inside Astro's SSR bundle (works fine in plain Node).
+// The sub-path exposes only the budget-defaults module, no transitive ulid.
+import { BUDGET_AXES, BUDGET_DEFAULTS, type BudgetAxis } from '@factory5/core/budgets';
 import Alert from '../components/Alert.astro';
+import Field from '../components/Field.astro';
+import Form from '../components/Form.astro';
+import Submit from '../components/Submit.astro';
+import Dashboard from '../layouts/Dashboard.astro';
+
+/**
+ * Tier 12 / ADR 0032 — "Advanced budgets" accordion.
+ * Labels + step granularity per axis. Names + explainers come from
+ * BUDGET_DEFAULTS; only display-side metadata lives here.
+ */
+const AXIS_LABEL: Record<BudgetAxis, string> = {
+  maxUsd: 'Max USD',
+  maxSteps: 'Max steps',
+  askUserDeadlineMs: 'Ask-user deadline (ms)',
+  maxTurnsScaffolder: 'Max turns — scaffolder',
+  maxTurnsBuilder: 'Max turns — builder',
+  maxTurnsFixer: 'Max turns — fixer',
+};
+const AXIS_STEP: Record<BudgetAxis, string> = {
+  maxUsd: '0.01',
+  maxSteps: '1',
+  askUserDeadlineMs: '1000',
+  maxTurnsScaffolder: '1',
+  maxTurnsBuilder: '1',
+  maxTurnsFixer: '1',
+};
+/**
+ * HTML `min` per axis. `0` is the unlimited-sentinel for the ceilings;
+ * the positive-only axes (deadline + maxTurns) get `min="1"` so the
+ * browser-side validation matches the Zod schema's `.positive()`.
+ */
+const AXIS_MIN: Record<BudgetAxis, string> = {
+  maxUsd: '0',
+  maxSteps: '0',
+  askUserDeadlineMs: '1',
+  maxTurnsScaffolder: '1',
+  maxTurnsBuilder: '1',
+  maxTurnsFixer: '1',
+};
 ---
 
 <Dashboard title="New build">
@@ -66,26 +106,40 @@ import Alert from '../components/Alert.astro';
           ]}
         />
       </div>
-      <div class="form-row">
-        <Field
-          name="maxUsd"
-          label="Max USD"
-          type="number"
-          step="0.01"
-          min="0"
-          placeholder="project / config default"
-          hint="Leave blank for default tiers."
-        />
-        <Field
-          name="maxSteps"
-          label="Max steps"
-          type="number"
-          step="1"
-          min="1"
-          placeholder="project / config default"
-          hint="Leave blank for default tiers."
-        />
-      </div>
+
+      <details class="budgets-accordion">
+        <summary>
+          <span class="budgets-glyph" aria-hidden="true">+</span>
+          <span class="budgets-label">Advanced budgets</span>
+          <span class="budgets-meta">six axes · all optional · ADR 0032</span>
+        </summary>
+        <p class="budgets-preamble">
+          Leave any field blank to use the default. These are the operator-facing budgets
+          (<em>ADR 0032 §1</em>); internal pacing constants stay hidden.
+        </p>
+        {
+          BUDGET_AXES.map((axis) => (
+            <div class="budget-row">
+              <div class="budget-control">
+                <label for={`budget-${axis}`}>{AXIS_LABEL[axis]}</label>
+                <input
+                  id={`budget-${axis}`}
+                  name={axis}
+                  type="number"
+                  step={AXIS_STEP[axis]}
+                  min={AXIS_MIN[axis]}
+                  placeholder={String(BUDGET_DEFAULTS[axis].value)}
+                  data-budget-axis={axis}
+                />
+                <span class="budget-default">
+                  default <code>{BUDGET_DEFAULTS[axis].value}</code>
+                </span>
+              </div>
+              <p class="budget-explainer">{BUDGET_DEFAULTS[axis].explainer}</p>
+            </div>
+          ))
+        }
+      </details>
 
       <div id="form-error-slot" hidden>
         <Alert kind="conflict" title="" body="" />
@@ -96,6 +150,160 @@ import Alert from '../components/Alert.astro';
       </div>
     </Form>
   </div>
+
+  <style>
+    /*
+     * Tier 12 — "Advanced budgets" accordion.
+     * Editorial appendix: a footnote, not a heading. The collapsed state
+     * is the casual operator's path; the open state turns the same row
+     * into an asymmetric two-column "data | prose" layout that mirrors a
+     * magazine caption (mono left, italic right). All design tokens are
+     * the Tier 9 dashboard set; no new colors.
+     */
+    .budgets-accordion {
+      border-top: 1px solid var(--hairline);
+      border-bottom: 1px solid var(--hairline);
+      margin: 4px 0 4px;
+    }
+    .budgets-accordion summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 0;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: baseline;
+      user-select: none;
+    }
+    .budgets-accordion summary::-webkit-details-marker {
+      display: none;
+    }
+    .budgets-accordion summary::marker {
+      content: '';
+    }
+    .budgets-accordion summary:focus-visible {
+      outline: 2px solid var(--signal);
+      outline-offset: 3px;
+    }
+    .budgets-glyph {
+      font-family: var(--f-mono);
+      font-size: 14px;
+      color: var(--signal);
+      font-weight: 500;
+      width: 14px;
+      line-height: 1;
+      text-align: center;
+      transition: transform 220ms cubic-bezier(0.5, 0, 0.2, 1);
+    }
+    .budgets-accordion[open] .budgets-glyph {
+      transform: rotate(45deg);
+    }
+    .budgets-label {
+      font-family: var(--f-display);
+      font-style: italic;
+      font-size: 15px;
+      color: var(--ink);
+      line-height: 1.1;
+    }
+    .budgets-meta {
+      font-family: var(--f-mono);
+      font-size: 9.5px;
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-cap);
+      color: var(--mute);
+      white-space: nowrap;
+    }
+    .budgets-accordion[open] summary {
+      border-bottom: 1px solid var(--hairline);
+    }
+    .budgets-preamble {
+      font-family: var(--f-body);
+      font-style: italic;
+      font-size: 12px;
+      color: var(--mute);
+      margin: 14px 0 4px;
+      max-width: 42rem;
+      line-height: 1.55;
+    }
+    .budget-row {
+      display: grid;
+      grid-template-columns: minmax(13rem, 17rem) 1fr;
+      gap: 28px;
+      padding: 14px 0;
+      border-top: 1px dashed color-mix(in srgb, var(--hairline) 55%, transparent);
+      align-items: start;
+    }
+    .budget-row:first-of-type {
+      border-top: none;
+    }
+    .budget-control {
+      display: grid;
+      gap: 5px;
+    }
+    .budget-control label {
+      font-family: var(--f-mono);
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-cap);
+      color: var(--mute);
+    }
+    .budget-control input {
+      font: inherit;
+      font-family: var(--f-mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 13px;
+      padding: 9px 12px;
+      background: var(--bg-2);
+      color: var(--ink);
+      border: 1px solid var(--hairline);
+      border-radius: 2px;
+      transition:
+        border-color 180ms ease,
+        background 180ms ease;
+    }
+    .budget-control input::placeholder {
+      color: var(--mute-2);
+    }
+    .budget-control input:focus {
+      outline: none;
+      border-color: var(--signal);
+      background: var(--surface);
+    }
+    .budget-default {
+      font-family: var(--f-mono);
+      font-size: 10px;
+      color: var(--mute-2);
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-cap);
+    }
+    .budget-default code {
+      font-family: var(--f-mono);
+      color: var(--ink-2);
+      background: transparent;
+      padding: 0;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .budget-explainer {
+      font-family: var(--f-body);
+      font-style: italic;
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--mute);
+      margin: 0;
+      padding-top: 18px;
+    }
+    @media (max-width: 640px) {
+      .budget-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+      .budget-explainer {
+        padding-top: 0;
+      }
+    }
+  </style>
 
   <script>
     import {
@@ -188,6 +396,42 @@ import Alert from '../components/Alert.astro';
       }
     };
 
+    /**
+     * Tier 12 / ADR 0032 §1 — collect operator-overridden budgets.
+     *
+     * The form renders one `<input data-budget-axis="...">` per axis from
+     * `BUDGET_AXES` server-side; we iterate those at submit time so the
+     * client never names the axes (the server-rendered DOM is the contract).
+     * Blank inputs are skipped — only operator-set axes ride on the wire,
+     * so the resolver downstream knows which were defaults vs. overrides.
+     */
+    interface CollectedBudgets {
+      limits: Record<string, number>;
+      budgets: Record<string, number>;
+    }
+    const collectBudgets = (form: HTMLFormElement): CollectedBudgets => {
+      const inputs = form.querySelectorAll<HTMLInputElement>('input[data-budget-axis]');
+      const limits: Record<string, number> = {};
+      const budgets: Record<string, number> = {};
+      for (const inp of inputs) {
+        const raw = inp.value.trim();
+        if (raw === '') continue;
+        const axis = inp.dataset.budgetAxis;
+        if (axis === undefined) continue;
+        const v = Number.parseFloat(raw);
+        if (!Number.isFinite(v)) continue;
+        // Pre-Tier-12 limits surface stays on body.limits for ADR-0020
+        // pre-call enforcement; the four new axes go on body.budgets.
+        // 12.7 unifies the shape on the directive payload side.
+        if (axis === 'maxUsd' || axis === 'maxSteps') {
+          if (v > 0) limits[axis] = v;
+        } else {
+          budgets[axis] = v;
+        }
+      }
+      return { limits, budgets };
+    };
+
     const wireForm = (): void => {
       const form = document.getElementById('build-form') as HTMLFormElement | null;
       const submit = document.getElementById('submit-btn') as HTMLButtonElement | null;
@@ -203,22 +447,13 @@ import Alert from '../components/Alert.astro';
         const projSelect = document.getElementById('project') as HTMLSelectElement;
         const langSelect = document.getElementById('language') as HTMLSelectElement;
         const autoSelect = document.getElementById('autonomy') as HTMLSelectElement;
-        const usdInput = document.getElementById('maxUsd') as HTMLInputElement;
-        const stepsInput = document.getElementById('maxSteps') as HTMLInputElement;
 
         const body: Record<string, unknown> = { project: projSelect.value };
         if (langSelect.value !== '') body.language = langSelect.value;
         if (autoSelect.value !== '') body.autonomy = autoSelect.value;
-        const limits: Record<string, number> = {};
-        if (usdInput.value.trim() !== '') {
-          const v = Number.parseFloat(usdInput.value);
-          if (Number.isFinite(v)) limits.maxUsd = v;
-        }
-        if (stepsInput.value.trim() !== '') {
-          const v = Number.parseInt(stepsInput.value, 10);
-          if (Number.isFinite(v)) limits.maxSteps = v;
-        }
+        const { limits, budgets } = collectBudgets(form);
         if (Object.keys(limits).length > 0) body.limits = limits;
+        if (Object.keys(budgets).length > 0) body.budgets = budgets;
 
         apiPost<typeof body, CreateBuildResp>('/api/v1/builds', body)
           .then((resp) => {

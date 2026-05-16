@@ -8,6 +8,7 @@
 import {
   agentRoleSchema,
   autonomyModeSchema,
+  budgetsSchema,
   channelIdSchema,
   directiveLimitsSchema,
   directiveLogLineSchema,
@@ -366,6 +367,16 @@ export const apiV1CreateBuildRequestSchema = z.object({
   language: z.enum(['python', 'node', 'go', 'rust']).optional(),
   autonomy: autonomyModeSchema.optional(),
   limits: directiveLimitsSchema.optional(),
+  /**
+   * Operator-facing Tier-12 budgets (ADR 0032 §1). Optional partial — every
+   * axis the operator did NOT override is filled in from {@link BUDGET_DEFAULTS}
+   * downstream. Persisted on the resulting directive at `payload.budgets`
+   * per ADR 0032 §6. Distinct from {@link directiveLimitsSchema}: `limits`
+   * stays the directive-level `maxUsd` / `maxSteps` shape that ADR 0020 pins;
+   * `budgets` carries the full Tier-12 axis set including the four that
+   * `limits` doesn't cover.
+   */
+  budgets: budgetsSchema.optional(),
 });
 export type ApiV1CreateBuildRequest = z.infer<typeof apiV1CreateBuildRequestSchema>;
 

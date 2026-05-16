@@ -11,6 +11,11 @@
       "types": "./dist/index.d.ts",
       "development": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./budgets": {
+      "types": "./dist/budget-defaults.d.ts",
+      "development": "./src/budget-defaults.ts",
+      "import": "./dist/budget-defaults.js"
     }
   },
   "files": [
@@ -18,8 +23,8 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean",
-    "dev": "tsup src/index.ts --format esm --dts --sourcemap --watch",
+    "build": "tsup src/index.ts src/budget-defaults.ts --format esm --dts --sourcemap --clean",
+    "dev": "tsup src/index.ts src/budget-defaults.ts --format esm --dts --sourcemap --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

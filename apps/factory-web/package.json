@@ -14,6 +14,7 @@
     "typecheck": "astro check"
   },
   "dependencies": {
+    "@factory5/core": "workspace:*",
     "@factory5/ipc": "workspace:*",
     "astro": "^5.0.0"
   },

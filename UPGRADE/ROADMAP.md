@@ -168,7 +168,7 @@ Operator complaint 2026-05-16: _"why are we failing instead of asking the user i
 - [x] Open U032 (operator-invisible turn budgets; hard-fail without retry-question escalation)
 - [x] ADR 0032 — Budget UX paradigm (operator-facing vs internal-pacing budgets, default-publication contract, escalation rule, persistence contract)
 - [x] `BUDGET_DEFAULTS` constant + Zod schema in `@factory5/core` — single source of truth for defaults + explainers
-- [ ] Web UI Build form: "Advanced budgets" accordion (collapsed by default) with six fields + defaults + explainers
+- [x] Web UI Build form: "Advanced budgets" accordion (collapsed by default) with six fields + defaults + explainers
 - [ ] CLI flags on `factory build` and `factory resume`: `--max-usd`, `--max-steps`, `--ask-deadline-ms`, `--max-turns-scaffolder`, `--max-turns-builder`, `--max-turns-fixer`; `--help` post-text quotes explainers
 - [ ] Directive `payload.budgets` field; Tier 10 resume route inherits full budget set
 - [ ] Brain escalation in `pool.ts` — detect `error_max_turns` subtype, raise typed askUser with bump suggestion; relaunch task on accept; abort path mirrors current failed-task behaviour

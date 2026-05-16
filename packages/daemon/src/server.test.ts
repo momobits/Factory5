@@ -1920,6 +1920,58 @@ describe('IPC server — POST /api/v1/builds (ADR 0027, sub-step 11.3)', () => {
     await app.close();
   });
 
+  it('Tier 12 / ADR 0032 §6: partial budgets persist to directive.payload.budgets', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {
+        project: projectDir,
+        budgets: { maxTurnsScaffolder: 160, askUserDeadlineMs: 600_000 },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { payload: { budgets?: Record<string, number> } };
+    };
+    // Only the operator-overridden axes land — resolver fills the rest at
+    // consumption time so resume inheritance preserves intent.
+    expect(body.directive.payload.budgets).toEqual({
+      maxTurnsScaffolder: 160,
+      askUserDeadlineMs: 600_000,
+    });
+    await app.close();
+  });
+
+  it('Tier 12: omits payload.budgets entirely when body.budgets is empty', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir, budgets: {} },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { directive: { payload: { budgets?: unknown } } };
+    expect(body.directive.payload.budgets).toBeUndefined();
+    await app.close();
+  });
+
+  it('Tier 12: returns 400 SCHEMA_VALIDATION_FAILED on negative maxTurns', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir, budgets: { maxTurnsBuilder: -5 } },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
   it('language fallback: reads metadata.language when body.language is absent (10.8 parity)', async () => {
     // Pre-seed project.json with metadata.language = 'rust'.
     const factoryDir = join(projectDir, '.factory');

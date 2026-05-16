@@ -75,6 +75,9 @@ importers:
 
   apps/factory-web:
     dependencies:
+      '@factory5/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@factory5/ipc':
         specifier: workspace:*
         version: link:../../packages/ipc
