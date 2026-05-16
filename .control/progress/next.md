@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-16T12:29:30Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-16T16:40:36Z by
 > `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
@@ -16,7 +16,29 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-**No active phase. Upgrade arc closed for the seventh time** at `phase-10-resume-and-activity-feed-closed` 2026-05-16. To resume work, the operator can:
+**Phase 11 (directive-log-persistence) starting at step 11.1.** Tier 10 closed cleanly; the post-close smoke surfaced three operator-felt gaps that Tier 11 + Tier 12 close in sequence.
+
+**Pre-tier follow-up shipped first** — commit `fa2f800` (`fix(phase-10): surface task errors + clarify pip + bump turn defaults`):
+- `task.result.error` rendered in the task table for failed tasks (red-tinted follow-up row).
+- Pip label "Completed" → "Stream ended" so it doesn't compete with the title's directive status.
+- `maxTurns` default bumped 40 → 80 (`packages/providers/src/claude-cli.ts:597`); planner range advertised 10-80 → 10-160 (`prompts/agents/planner.md` + `packages/brain/src/planner.ts:247`).
+
+**Tier 11 (this work)** — Per-directive log persistence:
+1. Migration 010 (`directive_log_lines` table)
+2. Daemon `DirectiveStreamHub.emit` tees `log.line` events to DB before fanning out
+3. New `GET /api/v1/directives/:id/logs?since=<iso>&limit=<n>`
+4. FE replays historic on connect; dedups against live SSE via join-cursor
+5. Closes U031 (activity panel empty after refresh; multi-tab event split)
+
+**Tier 12 (next, scaffolded only)** — Budget UX:
+1. ADR 0033 pins the budget paradigm (operator-facing vs internal; escalation; default-publication; persistence)
+2. `BUDGET_DEFAULTS` in `@factory5/core` as single source of truth (six fields + defaults + explainers)
+3. Web Build form "Advanced budgets" accordion + CLI flags
+4. Brain escalation on `error_max_turns` via typed askUser ("Task X out of turns at 80; bump to 120?")
+5. Tier 8 auto-answer adapts (bump on first failure, abort on second)
+6. Closes U032
+
+**Mystery from operator session 2026-05-16** — *"my max-steps=100 didn't persist after resume"* — investigated 2026-05-16 by querying the DB directly. The directive's `max_steps` correctly persisted at 1000 across both resumes. The "40" the operator saw was the scaffolder task's `maxTurns` (per-task tool-conversation cap), NOT `max_steps`. Two completely different knobs with overlapping-sounding names — exactly the surface area Tier 12 addresses.
 
 1. **Author a Tier 11 plan** — the Phase 10 Deferred section identified five candidates worth promoting if/when demand signal surfaces: pino transport tap (auto-mirror brain pino lines via `directiveId` binding); per-directive log persistence (today `log.line` events are SSE-only — operator reopening a terminal directive sees empty activity panel); resume-after-edit (override autonomy/budget on resume); bulk resume (pick N failed directives, resume all); `checkModules` h1 acceptance (`packages/wiki/src/readiness.ts:74` accepts only h2 or `modules/` dir today; the original automl crash's modules-documented warn was a false-negative since the architect wrote `# Modules` h1).
 2. **Promote a longer-standing carry-forward** — U005 chat REPL cancel UX path (a+) is now four-times-deferred. Other Phase 8-introduced carry-forwards (per-project deadline override, `factory config get/set`, override-after-auto-answer) and Tier-9-deferred items (inline-style audit, ADR 0031 for editorial aesthetic — already landed in Tier 10 as log-forwarder ADR instead) remain.

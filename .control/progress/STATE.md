@@ -3,7 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-16 — session end after Phase 10 close. Upgrade arc closed for the **seventh time** at `phase-10-resume-and-activity-feed-closed` (tag annotated at `fbc3c27`). Nine commits this session: scaffold `1ac1823`; 10.1 `0ce4590`; 10.2 `bb2bca9`; 10.3 `585f172`; 10.4 `e83c3c1`; 10.5 `f100910`; 10.6 `9289aff`; phase-close `fbc3c27`; this session-end. The phase-close commit pinned STATE.md to itself (no lag delta this turn); this session-end will reintroduce lag-by-1 #27 — STATE references `fbc3c27` at write time; HEAD moves to the session-end commit's own sha.
+**Last updated:** 2026-05-16 — Tier 11 + Tier 12 scaffolded; Tier 10 follow-up `fa2f800` shipped (task error rendering + pip clarification + turn-default bump 40→80, max 80→160). Upgrade arc **reopened** with Phase 11 (directive-log-persistence) active at step 11.1.
+**Current phase:** 11 — directive-log-persistence (scaffolded; starting)
+**Current step:** 11.1 — open U031
+**Status:** Tier 11 + Tier 12 both planned; Tier 11 is the immediate work (per-directive log persistence: migration 010 + daemon hub tee + logs route + FE replay). Tier 12 (budget UX) is scaffolded but not started — covers surface-and-escalate for the 15 hardcoded budgets surfaced in the audit. Pre-tier follow-up `fa2f800` already shipped the immediate FE fix (task.result.error rendering, pip relabel "Completed" → "Stream ended") plus the turn-default bump.
 **Current phase:** none (arc-complete)
 **Current step:** none
 **Status:** Phase 10 closed cleanly. All done-criteria green: 4 `pnpm` gates clean (build / test / lint / format:check); ADR 0031 lands; 12 new tests across packages (planner-emit +4, daemon resume route +8); browser smoke confirmed Resume click → child directive mints → activity panel narrates 5 events live (triage → architect-calling → wrote 13 wiki pages → readiness all passed → planner-calling). U030 closed.
@@ -20,7 +23,29 @@
 
 ## Next action
 
-**No active phase. Upgrade arc closed for the seventh time** at `phase-10-resume-and-activity-feed-closed` 2026-05-16. To resume work, the operator can:
+**Phase 11 (directive-log-persistence) starting at step 11.1.** Tier 10 closed cleanly; the post-close smoke surfaced three operator-felt gaps that Tier 11 + Tier 12 close in sequence.
+
+**Pre-tier follow-up shipped first** — commit `fa2f800` (`fix(phase-10): surface task errors + clarify pip + bump turn defaults`):
+- `task.result.error` rendered in the task table for failed tasks (red-tinted follow-up row).
+- Pip label "Completed" → "Stream ended" so it doesn't compete with the title's directive status.
+- `maxTurns` default bumped 40 → 80 (`packages/providers/src/claude-cli.ts:597`); planner range advertised 10-80 → 10-160 (`prompts/agents/planner.md` + `packages/brain/src/planner.ts:247`).
+
+**Tier 11 (this work)** — Per-directive log persistence:
+1. Migration 010 (`directive_log_lines` table)
+2. Daemon `DirectiveStreamHub.emit` tees `log.line` events to DB before fanning out
+3. New `GET /api/v1/directives/:id/logs?since=<iso>&limit=<n>`
+4. FE replays historic on connect; dedups against live SSE via join-cursor
+5. Closes U031 (activity panel empty after refresh; multi-tab event split)
+
+**Tier 12 (next, scaffolded only)** — Budget UX:
+1. ADR 0033 pins the budget paradigm (operator-facing vs internal; escalation; default-publication; persistence)
+2. `BUDGET_DEFAULTS` in `@factory5/core` as single source of truth (six fields + defaults + explainers)
+3. Web Build form "Advanced budgets" accordion + CLI flags
+4. Brain escalation on `error_max_turns` via typed askUser ("Task X out of turns at 80; bump to 120?")
+5. Tier 8 auto-answer adapts (bump on first failure, abort on second)
+6. Closes U032
+
+**Mystery from operator session 2026-05-16** — *"my max-steps=100 didn't persist after resume"* — investigated 2026-05-16 by querying the DB directly. The directive's `max_steps` correctly persisted at 1000 across both resumes. The "40" the operator saw was the scaffolder task's `maxTurns` (per-task tool-conversation cap), NOT `max_steps`. Two completely different knobs with overlapping-sounding names — exactly the surface area Tier 12 addresses.
 
 1. **Author a Tier 11 plan** — the Phase 10 Deferred section identified five candidates worth promoting if/when demand signal surfaces: pino transport tap (auto-mirror brain pino lines via `directiveId` binding); per-directive log persistence (today `log.line` events are SSE-only — operator reopening a terminal directive sees empty activity panel); resume-after-edit (override autonomy/budget on resume); bulk resume (pick N failed directives, resume all); `checkModules` h1 acceptance (`packages/wiki/src/readiness.ts:74` accepts only h2 or `modules/` dir today; the original automl crash's modules-documented warn was a false-negative since the architect wrote `# Modules` h1).
 2. **Promote a longer-standing carry-forward** — U005 chat REPL cancel UX path (a+) is now four-times-deferred. Other Phase 8-introduced carry-forwards (per-project deadline override, `factory config get/set`, override-after-auto-answer) and Tier-9-deferred items (inline-style audit, ADR 0031 for editorial aesthetic — already landed in Tier 10 as log-forwarder ADR instead) remain.
@@ -43,8 +68,8 @@ If the operator doesn't want a Tier 11, the project is in a clean post-arc parki
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `fbc3c27` — `chore(phase-10): close phase 10, kick off arc-complete (seventh time)` (this session-end commit will reintroduce lag #27)
-- **Uncommitted changes:** none at session-end (smoke artifacts gitignored via `307d79c`)
+- **Last commit:** `fa2f800` — `fix(phase-10): surface task errors + clarify pip + bump turn defaults` (Tier 11+12 scaffold commit will follow)
+- **Uncommitted changes:** Tier 11 + Tier 12 scaffold (plans + phase dirs + ROADMAP + phase-plan + ISSUES + STATE flip)
 - **Last phase tag:** `phase-10-resume-and-activity-feed-closed` (annotated at `fbc3c27`)
 
 ---
@@ -57,7 +82,7 @@ If the operator doesn't want a Tier 11, the project is in a clean post-arc parki
 
 ## In-flight work
 
-No phase active. Phase 10 closed cleanly. No Phase 11 scaffolded.
+Phase 11 (directive-log-persistence) scaffolded; starting at 11.1. Phase 12 (budget-ux) scaffolded, not started. Tier 11 plan at [`../../UPGRADE/plans/tier-11-directive-log-persistence.md`](../../UPGRADE/plans/tier-11-directive-log-persistence.md); Tier 12 plan at [`../../UPGRADE/plans/tier-12-budget-ux.md`](../../UPGRADE/plans/tier-12-budget-ux.md).
 
 **Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 

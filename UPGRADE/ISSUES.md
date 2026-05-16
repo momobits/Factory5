@@ -33,6 +33,24 @@ Severity:
 - **Hypothesis**: Path (a+) bumps the timeout to ~10 min AND prints the directive id when minted AND adds a periodic "still working..." heartbeat AND adds a SIGINT handler so first Ctrl-C cancels just the in-flight directive (returns to `you>`) and second Ctrl-C exits the REPL AND prompts before exiting if a directive is still in flight. Bare path (a) — bump only — would actually make UX worse (longer staring at a dead prompt). Path (b) — daemon-side streaming partial responses — is the better UX but requires daemon-side support and is a multi-step tier.
 - **Resolution**: Tier 9 candidate. Twice-deferred (Phase 2 → Phase 4 → still open). Parked at Phase 8 scaffold time per operator decision; promote when the false-timeout pain surfaces in real use.
 
+### U031 — Activity panel empty after refresh; multi-tab event split
+
+- **Severity**: medium
+- **Tier**: 11
+- **Area**: state + daemon + web
+- **Description**: Two operator-felt failure modes surfaced 2026-05-16 by Tier 10's post-close smoke. (1) Refresh forgets everything: opening a directive's detail page mid-run, then refreshing, returns an empty activity panel — the `log.line` events the FE was rendering are SSE-only and dropped on disconnect. (2) Multi-tab event split: two dashboard tabs subscribed to the same directive see different event sets because events emitted before a tab's subscribe time aren't replayed to that tab. Both fail modes also imply post-mortem invisibility: opening a `failed` directive a session later shows nothing in the activity panel even though the daemon log file contains the full narrative. ADR 0031 explicitly noted persistence as the Tier 11+ follow-up.
+- **Hypothesis**: Migration 010 adds a `directive_log_lines` table; daemon `DirectiveStreamHub.emit` tees `log.line` events to DB before fanning out (synchronous insert, log+continue on failure); new `GET /api/v1/directives/:id/logs?since=<iso>&limit=<n>` route returns historic events for a directive; FE on directive-detail boot fetches historic first, captures the latest ts as a `joinCursor`, then attaches SSE — log.line events with `ts <= joinCursor` are dropped to avoid double-render at the join boundary. Sizing: ~750 KB/day at 100 directives/day × 50 events/directive × 150 bytes; ~275 MB/year unchecked. Retention policy deferred.
+- **Resolution**: (filled when 11.6 lands and the browser smoke proves refresh-survives + multi-tab + terminal-post-mortem).
+
+### U032 — Operator-invisible turn budgets; hard-fail without retry-question escalation
+
+- **Severity**: high
+- **Tier**: 12
+- **Area**: cli + web + brain
+- **Description**: The codebase has 15 hardcoded budgets and timeouts; operators control only `maxUsd` and `maxSteps`. Per-task `maxTurns` (default 80 post-Tier-10-fix) is planner-emitted and never surfaced. When `error_max_turns` trips mid-stream, the worker reports the failure, the task is marked failed, and the brain raises a generic `askUser("what next?")` that doesn't carry the bump-suggestion context. Operator complaint 2026-05-16: _"why are we failing instead of asking the user if we should continue over the budget? why do we have a max cost and max steps that we ask the user and have other limits the user does not see?"_ The driving incident: an automl scaffolder hit the 40-turn cap with 13 modules to scaffold; operator saw "Task failed" with no diagnostic and no recovery path (Tier 10 post-close smoke).
+- **Hypothesis**: Six operator-facing budgets identified in the Tier 12 audit (maxUsd, maxSteps, askUserDeadlineMs, maxTurnsScaffolder, maxTurnsBuilder, maxTurnsFixer); the rest stay internal pacing. New `BUDGET_DEFAULTS` constant + Zod schema in `@factory5/core` becomes the single source of truth read by CLI / Web / project-metadata parsers — defaults + explainers can't drift. Web Build form gets an "Advanced budgets" accordion (collapsed by default); CLI gets matching flags with `--help` quoting the explainers verbatim. Directive payload carries `budgets`; Tier 10 resume route inherits the full set. Brain `pool.ts` detects `error_max_turns` subtype and raises a typed askUser with task title + current cap + suggested bump; on accept-bump, relaunches the task with the new budget; on abort, current failed-task behaviour. Tier 8 auto-answer adapter recognises the budget-escalation prompt: bump-by-one-bucket on first failure, abort on second. ADR 0033 pins the budget UX paradigm: operator-facing vs internal-pacing budgets, default-publication contract, escalation rule, persistence contract.
+- **Resolution**: (filled when 12.8 lands and the browser smoke proves a budget-tripping task escalates via askUser → accept → retry → success).
+
 ## Resolved
 
 ### U030 — No UI surface for resume; directive-detail activity panel silent on build directives

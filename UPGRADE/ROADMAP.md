@@ -1,6 +1,6 @@
 # Roadmap — factory5 first-class upgrade
 
-Ten tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent. Tier 9 reopens the arc again for the first frontend aesthetic overhaul in the project — porting the "Editorial Control Room" aesthetic from the sibling conductor project to `apps/factory-web` as a single-session, dual-theme redesign (informal cadence — no per-step commits, no ADR).
+Twelve tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent. Tier 9 reopens the arc again for the first frontend aesthetic overhaul in the project — porting the "Editorial Control Room" aesthetic from the sibling conductor project to `apps/factory-web` as a single-session, dual-theme redesign (informal cadence — no per-step commits, no ADR).
 
 ## Status legend
 
@@ -146,6 +146,36 @@ Close two operator-feels-blind gaps surfaced by an `automl` build failure 2026-0
 - [x] U030 closes when 10.5 lands
 
 Plan: [`plans/tier-10-resume-and-activity-feed.md`](plans/tier-10-resume-and-activity-feed.md)
+
+## Tier 11 — Per-directive log persistence
+
+Close two operator-felt gaps from Tier 10's post-close smoke: (1) activity panel disappears on refresh because `log.line` events are SSE-only / ephemeral; (2) multi-tab consistency — tabs that subscribe after another tab miss historic events. Migration 010 adds `directive_log_lines` table; daemon `DirectiveStreamHub.emit` tees `log.line` events to DB before fanning out; new `GET /api/v1/directives/:id/logs` returns historic per-directive events; FE replays on connect and dedups against the live SSE stream via a join-cursor. Estimated **1 session**.
+
+- [ ] Open U031 (activity panel empty after reload; multi-tab event split)
+- [ ] Migration 010 — `directive_log_lines` table (directive_id / ts / level / component / msg / attrs_json + ts index); three pre-existing migration shape tests bump to `[1..10]`
+- [ ] State queries — `appendLogLine`, `listForDirective`; unit tests
+- [ ] Daemon hub tees `log.line` to DB on emit; integration test asserts read-back
+- [ ] `GET /api/v1/directives/:id/logs?since=<iso>&limit=<n>` daemon route; bearer-auth; 3 integration tests
+- [ ] FE replay + dedup — fetch historic before attaching SSE; events with `ts <= joinCursor` are dropped
+- [ ] U031 closes
+
+Plan: [`plans/tier-11-directive-log-persistence.md`](plans/tier-11-directive-log-persistence.md)
+
+## Tier 12 — Budget UX: surface all knobs, escalate instead of hard-fail
+
+Operator complaint 2026-05-16: _"why are we failing instead of asking the user if we should continue over the budget?"_ The codebase has 15 hardcoded budgets and timeouts; operators control 2 (maxUsd, maxSteps); per-task `maxTurns` failures are silent. Six budgets identified as operator-facing in the Tier 12 audit. Surface them at build time via Web UI accordion + CLI flags with defaults + explainers; persist on directive payload; inherit on resume; escalate on `error_max_turns` via typed askUser instead of hard-fail; ADR 0033 pins the paradigm. Estimated **2 sessions**.
+
+- [ ] Open U032 (operator-invisible turn budgets; hard-fail without retry-question escalation)
+- [ ] ADR 0033 — Budget UX paradigm (operator-facing vs internal-pacing budgets, default-publication contract, escalation rule, persistence contract)
+- [ ] `BUDGET_DEFAULTS` constant + Zod schema in `@factory5/core` — single source of truth for defaults + explainers
+- [ ] Web UI Build form: "Advanced budgets" accordion (collapsed by default) with six fields + defaults + explainers
+- [ ] CLI flags on `factory build` and `factory resume`: `--max-usd`, `--max-steps`, `--ask-deadline-ms`, `--max-turns-scaffolder`, `--max-turns-builder`, `--max-turns-fixer`; `--help` post-text quotes explainers
+- [ ] Directive `payload.budgets` field; Tier 10 resume route inherits full budget set
+- [ ] Brain escalation in `pool.ts` — detect `error_max_turns` subtype, raise typed askUser with bump suggestion; relaunch task on accept; abort path mirrors current failed-task behaviour
+- [ ] Tier 8 auto-answer adapter — bump-by-one-bucket on first budget failure, abort on second
+- [ ] U032 closes
+
+Plan: [`plans/tier-12-budget-ux.md`](plans/tier-12-budget-ux.md)
 
 ## Out of scope (now)
 
