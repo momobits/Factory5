@@ -2,6 +2,13 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-17 — Drift-fix at session start
+
+- SessionStart hook reported `commit-mismatch`: STATE.md named `343f101` (the phase-close) as the last commit, but HEAD was `68dbd6b` (the prior session's session-end commit). Lag-by-1 #30, anticipated by STATE.md's own "Last commit" line.
+- Reconciled by bumping STATE.md "Last commit" pointer to `68dbd6b` + folding in the SessionStart hook's `next.md` timestamp regen (`22:19:57Z` → `22:28:35Z`). No phase work; pure session-start hygiene.
+- Lag counter now #31 (this drift-fix itself reintroduces lag #31 since it can't name its own SHA pre-commit).
+- Next: step 12.1 — open U032 in `UPGRADE/ISSUES.md` Open section (recordkeeping flip mirroring 11.1).
+
 ## 2026-05-17 — Session end after Phase 11 close
 
 - Pure session-end housekeeping: STATE.md timestamp bump (date rolled 2026-05-16 → 2026-05-17 mid-session); last-commit pointer to `343f101` (the phase-close); lag counter bumped to #30 (reintroduces — this session-end commit will diverge from STATE pointer).
