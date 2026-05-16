@@ -39,6 +39,7 @@ import Alert from '../../components/Alert.astro';
         { key: 'status', label: 'Status' },
         { key: 'lastTouched', label: 'Last touched' },
         { key: 'workspace', label: 'Workspace' },
+        { key: 'lastBuild', label: 'Last build' },
       ]}
       rows={[]}
       loading
@@ -48,6 +49,7 @@ import Alert from '../../components/Alert.astro';
   <script>
     import {
       apiFetch,
+      apiPost,
       captureTokenFromUrl,
       getToken,
       NoTokenError,
@@ -65,6 +67,20 @@ import Alert from '../../components/Alert.astro';
       items: Project[];
     }
 
+    interface Directive {
+      id: string;
+      intent: string;
+      status: string;
+      projectId?: string;
+      createdAt: string;
+    }
+    interface DirectivesList {
+      items: Directive[];
+    }
+    interface ResumeResponse {
+      directive: { id: string };
+    }
+
     const showError = (message: string): void => {
       const err = document.getElementById('error');
       if (err === null) return;
@@ -72,7 +88,55 @@ import Alert from '../../components/Alert.astro';
       err.hidden = false;
     };
 
-    const renderProjects = (data: ProjectsList): void => {
+    // Tier 10 / 10.5 — build a `projectId -> latest build directive` map
+    // from one /api/v1/directives fetch so the projects table can render
+    // a per-row "Last build" status + Resume action without N+1 calls.
+    const latestBuildByProject = (data: DirectivesList): Map<string, Directive> => {
+      const m = new Map<string, Directive>();
+      for (const d of data.items) {
+        if (d.intent !== 'build') continue;
+        if (d.projectId === undefined) continue;
+        const existing = m.get(d.projectId);
+        if (existing === undefined || d.createdAt > existing.createdAt) {
+          m.set(d.projectId, d);
+        }
+      }
+      return m;
+    };
+
+    // Per-row resume click handler — mirrors the directive-detail Resume
+    // button: POST /api/v1/directives/:id/resume, then nav to the new
+    // directive's detail page. Inline error on failure (alert + row UI
+    // stays put so the operator can retry).
+    const resumeFromProject = async (
+      priorId: string,
+      btn: HTMLButtonElement,
+    ): Promise<void> => {
+      const originalText = btn.textContent ?? 'Resume';
+      btn.disabled = true;
+      btn.textContent = 'Resuming…';
+      try {
+        const resp = (await apiPost(
+          `/api/v1/directives/${encodeURIComponent(priorId)}/resume`,
+          {},
+        )) as ResumeResponse;
+        window.location.href = `/app/directives/detail?id=${encodeURIComponent(resp.directive.id)}`;
+      } catch (err: unknown) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        let message = 'Resume failed';
+        if (err instanceof ApiError) {
+          message = `Resume failed: ${err.code} (${String(err.status)}) — ${err.message}`;
+        } else if (err instanceof NoTokenError) {
+          message = err.message;
+        } else if (err instanceof Error) {
+          message = `Resume failed: ${err.message}`;
+        }
+        showError(message);
+      }
+    };
+
+    const renderProjects = (data: ProjectsList, latestById: Map<string, Directive>): void => {
       const content = document.getElementById('content');
       const empty = document.getElementById('empty-state');
       if (data.items.length === 0) {
@@ -115,6 +179,40 @@ import Alert from '../../components/Alert.astro';
         wsTd.textContent = p.workspacePath;
         tr.appendChild(wsTd);
 
+        const lastBuildTd = document.createElement('td');
+        const latest = latestById.get(p.id);
+        if (latest === undefined) {
+          lastBuildTd.style.cssText =
+            'color: color-mix(in srgb, currentColor 50%, transparent); font-size: 0.85rem;';
+          lastBuildTd.textContent = '—';
+        } else {
+          const link = document.createElement('a');
+          link.href = `/app/directives/detail?id=${encodeURIComponent(latest.id)}`;
+          link.className = 'link';
+          link.textContent = latest.status;
+          link.style.cssText = 'font-family: var(--f-mono, monospace); font-size: 0.85rem;';
+          lastBuildTd.appendChild(link);
+
+          // Resume button — only on terminal-non-running directives.
+          // Hidden on `running` / `pending` (those need Cancel first;
+          // matches the daemon's 409 DIRECTIVE_NOT_TERMINAL refusal).
+          if (
+            latest.status === 'failed' ||
+            latest.status === 'blocked' ||
+            latest.status === 'complete'
+          ) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'row-resume-btn';
+            btn.textContent = 'Resume';
+            btn.addEventListener('click', () => {
+              void resumeFromProject(latest.id, btn);
+            });
+            lastBuildTd.appendChild(btn);
+          }
+        }
+        tr.appendChild(lastBuildTd);
+
         tbody.appendChild(tr);
       }
     };
@@ -124,8 +222,18 @@ import Alert from '../../components/Alert.astro';
     if (getToken() === null) {
       showError('No UI token present. Reopen the URL logged by factoryd.');
     } else {
-      apiFetch<ProjectsList>('/api/v1/projects')
-        .then(renderProjects)
+      // Two parallel fetches: projects + latest-200 directives. The page
+      // could survive with only projects (degraded Last-build column) so
+      // failing the directives fetch is non-fatal — show what we have.
+      Promise.all([
+        apiFetch<ProjectsList>('/api/v1/projects'),
+        apiFetch<DirectivesList>('/api/v1/directives?limit=100').catch(() => ({
+          items: [] as Directive[],
+        })),
+      ])
+        .then(([projects, directives]) => {
+          renderProjects(projects, latestBuildByProject(directives));
+        })
         .catch((err: unknown) => {
           if (err instanceof NoTokenError) {
             showError(err.message);

@@ -111,6 +111,12 @@ import Dashboard from '../../layouts/Dashboard.astro';
       // `cancelError` carries the message inline.
       cancelInflight: boolean;
       cancelError: string | null;
+      // Tier 10 / 10.5 — resume button state, mirrors the cancel UX:
+      // `resumeInflight` flips true on click and stays true through the
+      // POST; on success the page navigates to the new directive's
+      // detail; on error, flips back to false with `resumeError` set.
+      resumeInflight: boolean;
+      resumeError: string | null;
     }
 
     const state: PageState = {
@@ -124,6 +130,8 @@ import Dashboard from '../../layouts/Dashboard.astro';
       finalBlockedReason: null,
       cancelInflight: false,
       cancelError: null,
+      resumeInflight: false,
+      resumeError: null,
     };
 
     // Auto-scroll-pin tracking for log tail.
@@ -177,10 +185,24 @@ import Dashboard from '../../layouts/Dashboard.astro';
       if (cancelable || state.cancelInflight || state.cancelError !== null) {
         titleRow.appendChild(buildCancelControl());
       }
+      // Tier 10 — Resume on any terminal status. Mutex with cancel: never
+      // both visible (cancelable XOR terminal). We only show Resume on
+      // build directives (intent === 'build'); chat directives don't have
+      // a useful resume semantic.
+      const resumable =
+        intent === 'build' &&
+        (status === 'failed' || status === 'blocked' || status === 'complete');
+      if (resumable || state.resumeInflight || state.resumeError !== null) {
+        titleRow.appendChild(buildResumeControl());
+      }
       heading.appendChild(titleRow);
 
       if (state.cancelError !== null) {
         heading.appendChild(el('p', { class: 'err cancel-err' }, state.cancelError));
+      }
+
+      if (state.resumeError !== null) {
+        heading.appendChild(el('p', { class: 'err resume-err' }, state.resumeError));
       }
 
       if (dt !== null) {
@@ -239,6 +261,62 @@ import Dashboard from '../../layouts/Dashboard.astro';
         void cancelDirective();
       });
       return btn;
+    }
+
+    function buildResumeControl(): HTMLButtonElement {
+      const btnAttrs: Record<string, string> = { class: 'resume-btn', type: 'button' };
+      if (state.resumeInflight) btnAttrs['disabled'] = 'disabled';
+      const btn = el(
+        'button',
+        btnAttrs,
+        state.resumeInflight ? 'Resuming…' : 'Resume',
+      ) as HTMLButtonElement;
+      btn.addEventListener('click', () => {
+        void resumeDirective();
+      });
+      return btn;
+    }
+
+    interface ResumeResponse {
+      directive: { id: string };
+    }
+
+    async function resumeDirective(): Promise<void> {
+      if (state.resumeInflight) return;
+      state.resumeInflight = true;
+      state.resumeError = null;
+      render();
+      try {
+        const resp = (await apiPost(
+          `/api/v1/directives/${encodeURIComponent(directiveId)}/resume`,
+          {},
+        )) as ResumeResponse;
+        // Success — navigate to the new directive's detail page. The SSE
+        // stream over there will pick up the new run's events as they
+        // arrive. We don't bother flipping `resumeInflight` back because
+        // we're leaving the page.
+        window.location.href = `/app/directives/detail?id=${encodeURIComponent(resp.directive.id)}`;
+      } catch (err: unknown) {
+        let message = 'Resume failed';
+        if (err instanceof ApiError) {
+          if (err.code === 'DIRECTIVE_NOT_TERMINAL') {
+            message = 'Cannot resume — directive is still running. Cancel it first.';
+          } else if (err.code === 'PROJECT_NOT_FOUND') {
+            message = `Project path missing on disk: ${err.message}`;
+          } else if (err.code === 'UI_AUTH_REQUIRED' || err.code === 'UI_DISABLED') {
+            message = `Resume rejected by daemon: ${err.code}.`;
+          } else {
+            message = `Resume failed: ${err.code} (${String(err.status)}) — ${err.message}`;
+          }
+        } else if (err instanceof NoTokenError) {
+          message = err.message;
+        } else if (err instanceof Error) {
+          message = `Resume failed: ${err.message}`;
+        }
+        state.resumeError = message;
+        state.resumeInflight = false;
+        render();
+      }
     }
 
     async function cancelDirective(): Promise<void> {
@@ -690,6 +768,14 @@ import Dashboard from '../../layouts/Dashboard.astro';
       animation: live-pip-blink 0.9s ease-in-out infinite;
     }
     .cancel-err {
+      margin: 0;
+      font-size: 0.75rem;
+    }
+    /* Resume button base styling lives in Dashboard.astro's global block
+       (Tier 10 / 10.5) — scoped <style> rules don't reach JS-created
+       elements (no data-astro-cid attribute on runtime <button>s). The
+       error-line styling stays local. */
+    .resume-err {
       margin: 0;
       font-size: 0.75rem;
     }
