@@ -1,6 +1,6 @@
 # Roadmap — factory5 first-class upgrade
 
-Nine tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent. Tier 9 reopens the arc again for the first frontend aesthetic overhaul in the project — porting the "Editorial Control Room" aesthetic from the sibling conductor project to `apps/factory-web` as a single-session, dual-theme redesign (informal cadence — no per-step commits, no ADR).
+Ten tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent. Tier 9 reopens the arc again for the first frontend aesthetic overhaul in the project — porting the "Editorial Control Room" aesthetic from the sibling conductor project to `apps/factory-web` as a single-session, dual-theme redesign (informal cadence — no per-step commits, no ADR).
 
 ## Status legend
 
@@ -132,6 +132,20 @@ Port the "Editorial Control Room" aesthetic from the sibling conductor project (
 - [x] Absorbs the Phase 8 carry-forward "PageShell + Dashboard `<style is:global>` migration" — global stylesheet now carries the look pages have always referenced
 
 Plan: [`plans/tier-9-control-room-redesign.md`](plans/tier-9-control-room-redesign.md)
+
+## Tier 10 — Resume button + activity feed on directive detail
+
+Close two operator-feels-blind gaps surfaced by an `automl` build failure 2026-05-16. (1) No UI surface for `factory resume` — CLI command exists at `packages/cli/src/commands/resume.ts` but the daemon has no HTTP mirror; operator viewing a failed directive from a phone has no recovery action. (2) Directive-detail activity panel is silent on `build` directives because the brain emits only one `log.line` SSE event today (`packages/brain/src/loop.ts:258`, chat reply only). The `automl` planner crashed on a Zod schema validation after a 10-minute Sonnet call; the operator saw the directive flip `running → failed` with no narrative of *what* the brain was doing or *where* it broke. SSE plumbing from Phase 3 (ADR 0029) is in place; only emission-side coverage is sparse. Estimated **2 sessions**.
+
+- [ ] Open U030 (no UI surface for resume; activity panel silent on build directives)
+- [ ] ADR 0031 — log-forwarder design: manual `emitLogLine` sites as first-ship; pino-transport-tap and hybrid listed as alternatives considered + Tier 11 candidates
+- [ ] Brain `emitLogLine` narrative sites in `architect.ts` / `planner.ts` / `pool.ts` / `loop.ts`; planner parse-fail and Zod-fail surface first 500 chars of LLM output as `attrs.detail`
+- [ ] `POST /api/v1/directives/:id/resume` daemon route — mirrors `factory resume` CLI logic (parentDirectiveId + payload.resumeFrom chain); 404 missing prior; 409 prior non-terminal; 422 prior projectPath missing on disk
+- [ ] UI: Resume button on directive-detail when status terminal (`failed | blocked | complete`); per-row Resume link on Projects index when most-recent directive is terminal-non-complete
+- [ ] UI: activity panel level badges (info / warn / error using design tokens) + empty-state "Waiting for the brain to narrate…" hint
+- [ ] U030 closes when 10.5 lands
+
+Plan: [`plans/tier-10-resume-and-activity-feed.md`](plans/tier-10-resume-and-activity-feed.md)
 
 ## Out of scope (now)
 

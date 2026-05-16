@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-15T21:39:05Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-16T00:44:46Z by
 > `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
@@ -16,25 +16,15 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-**No active phase. Upgrade arc closed for the sixth time** at `phase-9-control-room-redesign-closed` 2026-05-15. Phase 9 (control-room-redesign) closed cleanly with all 8 done-criteria green, including live browser verification via Playwright MCP — completed this session (no longer operator-side only as the README originally noted). All four `pnpm` gates green.
+**Phase 10 (resume-and-activity-feed) scaffolded, awaiting 10.1.** Tier 10 reopens the upgrade arc post-Phase-9-close. Operator-felt incident driving the tier: `automl` build directive `01KRQ1RPE5SM6Q8AYSRHHAPG39` failed at the planner Zod-parse step 2026-05-16 with no narrative surfacing in the dashboard. Two surfaces ship:
 
-To resume work, the operator can:
+1. **`POST /api/v1/directives/:id/resume`** daemon route — HTTP mirror of `factory resume` CLI (`packages/cli/src/commands/resume.ts`). Web UI gains a Resume button on directive-detail (terminal status) + per-row Resume link on Projects index.
+2. **Brain `emitLogLine` coverage** — narrative sites at every brain stage entry / exit / error. Planner parse-fail and Zod-fail surface first 500 chars of LLM output as `attrs.detail`. SSE plumbing from Phase 3 (ADR 0029) already in place; only emission-side coverage was sparse.
+3. **ADR 0031** pins the log-forwarder design: manual emit sites as first-ship; pino-transport-tap deferred to Tier 11+.
 
-1. **Author a Tier 10 plan** — most-likely candidate per demand signal: **U005 chat REPL cancel UX path (a+)** (now thrice-deferred through Tier 9 — was the operator-felt bug pre-Tier-8). Or one of the Phase 8-introduced carry-forwards (per-project deadline override, `factory config get/set`, override-after-auto-answer) or one of the Tier-9-deferred items (inline-style audit on the 12 pages, ADR 0031 for the editorial aesthetic).
-2. **Promote a carry-forward item** — see `## In-flight work` below.
-3. **Park** — surfaces are stable; nothing is gated on more work.
+Next step: 10.1 — open U030 in `UPGRADE/ISSUES.md` Open section. Severity medium; Tier 10; Area web + brain. Then 10.2 (ADR 0031), 10.3 (emit sites), 10.4 (daemon route), 10.5 (UI surfaces), 10.6 (activity panel refinements), 10.7 (`/phase-close`).
 
-**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; the audit-driven Tier 5 reopened the arc 2026-05-07 at `c0869d6` and closed at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 reopened 2026-05-07 at `542f99a` and closed at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 reopened 2026-05-07 at `ee970e8` and closed at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 reopened 2026-05-08 at `8453086` and closed at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`. Tier 9 reopened 2026-05-15 at `397637c` and closed at `phase-9-control-room-redesign-closed` 2026-05-15 at this commit — first tier in the arc that shipped visual-design work without an underlying contract change.
-
-To kick off Phase 10:
-
-1. Operator drafts `UPGRADE/plans/tier-10-<name>.md` with goal, sub-steps, acceptance.
-2. Add a Phase 10 row to `.control/architecture/phase-plan.md`.
-3. Add a Tier 10 section to `UPGRADE/ROADMAP.md`.
-4. Scaffold `.control/phases/phase-10-<name>/{README.md,steps.md}` from `.control/templates/`.
-5. Then start working through the sub-steps.
-
-If the operator doesn't want a Tier 10, the project is in a clean post-arc parking state.
+**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; the audit-driven Tier 5 reopened the arc 2026-05-07 at `c0869d6` and closed at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 reopened 2026-05-07 at `542f99a` and closed at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 reopened 2026-05-07 at `ee970e8` and closed at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 reopened 2026-05-08 at `8453086` and closed at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 reopened 2026-05-15 at `397637c` and closed at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`. Tier 10 reopens 2026-05-16 at this scaffold commit.
 
 
 ## Notes for next session
