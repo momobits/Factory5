@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-16 — Tier 11 + Tier 12 scaffolded; Tier 10 follow-up `fa2f800` shipped (task error rendering + pip clarification + turn-default bump 40→80, max 80→160). Upgrade arc **reopened** with Phase 11 (directive-log-persistence) active at step 11.1.
-**Current phase:** 11 — directive-log-persistence (scaffolded; starting)
-**Current step:** 11.1 — open U031
-**Status:** Tier 11 + Tier 12 both planned; Tier 11 is the immediate work (per-directive log persistence: migration 010 + daemon hub tee + logs route + FE replay). Tier 12 (budget UX) is scaffolded but not started — covers surface-and-escalate for the 15 hardcoded budgets surfaced in the audit. Pre-tier follow-up `fa2f800` already shipped the immediate FE fix (task.result.error rendering, pip relabel "Completed" → "Stream ended") plus the turn-default bump.
+**Last updated:** 2026-05-16 — session end after 11.2. Five commits this session: `fa2f800` (pre-tier FE fix + turn-default bump 40→80, max 80→160); `c22cb71` (Tier 11 + Tier 12 scaffold); `edbdf1d` (chore 11.1 open U031); `69bd145` (feat 11.2 migration 010); this session-end will bump STATE pointer to `69bd145` (lag-by-1 #28 will reintroduce).
+**Current phase:** 11 — directive-log-persistence (in flight)
+**Current step:** 11.3 — state queries (`appendLogLine`, `listForDirective` + unit tests)
+**Status:** Tier 11 half-done. Steps 11.1 (open U031) and 11.2 (migration 010 + 6 shape tests + 4 hardcoded-array bumps; state count 174 → 180) landed. Remaining: 11.3 state queries, 11.4 daemon hub tee, 11.5 `GET /api/v1/directives/:id/logs` route, 11.6 FE replay + dedup, 11.7 `/phase-close` + live browser smoke. Tier 12 (budget UX) scaffolded but not started.
 **Current phase:** none (arc-complete)
 **Current step:** none
 **Status:** Phase 10 closed cleanly. All done-criteria green: 4 `pnpm` gates clean (build / test / lint / format:check); ADR 0031 lands; 12 new tests across packages (planner-emit +4, daemon resume route +8); browser smoke confirmed Resume click → child directive mints → activity panel narrates 5 events live (triage → architect-calling → wrote 13 wiki pages → readiness all passed → planner-calling). U030 closed.
@@ -23,7 +23,7 @@
 
 ## Next action
 
-**Phase 11 (directive-log-persistence) starting at step 11.1.** Tier 10 closed cleanly; the post-close smoke surfaced three operator-felt gaps that Tier 11 + Tier 12 close in sequence.
+**Phase 11 (directive-log-persistence) in flight — next is 11.3 (state queries).** Tier 10 closed cleanly; the post-close smoke surfaced three operator-felt gaps that Tier 11 + Tier 12 close in sequence. 11.1 + 11.2 landed; five sub-steps remain.
 
 **Pre-tier follow-up shipped first** — commit `fa2f800` (`fix(phase-10): surface task errors + clarify pip + bump turn defaults`):
 - `task.result.error` rendered in the task table for failed tasks (red-tinted follow-up row).
@@ -68,8 +68,8 @@ If the operator doesn't want a Tier 11, the project is in a clean post-arc parki
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `fa2f800` — `fix(phase-10): surface task errors + clarify pip + bump turn defaults` (Tier 11+12 scaffold commit will follow)
-- **Uncommitted changes:** Tier 11 + Tier 12 scaffold (plans + phase dirs + ROADMAP + phase-plan + ISSUES + STATE flip)
+- **Last commit:** `69bd145` — `feat(11.2): migration 010 — directive_log_lines table` (session-end commit will bump to lag #28)
+- **Uncommitted changes:** none at session-end
 - **Last phase tag:** `phase-10-resume-and-activity-feed-closed` (annotated at `fbc3c27`)
 
 ---
@@ -82,7 +82,7 @@ If the operator doesn't want a Tier 11, the project is in a clean post-arc parki
 
 ## In-flight work
 
-Phase 11 (directive-log-persistence) scaffolded; starting at 11.1. Phase 12 (budget-ux) scaffolded, not started. Tier 11 plan at [`../../UPGRADE/plans/tier-11-directive-log-persistence.md`](../../UPGRADE/plans/tier-11-directive-log-persistence.md); Tier 12 plan at [`../../UPGRADE/plans/tier-12-budget-ux.md`](../../UPGRADE/plans/tier-12-budget-ux.md).
+Phase 11 (directive-log-persistence) in flight. 11.1 + 11.2 closed; resume at **11.3 — state queries** (`packages/state/src/queries/directive-log-lines.ts` with `appendLogLine` + `listForDirective`; schema in `@factory5/core`; unit tests cover append + read-back, sinceTs filter, ordering, limit, large attrs roundtrip). Pattern to mirror: `packages/state/src/queries/pending-questions.ts` (the most recent query file added — Tier 8). Phase 12 (budget-ux) scaffolded, not started. Tier 11 plan at [`../../UPGRADE/plans/tier-11-directive-log-persistence.md`](../../UPGRADE/plans/tier-11-directive-log-persistence.md); Tier 12 plan at [`../../UPGRADE/plans/tier-12-budget-ux.md`](../../UPGRADE/plans/tier-12-budget-ux.md).
 
 **Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 
@@ -111,7 +111,7 @@ Phase 11 (directive-log-persistence) scaffolded; starting at 11.1. Phase 12 (bud
 
 ## Test / eval status
 
-- **Last test run:** 2026-05-16 (Phase 10 phase-close verification) — full workspace passes, all four `pnpm` gates green: build / test / lint / format:check. Workspace grew **+12 tests** (planner-emit +4 / daemon resume route +8): daemon 173 → 181; brain 114 → 118. Workspace total now **1194 passing + 3 skipped** (was 1182 + 3 pre-Tier-10).
+- **Last test run:** 2026-05-16 (during 11.2 close) — `@factory5/state` test pass, all packages green at the time. State grew **+6 tests** from migration 010 shape tests (174 → 180). Workspace total now **1200 passing + 3 skipped** (was 1194 + 3 pre-11.2). Full workspace gate re-run pending at next /phase-close; spot-checks (state, brain) green throughout.
 - **Eval score** (agent phases only): n/a
 - **Regression tests:** unit + integration only; no eval harness. ADR 0029 still in promoted state.
 
@@ -127,7 +127,12 @@ Phase 11 (directive-log-persistence) scaffolded; starting at 11.1. Phase 12 (bud
 
 ## Recently completed (last 5 steps)
 
-- **Session-end (this commit)** — `docs(state)`: session end after phase-10 close. STATE.md timestamp bump + last-commit pointer to `fbc3c27` + lag counter (#27 reintroduced). — 2026-05-16
+- **Session-end (this commit)** — `docs(state)`: session end after 11.2. STATE.md timestamp bump + last-commit pointer to `69bd145` + lag counter (#28 reintroduced). — 2026-05-16
+- **Step 11.2** — `feat(11.2)`: migration 010 — directive_log_lines table. New table backs Tier 11's persistence of log.line SSE events: directive_id / ts / level / component / msg / attrs_json columns + (directive_id, ts) index + ON DELETE CASCADE. 6 new shape tests + 4 hardcoded-array bumps to `[1..10]`. State count 174 → 180. — 2026-05-16 — `69bd145`
+- **Step 11.1** — `chore(11.1)`: open U031. Recordkeeping flip — U031 itself was added to UPGRADE/ISSUES.md in the scaffold commit `c22cb71` (bundled with U032). — 2026-05-16 — `edbdf1d`
+- **Phase 11 + 12 scaffold** — `chore(phase-11)`: scaffold Tier 11 + Tier 12 (log persistence + budget UX). Tier 11 plan + phase dir + ROADMAP rows + ISSUES (U031 + U032) + STATE cursor flip arc-complete → Phase 11 active. Tier 12 (budget-ux) scaffolded but not started. — 2026-05-16 — `c22cb71`
+- **Post-Tier-10 fix** — `fix(phase-10)`: surface task errors + clarify pip + bump turn defaults. `task.result.error` rendered in task table for failed tasks; pip relabel "Completed" → "Stream ended" on terminal directives; `maxTurns` default 40 → 80; planner range advertised 10-80 → 10-160. — 2026-05-16 — `fa2f800`
+- **Session-end after Phase 10 close** — `docs(state)`: session end after phase-10 close. STATE.md timestamp bump + last-commit pointer to `fbc3c27` + lag counter (#27 reintroduced). — 2026-05-16 — `aa1ee2d`
 - **Phase 10 close** — `chore(phase-10)`: close phase 10, kick off arc-complete (seventh time). Tagged `phase-10-resume-and-activity-feed-closed`. All done-criteria green: 4 `pnpm` gates clean; ADR 0031 lands; 12 new tests across packages (planner-emit +4, daemon resume route +8); browser smoke confirmed Resume click → child directive mints → activity panel narrates 5 events live. U030 closed. — 2026-05-16 — `fbc3c27`
 - **Step 10.6** — `feat(10.6)`: UI activity panel level badges + empty state. Header renamed "Live log" → "Activity"; counter "<N> lines" → "<N> events"; level pills (info acid green / warn amber / error halt red) using Tier 9 design tokens; empty-state "Waiting for the brain to narrate…" on running/pending with zero events. Title-row Resume button renamed `.resume-btn` → `.directive-resume-btn` to avoid collision with pre-existing log-tail `.resume-btn` (Resume tailing); both moved to `Dashboard.astro` `<style is:global>` — Astro scoped rules don't reach JS-created elements, also fixed `.cancel-btn` chrome in passing (broken since Phase 3). — 2026-05-16 — `9289aff`
 - **Step 10.5** — `feat(10.5)`: UI resume button + projects-row resume link. Directive-detail renders a vermillion Resume pill when `effectiveStatus()` ∈ `failed | blocked | complete` AND `intent === 'build'`; mutex with Cancel (never both). Projects index gains "Last build" column with the latest build directive's status (linked to detail page) + per-row Resume pill on terminal directives. One `/api/v1/directives?limit=100` fetch builds the projectId-to-latest map (no N+1); degrades gracefully when the directives fetch fails. — 2026-05-16 — `f100910`

@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-16T16:40:36Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-16T18:35:10Z by
 > `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
@@ -16,7 +16,7 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-**Phase 11 (directive-log-persistence) starting at step 11.1.** Tier 10 closed cleanly; the post-close smoke surfaced three operator-felt gaps that Tier 11 + Tier 12 close in sequence.
+**Phase 11 (directive-log-persistence) in flight — next is 11.3 (state queries).** Tier 10 closed cleanly; the post-close smoke surfaced three operator-felt gaps that Tier 11 + Tier 12 close in sequence. 11.1 + 11.2 landed; five sub-steps remain.
 
 **Pre-tier follow-up shipped first** — commit `fa2f800` (`fix(phase-10): surface task errors + clarify pip + bump turn defaults`):
 - `task.result.error` rendered in the task table for failed tasks (red-tinted follow-up row).

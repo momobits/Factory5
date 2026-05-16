@@ -2,6 +2,26 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-16 (afternoon) — Tier 10 follow-up + Tier 11/12 scaffold + 11.1-11.2; Phase 11 in flight
+
+- Post-Phase-10 session driven by operator-felt smoke gaps. Six commits this session, four discrete pieces of work: pre-tier FE fix (`fa2f800`); Tier 11 + Tier 12 scaffold (`c22cb71`); 11.1 recordkeeping (`edbdf1d`); 11.2 migration 010 (`69bd145`); this session-end.
+- **Three operator-felt smoke findings** surfaced post-Phase-10:
+  1. **Activity panel empty after refresh** — `log.line` events are SSE-only / ephemeral. Confirmed Tier 11 candidate.
+  2. **Multi-tab event split** — events emitted before a tab's subscribe never replay to it. Same root cause; falls out of Tier 11.
+  3. **Failed-task error invisible** — `apiV1InflightTask.result.error` IS in the daemon snapshot but the FE never rendered it. The scaffolder's `error_max_turns` from a 13-module automl build hid behind a bare "Task failed" status. Shipped as `fa2f800` FE patch.
+- **Plus an operator question** that turned out not to be a bug: *"my max-steps=100 didn't persist on resume"*. Queried the DB directly — all three related directives (original + 2 resumes) had `max_steps=1000` correctly. The "40" the operator saw was the scaffolder task's `maxTurns` (per-task tool-conversation cap), NOT `max_steps`. Two completely different knobs with overlapping vocab — exactly the design problem Tier 12 (budget UX) addresses.
+- **Pre-tier follow-up `fa2f800`** — three small fixes: (a) render `task.result.error` in the directive-detail task table for failed tasks (red-tinted follow-up row using Tier 9 design tokens); (b) relabel the SSE pip "Completed" → "Stream ended" on terminal directives so it doesn't compete with the title's directive status; (c) bump `maxTurns` provider default 40 → 80 (`packages/providers/src/claude-cli.ts:597`) and the advertised planner range 10-80 → 10-160 (`prompts/agents/planner.md` + `packages/brain/src/planner.ts:247`).
+- **Tier 11 + Tier 12 scaffold `c22cb71`** — full plans for both tiers (`UPGRADE/plans/tier-11-directive-log-persistence.md` + `tier-12-budget-ux.md`); phase dirs; ROADMAP sections with count bump "Ten tiers → Twelve tiers"; phase-plan.md rows + per-phase summaries; ISSUES.md U031 + U032 opened; STATE.md cursor flip arc-complete → Phase 11 active.
+- **Tier 11 work shipped this session:**
+  - **11.1** (`edbdf1d`) — open U031 (recordkeeping flip; the issue text itself was added in the scaffold commit).
+  - **11.2** (`69bd145`) — migration 010 (`directive_log_lines` table with directive_id / ts / level / component / msg / attrs_json columns + ts index + ON DELETE CASCADE). No backfill. 6 new shape tests + 4 hardcoded-array bumps to `[1..10]`. State test count 174 → 180.
+- **Tier 11 remaining** (next session): 11.3 state queries, 11.4 daemon hub tee, 11.5 logs route, 11.6 FE replay + dedup, 11.7 `/phase-close` + live browser smoke.
+- **Tier 12 remaining**: full implementation; scaffolded but not started.
+- **No new ADRs this session.** ADR 0033 (budget UX paradigm) will land at 12.2 when Tier 12 starts.
+- **Issues opened / closed**: opened U031 (activity panel empty after refresh; multi-tab event split) + U032 (operator-invisible turn budgets; hard-fail without retry-question escalation). Both still Open.
+- **All four `pnpm` gates green throughout this session.** Workspace test count 1194 → 1200 + 3 skipped (+6 from migration 010 shape tests).
+- **Lag-by-1 now at #28** (will reintroduce with this session-end). Structural fix still pending — Tier 13+ candidate.
+
 ## 2026-05-16 — Phase 10 closed (resume-and-activity-feed); scaffold + 10.1 → 10.7 + live browser smoke in one day; upgrade arc complete (seventh time)
 
 - Tier 10 reopened the upgrade arc the morning of 2026-05-16 and closed the same day. Eight tier-10 commits: scaffold `1ac1823`, 10.1 `0ce4590`, 10.2 `bb2bca9`, 10.3 `585f172`, 10.4 `e83c3c1`, 10.5 `f100910`, 10.6 `9289aff`, this phase-close.
