@@ -2,6 +2,13 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-17 — Session end after Phase 11 close
+
+- Pure session-end housekeeping: STATE.md timestamp bump (date rolled 2026-05-16 → 2026-05-17 mid-session); last-commit pointer to `343f101` (the phase-close); lag counter bumped to #30 (reintroduces — this session-end commit will diverge from STATE pointer).
+- No new code, ADRs, or tests this commit.
+- Tag `phase-11-directive-log-persistence-closed` lives at `343f101`.
+- Next session starts at Phase 12 step 12.1 — open U032 in `UPGRADE/ISSUES.md` Open section.
+
 ## 2026-05-16 (evening) — Phase 11 (directive-log-persistence) closed; Phase 12 (budget-ux) active
 
 - 11.3 → 11.7 shipped in one session continuation from the afternoon. Five new commits: `81a0c74` 11.3 state queries (+7 tests), `49cc4e5` 11.4 hub tee (+4 tests in new `directive-stream.test.ts`, hub constructor gained `db: Database`), `93c1c85` 11.5 GET `/api/v1/directives/:id/logs` (+5 tests; plan said 3, added 404 + empty-list), `f95da1b` 11.6 FE replay + fixed join-cursor (plan-deviation: cursor stays FIXED, not advancing — advancing variant drops ms-collision live events), this phase-close commit.

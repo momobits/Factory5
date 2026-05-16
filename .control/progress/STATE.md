@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-16 — Phase 11 closed; Phase 12 active. Five tier-11 work commits this session continuation (`81a0c74` 11.3 state queries, `49cc4e5` 11.4 hub tee, `93c1c85` 11.5 logs route, `f95da1b` 11.6 FE replay, this phase-close commit) plus the LOG/STATE artifacts in this commit.
+**Last updated:** 2026-05-17 — session end after Phase 11 close. Tagged `phase-11-directive-log-persistence-closed` at `343f101`. Five tier-11 work commits this session continuation (`81a0c74` 11.3, `49cc4e5` 11.4, `93c1c85` 11.5, `f95da1b` 11.6, `343f101` phase-close) + this session-end commit (STATE pointer update). Lag-by-1 #30 will reintroduce since this session-end edits STATE then commits.
 **Current phase:** 12 — budget-ux (active, scaffolded but not started)
 **Current step:** 12.1 — open U032 in `UPGRADE/ISSUES.md` Open section
 **Status:** Phase 11 closed cleanly with `phase-11-directive-log-persistence-closed`. All 10 done-criteria green: 4 `pnpm` gates clean; migration 010 + state queries (+7 tests) + daemon hub tee (+4 tests) + GET /logs route (+5 tests) + FE replay all shipped; live browser smoke confirmed all three Tier 11 scenarios end-to-end (refresh restores activity panel, multi-tab consistency, terminal directive post-mortem visibility) at $0.6238 spend on the smoke-demo build. U031 closed. Workspace 1200 → 1216 + 3 skipped (+16). Tier 12 scaffold (`c22cb71`) already in place — plans, ROADMAP rows, phase dir, ISSUES (U032). First sub-step 12.1 opens U032 in the issues file (recordkeeping flip).
@@ -43,9 +43,9 @@
 ## Git state
 
 - **Branch:** main
-- **Last commit:** (this phase-close commit) — `chore(phase-11): close phase 11, kick off phase 12`
-- **Uncommitted changes:** none at phase-close
-- **Last phase tag:** `phase-11-directive-log-persistence-closed` (annotated at this phase-close commit)
+- **Last commit:** `343f101` — `chore(phase-11): close phase 11, kick off phase 12` (session-end commit will bump to lag #30)
+- **Uncommitted changes:** none at session-end
+- **Last phase tag:** `phase-11-directive-log-persistence-closed` (annotated at `343f101`)
 
 ---
 
@@ -102,7 +102,8 @@ Phase 12 (budget-ux) active, scaffolded but not started. Resume at **12.1 — op
 
 ## Recently completed (last 5 steps)
 
-- **Phase 11 close** (this commit) — `chore(phase-11)`: close phase 11, kick off phase 12. Tagged `phase-11-directive-log-persistence-closed`. All 10 done-criteria green: 4 `pnpm` gates clean; live browser smoke (Playwright MCP, smoke-demo, $0.6238 spend) confirmed refresh-survives + multi-tab consistency + terminal directive post-mortem visibility. U031 closed. Workspace 1200 → 1216 + 3 skipped (+16). — 2026-05-16
+- **Session-end after phase-11 close** (this commit) — `docs(state)`: session end after phase-11 close. STATE.md timestamp bump to 2026-05-17 + last-commit pointer to `343f101` + lag counter (#30 reintroduced) + journal entry. — 2026-05-17
+- **Phase 11 close** — `chore(phase-11)`: close phase 11, kick off phase 12. Tagged `phase-11-directive-log-persistence-closed`. All 10 done-criteria green: 4 `pnpm` gates clean; live browser smoke (Playwright MCP, smoke-demo, $0.6238 spend) confirmed refresh-survives + multi-tab consistency + terminal directive post-mortem visibility. U031 closed. Workspace 1200 → 1216 + 3 skipped (+16). — 2026-05-16 — `343f101`
 - **Step 11.6** — `feat(11.6)`: FE replays log.line history + dedups against SSE. `detail.astro` bootstrap adds replay fetch between snapshot and SSE attach; fixed join cursor pinned to `historic.last.ts` (plan-deviation: not advancing — advancing variant drops ms-collision live events sharing a ts). Live-event cap bumped 500 → 5000 to match replay limit. FE-only; no new tests (no Astro test infra). — 2026-05-16 — `f95da1b`
 - **Step 11.5** — `feat(11.5)`: `GET /api/v1/directives/:id/logs` route. `apiV1DirectiveLogsQuerySchema` + `apiV1DirectiveLogsResponseSchema` in `@factory5/ipc`; bearer-auth; 404 unknown directive; default limit `DEFAULT_LOG_LINE_LIMIT` (5000); clamped server-side to [1, 5000]. 5 integration tests (plan said 3 — added 404 + empty-list). Daemon test count 185 → 190. — 2026-05-16 — `93c1c85`
 - **Step 11.4** — `feat(11.4)`: daemon hub tees log.line events. `DirectiveStreamHub` constructor took a required `db: Database`; `emit()` writes `log.line` to `directive_log_lines` in try/catch + warn-on-failure BEFORE fan-out (non-blocking). Daemon `startDaemon` switched hub from eager const to deferred-after-openDatabase let; stop path optional-chains shutdown. 4 integration tests in new `directive-stream.test.ts` (persist + ordered read-back, tee-before-fanout, non-log.line skip, drop-table failure path doesn't block fanout). Plan-deviation: dedicated test file instead of appending to `server.test.ts` per plan — tee is a hub-internal mechanism with no HTTP surface. — 2026-05-16 — `49cc4e5`
@@ -237,7 +238,7 @@ None — Phase 12 not started. Cleared at phase close.
 - **`factory config get / set <key>` CLI** — operator surface for `<dataDir>/config.json`.
 - **Override after auto-answer** — `factory questions answer --force <id>`. Pin via ADR if it ships.
 - **Inline-style audit on the 12 pages** — Tier 9-deferred.
-- **Structural `/session-end` lag-by-1 fix** — now 29 occurrences (this phase-close commit lands as #29; STATE.md's "Last commit" pointer correctly names this commit thanks to it being the close itself). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **Structural `/session-end` lag-by-1 fix** — now 30 occurrences (phase-close `343f101` was a non-lagging instance because it named itself in STATE.md; this session-end commit reintroduces the lag at #30 — STATE.md correctly points at `343f101` right now, but once this session-end commit lands, HEAD diverges from STATE). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 **Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav. **Tier 9 added** a new vocabulary on top: vermillion (`#ff4d1c`) as the singular signal color; Fraunces italic display + Bricolage Grotesque body + JetBrains Mono data; CSS custom-property tokens (`--bg / --surface / --ink / --hairline / --signal / --amber / --acid / --halt / --cool`) flipped by `prefers-color-scheme`; paper-grain SVG atmosphere via `body::before / body::after`; editorial masthead with brand mark `§` + numbered nav + monospaced status pip + pulse animation.
 
