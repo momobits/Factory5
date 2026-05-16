@@ -129,6 +129,6 @@ describe('migration 009-pending-questions-answered-by — schema shape', () => {
     const appliedIds = (
       db.prepare('SELECT id FROM migrations ORDER BY id').all() as { id: number }[]
     ).map((r) => r.id);
-    expect(appliedIds).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(appliedIds).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 });
