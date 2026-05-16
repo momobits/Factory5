@@ -950,7 +950,7 @@ const navLinks: NavLink[] = [
          data-astro-cid to template-emitted elements only, so runtime
          <button>s don't match scoped rules. */
       .cancel-btn,
-      .resume-btn,
+      .directive-resume-btn,
       .row-resume-btn {
         font: inherit;
         font-size: 11px;
@@ -986,23 +986,23 @@ const navLinks: NavLink[] = [
         border-color: color-mix(in srgb, #c0263a 28%, transparent);
         background: color-mix(in srgb, #c0263a 3%, transparent);
       }
-      .resume-btn,
+      .directive-resume-btn,
       .row-resume-btn {
         border: 1px solid color-mix(in srgb, var(--signal) 60%, transparent);
         color: var(--signal);
         background: color-mix(in srgb, var(--signal) 6%, transparent);
       }
-      .resume-btn:hover:not(:disabled),
+      .directive-resume-btn:hover:not(:disabled),
       .row-resume-btn:hover:not(:disabled) {
         background: color-mix(in srgb, var(--signal) 16%, transparent);
         border-color: color-mix(in srgb, var(--signal) 85%, transparent);
       }
-      .resume-btn:focus-visible,
+      .directive-resume-btn:focus-visible,
       .row-resume-btn:focus-visible {
         outline: 2px solid color-mix(in srgb, var(--signal) 60%, transparent);
         outline-offset: 2px;
       }
-      .resume-btn:disabled,
+      .directive-resume-btn:disabled,
       .row-resume-btn:disabled {
         cursor: progress;
         color: color-mix(in srgb, var(--signal) 55%, transparent);
@@ -1013,6 +1013,129 @@ const navLinks: NavLink[] = [
         font-size: 10px;
         padding: 4px 10px;
         margin-left: 10px;
+      }
+
+      /* Activity panel (Tier 10 / 10.6) — the directive-detail "Live log"
+         section. Same scope rationale as the cancel/resume buttons above:
+         lines are JS-created at runtime so the styling must live in the
+         global stylesheet to reach them. */
+      .log-tail {
+        margin-top: 18px;
+        position: relative;
+        border: 1px solid var(--hairline);
+        background: var(--bg-2);
+        border-radius: 2px;
+      }
+      .log-tail-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        padding: 8px 14px;
+        border-bottom: 1px solid var(--hairline);
+        font-family: var(--f-body);
+        font-size: 11px;
+        letter-spacing: var(--tracking-cap, 0.06em);
+        text-transform: uppercase;
+        color: var(--ink-2);
+      }
+      .log-tail-count {
+        color: var(--mute);
+        font-family: var(--f-mono);
+      }
+      .log-tail-body {
+        max-height: 22rem;
+        overflow-y: auto;
+        font-family: var(--f-mono);
+        font-size: 12px;
+        line-height: 1.5;
+        padding: 8px 14px;
+        background: var(--surface);
+      }
+      .log-tail-empty {
+        padding: 14px;
+        color: var(--mute);
+        font-style: italic;
+        text-align: center;
+        font-family: var(--f-body);
+      }
+      .log-line {
+        display: grid;
+        grid-template-columns: auto 4rem auto 1fr;
+        gap: 10px;
+        padding: 3px 0;
+        border-bottom: 1px dashed color-mix(in srgb, var(--hairline) 70%, transparent);
+        align-items: baseline;
+      }
+      .log-line:last-child {
+        border-bottom: none;
+      }
+      .log-ts {
+        color: var(--mute);
+        font-variant-numeric: tabular-nums;
+        font-size: 10px;
+      }
+      .log-level {
+        display: inline-flex;
+        justify-content: center;
+        padding: 1px 6px;
+        border-radius: 2px;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-family: var(--f-body);
+        border: 1px solid transparent;
+      }
+      .log-level-info,
+      .log-level-debug,
+      .log-level-trace {
+        color: var(--acid);
+        background: color-mix(in srgb, var(--acid) 8%, transparent);
+        border-color: color-mix(in srgb, var(--acid) 30%, transparent);
+      }
+      .log-level-warn {
+        color: var(--amber);
+        background: color-mix(in srgb, var(--amber) 10%, transparent);
+        border-color: color-mix(in srgb, var(--amber) 40%, transparent);
+      }
+      .log-level-error,
+      .log-level-fatal {
+        color: var(--halt);
+        background: color-mix(in srgb, var(--halt) 10%, transparent);
+        border-color: color-mix(in srgb, var(--halt) 45%, transparent);
+      }
+      .log-component {
+        color: var(--mute);
+        font-size: 11px;
+      }
+      .log-msg {
+        word-break: break-word;
+        color: var(--ink);
+      }
+      /* Sticky "Resume tailing" button — appears inside the log-tail
+         panel only when the operator has scrolled up, so live events
+         that flow in don't yank them away from what they were reading. */
+      .log-tail .log-resume-tail-btn {
+        display: none;
+        position: absolute;
+        bottom: 10px;
+        right: 12px;
+        font: inherit;
+        font-size: 11px;
+        font-family: var(--f-body);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: var(--tracking-cap, 0.06em);
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--signal) 50%, transparent);
+        background: var(--surface);
+        color: var(--signal);
+        cursor: pointer;
+        box-shadow: 0 1px 4px color-mix(in srgb, var(--ink) 12%, transparent);
+      }
+      .log-tail.paused .log-resume-tail-btn {
+        display: block;
       }
 
       /* Alerts */

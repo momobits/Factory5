@@ -264,7 +264,14 @@ import Dashboard from '../../layouts/Dashboard.astro';
     }
 
     function buildResumeControl(): HTMLButtonElement {
-      const btnAttrs: Record<string, string> = { class: 'resume-btn', type: 'button' };
+      // Class is `directive-resume-btn` (not `resume-btn`) to avoid colliding
+      // with the log-tail panel's existing "Resume tailing" button which
+      // lives inside `.log-tail` and uses `.resume-btn` for its sticky
+      // bottom-right control.
+      const btnAttrs: Record<string, string> = {
+        class: 'directive-resume-btn',
+        type: 'button',
+      };
       if (state.resumeInflight) btnAttrs['disabled'] = 'disabled';
       const btn = el(
         'button',
@@ -432,35 +439,50 @@ import Dashboard from '../../layouts/Dashboard.astro';
     }
 
     function buildLogTail(): HTMLElement | null {
-      // Only render the panel after the first log line arrives — log.line
-      // emission is wired progressively (deferred slice of 3.1); rendering
-      // a permanently-empty panel would mislead the operator.
-      if (state.logLines.length === 0) return null;
+      // Empty-state policy (Tier 10 / 10.6): show a placeholder hint when
+      // the directive is still active (running / pending) so the operator
+      // sees "Waiting for the brain to narrate…" instead of nothing. For
+      // terminal directives that received zero events, skip the panel —
+      // an empty panel post-mortem would mislead more than it helps.
+      const status = effectiveStatus();
+      const expectingMore = status === 'running' || status === 'pending';
+      if (state.logLines.length === 0 && !expectingMore) return null;
+
       const wrap = el('section', { class: 'log-tail' });
       const header = el(
         'div',
         { class: 'log-tail-header' },
-        el('strong', {}, 'Live log'),
-        el('span', { class: 'log-tail-count' }, `${String(state.logLines.length)} lines`),
+        el('strong', {}, 'Activity'),
+        el('span', { class: 'log-tail-count' }, `${String(state.logLines.length)} events`),
       );
       const body = el('div', { class: 'log-tail-body' });
-      for (const line of state.logLines) {
+      if (state.logLines.length === 0) {
         body.appendChild(
           el(
             'div',
-            { class: 'log-line' },
-            el('span', { class: 'log-ts' }, tsLabel(line.ts)),
-            el('span', { class: `log-level log-level-${line.level}` }, line.level),
-            el(
-              'span',
-              { class: 'log-component' },
-              line.component,
-            ),
-            el('span', { class: 'log-msg' }, line.msg),
+            { class: 'log-tail-empty' },
+            'Waiting for the brain to narrate…',
           ),
         );
+      } else {
+        for (const line of state.logLines) {
+          body.appendChild(
+            el(
+              'div',
+              { class: 'log-line' },
+              el('span', { class: 'log-ts' }, tsLabel(line.ts)),
+              el('span', { class: `log-level log-level-${line.level}` }, line.level),
+              el('span', { class: 'log-component' }, line.component),
+              el('span', { class: 'log-msg' }, line.msg),
+            ),
+          );
+        }
       }
-      const resume = el('button', { class: 'resume-btn', type: 'button' }, 'Resume tailing');
+      const resume = el(
+        'button',
+        { class: 'log-resume-tail-btn', type: 'button' },
+        'Resume tailing',
+      );
       resume.addEventListener('click', () => {
         logTailPaused = false;
         wrap.classList.remove('paused');
@@ -829,87 +851,11 @@ import Dashboard from '../../layouts/Dashboard.astro';
       }
     }
 
-    .log-tail {
-      position: relative;
-      margin-top: 1rem;
-      border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
-      border-radius: 5px;
-      overflow: hidden;
-      background: color-mix(in srgb, currentColor 2%, transparent);
-    }
-    .log-tail-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.5rem 0.75rem;
-      border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-      background: color-mix(in srgb, currentColor 5%, transparent);
-      font-size: 0.85rem;
-    }
-    .log-tail-count {
-      font-variant-numeric: tabular-nums;
-      color: color-mix(in srgb, currentColor 55%, transparent);
-      font-size: 0.8rem;
-    }
-    .log-tail-body {
-      max-height: 18rem;
-      overflow-y: auto;
-      font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
-      font-size: 0.78rem;
-      line-height: 1.55;
-      padding: 0.4rem 0.75rem;
-    }
-    .log-line {
-      display: grid;
-      grid-template-columns: auto 3.5rem auto 1fr;
-      gap: 0.6rem;
-      padding: 0.1rem 0;
-      border-bottom: 1px dashed color-mix(in srgb, currentColor 6%, transparent);
-    }
-    .log-line:last-child {
-      border-bottom: none;
-    }
-    .log-ts {
-      color: color-mix(in srgb, currentColor 50%, transparent);
-      font-variant-numeric: tabular-nums;
-    }
-    .log-level {
-      text-transform: uppercase;
-      font-size: 0.7rem;
-      letter-spacing: 0.04em;
-      align-self: center;
-      color: color-mix(in srgb, currentColor 65%, transparent);
-    }
-    .log-level-warn {
-      color: #b87b1a;
-    }
-    .log-level-error,
-    .log-level-fatal {
-      color: #c24;
-    }
-    .log-component {
-      color: color-mix(in srgb, currentColor 60%, transparent);
-    }
-    .log-msg {
-      word-break: break-word;
-    }
-    .resume-btn {
-      display: none;
-      position: absolute;
-      bottom: 0.6rem;
-      right: 0.75rem;
-      font: inherit;
-      font-size: 0.75rem;
-      padding: 0.25rem 0.7rem;
-      border-radius: 3px;
-      border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-      background: Canvas;
-      color: inherit;
-      cursor: pointer;
-      box-shadow: 0 1px 4px color-mix(in srgb, currentColor 12%, transparent);
-    }
-    .log-tail.paused .resume-btn {
-      display: block;
-    }
+    /* Log-tail panel + log-line + level-badge + "Resume tailing" sticky
+       button all live in Dashboard.astro's global <style is:global> block
+       (Tier 10 / 10.6). Astro scoped <style> rules attach a
+       `[data-astro-cid-xyz]` selector that only matches template-emitted
+       elements; the log lines + buttons here are all created via the
+       runtime `el()` helper so they never match scoped rules. */
   </style>
 </Dashboard>
