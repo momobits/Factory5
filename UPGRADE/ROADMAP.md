@@ -163,10 +163,10 @@ Plan: [`plans/tier-11-directive-log-persistence.md`](plans/tier-11-directive-log
 
 ## Tier 12 — Budget UX: surface all knobs, escalate instead of hard-fail
 
-Operator complaint 2026-05-16: _"why are we failing instead of asking the user if we should continue over the budget?"_ The codebase has 15 hardcoded budgets and timeouts; operators control 2 (maxUsd, maxSteps); per-task `maxTurns` failures are silent. Six budgets identified as operator-facing in the Tier 12 audit. Surface them at build time via Web UI accordion + CLI flags with defaults + explainers; persist on directive payload; inherit on resume; escalate on `error_max_turns` via typed askUser instead of hard-fail; ADR 0033 pins the paradigm. Estimated **2 sessions**.
+Operator complaint 2026-05-16: _"why are we failing instead of asking the user if we should continue over the budget?"_ The codebase has 15 hardcoded budgets and timeouts; operators control 2 (maxUsd, maxSteps); per-task `maxTurns` failures are silent. Six budgets identified as operator-facing in the Tier 12 audit. Surface them at build time via Web UI accordion + CLI flags with defaults + explainers; persist on directive payload; inherit on resume; escalate on `error_max_turns` via typed askUser instead of hard-fail; ADR 0032 pins the paradigm. Estimated **2 sessions**.
 
 - [x] Open U032 (operator-invisible turn budgets; hard-fail without retry-question escalation)
-- [ ] ADR 0033 — Budget UX paradigm (operator-facing vs internal-pacing budgets, default-publication contract, escalation rule, persistence contract)
+- [x] ADR 0032 — Budget UX paradigm (operator-facing vs internal-pacing budgets, default-publication contract, escalation rule, persistence contract)
 - [ ] `BUDGET_DEFAULTS` constant + Zod schema in `@factory5/core` — single source of truth for defaults + explainers
 - [ ] Web UI Build form: "Advanced budgets" accordion (collapsed by default) with six fields + defaults + explainers
 - [ ] CLI flags on `factory build` and `factory resume`: `--max-usd`, `--max-steps`, `--ask-deadline-ms`, `--max-turns-scaffolder`, `--max-turns-builder`, `--max-turns-fixer`; `--help` post-text quotes explainers

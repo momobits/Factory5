@@ -1,7 +1,7 @@
 # Phase 12 Steps
 
 - [x] 12.1 — Open U032 in `UPGRADE/ISSUES.md` Open section. Severity high; Tier 12; Area cli + web + brain.
-- [ ] 12.2 — ADR 0033 — Budget UX paradigm. Five-part decision: operator-facing budgets, internal-pacing constants, default-publication contract, escalation rule, persistence contract. Update `docs/decisions/INDEX.md` and `docs/ARCHITECTURE.md` ADR count.
+- [x] 12.2 — ADR 0032 — Budget UX paradigm. Five-part decision: operator-facing budgets, internal-pacing constants, default-publication contract, escalation rule, persistence contract. Update `docs/decisions/INDEX.md` and `docs/ARCHITECTURE.md` ADR count.
 - [ ] 12.3 — `BUDGET_DEFAULTS` constant + Zod schema in `@factory5/core/src/budget-defaults.ts`. Six entries: maxUsd, maxSteps, askUserDeadlineMs, maxTurnsScaffolder, maxTurnsBuilder, maxTurnsFixer. Each carries `value` + `explainer`. Single source of truth read by CLI / Web / project-metadata parsers.
 - [ ] 12.4 — Web UI Build form (`apps/factory-web/src/pages/build.astro`) gains an "Advanced budgets" `<details>` accordion (collapsed by default) with all six fields + defaults + explainers shown as hint text. Submit POSTs the full set to `/api/v1/builds`.
 - [ ] 12.5 — CLI flags on `factory build` AND `factory resume`: `--max-usd`, `--max-steps`, `--ask-deadline-ms`, `--max-turns-scaffolder`, `--max-turns-builder`, `--max-turns-fixer`. `--help` post-text quotes explainers verbatim from `BUDGET_DEFAULTS`.
@@ -11,7 +11,7 @@
 
 ## Step detail
 
-### 12.2 — ADR 0033 shape
+### 12.2 — ADR 0032 shape
 
 Six-section ADR mirroring 0030 / 0031:
 

@@ -13,7 +13,7 @@ This tier ships a **surface-and-escalate** budget model:
 1. Every operator-felt budget exposed at build mint time with a documented default and an explainer.
 2. Every operator-felt budget persisted in the directive's payload and inherited on resume.
 3. `maxTurns` failures escalate via a typed askUser ("scaffolder hit 80-turn cap; retry with [120] or abort?") instead of a generic one.
-4. ADR 0033 documents the budget paradigm — which knobs are operator-facing vs internal-pacing, and how to add new ones safely.
+4. ADR 0032 documents the budget paradigm — which knobs are operator-facing vs internal-pacing, and how to add new ones safely.
 
 ## Outcome
 
@@ -21,7 +21,7 @@ This tier ships a **surface-and-escalate** budget model:
 - **CLI** gains `--max-turns-scaffolder`, `--max-turns-builder`, `--ask-deadline-ms` flags with the same defaults + explainers in `--help`.
 - **Directive payload** carries the full budget set explicitly. Resumes inherit verbatim. Per-project metadata at `<project>/.factory/project.json` can override defaults (third tier per the existing budget-resolution helper).
 - **Brain escalation on `error_max_turns`** — when the worker returns the `error_max_turns` subtype, the brain raises a typed askUser with the failing task title, the current `maxTurns`, and a suggested bump (default: next bucket; for scaffolder 80→120→160, for builder 80→160). The operator (or Tier 8 auto-answer) picks: accept-bump, custom-bump, or abort. Accept-bump retries the task with the higher budget; abort flips the directive to `blocked`. The auto-answer default behaviour: bump-by-one-bucket on the first failure, abort on the second.
-- **ADR 0033 — Budget UX paradigm** pins which budgets are operator-facing, which are internal, the escalation rule, and the per-failure backoff schedule for the auto-answer dispatcher.
+- **ADR 0032 — Budget UX paradigm** pins which budgets are operator-facing, which are internal, the escalation rule, and the per-failure backoff schedule for the auto-answer dispatcher.
 
 ## Where we were, end of Phase 11
 
@@ -60,7 +60,7 @@ The current `maxUsd`/`maxSteps` model is the right pattern: pre-flight check, ce
 | `START_WAIT_BUDGET_MS`                | 5_000               | No                                                     | Stays internal                                                                                                 |
 | `STOP_WAIT_BUDGET_MS`                 | 10_000              | No                                                     | Stays internal                                                                                                 |
 
-**Decision rule going forward** (ADR 0033): a budget is operator-facing if (a) the operator can plausibly judge what value they want for THIS build (project size, time pressure, $ ceiling) AND (b) the failure mode if it trips is operator-visible. Internal pacing constants (poll intervals, heartbeats, backoffs) fail both tests — they tune the daemon's responsiveness, not the build's outcome.
+**Decision rule going forward** (ADR 0032): a budget is operator-facing if (a) the operator can plausibly judge what value they want for THIS build (project size, time pressure, $ ceiling) AND (b) the failure mode if it trips is operator-visible. Internal pacing constants (poll intervals, heartbeats, backoffs) fail both tests — they tune the daemon's responsiveness, not the build's outcome.
 
 ## What this tier ships
 
@@ -68,7 +68,7 @@ The current `maxUsd`/`maxSteps` model is the right pattern: pre-flight check, ce
 
 Severity high; Tier 12; Area cli + web + brain.
 
-### 12.2 — ADR 0033: Budget UX paradigm
+### 12.2 — ADR 0032: Budget UX paradigm
 
 Five-part decision:
 
@@ -177,7 +177,7 @@ Standard gates + a live browser smoke: kick off a build via the Web UI with cust
 ## Done criteria
 
 - [ ] All four `pnpm` gates green
-- [ ] ADR 0033 lands; INDEX.md + ARCHITECTURE.md ADR count updated
+- [x] ADR 0032 lands; INDEX.md + ARCHITECTURE.md ADR count updated
 - [ ] `BUDGET_DEFAULTS` exported from `@factory5/core`; CLI and Web read from the same source
 - [ ] Web Build form: Advanced budgets accordion with all six fields + defaults + explainers
 - [ ] CLI: six new flags on `factory build` and `factory resume`; `--help` quotes the same explainers
@@ -190,7 +190,7 @@ Standard gates + a live browser smoke: kick off a build via the Web UI with cust
 
 ## Rollback
 
-`git reset --hard phase-11-directive-log-persistence-closed`. No DB schema changes; no migrations to unwind. ADR 0033 stays in history per CLAUDE.md "do not edit accepted ADRs"; supersede with a follow-up if the model needs revising.
+`git reset --hard phase-11-directive-log-persistence-closed`. No DB schema changes; no migrations to unwind. ADR 0032 stays in history per CLAUDE.md "do not edit accepted ADRs"; supersede with a follow-up if the model needs revising.
 
 ## Carry-forward (Tier 13+ candidates)
 
@@ -203,7 +203,7 @@ Standard gates + a live browser smoke: kick off a build via the Web UI with cust
 
 - `chore(phase-12): scaffold tier 12 budget UX`
 - `chore(12.1): open U032`
-- `docs(12.2): ADR 0033 — budget UX paradigm`
+- `docs(12.2): ADR 0032 — budget UX paradigm`
 - `feat(12.3): BUDGET_DEFAULTS in @factory5/core`
 - `feat(12.4): Web UI Build form — Advanced budgets accordion`
 - `feat(12.5): CLI budget flags + --help explainers`

@@ -24,7 +24,7 @@
 
 **Tier 12 sub-steps** (per `.control/phases/phase-12-budget-ux/steps.md`):
 1. **12.1** — Open U032 in `UPGRADE/ISSUES.md` Open section (recordkeeping flip; U032 already added in the scaffold commit).
-2. **12.2** — ADR 0033 pins the budget UX paradigm: operator-facing vs internal-pacing budgets; escalation rule; default-publication contract; persistence contract.
+2. **12.2** — ADR 0032 pins the budget UX paradigm: operator-facing vs internal-pacing budgets; escalation rule; default-publication contract; persistence contract.
 3. **12.3** — `BUDGET_DEFAULTS` exported from `@factory5/core` as the single source of truth for six operator-facing budgets (maxUsd, maxSteps, askUserDeadlineMs, maxTurnsScaffolder, maxTurnsBuilder, maxTurnsFixer) + defaults + explainers.
 4. **12.4** — Web UI Build form: "Advanced budgets" accordion (collapsed by default) with the six fields + defaults + explainers from the constant.
 5. **12.5** — CLI: six new flags on `factory build` AND `factory resume`; `--help` post-text quotes the explainers verbatim.
@@ -217,7 +217,7 @@ None — Phase 12 not started. Cleared at phase close.
 
 **Read first** when next session resumes:
 
-1. `UPGRADE/plans/tier-12-budget-ux.md` — the full Tier 12 plan including the budget audit (15 hardcoded budgets vs 6 operator-facing), ADR 0033 sketch, brain escalation flow, Tier 8 auto-answer adaptation.
+1. `UPGRADE/plans/tier-12-budget-ux.md` — the full Tier 12 plan including the budget audit (15 hardcoded budgets vs 6 operator-facing), ADR 0032 sketch, brain escalation flow, Tier 8 auto-answer adaptation.
 2. `.control/phases/phase-12-budget-ux/steps.md` — the per-step checklist.
 3. `UPGRADE/ISSUES.md` — U032 description + hypothesis.
 4. ADR 0030 (auto-answer contract) — 12.7/12.8 adapt the auto-answer dispatcher.

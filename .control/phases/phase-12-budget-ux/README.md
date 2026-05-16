@@ -15,7 +15,7 @@ Stop the app from silently picking budget defaults the operator never sees, and 
 - New `@factory5/core/src/budget-defaults.ts` is the source of truth for defaults + explainers; CLI/web/project-metadata parsers all read it.
 - Directive `payload.budgets` carries the full set; resumes inherit it.
 - Brain `pool.ts` catches `error_max_turns` subtype, raises a typed askUser ("Task X ran out of turns; bump to Y?"), and relaunches the task on accept. Tier 8 auto-answer accepts the bump on first failure, aborts on second.
-- ADR 0033 pins the budget UX paradigm: operator-facing vs internal-pacing budgets; escalation rule; default-publication contract; persistence contract.
+- ADR 0032 pins the budget UX paradigm: operator-facing vs internal-pacing budgets; escalation rule; default-publication contract; persistence contract.
 
 Full plan: [`../../../UPGRADE/plans/tier-12-budget-ux.md`](../../../UPGRADE/plans/tier-12-budget-ux.md).
 
@@ -44,7 +44,7 @@ See [`steps.md`](steps.md).
 ## Done criteria
 
 - [ ] All four `pnpm` gates green
-- [ ] ADR 0033 lands; INDEX.md + ARCHITECTURE.md ADR count bumped
+- [x] ADR 0032 lands; INDEX.md + ARCHITECTURE.md ADR count bumped
 - [ ] `BUDGET_DEFAULTS` exported from `@factory5/core`; CLI + Web read from the same source
 - [ ] Web UI Build form: Advanced budgets accordion (collapsed by default); six fields + defaults + explainers
 - [ ] CLI: six new flags on `factory build` AND `factory resume`; `--help` post-text quotes explainers
@@ -61,7 +61,7 @@ See [`steps.md`](steps.md).
 
 ## ADRs decided in this phase
 
-- ADR 0033 — Budget UX paradigm (operator-facing vs internal-pacing budgets; escalation rule; default-publication contract; persistence contract). To be authored in 12.2.
+- ADR 0032 — Budget UX paradigm (operator-facing vs internal-pacing budgets; escalation rule; default-publication contract; persistence contract). To be authored in 12.2.
 
 ## Deferred to Phase 13 (or later)
 
