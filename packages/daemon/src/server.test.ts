@@ -2105,6 +2105,218 @@ describe('IPC server — POST /api/v1/builds (ADR 0027, sub-step 11.3)', () => {
   });
 });
 
+describe('IPC server — POST /api/v1/directives/:id/resume (Tier 10 — HTTP mirror of `factory resume`)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+  let projectDir: string;
+
+  beforeEach(async () => {
+    db = freshDb();
+    doorbell = new Doorbell();
+    projectDir = await mkdtemp(join(tmpdir(), 'factory5-resume-route-'));
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  const UI_TOKEN = 'ui-secret-resume';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  const insertPriorDirective = (overrides: Partial<Directive> = {}): Directive => {
+    const directive: Directive = {
+      id: newId(),
+      source: 'cli',
+      principal: 'web-ui',
+      channelRef: 'web-ui-prior',
+      intent: 'build',
+      payload: {
+        project: 'sample',
+        projectPath: projectDir,
+        workspace: projectDir,
+        language: 'node',
+      },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'failed',
+      limits: { maxUsd: 5, maxSteps: 100 },
+      ...overrides,
+    };
+    directivesQ.insert(db, directive);
+    return directive;
+  };
+
+  it('returns 401 without bearer', async () => {
+    const prior = insertPriorDirective();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${prior.id}/resume`,
+      payload: {},
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns 404 DIRECTIVE_NOT_FOUND when the prior id is unknown', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${newId()}/resume`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('DIRECTIVE_NOT_FOUND');
+    await app.close();
+  });
+
+  it('returns 409 DIRECTIVE_NOT_TERMINAL when the prior is still running', async () => {
+    const prior = insertPriorDirective({ status: 'running' });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${prior.id}/resume`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('DIRECTIVE_NOT_TERMINAL');
+    await app.close();
+  });
+
+  it('returns 409 DIRECTIVE_NOT_TERMINAL when the prior is still pending', async () => {
+    const prior = insertPriorDirective({ status: 'pending' });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${prior.id}/resume`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('DIRECTIVE_NOT_TERMINAL');
+    await app.close();
+  });
+
+  it("returns 422 PROJECT_NOT_FOUND when the prior's projectPath no longer exists", async () => {
+    const prior = insertPriorDirective({
+      payload: {
+        project: 'sample',
+        projectPath: join(tmpdir(), 'factory5-nonexistent-resume-target-xyzzy'),
+        workspace: tmpdir(),
+      },
+    });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${prior.id}/resume`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(422);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('PROJECT_NOT_FOUND');
+    await app.close();
+  });
+
+  it('happy path: mints a child directive with parentDirectiveId + payload.resumeFrom + inherited fields', async () => {
+    const projectId = newId();
+    const prior = insertPriorDirective({ projectId });
+
+    let rung: { directiveId: string; reason: string } | undefined;
+    doorbell.on('directive.new', (payload) => {
+      rung = payload;
+    });
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${prior.id}/resume`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+
+    const body = res.json() as {
+      directive: {
+        id: string;
+        intent: string;
+        autonomy: string;
+        status: string;
+        projectId?: string;
+        parentDirectiveId?: string;
+        payload: {
+          project: string;
+          projectPath: string;
+          resumeFrom: string;
+          language?: string;
+        };
+        limits?: { maxUsd: number; maxSteps: number };
+      };
+    };
+    expect(body.directive.intent).toBe('build');
+    expect(body.directive.status).toBe('pending');
+    expect(body.directive.autonomy).toBe('autonomous'); // inherited from prior
+    expect(body.directive.parentDirectiveId).toBe(prior.id);
+    expect(body.directive.payload.resumeFrom).toBe(prior.id);
+    expect(body.directive.payload.projectPath).toBe(projectDir);
+    expect(body.directive.payload.language).toBe('node'); // carried from prior
+    expect(body.directive.projectId).toBe(projectId);
+    expect(body.directive.limits).toEqual({ maxUsd: 5, maxSteps: 100 });
+
+    // Persisted in SQLite + doorbell rang.
+    const persisted = directivesQ.getById(db, body.directive.id);
+    expect(persisted?.parentDirectiveId).toBe(prior.id);
+    expect(rung).toEqual({ directiveId: body.directive.id, reason: 'new' });
+    await app.close();
+  });
+
+  it('body.autonomy override wins over the prior autonomy', async () => {
+    const prior = insertPriorDirective({ autonomy: 'autonomous' });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${prior.id}/resume`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { autonomy: 'assisted' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { directive: { autonomy: string } };
+    expect(body.directive.autonomy).toBe('assisted');
+    await app.close();
+  });
+
+  it('happy path on a `complete` prior — still mints a child (re-run from a finished build)', async () => {
+    const prior = insertPriorDirective({ status: 'complete' });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${prior.id}/resume`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { directive: { parentDirectiveId?: string } };
+    expect(body.directive.parentDirectiveId).toBe(prior.id);
+    await app.close();
+  });
+});
+
 describe('IPC server — POST /api/v1/chat/messages (Phase 3 / step 3.5)', () => {
   let db: Database;
   let doorbell: Doorbell;

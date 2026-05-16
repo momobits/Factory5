@@ -45,6 +45,8 @@ import {
   apiV1CreateBuildResponseSchema,
   apiV1CreateProjectRequestSchema,
   apiV1CreateProjectResponseSchema,
+  apiV1ResumeRequestSchema,
+  apiV1ResumeResponseSchema,
   apiV1DirectiveDetailResponseSchema,
   apiV1DirectivesListQuerySchema,
   apiV1DirectivesListResponseSchema,
@@ -75,6 +77,7 @@ import {
   type ApiV1ChatMessageResponse,
   type ApiV1CreateBuildResponse,
   type ApiV1CreateProjectResponse,
+  type ApiV1ResumeResponse,
   type ApiV1DirectiveDetailResponse,
   type ApiV1DirectivesListResponse,
   type ApiV1FindingsListResponse,
@@ -909,6 +912,106 @@ function registerRoutes(
         hasLimits,
       },
       'ipc: /api/v1/builds — directive created',
+    );
+    reply.send(resp);
+  });
+
+  // ----- POST /api/v1/directives/:id/resume (Tier 10 — HTTP mirror of `factory resume`) -----
+  // Mutation surface — locates the prior directive by id, extracts payload
+  // context, and mints a child directive with parentDirectiveId +
+  // payload.resumeFrom. The brain skips the architect when the wiki is
+  // already on disk and skips already-complete tasks in the plan. Same
+  // resume semantics as packages/cli/src/commands/resume.ts.
+  app.post<{ Params: { id: string } }>('/api/v1/directives/:id/resume', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const body = apiV1ResumeRequestSchema.parse(request.body ?? {});
+    const priorId = request.params.id;
+
+    const prior = directivesQ.getById(opts.db, priorId);
+    if (prior === undefined) {
+      throw new IpcRequestError(404, 'DIRECTIVE_NOT_FOUND', `directive ${priorId} not found`);
+    }
+    if (prior.status === 'running' || prior.status === 'pending') {
+      throw new IpcRequestError(
+        409,
+        'DIRECTIVE_NOT_TERMINAL',
+        `directive ${priorId} is ${prior.status} — cancel it first before resuming`,
+      );
+    }
+
+    // Extract projectPath from the prior payload. resume.ts:33-38 accepts
+    // either `payload.projectPath` or `payload.project`; the daemon-side
+    // /api/v1/builds writes both fields, so either works.
+    const payload =
+      typeof prior.payload === 'object' && prior.payload !== null
+        ? (prior.payload as Record<string, unknown>)
+        : undefined;
+    const projectPath =
+      (typeof payload?.['projectPath'] === 'string' ? payload['projectPath'] : undefined) ??
+      (typeof payload?.['project'] === 'string' ? payload['project'] : undefined);
+    if (projectPath === undefined) {
+      throw new IpcRequestError(
+        422,
+        'PROJECT_NOT_FOUND',
+        `directive ${priorId} payload has no projectPath; cannot resume`,
+      );
+    }
+    if (!(await fileExists(projectPath))) {
+      throw new IpcRequestError(
+        422,
+        'PROJECT_NOT_FOUND',
+        `directive ${priorId}'s project path ${projectPath} no longer exists on disk`,
+      );
+    }
+
+    const project = typeof payload?.['project'] === 'string' ? payload['project'] : projectPath;
+    const priorLanguage = payload?.['language'];
+    const carriedLanguage =
+      priorLanguage === 'python' ||
+      priorLanguage === 'node' ||
+      priorLanguage === 'go' ||
+      priorLanguage === 'rust'
+        ? priorLanguage
+        : undefined;
+    const autonomy = body.autonomy ?? prior.autonomy;
+    const inheritedProjectId = prior.projectId;
+    const nowIso = new Date().toISOString();
+
+    const directive = directiveSchema.parse({
+      id: newId(),
+      source: 'cli',
+      principal: 'web-ui',
+      channelRef: `web-ui-resume-${request.id}`,
+      intent: 'build', // pipeline is the build path even on resume
+      payload: {
+        project,
+        projectPath,
+        workspace: defaultWorkspace(),
+        resumeFrom: prior.id,
+        ...(carriedLanguage !== undefined ? { language: carriedLanguage } : {}),
+      },
+      autonomy,
+      createdAt: nowIso,
+      status: 'pending',
+      parentDirectiveId: prior.id,
+      ...(inheritedProjectId !== undefined ? { projectId: inheritedProjectId } : {}),
+      ...(prior.limits !== undefined ? { limits: prior.limits } : {}),
+    });
+    directivesQ.insert(opts.db, directive);
+
+    opts.doorbell.emit('directive.new', { directiveId: directive.id, reason: 'new' });
+
+    const resp: ApiV1ResumeResponse = apiV1ResumeResponseSchema.parse({ directive });
+    ipcLog.info(
+      {
+        reqId: request.id,
+        directiveId: directive.id,
+        parentDirectiveId: prior.id,
+        priorStatus: prior.status,
+        projectPath,
+        autonomy,
+      },
+      'ipc: /api/v1/directives/:id/resume — child directive created',
     );
     reply.send(resp);
   });

@@ -374,6 +374,40 @@ export const apiV1CreateBuildResponseSchema = z.object({
 export type ApiV1CreateBuildResponse = z.infer<typeof apiV1CreateBuildResponseSchema>;
 
 // -----------------------------------------------------------------------------
+// POST /api/v1/directives/:id/resume  (web UI, ADR 0027 + Tier 10)
+// -----------------------------------------------------------------------------
+
+/**
+ * Request body for resuming a prior (failed / blocked / complete)
+ * directive via the web UI. HTTP mirror of `factory resume <project>`
+ * (`packages/cli/src/commands/resume.ts`).
+ *
+ * The route locates the prior directive by id, extracts its
+ * `projectPath` / `projectId` / `language` from the payload, and mints
+ * a child directive with `parentDirectiveId` + `payload.resumeFrom` set.
+ * The brain skips the architect when the wiki is already on disk and
+ * skips already-complete tasks in the plan — same resume semantics as
+ * the CLI.
+ *
+ * Body is optional; when omitted the child inherits the prior's
+ * `autonomy` verbatim. Refuses the resume when:
+ *   - prior directive not found (404 `DIRECTIVE_NOT_FOUND`)
+ *   - prior is still `running` or `pending` (409 `DIRECTIVE_NOT_TERMINAL`)
+ *   - prior's `payload.projectPath` no longer exists on disk
+ *     (422 `PROJECT_NOT_FOUND`)
+ */
+export const apiV1ResumeRequestSchema = z.object({
+  /** Override autonomy on the resumed run (defaults to the prior's). */
+  autonomy: autonomyModeSchema.optional(),
+});
+export type ApiV1ResumeRequest = z.infer<typeof apiV1ResumeRequestSchema>;
+
+export const apiV1ResumeResponseSchema = z.object({
+  directive: directiveSchema,
+});
+export type ApiV1ResumeResponse = z.infer<typeof apiV1ResumeResponseSchema>;
+
+// -----------------------------------------------------------------------------
 // POST /api/v1/projects  (web UI, Phase 3 step 3.7 — browser mirror of `factory init`)
 // -----------------------------------------------------------------------------
 
