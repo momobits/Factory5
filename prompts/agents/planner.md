@@ -76,13 +76,15 @@ Prefer **fewer, larger** tasks over many tiny ones. A good `builder` task covers
 
 ## Turn budgets (`maxTurns`)
 
-Optional per-task field. Applies only to tool-using agents. Defaults to 40.
+Optional per-task field. Applies only to tool-using agents. Defaults to 80.
 
-- **10-20** — narrow single-file change (a small utility, a typed helper)
-- **25-40** — typical module (a few files, one cohesive feature)
-- **50-80** — broad implementation (cross-cutting wiring, a fixer pass across many files, an API layer with tests + docs)
+- **10-30** — narrow single-file change (a small utility, a typed helper)
+- **40-80** — typical module (a few files, one cohesive feature)
+- **80-160** — broad implementation (cross-cutting wiring, a fixer pass across many files, an API layer with tests + docs, a scaffolder for a project with >10 modules)
 
-Under-budgeting a large builder task is worse than over-budgeting — the subprocess dies mid-work, losing its context. When in doubt, round up.
+Under-budgeting a large builder task is worse than over-budgeting — the subprocess dies mid-work, losing its context (`error_max_turns` from claude-cli). When in doubt, round up.
+
+**Scaffolder budgets specifically:** the scaffolder task lays out the full project skeleton in a single run. The default 80 covers ~6-8 modules comfortably. Set `maxTurns: 120` for 10-15 modules; `maxTurns: 160` for 15+ modules or polyglot scaffolds. Going under-budget here is the most common silent-failure mode for autonomous builds — the wiki gets written but no source files land.
 
 ## Worked examples
 

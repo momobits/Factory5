@@ -103,7 +103,10 @@ export interface ClaudeCliProviderOptions {
    * Default max agentic turns for `stream()` when tools are in play and the
    * {@link ProviderRequest.maxTurns} per-request override is unset. Raised
    * to 40 in ADR 0016 after the Phase 2 live run showed builder tasks
-   * frequently hitting the prior 20-turn ceiling mid-TDD loop.
+   * frequently hitting the prior 20-turn ceiling mid-TDD loop. Raised to
+   * 80 in Tier 12 after operator-felt scaffolder failures on a 13-module
+   * automl build — see U030 / U032 + `prompts/agents/planner.md`'s
+   * "Turn budgets" table for the updated guidance.
    */
   maxTurns?: number;
   /**
@@ -594,7 +597,7 @@ export class ClaudeCliProvider implements ModelProvider {
     this.defaultCwd = opts.cwd;
     this.timeoutMs = opts.timeoutMs ?? 10 * 60 * 1000;
     this.streamTimeoutMs = opts.streamTimeoutMs ?? this.timeoutMs * 2;
-    this.maxTurns = opts.maxTurns ?? 40;
+    this.maxTurns = opts.maxTurns ?? 80;
     this.noAvailabilityCache = opts.noAvailabilityCache ?? false;
   }
 

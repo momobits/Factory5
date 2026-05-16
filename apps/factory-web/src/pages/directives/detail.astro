@@ -50,6 +50,12 @@ import Dashboard from '../../layouts/Dashboard.astro';
       status: string;
       startedAt?: string;
       finishedAt?: string;
+      // Worker-side error string captured at task termination (Tier 10
+      // fix). For `error_max_turns` from claude-cli this carries the
+      // exact "claude-cli reported error (subtype=…)" message — surfaced
+      // in the task table so the operator can diagnose without diving
+      // into the daemon log.
+      error?: string;
     }
     interface PendingQuestion {
       id: string;
@@ -157,7 +163,12 @@ import Dashboard from '../../layouts/Dashboard.astro';
         case 'disconnected':
           return 'Disconnected';
         case 'completed':
-          return 'Completed';
+          // Tier 10 fix: "Completed" competed with the directive's own
+          // status ("build — failed" / "build — blocked" / etc.) in
+          // the title row. The pip describes the SSE STREAM state,
+          // not the directive state — relabel so the distinction
+          // reads.
+          return 'Stream ended';
       }
     }
 
@@ -432,6 +443,17 @@ import Dashboard from '../../layouts/Dashboard.astro';
             el('td', {}, tsLabel(t.finishedAt)),
           ),
         );
+        // Tier 10 fix: surface the worker's error string when the task
+        // failed. Closes the silent-fail UX gap that hid `error_max_turns`
+        // and other worker-side throws behind a bare "failed" status.
+        if (t.error !== undefined && t.error.length > 0) {
+          const errCell = el('td', { class: 'task-error-cell', colspan: '6' });
+          errCell.appendChild(el('span', { class: 'task-error-label' }, 'error'));
+          errCell.appendChild(el('span', { class: 'task-error-msg' }, t.error));
+          const errRow = el('tr', { class: 'task-error-row' });
+          errRow.appendChild(errCell);
+          tbody.appendChild(errRow);
+        }
       }
       table.appendChild(tbody);
       wrap.appendChild(table);
@@ -534,7 +556,22 @@ import Dashboard from '../../layouts/Dashboard.astro';
       // brief polling-fallback window.
       for (const t of detail.timeline.tasks) {
         if (!state.tasks.has(t.id)) {
-          state.tasks.set(t.id, t);
+          // The snapshot's ApiV1InflightTask carries a `result?: TaskResult`
+          // with `error?: string` set on failed workers. Lift it onto the
+          // local map shape so buildTasks() can render it without each
+          // call site having to chase the nested optional.
+          const errFromResult = (t as { result?: { error?: string } }).result?.error;
+          const task: InflightTask = {
+            id: t.id,
+            title: t.title,
+            agent: t.agent,
+            category: t.category,
+            status: t.status,
+            ...(t.startedAt !== undefined ? { startedAt: t.startedAt } : {}),
+            ...(t.finishedAt !== undefined ? { finishedAt: t.finishedAt } : {}),
+            ...(errFromResult !== undefined ? { error: errFromResult } : {}),
+          };
+          state.tasks.set(t.id, task);
         }
       }
       state.openQuestions = detail.timeline.openQuestions;
@@ -561,6 +598,9 @@ import Dashboard from '../../layouts/Dashboard.astro';
         }
         case 'task.completed': {
           const existing = state.tasks.get(ev.taskId);
+          // ev.error is `string | null` per the SSE schema — null on
+          // clean completion, populated on worker throw / non-zero exit.
+          const errorPatch = ev.error !== null ? { error: ev.error } : {};
           if (existing === undefined) {
             // Live-only task we never saw start (rare; race window). Insert
             // a partial row so the table reflects its terminal state.
@@ -571,12 +611,14 @@ import Dashboard from '../../layouts/Dashboard.astro';
               category: '',
               status: ev.status,
               finishedAt: ev.finishedAt,
+              ...errorPatch,
             });
           } else {
             state.tasks.set(ev.taskId, {
               ...existing,
               status: ev.status,
               finishedAt: ev.finishedAt,
+              ...errorPatch,
             });
           }
           break;

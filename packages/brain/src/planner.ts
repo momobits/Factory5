@@ -244,7 +244,7 @@ export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
     '  - `expectedOutputs.files` — relative paths the task writes (BE COMPLETE — see rule below)',
     '  - `expectedOutputs.signals` — tokens like "pytest-green" / "build-ok" / "lint-clean"',
     '  - `dependsOn` — 0-based INDEXES into this tasks array for prerequisites',
-    '  - `maxTurns` (optional) — integer 10-80. Only for builder/scaffolder/fixer.',
+    '  - `maxTurns` (optional) — integer 10-160. Only for builder/scaffolder/fixer.',
     '       Use >40 when the task is a large multi-module implementation or a broad fixer',
     '       pass over many files. Use <=20 for narrow single-file changes.',
     '',

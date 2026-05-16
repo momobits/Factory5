@@ -1112,6 +1112,37 @@ const navLinks: NavLink[] = [
         word-break: break-word;
         color: var(--ink);
       }
+      /* Task-error follow-up row in the directive-detail tasks table
+         (Tier 10 fix). Renders the worker's `result.error` string under
+         the failed task row so the operator sees `error_max_turns` etc.
+         without diving into the daemon log. */
+      .task-error-row td.task-error-cell {
+        padding: 6px 16px 10px 16px;
+        background: color-mix(in srgb, var(--halt) 5%, transparent);
+        border-bottom: 1px solid color-mix(in srgb, var(--halt) 20%, transparent);
+        font-family: var(--f-mono);
+        font-size: 11px;
+        line-height: 1.45;
+        color: var(--ink);
+      }
+      .task-error-row .task-error-label {
+        display: inline-block;
+        margin-right: 10px;
+        padding: 1px 6px;
+        border-radius: 2px;
+        border: 1px solid color-mix(in srgb, var(--halt) 45%, transparent);
+        background: color-mix(in srgb, var(--halt) 12%, transparent);
+        color: var(--halt);
+        font-family: var(--f-body);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        vertical-align: baseline;
+      }
+      .task-error-row .task-error-msg {
+        word-break: break-word;
+      }
       /* Sticky "Resume tailing" button — appears inside the log-tail
          panel only when the operator has scrolled up, so live events
          that flow in don't yank them away from what they were reading. */
