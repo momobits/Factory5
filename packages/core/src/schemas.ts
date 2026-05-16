@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 
+import { BUDGET_DEFAULTS } from './budget-defaults.js';
 import {
   AGENT_ROLES,
   AUTONOMY_MODES,
@@ -316,8 +317,13 @@ export const directiveLogLineInputSchema = directiveLogLineSchema.omit({ id: tru
  * Default `ask_user` deadline, milliseconds. ADR 0030 §2 — 5 minutes.
  * Pre-Tier-8 deployments without `<dataDir>/config.json` use this; missing
  * keys in a present file fall back to this too.
+ *
+ * Re-exports the Tier-12 {@link BUDGET_DEFAULTS} value so the single-
+ * source-of-truth contract (ADR 0032 §3) holds — editing this value
+ * means editing the explainer too, and the explainer lives only in
+ * `budget-defaults.ts`.
  */
-export const DEFAULT_ASK_USER_DEADLINE_MS = 300_000;
+export const DEFAULT_ASK_USER_DEADLINE_MS = BUDGET_DEFAULTS.askUserDeadlineMs.value;
 
 /**
  * The shape `<dataDir>/config.json` is parsed against. All fields are
