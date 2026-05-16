@@ -27,8 +27,11 @@ import type { Database } from '@factory5/state';
 import { projectPaths, readWiki, writePlan } from '@factory5/wiki';
 import { z } from 'zod';
 
+import type { DirectiveEventEmitter } from '@factory5/ipc';
+
 import { getAgent } from './agents/registry.js';
 import { assertBudget } from './budget.js';
+import { emitLogLine } from './emit.js';
 import { buildAgentSystemPrompt } from './prompts.js';
 import { extractJsonObject } from './triage.js';
 import { recordUsage } from './usage.js';
@@ -202,6 +205,13 @@ export interface PlannerOptions {
   category?: ModelCategory;
   /** Per-directive budget ceilings (ADR 0020). See {@link TriageOptions.limits}. */
   limits?: DirectiveLimits;
+  /**
+   * Optional SSE emitter (ADR 0029 / ADR 0031). When wired, the planner
+   * surfaces `log.line` events at stage entry, JSON-parse-fail and
+   * Zod-fail (carrying first 500 chars of LLM output as `attrs.detail`),
+   * and plan-written.
+   */
+  emit?: DirectiveEventEmitter;
 }
 
 export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
@@ -292,6 +302,14 @@ export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
     { projectPath: opts.projectPath, provider: resolution.provider.id, model: resolution.model },
     'planner: calling planning provider',
   );
+  emitLogLine(
+    opts.emit,
+    opts.directiveId,
+    'info',
+    'brain.planner',
+    `planner: calling ${resolution.model}`,
+    { provider: resolution.provider.id },
+  );
 
   if (opts.db !== undefined) {
     assertBudget({
@@ -328,11 +346,34 @@ export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
 
   const jsonText = extractJsonObject(response.text);
   if (jsonText === undefined) {
-    throw new Error(
-      `planner: response contained no JSON object. First 500 chars: ${response.text.slice(0, 500)}`,
+    const detail = response.text.slice(0, 500);
+    emitLogLine(
+      opts.emit,
+      opts.directiveId,
+      'error',
+      'brain.planner',
+      'planner: no JSON in response',
+      { detail },
     );
+    throw new Error(`planner: response contained no JSON object. First 500 chars: ${detail}`);
   }
-  const parsed = plannerJsonSchema.parse(JSON.parse(jsonText));
+  let parsed;
+  try {
+    parsed = plannerJsonSchema.parse(JSON.parse(jsonText));
+  } catch (err) {
+    const detail = response.text.slice(0, 500);
+    const zodIssues =
+      err instanceof z.ZodError ? err.issues.slice(0, 3) : [{ message: String(err) }];
+    emitLogLine(
+      opts.emit,
+      opts.directiveId,
+      'error',
+      'brain.planner',
+      'planner: schema parse failed',
+      { detail, zodIssues },
+    );
+    throw err;
+  }
 
   const planId = newId();
   const { tasks, notes } = materialisePlannerTasks(parsed.tasks, planId);
@@ -356,6 +397,14 @@ export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
   log.info(
     { planId, taskCount: tasks.length, projectPath: opts.projectPath, adjustments: notes.length },
     'planner: plan written',
+  );
+  emitLogLine(
+    opts.emit,
+    opts.directiveId,
+    'info',
+    'brain.planner',
+    `planner: ${String(tasks.length)} task${tasks.length === 1 ? '' : 's'} queued`,
+    { planId, adjustments: notes.length },
   );
 
   return { plan, rawResponse: response.text, adjustments: notes };

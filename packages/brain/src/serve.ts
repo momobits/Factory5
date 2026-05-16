@@ -29,6 +29,7 @@ import { directives as directivesQ, type Database } from '@factory5/state';
 
 import { runAutoAnswerSweep } from './auto-answer.js';
 import { registerCancellation } from './cancellation.js';
+import { emitLogLine } from './emit.js';
 
 const log = createLogger('brain.serve');
 
@@ -206,6 +207,29 @@ export async function runServe(opts: ServeOptions): Promise<void> {
               );
             }
             log.error({ err, directiveId: directive.id }, 'serve: directive threw');
+            // ADR 0031 — surface the throw on the SSE stream so directive-detail's
+            // activity panel renders the actual cause instead of staying silent. The
+            // brain-side error sites (architect/planner parse-fail, etc.) already
+            // emit a structured log.line earlier in the same throw path; this is a
+            // belt-and-suspenders fallback for unexpected throws that didn't get
+            // an emit on the way out.
+            const emit = opts.emitDirectiveEvent;
+            if (emit !== undefined) {
+              const errMsg = err instanceof Error ? err.message : String(err);
+              emitLogLine(
+                emit,
+                directive.id,
+                'error',
+                'brain.loop',
+                `brain: directive threw — ${errMsg.slice(0, 200)}`,
+              );
+              emit({
+                type: 'directive.completed',
+                directiveId: directive.id,
+                status: 'failed',
+                blockedReason: null,
+              });
+            }
           })
           .finally(() => {
             cancellation.release();

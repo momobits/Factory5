@@ -137,61 +137,9 @@ async function runPlanTasks(
   });
 }
 
-/**
- * Emit `directive.completed` to the SSE hub if an emitter is wired.
- * Centralised so every terminal-status branch in `runInline` ends with
- * the same signal shape. The call is fire-and-forget — emit failures
- * are not propagated (the SSE consumer's reconnect-and-backfill flow
- * recovers).
- */
-function emitDirectiveCompleted(
-  emit: DirectiveEventEmitter | undefined,
-  directiveId: string,
-  status: Directive['status'],
-  blockedReason: string | undefined,
-): void {
-  if (emit === undefined) return;
-  emit({
-    type: 'directive.completed',
-    directiveId,
-    status,
-    blockedReason: blockedReason ?? null,
-  });
-}
+import { emitDirectiveCompleted, emitLogLine } from './emit.js';
 
-/**
- * Emit a `log.line` event for SSE subscribers (Phase 3 / step 3.5).
- * Used at sites where the user-facing line content (e.g. a chat reply)
- * should surface to live SSE subscribers as a renderable bubble. Same
- * fire-and-forget shape as {@link emitDirectiveCompleted}; silent when
- * no emitter is wired (CLI inline runs, tests without a hub). The
- * helper sets `ts` to the current wall-clock instant so callers don't
- * each have to format an ISO string.
- *
- * Exported for direct unit testing (see `loop.test.ts`); the
- * integration call sites use it as an internal helper rather than a
- * public brain API surface — the package's `index.ts` does not
- * re-export it.
- */
-export function emitLogLine(
-  emit: DirectiveEventEmitter | undefined,
-  directiveId: string,
-  level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal',
-  component: string,
-  msg: string,
-  attrs?: Record<string, unknown>,
-): void {
-  if (emit === undefined) return;
-  emit({
-    type: 'log.line',
-    directiveId,
-    ts: new Date().toISOString(),
-    level,
-    component,
-    msg,
-    ...(attrs !== undefined ? { attrs } : {}),
-  });
-}
+export { emitDirectiveCompleted, emitLogLine } from './emit.js';
 
 async function runInline(
   opts: Required<Pick<BrainOptions, 'directiveId'>> & BrainOptions,
@@ -236,6 +184,14 @@ async function runInline(
 
       // For inline builds, respect the original intent; triage is the audit record.
       const effectiveIntent = directive.intent;
+      emitLogLine(
+        emit,
+        directive.id,
+        'info',
+        'brain.triage',
+        `triage: intent=${triage.intent} confidence=${triage.confidence.toFixed(2)}`,
+        { effectiveIntent },
+      );
 
       if (effectiveIntent === 'chat') {
         // Phase 3 minimum: emit a triage-summary reply on the CLI-RPC channel
@@ -310,6 +266,13 @@ async function runInline(
       if (existingReadiness.ok) {
         log.info({ projectPath }, 'architect: skipped — wiki already ready');
         await appendBuildLog(projectPath, 'architect skipped (wiki already ready)');
+        emitLogLine(
+          emit,
+          directive.id,
+          'info',
+          'brain.architect',
+          'architect: skipped (wiki already on disk; resume path)',
+        );
       } else {
         architect = await runArchitect({
           registry,
@@ -317,6 +280,7 @@ async function runInline(
           db,
           directiveId: directive.id,
           ...(limits !== undefined ? { limits } : {}),
+          ...(emit !== undefined ? { emit } : {}),
         });
         if (!architect.readiness.ok) {
           const failed = architect.readiness.checks.filter((c) => !c.ok).map((c) => c.id);
@@ -365,6 +329,14 @@ async function runInline(
         existing.status !== 'abandoned'
       ) {
         log.info({ planId: existing.id, status: existing.status }, 'reusing existing plan');
+        emitLogLine(
+          emit,
+          directive.id,
+          'info',
+          'brain.planner',
+          `planner: reusing existing plan (${String(existing.tasks.length)} task${existing.tasks.length === 1 ? '' : 's'}, status=${existing.status})`,
+          { planId: existing.id },
+        );
         plan = existing;
       } else {
         const plannerOut = await runPlanner({
@@ -373,6 +345,7 @@ async function runInline(
           directiveId: directive.id,
           db,
           ...(limits !== undefined ? { limits } : {}),
+          ...(emit !== undefined ? { emit } : {}),
         });
         plan = plannerOut.plan;
       }
@@ -495,6 +468,14 @@ async function runInline(
         },
         'brain: inline run complete',
       );
+      emitLogLine(
+        emit,
+        directive.id,
+        terminalStatus === 'complete' ? 'info' : 'warn',
+        'brain.loop',
+        `brain: directive ${terminalStatus} (open findings=${findingsCountPhrase}, spend=$${totalCost.toFixed(4)})`,
+        { terminalStatus, totalCostUsd: totalCost },
+      );
 
       const result: InlineResult = {
         directive,
@@ -513,6 +494,9 @@ async function runInline(
           { directiveId: directive.id, detail: err.detail, reason },
           'brain: directive halted by pre-call budget check',
         );
+        emitLogLine(emit, directive.id, 'warn', 'brain.loop', `brain: blocked — ${reason}`, {
+          detail: err.detail,
+        });
         directivesQ.markBlocked(db, directive.id, reason);
         emitDirectiveCompleted(emit, directive.id, 'blocked', reason);
         outbound.enqueue(db, {

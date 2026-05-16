@@ -38,6 +38,7 @@ import {
 
 import { assertBudget, BudgetExceededError } from './budget.js';
 import { loadDaemonEndpoint } from './daemon-endpoint.js';
+import { emitLogLine } from './emit.js';
 import { buildAgentSystemPrompt } from './prompts.js';
 import { recordUsage } from './usage.js';
 
@@ -384,6 +385,14 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
     },
     'pool: starting',
   );
+  emitLogLine(
+    opts.emitDirectiveEvent,
+    opts.directiveId,
+    'info',
+    'brain.pool',
+    `pool: dispatching ${String(order.length)} task${order.length === 1 ? '' : 's'} (concurrency=${String(concurrency)})`,
+    { preCompleted: results.size },
+  );
 
   const isReady = (t: Task): boolean => t.dependsOn.every((dep) => results.has(dep));
   const hasFailedDep = (t: Task): boolean =>
@@ -483,6 +492,14 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
         // keep draining the rest of the DAG.
         log.error({ err, taskId: task.id }, 'pool: task threw — recording as failure');
         const message = err instanceof Error ? err.message : String(err);
+        emitLogLine(
+          opts.emitDirectiveEvent,
+          opts.directiveId,
+          'error',
+          'brain.pool',
+          `pool: task ${task.title} threw — ${message.slice(0, 200)}`,
+          { taskId: task.id, agent: task.agent },
+        );
         const result = {
           exitCode: 1,
           filesChanged: [],
@@ -570,14 +587,23 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
   };
   await writePlan(final);
 
+  const succeededCount = [...results.values()].filter((r) => r.exitCode === 0).length;
+  const failedCount = [...results.values()].filter((r) => r.exitCode !== 0).length;
   log.info(
     {
       total: order.length,
-      succeeded: [...results.values()].filter((r) => r.exitCode === 0).length,
-      failed: [...results.values()].filter((r) => r.exitCode !== 0).length,
+      succeeded: succeededCount,
+      failed: failedCount,
       budgetHalted: budgetError !== undefined,
     },
     'pool: complete',
+  );
+  emitLogLine(
+    opts.emitDirectiveEvent,
+    opts.directiveId,
+    failedCount > 0 ? 'warn' : 'info',
+    'brain.pool',
+    `pool: complete — ${String(succeededCount)} passed, ${String(failedCount)} failed${budgetError !== undefined ? ' (budget halted)' : ''}`,
   );
 
   if (budgetError !== undefined) throw budgetError;

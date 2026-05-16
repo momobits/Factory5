@@ -26,7 +26,10 @@ import {
 import { simpleGit } from 'simple-git';
 import { z } from 'zod';
 
+import type { DirectiveEventEmitter } from '@factory5/ipc';
+
 import { assertBudget } from './budget.js';
+import { emitLogLine } from './emit.js';
 import { buildAgentSystemPrompt } from './prompts.js';
 import { extractJsonObject } from './triage.js';
 import { recordUsage } from './usage.js';
@@ -60,6 +63,12 @@ export interface ArchitectOptions {
   category?: ModelCategory;
   /** Per-directive budget ceilings (ADR 0020). See {@link TriageOptions.limits}. */
   limits?: DirectiveLimits;
+  /**
+   * Optional SSE emitter (ADR 0029 / ADR 0031). When wired, the architect
+   * surfaces `log.line` events at stage entry, wiki-written, and the
+   * readiness check so directive-detail's activity panel narrates the run.
+   */
+  emit?: DirectiveEventEmitter;
 }
 
 async function readClaudeMd(projectPath: string): Promise<string> {
@@ -121,6 +130,16 @@ export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectRes
     { projectPath: opts.projectPath, provider: resolution.provider.id, model: resolution.model },
     'architect: calling reasoning provider',
   );
+  if (opts.directiveId !== undefined) {
+    emitLogLine(
+      opts.emit,
+      opts.directiveId,
+      'info',
+      'brain.architect',
+      `architect: calling ${resolution.model}`,
+      { provider: resolution.provider.id },
+    );
+  }
 
   if (opts.db !== undefined && opts.directiveId !== undefined) {
     assertBudget({
@@ -158,11 +177,38 @@ export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectRes
 
   const jsonText = extractJsonObject(response.text);
   if (jsonText === undefined) {
-    throw new Error(
-      `architect: response contained no JSON object. First 500 chars: ${response.text.slice(0, 500)}`,
-    );
+    const detail = response.text.slice(0, 500);
+    if (opts.directiveId !== undefined) {
+      emitLogLine(
+        opts.emit,
+        opts.directiveId,
+        'error',
+        'brain.architect',
+        'architect: no JSON in response',
+        { detail },
+      );
+    }
+    throw new Error(`architect: response contained no JSON object. First 500 chars: ${detail}`);
   }
-  const plan = architectJsonSchema.parse(JSON.parse(jsonText));
+  let plan;
+  try {
+    plan = architectJsonSchema.parse(JSON.parse(jsonText));
+  } catch (err) {
+    if (opts.directiveId !== undefined) {
+      const detail = response.text.slice(0, 500);
+      const zodIssues =
+        err instanceof z.ZodError ? err.issues.slice(0, 3) : [{ message: String(err) }];
+      emitLogLine(
+        opts.emit,
+        opts.directiveId,
+        'error',
+        'brain.architect',
+        'architect: schema parse failed',
+        { detail, zodIssues },
+      );
+    }
+    throw err;
+  }
 
   const writtenPages: WikiPage[] = [];
   for (const p of plan.pages) {
@@ -173,6 +219,16 @@ export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectRes
     { projectPath: opts.projectPath, pages: writtenPages.length },
     'architect: wiki written',
   );
+  if (opts.directiveId !== undefined) {
+    emitLogLine(
+      opts.emit,
+      opts.directiveId,
+      'info',
+      'brain.architect',
+      `architect: wrote ${String(writtenPages.length)} wiki page${writtenPages.length === 1 ? '' : 's'}`,
+      { slugs: writtenPages.map((p) => p.slug) },
+    );
+  }
 
   // I014 fix (Phase 13.4) — when re-running on an existing project that
   // already has a git repo and a tracked `docs/knowledge/*.md` wiki, the
@@ -192,14 +248,23 @@ export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectRes
   });
 
   const readiness = await wikiReadiness(opts.projectPath);
+  const failedChecks = readiness.checks.filter((c) => !c.ok).map((c) => c.id);
   log.info(
-    {
-      projectPath: opts.projectPath,
-      readinessOk: readiness.ok,
-      failedChecks: readiness.checks.filter((c) => !c.ok).map((c) => c.id),
-    },
+    { projectPath: opts.projectPath, readinessOk: readiness.ok, failedChecks },
     'architect: readiness evaluated',
   );
+  if (opts.directiveId !== undefined) {
+    emitLogLine(
+      opts.emit,
+      opts.directiveId,
+      readiness.ok ? 'info' : 'warn',
+      'brain.architect',
+      readiness.ok
+        ? 'wiki readiness: all checks passed'
+        : `wiki readiness: failed (${failedChecks.join(', ')}) — continuing per Phase 1 policy`,
+      { failed: failedChecks },
+    );
+  }
 
   return {
     projectPath: opts.projectPath,
