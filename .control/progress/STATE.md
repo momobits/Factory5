@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-16 — Phase 10 close. Upgrade arc closed for the **seventh time** at `phase-10-resume-and-activity-feed-closed`. Tier 10 shipped in two sessions (today 2026-05-16): scaffold + 10.1 → 10.7 + live browser smoke. Eight tier-10 commits this turn.
+**Last updated:** 2026-05-16 — session end after Phase 10 close. Upgrade arc closed for the **seventh time** at `phase-10-resume-and-activity-feed-closed` (tag annotated at `fbc3c27`). Nine commits this session: scaffold `1ac1823`; 10.1 `0ce4590`; 10.2 `bb2bca9`; 10.3 `585f172`; 10.4 `e83c3c1`; 10.5 `f100910`; 10.6 `9289aff`; phase-close `fbc3c27`; this session-end. The phase-close commit pinned STATE.md to itself (no lag delta this turn); this session-end will reintroduce lag-by-1 #27 — STATE references `fbc3c27` at write time; HEAD moves to the session-end commit's own sha.
 **Current phase:** none (arc-complete)
 **Current step:** none
 **Status:** Phase 10 closed cleanly. All done-criteria green: 4 `pnpm` gates clean (build / test / lint / format:check); ADR 0031 lands; 12 new tests across packages (planner-emit +4, daemon resume route +8); browser smoke confirmed Resume click → child directive mints → activity panel narrates 5 events live (triage → architect-calling → wrote 13 wiki pages → readiness all passed → planner-calling). U030 closed.
@@ -43,9 +43,9 @@ If the operator doesn't want a Tier 11, the project is in a clean post-arc parki
 ## Git state
 
 - **Branch:** main
-- **Last commit:** this commit — `chore(phase-10): close phase 10, kick off arc-complete (seventh time)`
-- **Uncommitted changes:** none (smoke artifacts gitignored via `307d79c`; live-smoke screenshots match `/smoke-*.png` pattern)
-- **Last phase tag:** `phase-10-resume-and-activity-feed-closed` (annotated at this commit)
+- **Last commit:** `fbc3c27` — `chore(phase-10): close phase 10, kick off arc-complete (seventh time)` (this session-end commit will reintroduce lag #27)
+- **Uncommitted changes:** none at session-end (smoke artifacts gitignored via `307d79c`)
+- **Last phase tag:** `phase-10-resume-and-activity-feed-closed` (annotated at `fbc3c27`)
 
 ---
 
@@ -102,7 +102,8 @@ No phase active. Phase 10 closed cleanly. No Phase 11 scaffolded.
 
 ## Recently completed (last 5 steps)
 
-- **Phase 10 close (this commit)** — `chore(phase-10)`: close phase 10, kick off arc-complete (seventh time). Tagged `phase-10-resume-and-activity-feed-closed`. All done-criteria green: 4 `pnpm` gates clean; ADR 0031 lands; 12 new tests across packages (planner-emit +4, daemon resume route +8); browser smoke confirmed Resume click → child directive mints → activity panel narrates 5 events live. U030 closed. — 2026-05-16
+- **Session-end (this commit)** — `docs(state)`: session end after phase-10 close. STATE.md timestamp bump + last-commit pointer to `fbc3c27` + lag counter (#27 reintroduced). — 2026-05-16
+- **Phase 10 close** — `chore(phase-10)`: close phase 10, kick off arc-complete (seventh time). Tagged `phase-10-resume-and-activity-feed-closed`. All done-criteria green: 4 `pnpm` gates clean; ADR 0031 lands; 12 new tests across packages (planner-emit +4, daemon resume route +8); browser smoke confirmed Resume click → child directive mints → activity panel narrates 5 events live. U030 closed. — 2026-05-16 — `fbc3c27`
 - **Step 10.6** — `feat(10.6)`: UI activity panel level badges + empty state. Header renamed "Live log" → "Activity"; counter "<N> lines" → "<N> events"; level pills (info acid green / warn amber / error halt red) using Tier 9 design tokens; empty-state "Waiting for the brain to narrate…" on running/pending with zero events. Title-row Resume button renamed `.resume-btn` → `.directive-resume-btn` to avoid collision with pre-existing log-tail `.resume-btn` (Resume tailing); both moved to `Dashboard.astro` `<style is:global>` — Astro scoped rules don't reach JS-created elements, also fixed `.cancel-btn` chrome in passing (broken since Phase 3). — 2026-05-16 — `9289aff`
 - **Step 10.5** — `feat(10.5)`: UI resume button + projects-row resume link. Directive-detail renders a vermillion Resume pill when `effectiveStatus()` ∈ `failed | blocked | complete` AND `intent === 'build'`; mutex with Cancel (never both). Projects index gains "Last build" column with the latest build directive's status (linked to detail page) + per-row Resume pill on terminal directives. One `/api/v1/directives?limit=100` fetch builds the projectId-to-latest map (no N+1); degrades gracefully when the directives fetch fails. — 2026-05-16 — `f100910`
 - **Step 10.4** — `feat(10.4)`: `POST /api/v1/directives/:id/resume`. HTTP mirror of `factory resume` CLI. Bearer-auth + Zod-validated body (`autonomy?` optional override). 404 missing prior; 409 prior `running`/`pending`; 422 prior `projectPath` missing on disk. Mints child with `parentDirectiveId` + `payload.resumeFrom` + carried language/projectId/limits; doorbell emits so the brain serve loop picks up. 8 new integration tests in `server.test.ts`. New IPC schemas `apiV1ResumeRequestSchema` + `apiV1ResumeResponseSchema`. — 2026-05-16 — `e83c3c1`

@@ -1,7 +1,7 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-16T11:51:13Z by
-> `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-16T12:29:30Z by
+> `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
 
@@ -16,39 +16,44 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-**Phase 10 (resume-and-activity-feed) scaffolded, awaiting 10.1.** Tier 10 reopens the upgrade arc post-Phase-9-close. Operator-felt incident driving the tier: `automl` build directive `01KRQ1RPE5SM6Q8AYSRHHAPG39` failed at the planner Zod-parse step 2026-05-16 with no narrative surfacing in the dashboard. Two surfaces ship:
+**No active phase. Upgrade arc closed for the seventh time** at `phase-10-resume-and-activity-feed-closed` 2026-05-16. To resume work, the operator can:
 
-1. **`POST /api/v1/directives/:id/resume`** daemon route — HTTP mirror of `factory resume` CLI (`packages/cli/src/commands/resume.ts`). Web UI gains a Resume button on directive-detail (terminal status) + per-row Resume link on Projects index.
-2. **Brain `emitLogLine` coverage** — narrative sites at every brain stage entry / exit / error. Planner parse-fail and Zod-fail surface first 500 chars of LLM output as `attrs.detail`. SSE plumbing from Phase 3 (ADR 0029) already in place; only emission-side coverage was sparse.
-3. **ADR 0031** pins the log-forwarder design: manual emit sites as first-ship; pino-transport-tap deferred to Tier 11+.
+1. **Author a Tier 11 plan** — the Phase 10 Deferred section identified five candidates worth promoting if/when demand signal surfaces: pino transport tap (auto-mirror brain pino lines via `directiveId` binding); per-directive log persistence (today `log.line` events are SSE-only — operator reopening a terminal directive sees empty activity panel); resume-after-edit (override autonomy/budget on resume); bulk resume (pick N failed directives, resume all); `checkModules` h1 acceptance (`packages/wiki/src/readiness.ts:74` accepts only h2 or `modules/` dir today; the original automl crash's modules-documented warn was a false-negative since the architect wrote `# Modules` h1).
+2. **Promote a longer-standing carry-forward** — U005 chat REPL cancel UX path (a+) is now four-times-deferred. Other Phase 8-introduced carry-forwards (per-project deadline override, `factory config get/set`, override-after-auto-answer) and Tier-9-deferred items (inline-style audit, ADR 0031 for editorial aesthetic — already landed in Tier 10 as log-forwarder ADR instead) remain.
+3. **Park** — surfaces are stable; nothing is gated on more work.
 
-Next step: 10.1 — open U030 in `UPGRADE/ISSUES.md` Open section. Severity medium; Tier 10; Area web + brain. Then 10.2 (ADR 0031), 10.3 (emit sites), 10.4 (daemon route), 10.5 (UI surfaces), 10.6 (activity panel refinements), 10.7 (`/phase-close`).
+**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; the audit-driven Tier 5 closed at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 closed at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 closed at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 closed at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 closed at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 reopened 2026-05-16 at `1ac1823` (scaffold) and closed at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at this phase-close commit.
 
-**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; the audit-driven Tier 5 reopened the arc 2026-05-07 at `c0869d6` and closed at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 reopened 2026-05-07 at `542f99a` and closed at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 reopened 2026-05-07 at `ee970e8` and closed at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 reopened 2026-05-08 at `8453086` and closed at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 reopened 2026-05-15 at `397637c` and closed at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`. Tier 10 reopens 2026-05-16 at this scaffold commit.
+To kick off Phase 11:
+
+1. Operator drafts `UPGRADE/plans/tier-11-<name>.md` with goal, sub-steps, acceptance.
+2. Add a Phase 11 row to `.control/architecture/phase-plan.md`.
+3. Add a Tier 11 section to `UPGRADE/ROADMAP.md`.
+4. Scaffold `.control/phases/phase-11-<name>/{README.md,steps.md}` from `.control/templates/`.
+5. Then start working through the sub-steps.
+
+If the operator doesn't want a Tier 11, the project is in a clean post-arc parking state.
+
 
 ## Notes for next session
 
-**No active phase.** The upgrade arc closed at `phase-9-control-room-redesign-closed` 2026-05-15. To resume work, the operator can either:
+**No active phase.** The upgrade arc closed at `phase-10-resume-and-activity-feed-closed` 2026-05-16. To resume work, the operator can either:
 
-1. **Author a Tier 10 plan** — most-likely candidate per demand signal: **U005 chat REPL cancel UX path (a+)** (now thrice-deferred — was the operator-felt bug pre-Tier-8). Or one of the Phase 8-introduced carry-forwards (per-project deadline override, `factory config get/set`, override-after-auto-answer) or one of the Tier-9-deferred items (inline-style audit on the 12 pages, ADR 0031 for the editorial aesthetic). To start: draft `UPGRADE/plans/tier-10-<name>.md`, add a Phase 10 row to `.control/architecture/phase-plan.md`, add a Tier 10 section to `UPGRADE/ROADMAP.md`, scaffold `.control/phases/phase-10-<name>/{README.md,steps.md}`.
+1. **Author a Tier 11 plan** — the Tier 10 Deferred section identified five strong candidates: **pino transport tap** (auto-mirror brain pino lines by `directiveId` binding — ADR 0031 explicitly flagged this as the natural follow-up if manual emit-site overhead grows); **per-directive log persistence** (today `log.line` events are SSE-only — operator reopening a terminal directive sees empty activity panel; needs `directive_log_lines` table + `GET /api/v1/directives/:id/logs` replay endpoint; the live smoke this session surfaced the gap on the cancelled directive); **resume-after-edit** (override autonomy/budget on resume); **bulk resume** (pick N failed directives, resume all); **`checkModules` h1 acceptance** (`packages/wiki/src/readiness.ts:74` over-literal — false-negatived the original automl architect output; ~5-line fix; advisory not load-bearing). To start: draft `UPGRADE/plans/tier-11-<name>.md`, add a Phase 11 row to `.control/architecture/phase-plan.md`, add a Tier 11 section to `UPGRADE/ROADMAP.md`, scaffold `.control/phases/phase-11-<name>/{README.md,steps.md}`.
 
-2. **Promote a carry-forward item** — see `## In-flight work` above. Order-of-likelihood (most likely demand signal first):
-   - **U005 chat REPL cancel UX path (a+)** — thrice-deferred; the operator-felt bug.
-   - **`factory questions list / show <id>` CLI** — composition over existing query helpers; ~1 commit if narrowly scoped. Tier 8 made `answered_by` real; CLI list/show would render the badge end-to-end.
-   - **`factory config get / set <key>` CLI** — operator surface for the Tier 8 config file.
-   - **Inline-style audit on the 12 pages** — Tier 9 absorbed the PageShell migration de facto but cosmetic-only `style=` attributes remain (e.g. `index.astro:15` `style="margin-top: 1.5rem;"`). ~30-min sweep.
-   - **ADR 0031 — Editorial Control Room aesthetic + dual-theme tokens** — pin Tier 9's design system retrospectively if a follow-up tier wants to lean on it.
-   - **Structural `/session-end` lag-by-1 fix** — 26 occurrences accumulated. Real engineering work, not a one-liner.
+2. **Promote a longer-standing carry-forward** — U005 chat REPL cancel UX path (a+) is now four-times-deferred (Phase 2 → 4 → 8 → 9 → 10). Other still-open Phase 8 carry-forwards (per-project deadline override, `factory config get/set`, override-after-auto-answer) and Tier-9-deferred items (inline-style audit on the 12 pages; structural `/session-end` lag-by-1 fix — now 27 occurrences).
 
 3. **Park** — surfaces are stable; nothing is gated on more work.
 
 **Read first** when next session resumes:
 
-- [`UPGRADE/LOG.md`](../../UPGRADE/LOG.md) — full upgrade-side narrative across all nine closed tiers (Tier 9 entry now at the top).
+- [`UPGRADE/LOG.md`](../../UPGRADE/LOG.md) — full upgrade-side narrative across all ten closed tiers (Tier 10 entry now at the top).
 - [`.control/progress/journal.md`](journal.md) — session-by-session control narrative.
 - This file (`STATE.md`).
 
 **Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav. **Tier 9 added** a new vocabulary on top: vermillion (`#ff4d1c`) as the singular signal color; Fraunces italic display + Bricolage Grotesque body + JetBrains Mono data; CSS custom-property tokens (`--bg / --surface / --ink / --hairline / --signal / --amber / --acid / --halt / --cool`) flipped by `prefers-color-scheme`; paper-grain SVG atmosphere via `body::before / body::after`; editorial masthead with brand mark `§` + numbered nav + monospaced status pip + pulse animation.
+
+**Tier 10 in retrospect:** Two-session tier (scaffold + 10.1–10.7 same day 2026-05-16). Eight tier-10 commits: scaffold `1ac1823`, 10.1 `0ce4590`, 10.2 `bb2bca9`, 10.3 `585f172`, 10.4 `e83c3c1`, 10.5 `f100910`, 10.6 `9289aff`, phase-close (this commit). +12 tests across packages (planner-emit +4, daemon resume route +8); workspace 1182 → 1194 + 3 skipped. ADR 0031 (log-forwarder design) landed; first ADR in the upgrade arc that pins an *emission convention* (manual emit-site discipline at every brain stage entry/exit/error) vs a structural surface. Two real bugs surfaced in passing: (1) the pre-existing `.cancel-btn` chrome had been rendering as default browser button since Phase 3 — Astro scoped `<style>` rules attach a `[data-astro-cid-xyz]` selector that JS-created elements never match. Fixed by lifting log-tail + button styles to `Dashboard.astro` `<style is:global>`. (2) `brain.serve`'s uncaught-throw catch path flipped the directive to `failed` in the DB but never emitted `directive.completed` on SSE — added belt-and-suspenders emit so the UI sees the terminal flip immediately. Live browser smoke (Playwright MCP) clicked Resume on the original `01KRQ1RPE5SM6Q8AYSRHHAPG39`, child `01KRR9RGFN10YMDX5C16TXK91Y` minted, activity panel narrated 5 events live (triage → architect-calling → wrote 13 wiki pages → readiness passed → planner-calling). Interesting observation: the architect on the resume produced 13 pages with a proper `modules/` directory split — wiki-readiness `modules-documented` check passed cleanly, the original automl warn was Opus non-determinism. The carry-forward `checkModules` h1 acceptance refinement stays a valid Tier 11 candidate but is advisory-only. Cancelled the planner mid-Sonnet to keep smoke budget bounded — total smoke spend $0.7241 (architect Opus). One UX gap surfaced post-cancel and noted as Tier 11 candidate: activity panel is empty after page reload on a terminal directive because `log.line` events are SSE-only (ephemeral).
 
 **Tier 9 in retrospect:** Four commits this session — bundled redesign + recordkeeping `397637c`, gitignore tweak `307d79c`, phase-close `9e8ee5c`, next.md regen `faeb209`. First aesthetic-only tier in the upgrade arc; no tests added (visual change only), no new APIs, no new packages, workspace count unchanged at 1182 + 3 skipped. The "informal cadence" (no per-step commits, no ADR, post-hoc recordkeeping) worked because the redesign was a single-author single-session concept transfer from a sibling project — per-step commits would have added friction without information. Live browser smoke completed via Playwright MCP in-session, satisfying the operator-side gate that the README originally said couldn't be assistant-driven. Two false positives investigated and dismissed during smoke (Playwright cursor hover-retention on the nav active-state, Chrome `currentColor` cache from pre-injection paint on dark-mode body copy); neither is a production bug. Absorbed Phase 8's "PageShell + Dashboard `<style is:global>` migration" de facto — global stylesheet now carries the look pages have always referenced via shared classes.
 
