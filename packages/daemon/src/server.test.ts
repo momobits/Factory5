@@ -17,6 +17,7 @@ import { newId, type Directive, type Finding, type PendingQuestion } from '@fact
 import {
   openDatabase,
   runMigrations,
+  directiveLogLines,
   directives as directivesQ,
   findingsRegistry,
   modelUsage,
@@ -2313,6 +2314,170 @@ describe('IPC server — POST /api/v1/directives/:id/resume (Tier 10 — HTTP mi
     expect(res.statusCode).toBe(200);
     const body = res.json() as { directive: { parentDirectiveId?: string } };
     expect(body.directive.parentDirectiveId).toBe(prior.id);
+    await app.close();
+  });
+});
+
+describe('IPC server — GET /api/v1/directives/:id/logs (Tier 11 / U031)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  const UI_TOKEN = 'ui-secret-logs';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  const insertDirective = (overrides: Partial<Directive> = {}): Directive => {
+    const directive: Directive = { ...testDirective(), status: 'running', ...overrides };
+    directivesQ.insert(db, directive);
+    return directive;
+  };
+
+  it('returns 401 without bearer', async () => {
+    const directive = insertDirective();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}/logs`,
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns 404 DIRECTIVE_NOT_FOUND when the directive id is unknown', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${newId()}/logs`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('DIRECTIVE_NOT_FOUND');
+    await app.close();
+  });
+
+  it('happy path: returns persisted log lines for a real directive', async () => {
+    const directive = insertDirective();
+    directiveLogLines.appendLogLine(db, {
+      directiveId: directive.id,
+      ts: '2026-05-16T01:00:00.000Z',
+      level: 'info',
+      component: 'brain.triage',
+      msg: 'classified as build',
+    });
+    directiveLogLines.appendLogLine(db, {
+      directiveId: directive.id,
+      ts: '2026-05-16T01:00:01.000Z',
+      level: 'info',
+      component: 'brain.architect',
+      msg: 'wrote 13 wiki pages',
+      attrs: { pages: 13 },
+    });
+    directiveLogLines.appendLogLine(db, {
+      directiveId: directive.id,
+      ts: '2026-05-16T01:00:02.000Z',
+      level: 'error',
+      component: 'brain.planner',
+      msg: 'planner: schema parse failed',
+    });
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}/logs`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      items: Array<{
+        id: number;
+        ts: string;
+        level: string;
+        component: string;
+        msg: string;
+        attrs?: Record<string, unknown>;
+      }>;
+      count: number;
+      limit: number;
+    };
+    expect(body.count).toBe(3);
+    expect(body.limit).toBe(5000);
+    expect(body.items.map((i) => i.msg)).toEqual([
+      'classified as build',
+      'wrote 13 wiki pages',
+      'planner: schema parse failed',
+    ]);
+    expect(body.items[1]?.attrs).toEqual({ pages: 13 });
+    await app.close();
+  });
+
+  it('honours `since` (strict-greater-than) — matches the FE join-cursor contract', async () => {
+    const directive = insertDirective();
+    directiveLogLines.appendLogLine(db, {
+      directiveId: directive.id,
+      ts: '2026-05-16T01:00:00.000Z',
+      level: 'info',
+      component: 'brain.triage',
+      msg: 'before',
+    });
+    directiveLogLines.appendLogLine(db, {
+      directiveId: directive.id,
+      ts: '2026-05-16T01:00:01.000Z',
+      level: 'info',
+      component: 'brain.triage',
+      msg: 'cursor',
+    });
+    directiveLogLines.appendLogLine(db, {
+      directiveId: directive.id,
+      ts: '2026-05-16T01:00:02.000Z',
+      level: 'info',
+      component: 'brain.architect',
+      msg: 'after',
+    });
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}/logs?since=2026-05-16T01:00:01.000Z`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: Array<{ msg: string }>; count: number };
+    expect(body.count).toBe(1);
+    expect(body.items[0]?.msg).toBe('after');
+    await app.close();
+  });
+
+  it('returns an empty list (200, count=0) for a real directive that emitted nothing', async () => {
+    const directive = insertDirective();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}/logs`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: unknown[]; count: number };
+    expect(body.count).toBe(0);
+    expect(body.items).toEqual([]);
     await app.close();
   });
 });

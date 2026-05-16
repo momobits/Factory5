@@ -10,6 +10,7 @@ import {
   autonomyModeSchema,
   channelIdSchema,
   directiveLimitsSchema,
+  directiveLogLineSchema,
   directiveSchema,
   findingSchema,
   findingStatusSchema,
@@ -406,6 +407,41 @@ export const apiV1ResumeResponseSchema = z.object({
   directive: directiveSchema,
 });
 export type ApiV1ResumeResponse = z.infer<typeof apiV1ResumeResponseSchema>;
+
+// -----------------------------------------------------------------------------
+// GET /api/v1/directives/:id/logs  (web UI, Tier 11 — directive-log replay)
+// -----------------------------------------------------------------------------
+
+/**
+ * Query string for `GET /api/v1/directives/:id/logs`. Both fields
+ * optional. The FE bootstrap on directive-detail fetches once with
+ * `?limit=5000` (no `since`) to replay history before attaching SSE;
+ * later refreshes / partial reconnects can pass a `since` cursor to
+ * resume cleanly.
+ *
+ *   ?since=<iso>   strict-greater-than filter on `ts` (matches the FE
+ *                  join-cursor contract — events with `ts <= since` are
+ *                  excluded so a replay-then-SSE join doesn't
+ *                  double-render at the boundary)
+ *   ?limit=5000    page size, clamped server-side to [1, 5000]
+ *                  (matches `DEFAULT_LOG_LINE_LIMIT` in
+ *                  `@factory5/state`; full directive history is rarely
+ *                  larger and the FE never asks for more)
+ */
+export const apiV1DirectiveLogsQuerySchema = z.object({
+  since: z.string().datetime({ offset: true }).optional(),
+  limit: z.coerce.number().int().min(1).max(5000).optional(),
+});
+export type ApiV1DirectiveLogsQuery = z.infer<typeof apiV1DirectiveLogsQuerySchema>;
+
+export const apiV1DirectiveLogsResponseSchema = z.object({
+  items: z.array(directiveLogLineSchema),
+  /** Number of rows returned (= `items.length`); echoed for UI convenience. */
+  count: z.number().int().nonnegative(),
+  /** Limit actually applied after server-side clamping. */
+  limit: z.number().int().positive(),
+});
+export type ApiV1DirectiveLogsResponse = z.infer<typeof apiV1DirectiveLogsResponseSchema>;
 
 // -----------------------------------------------------------------------------
 // POST /api/v1/projects  (web UI, Phase 3 step 3.7 — browser mirror of `factory init`)

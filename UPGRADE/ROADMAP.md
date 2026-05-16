@@ -155,7 +155,7 @@ Close two operator-felt gaps from Tier 10's post-close smoke: (1) activity panel
 - [x] Migration 010 — `directive_log_lines` table (directive_id / ts / level / component / msg / attrs_json + ts index); three pre-existing migration shape tests bump to `[1..10]`
 - [x] State queries — `appendLogLine`, `listForDirective`; unit tests
 - [x] Daemon hub tees `log.line` to DB on emit; integration test asserts read-back
-- [ ] `GET /api/v1/directives/:id/logs?since=<iso>&limit=<n>` daemon route; bearer-auth; 3 integration tests
+- [x] `GET /api/v1/directives/:id/logs?since=<iso>&limit=<n>` daemon route; bearer-auth; 5 integration tests (3 from the plan + 404 + empty-list)
 - [ ] FE replay + dedup — fetch historic before attaching SSE; events with `ts <= joinCursor` are dropped
 - [ ] U031 closes
 

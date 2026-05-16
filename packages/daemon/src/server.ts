@@ -48,6 +48,8 @@ import {
   apiV1ResumeRequestSchema,
   apiV1ResumeResponseSchema,
   apiV1DirectiveDetailResponseSchema,
+  apiV1DirectiveLogsQuerySchema,
+  apiV1DirectiveLogsResponseSchema,
   apiV1DirectivesListQuerySchema,
   apiV1DirectivesListResponseSchema,
   apiV1FindingsListQuerySchema,
@@ -79,6 +81,7 @@ import {
   type ApiV1CreateProjectResponse,
   type ApiV1ResumeResponse,
   type ApiV1DirectiveDetailResponse,
+  type ApiV1DirectiveLogsResponse,
   type ApiV1DirectivesListResponse,
   type ApiV1FindingsListResponse,
   type ApiV1PendingQuestionDetailResponse,
@@ -98,6 +101,8 @@ import type { Logger } from '@factory5/logger';
 import { createLogger } from '@factory5/logger';
 import {
   CancelDirectiveError,
+  DEFAULT_LOG_LINE_LIMIT,
+  directiveLogLines,
   directives as directivesQ,
   findingsRegistry,
   modelUsage,
@@ -601,6 +606,38 @@ function registerRoutes(
         callCount,
       },
       'ipc: /api/v1/directives/:id',
+    );
+    reply.send(resp);
+  });
+
+  // ----- GET /api/v1/directives/:id/logs (Tier 11 / U031) -----
+  // Returns the per-directive `log.line` history persisted by the SSE
+  // hub tee (Tier 11.4). FE bootstrap fetches once on directive-detail
+  // load before attaching SSE; the last `ts` becomes the join cursor
+  // that SSE handlers compare against (`ts <= joinCursor` is dropped).
+  // 404s when the directive itself doesn't exist; an empty array is a
+  // legitimate response for a real directive that emitted nothing yet.
+  app.get<{ Params: { id: string } }>('/api/v1/directives/:id/logs', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const { id } = request.params;
+    const directive = directivesQ.getById(opts.db, id);
+    if (directive === undefined) {
+      throw new IpcRequestError(404, 'DIRECTIVE_NOT_FOUND', `directive ${id} not found`);
+    }
+    const query = apiV1DirectiveLogsQuerySchema.parse(request.query);
+    const limit = query.limit ?? DEFAULT_LOG_LINE_LIMIT;
+    const items = directiveLogLines.listForDirective(opts.db, id, {
+      limit,
+      ...(query.since !== undefined ? { sinceTs: query.since } : {}),
+    });
+    const resp: ApiV1DirectiveLogsResponse = apiV1DirectiveLogsResponseSchema.parse({
+      items,
+      count: items.length,
+      limit,
+    });
+    ipcLog.debug(
+      { reqId: request.id, directiveId: id, since: query.since, limit, count: items.length },
+      'ipc: /api/v1/directives/:id/logs',
     );
     reply.send(resp);
   });
