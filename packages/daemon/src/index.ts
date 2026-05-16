@@ -197,11 +197,10 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
   // Subsystem stop order: reverse of insert order.
   const subsystems: Array<{ name: string; stop: () => Promise<void> }> = [];
   const doorbell = new Doorbell();
-  // Per-directive SSE event hub (Phase 3 / step 3.1). Brain emits via
-  // `emitDirectiveEvent` callback wired by the supervisor; SSE handler
-  // subscribes per request. Always instantiated — costs nothing when
-  // unused.
-  const directiveStream = new DirectiveStreamHub();
+  // Hub deferred until after openDatabase — Tier 11 added a `db: Database`
+  // constructor arg so the hub can tee `log.line` events to disk before
+  // fan-out (migration 010 / `directive_log_lines`).
+  let directiveStream: DirectiveStreamHub | undefined;
   let ipc: IpcServerHandle | undefined;
 
   try {
@@ -211,6 +210,12 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
 
     db = openDatabase(opts.dbPath);
     runMigrations(db);
+
+    // Per-directive SSE event hub (Phase 3 / step 3.1; Tier 11 added the
+    // `db` arg). Brain emits via `emitDirectiveEvent` callback wired by
+    // the supervisor; SSE handler subscribes per request. Always
+    // instantiated — costs nothing when unused.
+    directiveStream = new DirectiveStreamHub(db);
 
     log.info(
       { host, port: requestedPort, pid: process.pid, pidFile: pidFile?.path },
@@ -488,7 +493,7 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
         }
       }
       doorbell.clear();
-      directiveStream.shutdown();
+      directiveStream?.shutdown();
       if (db !== undefined) {
         closeDatabase(db);
       }

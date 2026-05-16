@@ -17,6 +17,7 @@
 
 import type { DirectiveStreamEvent } from '@factory5/ipc';
 import { createLogger } from '@factory5/logger';
+import { directiveLogLines, type Database } from '@factory5/state';
 
 const log = createLogger('daemon.directive-stream');
 
@@ -46,6 +47,20 @@ export type DirectiveEventListener = (event: DirectiveStreamEvent) => void;
  */
 export class DirectiveStreamHub {
   private readonly listeners = new Map<string, Set<DirectiveEventListener>>();
+  private readonly db: Database;
+
+  /**
+   * @param db Database handle. The hub tees `log.line` events to
+   *   `directive_log_lines` (Tier 11 / migration 010) before fan-out
+   *   so historic events survive page reload, multi-tab joins, and
+   *   post-mortem visits to terminal directives. Other event types
+   *   bypass persistence (`task.*`, `finding.*`, `spend.updated`,
+   *   `directive.completed` already have authoritative DB rows
+   *   elsewhere; this hub is only the persistence path for `log.line`).
+   */
+  constructor(db: Database) {
+    this.db = db;
+  }
 
   /**
    * Subscribe a listener to events for a single directive. Returns an
@@ -90,6 +105,29 @@ export class DirectiveStreamHub {
    * cares about.
    */
   emit(event: DirectiveStreamEvent): void {
+    if (event.type === 'log.line') {
+      // Tee log.line to disk BEFORE fan-out so a late subscriber's
+      // replay+SSE join sees the same boundary as live listeners
+      // currently in the loop. Persistence failure is non-fatal —
+      // the SSE contract (ADR 0029) is fire-and-forget; one failing
+      // INSERT should never block event delivery to live consumers.
+      try {
+        directiveLogLines.appendLogLine(this.db, {
+          directiveId: event.directiveId,
+          ts: event.ts,
+          level: event.level,
+          component: event.component,
+          msg: event.msg,
+          ...(event.attrs !== undefined ? { attrs: event.attrs } : {}),
+        });
+      } catch (err) {
+        log.warn(
+          { err, directiveId: event.directiveId },
+          'directive-stream: log.line persistence failed (non-fatal)',
+        );
+      }
+    }
+
     const set = this.listeners.get(event.directiveId);
     if (set === undefined) return;
     for (const listener of set) {

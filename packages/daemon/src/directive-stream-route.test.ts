@@ -63,7 +63,7 @@ async function startServer(opts: {
   uiAuthToken?: string | undefined;
   heartbeatMs?: number;
 }): Promise<ServerHandle> {
-  const hub = new DirectiveStreamHub();
+  const hub = new DirectiveStreamHub(opts.db);
   const app = await buildIpcServer({
     host: '127.0.0.1',
     port: 0,
