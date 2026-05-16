@@ -9,7 +9,7 @@
 Two operator surfaces are missing on the Control Room:
 
 1. **No way to resume a failed/blocked directive from the web UI.** `factory resume <project>` exists as a CLI command (`packages/cli/src/commands/resume.ts`) that reuses the architect's wiki output and re-runs the planner. There's no daemon HTTP equivalent, so the web UI can't surface it. Operators have to drop to a terminal — including when they're answering channel messages from a phone with no terminal access.
-2. **Directive-detail has no narrative.** The page shows the task table + spend + open questions + a log-tail panel, but the log tail is wired to the SSE `log.line` event which the brain only emits from one site today (`packages/brain/src/loop.ts:258`, chat reply rendering). For a `build` directive, the operator sees the task table populate but no narrative of *what stage the brain is in*. When the planner crashed on `automl` `01KRQ1RPE5SM6Q8AYSRHHAPG39` after a 10-minute Sonnet call, nothing surfaced in the UI — the directive simply flipped from `running` to `failed`.
+2. **Directive-detail has no narrative.** The page shows the task table + spend + open questions + a log-tail panel, but the log tail is wired to the SSE `log.line` event which the brain only emits from one site today (`packages/brain/src/loop.ts:258`, chat reply rendering). For a `build` directive, the operator sees the task table populate but no narrative of _what stage the brain is in_. When the planner crashed on `automl` `01KRQ1RPE5SM6Q8AYSRHHAPG39` after a 10-minute Sonnet call, nothing surfaced in the UI — the directive simply flipped from `running` to `failed`.
 
 Tier 10 ships both: a `POST /api/v1/directives/:id/resume` daemon route + UI buttons on directive-detail and the projects index, plus broader `emitLogLine` coverage from the brain so the activity panel renders a real timeline (architect start → wiki written → readiness checks → planner start → planner result / error → tasks dispatched).
 
@@ -23,7 +23,7 @@ Tier 10 ships both: a `POST /api/v1/directives/:id/resume` daemon route + UI but
 
 ## Where we were, end of Phase 9
 
-Phase 9 closed at `phase-9-control-room-redesign-closed` 2026-05-15 — the Control Room redesign. Upgrade arc parked for the sixth time. The factoryd / brain SSE plumbing for `log.line` events shipped in **Phase 3** (ADR 0029, `directive-stream-protocol`); the directive-detail page consumes it; only the *emission* side is sparse. The resume CLI command shipped in **Phase 1** and has been working through five subsequent tier-closes without an HTTP surface.
+Phase 9 closed at `phase-9-control-room-redesign-closed` 2026-05-15 — the Control Room redesign. Upgrade arc parked for the sixth time. The factoryd / brain SSE plumbing for `log.line` events shipped in **Phase 3** (ADR 0029, `directive-stream-protocol`); the directive-detail page consumes it; only the _emission_ side is sparse. The resume CLI command shipped in **Phase 1** and has been working through five subsequent tier-closes without an HTTP surface.
 
 The user-felt incident that drove this tier: an `automl` build directive crashed at the planner-JSON-parse step after a 10-minute Sonnet call. The wiki-readiness `modules-documented` warn fired correctly (the architect wrote a top-level `modules.md` with `# Modules` h1 — the gate's regex requires `## Modules` h2 or a `modules/` directory; both are over-literal). The operator saw the warn and thought it was the cause; the real cause was downstream and silent in the UI.
 
@@ -52,20 +52,20 @@ ADR 0031 recommends manual sites with a guardrail: at least one explicit `emitLo
 
 Add `emitLogLine` calls at these sites in the brain:
 
-| File | Site | level | msg shape |
-|---|---|---|---|
-| `loop.ts` (triage) | after triage classification | `info` | `triage → intent=<X> confidence=<Y>` |
-| `architect.ts` | start | `info` | `architect: calling <model>` |
-| `architect.ts` | wiki written | `info` | `architect: wrote <N> wiki pages` |
-| `architect.ts` | readiness | `info` or `warn` | `wiki readiness: <ok\|failed: <ids>>` |
-| `planner.ts` | start | `info` | `planner: calling <model>` |
-| `planner.ts` | parse fail (`:331`) | `error` | `planner: no JSON in response`; attrs include first 500 chars |
-| `planner.ts` | Zod fail (`:335`) | `error` | `planner: schema parse failed`; attrs include Zod issues |
-| `planner.ts` | plan written | `info` | `planner: <N> tasks queued` |
-| `pool.ts` | task dispatched | `info` | `pool: task <id> (<agent>) started` (parallel to `task.started` SSE event) |
-| `pool.ts` | task error | `error` | `pool: task <id> failed: <reason>` |
-| `assessor invocation` | start + end | `info` | `assessor: build=<x> integration=<y> verify=<z>` |
-| `loop.ts` finalisation | terminal | `info` | `brain: directive <status>` |
+| File                   | Site                        | level            | msg shape                                                                  |
+| ---------------------- | --------------------------- | ---------------- | -------------------------------------------------------------------------- |
+| `loop.ts` (triage)     | after triage classification | `info`           | `triage → intent=<X> confidence=<Y>`                                       |
+| `architect.ts`         | start                       | `info`           | `architect: calling <model>`                                               |
+| `architect.ts`         | wiki written                | `info`           | `architect: wrote <N> wiki pages`                                          |
+| `architect.ts`         | readiness                   | `info` or `warn` | `wiki readiness: <ok\|failed: <ids>>`                                      |
+| `planner.ts`           | start                       | `info`           | `planner: calling <model>`                                                 |
+| `planner.ts`           | parse fail (`:331`)         | `error`          | `planner: no JSON in response`; attrs include first 500 chars              |
+| `planner.ts`           | Zod fail (`:335`)           | `error`          | `planner: schema parse failed`; attrs include Zod issues                   |
+| `planner.ts`           | plan written                | `info`           | `planner: <N> tasks queued`                                                |
+| `pool.ts`              | task dispatched             | `info`           | `pool: task <id> (<agent>) started` (parallel to `task.started` SSE event) |
+| `pool.ts`              | task error                  | `error`          | `pool: task <id> failed: <reason>`                                         |
+| `assessor invocation`  | start + end                 | `info`           | `assessor: build=<x> integration=<y> verify=<z>`                           |
+| `loop.ts` finalisation | terminal                    | `info`           | `brain: directive <status>`                                                |
 
 The exact list is the floor; authors can add more where useful. Tests in `loop.test.ts` extend to assert these emit sites fire on the happy path; one regression test feeds `planner.ts` a deliberately malformed Sonnet output to assert the error-line surfaces with the first 500 chars.
 
@@ -82,6 +82,7 @@ New route in `packages/daemon/src/server.ts`. Body: `{ autonomy?: 'assisted' | '
 Reuses the bearer-auth + Zod-validated body pattern from `/api/v1/builds`. Adds `apiV1ResumeRequestSchema` + `apiV1ResumeResponseSchema` to `packages/ipc/src/`. New test in `packages/daemon/test/` that minted a prior directive, POSTs to `/resume`, asserts child directive shape + `parentDirectiveId` chain.
 
 **Refuses to resume when:**
+
 - Prior directive doesn't exist (404 `NOT_FOUND`).
 - Prior directive is currently `running` or `pending` (409 `CONFLICT` — operator should cancel first).
 - Prior directive's `projectPath` no longer exists on disk (422 `PROJECT_NOT_FOUND`).

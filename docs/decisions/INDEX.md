@@ -42,6 +42,7 @@ Decisions are append-only. To overturn a decision, write a new ADR with `Superse
 | [0028](0028-worker-sandbox-contract.md)                  | Worker-sandbox contract: gate site + path-prefix algebra + out-of-scope behaviour + Bash story + write-vs-read scope | Accepted           | 2026-04-26 |
 | [0029](0029-directive-stream-protocol.md)                | Directive-stream protocol: SSE for live build observation, six event types, brain-side optional-callback emission    | Accepted           | 2026-05-05 |
 | [0030](0030-pending-question-auto-answer.md)             | Pending-question auto-answer: deadline-driven LLM dispatch, structured `answered_by` provenance, daemon-wide config  | Accepted           | 2026-05-08 |
+| [0031](0031-log-forwarder-design.md)                     | Log-forwarder design: manual `emitLogLine` sites at brain stage breakpoints; pino-transport-tap deferred to Tier 11+ | Accepted           | 2026-05-16 |
 
 ## Adding a new ADR
 

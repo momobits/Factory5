@@ -204,4 +204,4 @@ Three-tier merge (`resolveDirectiveLimits` in `@factory5/wiki`): per-flag → pe
 | [`SKILLS.md`](SKILLS.md)             | Skill catalog — methodology files injected into agent prompts                                                                   |
 | [`AGENTS.md`](AGENTS.md)             | Agent role catalog — `triage`, `architect`, `planner`, `builder`, `reviewer`, `fixer`, `investigator`, `verifier`, `scaffolder` |
 | [`ONBOARDING.md`](ONBOARDING.md)     | Clone-to-first-build walkthrough                                                                                                |
-| [`decisions/`](decisions)            | 30 ADRs + INDEX                                                                                                                 |
+| [`decisions/`](decisions)            | 31 ADRs + INDEX                                                                                                                 |
