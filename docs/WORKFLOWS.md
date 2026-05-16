@@ -92,6 +92,18 @@ Whichever surface you answer through, the brain's polling loop sees the answer w
 
 Best for: long autonomous runs (hours), multi-day work where the operator isn't actively at the terminal, multi-operator teams where whoever's around answers.
 
+### 1.5 Resume after failure
+
+When a build hit a terminal failure (`failed` / `blocked` / `complete`-but-you-want-to-rerun) and you want to retry without losing the architect's work. Three surfaces:
+
+- **Web UI — directive-detail (Tier 10).** Open `/app/directives/detail/?id=<failed-directive-id>`. A vermillion **Resume** pill appears in the title row whenever status is terminal and `intent === 'build'` (mutex with the Cancel pill — never both). One click POSTs to `POST /api/v1/directives/:id/resume`, mints a child directive with `parentDirectiveId` + `payload.resumeFrom` set, and navigates to the child's detail page. The brain skips the architect when the wiki is still on disk and skips already-complete tasks in the plan.
+- **Web UI — Projects index (Tier 10).** Open `/app/projects/`. The "Last build" column shows the latest build directive's status linked to its detail page; a small Resume pill in the same cell on terminal-non-running rows offers a one-click resume of that project's most recent build.
+- **CLI.** `factory resume <project>` is the canonical command — looks up the most recent directive for the project, mints a child with the same linkage, runs the brain inline. Resume from any terminal status (`failed`, `blocked`, `complete`). Refuses on a `running`/`pending` prior — cancel it first.
+
+While the resumed directive runs, the **Activity** panel narrates brain stages live (see §5.4 in `docs/ONBOARDING.md`) — you'll see `architect: skipped (wiki already on disk; resume path)` when the wiki was good enough; otherwise the architect re-runs against the same prompt. Schema-validation failures (e.g. the planner couldn't extract valid JSON from the LLM response) surface as red **ERROR** events in the activity panel with the first 500 chars of the offending LLM output as `attrs.detail` — that's ADR 0031's contract.
+
+Best for: rerunning a build after fixing an upstream cause (a bug in a dep, a stale auth token, a transient LLM error); promoting a `complete` build to retry-with-modified-spec; recovering from operator-side cancels.
+
 ---
 
 ## 2. Decision matrix — which surface for which task?
