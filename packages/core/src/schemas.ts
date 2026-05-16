@@ -278,6 +278,37 @@ export const pendingQuestionSchema = z.object({
 });
 
 // -----------------------------------------------------------------------------
+// Directive log line (Tier 11 / U031)
+// -----------------------------------------------------------------------------
+
+/**
+ * Persisted row shape for `directive_log_lines` (migration 010). Mirrors the
+ * SSE `logLineEventSchema` field set so a row round-trips cleanly to/from a
+ * live event, but drops the `type` literal (not stored) and adds the
+ * surrogate `id` (SQLite-assigned) so callers can break ties on identical
+ * timestamps and correlate downstream operations.
+ *
+ * Read path: the daemon's `GET /api/v1/directives/:id/logs` route renders
+ * a list of these for the FE to replay on connect (Tier 11 §11.5–11.6).
+ *
+ * Write path: the daemon's `DirectiveStreamHub.emit` tee site builds a
+ * {@link DirectiveLogLineInput} (no `id` — auto-assigned) and calls
+ * `appendLogLine` before fan-out (Tier 11 §11.4).
+ */
+export const directiveLogLineSchema = z.object({
+  id: z.number().int().positive(),
+  directiveId: ulidSchema,
+  ts: isoDateTimeSchema,
+  level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']),
+  component: z.string().min(1),
+  msg: z.string(),
+  attrs: z.record(z.unknown()).optional(),
+});
+
+/** Insert shape — `id` is auto-assigned by SQLite (`INTEGER PRIMARY KEY AUTOINCREMENT`). */
+export const directiveLogLineInputSchema = directiveLogLineSchema.omit({ id: true });
+
+// -----------------------------------------------------------------------------
 // Daemon-wide config file (ADR 0030)
 // -----------------------------------------------------------------------------
 

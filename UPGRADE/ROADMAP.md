@@ -151,9 +151,9 @@ Plan: [`plans/tier-10-resume-and-activity-feed.md`](plans/tier-10-resume-and-act
 
 Close two operator-felt gaps from Tier 10's post-close smoke: (1) activity panel disappears on refresh because `log.line` events are SSE-only / ephemeral; (2) multi-tab consistency — tabs that subscribe after another tab miss historic events. Migration 010 adds `directive_log_lines` table; daemon `DirectiveStreamHub.emit` tees `log.line` events to DB before fanning out; new `GET /api/v1/directives/:id/logs` returns historic per-directive events; FE replays on connect and dedups against the live SSE stream via a join-cursor. Estimated **1 session**.
 
-- [ ] Open U031 (activity panel empty after reload; multi-tab event split)
-- [ ] Migration 010 — `directive_log_lines` table (directive_id / ts / level / component / msg / attrs_json + ts index); three pre-existing migration shape tests bump to `[1..10]`
-- [ ] State queries — `appendLogLine`, `listForDirective`; unit tests
+- [x] Open U031 (activity panel empty after reload; multi-tab event split)
+- [x] Migration 010 — `directive_log_lines` table (directive_id / ts / level / component / msg / attrs_json + ts index); three pre-existing migration shape tests bump to `[1..10]`
+- [x] State queries — `appendLogLine`, `listForDirective`; unit tests
 - [ ] Daemon hub tees `log.line` to DB on emit; integration test asserts read-back
 - [ ] `GET /api/v1/directives/:id/logs?since=<iso>&limit=<n>` daemon route; bearer-auth; 3 integration tests
 - [ ] FE replay + dedup — fetch historic before attaching SSE; events with `ts <= joinCursor` are dropped

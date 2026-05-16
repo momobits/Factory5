@@ -13,6 +13,8 @@ import type {
   autonomyModeSchema,
   channelIdSchema,
   directiveLimitsSchema,
+  directiveLogLineInputSchema,
+  directiveLogLineSchema,
   directiveSchema,
   directiveStatusSchema,
   eventBodySchema,
@@ -62,3 +64,5 @@ export type Plan = z.infer<typeof planSchema>;
 export type OutboundMessage = z.infer<typeof outboundMessageSchema>;
 export type PendingQuestion = z.infer<typeof pendingQuestionSchema>;
 export type Project = z.infer<typeof projectSchema>;
+export type DirectiveLogLine = z.infer<typeof directiveLogLineSchema>;
+export type DirectiveLogLineInput = z.infer<typeof directiveLogLineInputSchema>;
