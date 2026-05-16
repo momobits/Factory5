@@ -180,7 +180,7 @@ Standard gates + a live browser smoke: kick off a build via the Web UI with cust
 - [x] ADR 0032 lands; INDEX.md + ARCHITECTURE.md ADR count updated
 - [x] `BUDGET_DEFAULTS` exported from `@factory5/core`; CLI and Web read from the same source
 - [x] Web Build form: Advanced budgets accordion with all six fields + defaults + explainers
-- [ ] CLI: six new flags on `factory build` and `factory resume`; `--help` quotes the same explainers
+- [x] CLI: six new flags on `factory build` and `factory resume`; `--help` quotes the same explainers
 - [ ] Directive payload carries `budgets`; resume inherits it
 - [ ] Brain escalation: `error_max_turns` triggers typed askUser with bump-suggestion
 - [ ] Tier 8 auto-answer accepts the bump on first failure, aborts on second

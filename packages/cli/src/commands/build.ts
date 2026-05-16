@@ -16,8 +16,10 @@ import { exit, stdout } from 'node:process';
 import { loadConfig, loadDaemonEndpoint, runBrain } from '@factory5/brain';
 import { readPidFile } from '@factory5/daemon';
 import { type AutonomyMode, directiveSchema, newId, type Intent } from '@factory5/core';
+import { type BudgetAxis } from '@factory5/core/budgets';
 import { createDaemonClient } from '@factory5/ipc';
 import { createLogger } from '@factory5/logger';
+import { addBudgetFlags, collectBudgetFlags, type BudgetOptions } from './budget-flags.js';
 import {
   directives as directivesQ,
   modelUsage,
@@ -50,14 +52,6 @@ function parseLanguage(raw: string): ProjectLanguage {
   throw new Error(`--language must be python | node | go | rust, got: ${raw}`);
 }
 
-function parsePositiveFloat(flag: string, raw: string): number {
-  const n = Number.parseFloat(raw);
-  if (!Number.isFinite(n) || n <= 0) {
-    throw new Error(`${flag} must be a positive number, got: ${raw}`);
-  }
-  return n;
-}
-
 function parsePositiveInt(flag: string, raw: string): number {
   const n = Number.parseInt(raw, 10);
   if (!Number.isFinite(n) || n < 1) {
@@ -67,7 +61,7 @@ function parsePositiveInt(flag: string, raw: string): number {
 }
 
 export function registerBuildCommand(program: Command): void {
-  program
+  const cmd = program
     .command('build <project>')
     .description('build a project from its CLAUDE.md spec (delegates to factoryd if running)')
     .option('--autonomy <mode>', 'chat | assisted | autonomous', 'assisted')
@@ -78,17 +72,14 @@ export function registerBuildCommand(program: Command): void {
     .option('--workspace <path>', 'root directory under which projects live', defaultWorkspace())
     .option('--concurrency <n>', 'max parallel worker tasks (default: min(4, cpuCount))', (v) =>
       parsePositiveInt('--concurrency', v),
-    )
-    .option(
-      '--max-usd <n>',
-      'hard USD ceiling for this directive (ADR 0020). Absent = unlimited.',
-      (v) => parsePositiveFloat('--max-usd', v),
-    )
-    .option(
-      '--max-steps <n>',
-      'hard call-count ceiling for this directive (ADR 0020). Absent = unlimited.',
-      (v) => parsePositiveInt('--max-steps', v),
-    )
+    );
+
+  // Tier 12 / ADR 0032 §3 — six budget flags with explainers read verbatim
+  // from BUDGET_DEFAULTS. The same set lands on `factory resume` so resume
+  // can override per-axis when the operator picks accept-with-bump.
+  addBudgetFlags(cmd);
+
+  cmd
     .option('--inline', 'force inline execution even when a daemon is running')
     .option('--verbose', 'log at debug level')
     .addHelpText(
@@ -98,8 +89,13 @@ Examples:
   factory build my-app
   factory build my-app --autonomy autonomous --max-usd 5
   factory build my-app --language node --max-steps 200
+  factory build my-app --max-turns-scaffolder 160      # bigger projects
   factory build templates/python-cli --autonomy chat
-  factory build my-app --inline                       # bypass the daemon
+  factory build my-app --inline                        # bypass the daemon
+
+Budgets (ADR 0032 §1) are operator-facing; defaults + explainers live in
+@factory5/core/budgets — the same source the Web UI's "Advanced budgets"
+accordion reads. Omit any flag to use the default.
 `,
     )
     .action(
@@ -110,11 +106,9 @@ Examples:
           language?: string;
           workspace: string;
           concurrency?: number;
-          maxUsd?: number;
-          maxSteps?: number;
           inline?: boolean;
           verbose?: boolean;
-        },
+        } & BudgetOptions,
       ) => {
         try {
           if (options.verbose === true) {
@@ -155,13 +149,18 @@ Examples:
           // (ADR 0027 §4 / I009 fix): explicit CLI flag → per-project
           // `metadata.budgetDefaults` (Web UI–writable) → `config.toml`
           // `[budget.defaults]` (ADR 0020). Per-field independent.
+          // Tier 12 / ADR 0032 §6: the four new axes (deadline + maxTurns*)
+          // ride on directive.payload.budgets instead. The split is
+          // transitional — step 12.7 unifies the shape.
+          const { limits: explicitLimits, budgets: budgetOverrides } = collectBudgetFlags(options);
           const cfg = await loadConfig().catch(() => undefined);
           const limits = resolveDirectiveLimits({
-            explicitFlags: { maxUsd: options.maxUsd, maxSteps: options.maxSteps },
+            explicitFlags: explicitLimits,
             projectDefaults: budgetDefaultsFromProjectMeta(projectMeta),
             configDefaults: cfg?.budget.defaults,
           });
           const hasLimits = limits !== undefined;
+          const hasBudgets = Object.keys(budgetOverrides).length > 0;
 
           const directive = directiveSchema.parse({
             id: newId(),
@@ -174,6 +173,7 @@ Examples:
               projectPath,
               workspace,
               ...(language !== undefined ? { language } : {}),
+              ...(hasBudgets ? { budgets: budgetOverrides } : {}),
             },
             autonomy,
             createdAt: nowIso,
@@ -187,9 +187,14 @@ Examples:
             limits !== undefined
               ? `  limits:   ${limits.maxUsd !== undefined ? `max_usd=$${limits.maxUsd.toFixed(2)} ` : ''}${limits.maxSteps !== undefined ? `max_steps=${String(limits.maxSteps)}` : ''}\n`
               : '';
+          const budgetsLine = hasBudgets
+            ? `  budgets:  ${(Object.keys(budgetOverrides) as BudgetAxis[])
+                .map((k) => `${k}=${String(budgetOverrides[k])}`)
+                .join(' ')}\n`
+            : '';
           const languageLine = language !== undefined ? `  language: ${language}\n` : '';
           stdout.write(
-            `factory build ${project}\n  directive: ${directive.id}\n  path: ${projectPath}\n  autonomy: ${autonomy}\n${languageLine}${limitsLine}\n`,
+            `factory build ${project}\n  directive: ${directive.id}\n  path: ${projectPath}\n  autonomy: ${autonomy}\n${languageLine}${limitsLine}${budgetsLine}\n`,
           );
 
           const daemonAvailable = options.inline !== true && isDaemonRunning();

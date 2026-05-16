@@ -47,7 +47,7 @@ See [`steps.md`](steps.md).
 - [x] ADR 0032 lands; INDEX.md + ARCHITECTURE.md ADR count bumped
 - [x] `BUDGET_DEFAULTS` exported from `@factory5/core`; CLI + Web read from the same source
 - [x] Web UI Build form: Advanced budgets accordion (collapsed by default); six fields + defaults + explainers
-- [ ] CLI: six new flags on `factory build` AND `factory resume`; `--help` post-text quotes explainers
+- [x] CLI: six new flags on `factory build` AND `factory resume`; `--help` post-text quotes explainers
 - [ ] Directive payload `budgets` field; resume route inherits it
 - [ ] Brain escalation: `error_max_turns` → typed askUser → on accept, relaunch task with bumped budget; on abort, mark failed (current behaviour)
 - [ ] Tier 8 auto-answer: bump-by-one-bucket on first failure, abort on second
