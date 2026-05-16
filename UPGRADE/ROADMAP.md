@@ -137,13 +137,13 @@ Plan: [`plans/tier-9-control-room-redesign.md`](plans/tier-9-control-room-redesi
 
 Close two operator-feels-blind gaps surfaced by an `automl` build failure 2026-05-16. (1) No UI surface for `factory resume` — CLI command exists at `packages/cli/src/commands/resume.ts` but the daemon has no HTTP mirror; operator viewing a failed directive from a phone has no recovery action. (2) Directive-detail activity panel is silent on `build` directives because the brain emits only one `log.line` SSE event today (`packages/brain/src/loop.ts:258`, chat reply only). The `automl` planner crashed on a Zod schema validation after a 10-minute Sonnet call; the operator saw the directive flip `running → failed` with no narrative of _what_ the brain was doing or _where_ it broke. SSE plumbing from Phase 3 (ADR 0029) is in place; only emission-side coverage is sparse. Estimated **2 sessions**.
 
-- [ ] Open U030 (no UI surface for resume; activity panel silent on build directives)
-- [ ] ADR 0031 — log-forwarder design: manual `emitLogLine` sites as first-ship; pino-transport-tap and hybrid listed as alternatives considered + Tier 11 candidates
-- [ ] Brain `emitLogLine` narrative sites in `architect.ts` / `planner.ts` / `pool.ts` / `loop.ts`; planner parse-fail and Zod-fail surface first 500 chars of LLM output as `attrs.detail`
-- [ ] `POST /api/v1/directives/:id/resume` daemon route — mirrors `factory resume` CLI logic (parentDirectiveId + payload.resumeFrom chain); 404 missing prior; 409 prior non-terminal; 422 prior projectPath missing on disk
-- [ ] UI: Resume button on directive-detail when status terminal (`failed | blocked | complete`); per-row Resume link on Projects index when most-recent directive is terminal-non-complete
-- [ ] UI: activity panel level badges (info / warn / error using design tokens) + empty-state "Waiting for the brain to narrate…" hint
-- [ ] U030 closes when 10.5 lands
+- [x] Open U030 (no UI surface for resume; activity panel silent on build directives)
+- [x] ADR 0031 — log-forwarder design: manual `emitLogLine` sites as first-ship; pino-transport-tap and hybrid listed as alternatives considered + Tier 11 candidates
+- [x] Brain `emitLogLine` narrative sites in `architect.ts` / `planner.ts` / `pool.ts` / `loop.ts`; planner parse-fail and Zod-fail surface first 500 chars of LLM output as `attrs.detail`
+- [x] `POST /api/v1/directives/:id/resume` daemon route — mirrors `factory resume` CLI logic (parentDirectiveId + payload.resumeFrom chain); 404 missing prior; 409 prior non-terminal; 422 prior projectPath missing on disk
+- [x] UI: Resume button on directive-detail when status terminal (`failed | blocked | complete`); per-row Resume link on Projects index when most-recent directive is terminal-non-complete
+- [x] UI: activity panel level badges (info / warn / error using design tokens) + empty-state "Waiting for the brain to narrate…" hint
+- [x] U030 closes when 10.5 lands
 
 Plan: [`plans/tier-10-resume-and-activity-feed.md`](plans/tier-10-resume-and-activity-feed.md)
 

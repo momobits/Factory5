@@ -1,7 +1,7 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-16T00:44:46Z by
-> `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-16T11:51:13Z by
+> `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
 
@@ -25,7 +25,6 @@ see a structured `[control:state]` block instead of doing them by hand.
 Next step: 10.1 — open U030 in `UPGRADE/ISSUES.md` Open section. Severity medium; Tier 10; Area web + brain. Then 10.2 (ADR 0031), 10.3 (emit sites), 10.4 (daemon route), 10.5 (UI surfaces), 10.6 (activity panel refinements), 10.7 (`/phase-close`).
 
 **Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; the audit-driven Tier 5 reopened the arc 2026-05-07 at `c0869d6` and closed at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 reopened 2026-05-07 at `542f99a` and closed at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 reopened 2026-05-07 at `ee970e8` and closed at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 reopened 2026-05-08 at `8453086` and closed at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 reopened 2026-05-15 at `397637c` and closed at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`. Tier 10 reopens 2026-05-16 at this scaffold commit.
-
 
 ## Notes for next session
 

@@ -6,6 +6,47 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-16 — Phase 10 (resume-and-activity-feed) closed; upgrade arc complete (seventh time)
+
+Tier 10 reopened the upgrade arc 2026-05-16 and closed the same day. Two operator-feels-blind gaps fixed: (1) no UI surface for `factory resume`; (2) directive-detail's activity panel silent on `build` directives because the brain only emitted one `log.line` SSE event today.
+
+**Forcing function:** an `automl` build directive `01KRQ1RPE5SM6Q8AYSRHHAPG39` ran ~14 minutes on 2026-05-16 (architect ~3 min, planner ~10 min) and crashed on `ZodError: tasks Required` at `packages/brain/src/planner.ts:335` — silently in the UI. The operator saw the directive flip running→failed with no narrative and no recovery action. SSE plumbing from Phase 3 (ADR 0029) was already in place; only the _emission_ side was sparse.
+
+**Eight commits this session:**
+
+- `1ac1823` — `chore(phase-10)`: scaffold tier 10 resume + activity feed
+- `0ce4590` — `chore(10.1)`: open U030
+- `bb2bca9` — `docs(10.2)`: ADR 0031 — log-forwarder design
+- `585f172` — `feat(10.3)`: brain emitLogLine narrative sites
+- `e83c3c1` — `feat(10.4)`: POST /api/v1/directives/:id/resume
+- `f100910` — `feat(10.5)`: UI resume button + projects-row resume link
+- `9289aff` — `feat(10.6)`: UI activity panel level badges + empty state
+- this phase-close
+
+**Three workstreams shipped:**
+
+1. **`POST /api/v1/directives/:id/resume`** — HTTP mirror of `factory resume` CLI. Bearer-auth + Zod-validated body (`autonomy?` optional override). 404 missing prior; 409 prior `running`/`pending`; 422 prior `projectPath` missing on disk. Mints child with `parentDirectiveId` + `payload.resumeFrom` + carried language / projectId / limits; doorbell emits so the brain serve loop picks up. 8 new integration tests in `packages/daemon/src/server.test.ts`. New IPC schemas `apiV1ResumeRequestSchema` + `apiV1ResumeResponseSchema`.
+
+2. **Brain `emitLogLine` coverage** — extracted `emitLogLine` + `emitDirectiveCompleted` to a shared `packages/brain/src/emit.ts` to break the loop↔stage circular import; loop.ts re-exports for backward compat. Emit sites added at every brain stage entry / exit / error path per ADR 0031 §4: triage (after classification), architect (calling / no-JSON / Zod-fail / wiki-written / readiness), planner (calling / parse-fail / Zod-fail / plan-written), pool (dispatching / task-error / complete), loop (architect-skipped on resume, planner-reuse, terminal, budget-blocked), serve (uncaught-throw belt-and-suspenders that ALSO emits `directive.completed` — fixed a Phase-3-era silent-fail-in-UI gap discovered while wiring 10.3). Planner parse-fail and Zod-fail carry the first 500 chars of LLM response in `attrs.detail` + truncated Zod issues. 4 regression tests in `planner-emit.test.ts` lock the automl Zod-fail shape (`attrs.zodIssues[0].path === ['tasks']` is the canonical assertion).
+
+3. **UI surfaces** — directive-detail renders a vermillion Resume pill when `effectiveStatus()` ∈ `failed | blocked | complete` AND `intent === 'build'`; mutex with Cancel (never both). Projects index gains a "Last build" column with the latest build directive's status (linked) + per-row Resume pill on terminal directives — one `/api/v1/directives?limit=100` fetch builds the projectId-to-latest map (no N+1). Activity panel renders level-badge pills (info acid green / warn amber / error halt red) using Tier 9 design tokens; "Waiting for the brain to narrate…" empty-state hint on running directives with zero events; silent on terminal directives with no events to avoid misleading post-mortem. Header renamed "Live log" → "Activity"; counter "lines" → "events" to match the SSE vocabulary.
+
+**ADR 0031 — log-forwarder design.** Five-part decision: manual emit sites first-ship over pino-tap (auto-mirror deferred to Tier 11+); event shape is `level + component + msg + optional attrs` with dotted-hierarchy `component` like `brain.<stage>`; error events carry first 500 chars of any offending LLM output in `attrs.detail` (mirrors the existing `planner.ts:331` thrown-error prefix); guardrail mandates entry+exit+error emit per brain stage; `attrs.detail` is bounded at 500 chars (daemon log file is the full-transcript fallback). The ADR also documented Tier 11+ candidates explicitly: pino transport tap, hybrid, polling-based activity-log persistence.
+
+**Two pre-existing bugs surfaced in passing.** (1) The `.cancel-btn` had been rendering as default browser button since Phase 3 — Astro scoped `<style>` rules attach a `[data-astro-cid-xyz]` attribute selector that JS-created elements never match. Fixed by lifting the entire log-tail + button style block to `Dashboard.astro` `<style is:global>`. (2) `brain.serve`'s uncaught-throw catch path flipped the directive to `failed` in the DB but never emitted `directive.completed` on SSE, so the FE relied on polling to discover terminal state. Added belt-and-suspenders emit so the UI sees the terminal flip immediately.
+
+**Live browser smoke** (Playwright MCP, in-session) — restarted factoryd to pick up the new daemon route + emit sites, opened `/app/directives/detail?id=01KRQ1RPE5SM6Q8AYSRHHAPG39`, clicked the vermillion RESUME pill, child directive `01KRR9RGFN10YMDX5C16TXK91Y` minted, navigated to its detail page. Activity panel narrated 5 events live (triage: intent=resume confidence=0.95 → architect: calling claude-opus-4-7 → wrote 13 wiki pages → wiki readiness: all checks passed → planner: calling claude-sonnet-4-6). Cancel pill flipped to "CANCELLING", clicked it, daemon received the cancel at 11:56:54, directive marked failed in DB at $0.7241. Cancelled before Sonnet returned to keep smoke budget bounded.
+
+**Interesting empirical finding.** The architect on the resume produced **13 wiki pages with a proper `modules/` directory split** — the original automl run wrote a single `modules.md` with `# Modules` h1 which the gate's `checkModules` regex rejects. Opus output is non-deterministic; the original gate-fail was a one-off. The carry-forward "loosen `checkModules` to accept h1" stays a valid Tier 11 candidate but is advisory-only.
+
+**Workspace count:** 1182 + 3 skipped → 1194 + 3 skipped (+12 across planner-emit and resume-route).
+
+**All four `pnpm` gates green throughout.**
+
+**Next:** upgrade arc parks again. Tier 11 candidates from this tier's Deferred section: pino transport tap, per-directive log persistence (activity panel empty after reload on terminal directives), resume-after-edit, bulk resume, `checkModules` h1 acceptance. The longer-standing Phase 8 carry-forwards (U005 chat REPL cancel, per-project deadline override, `factory config get/set`, override-after-auto-answer) and the structural `/session-end` lag-by-1 fix (now 27 occurrences) remain available.
+
+---
+
 ## 2026-05-15 — Phase 9 (Control Room redesign — factory-web editorial port) closed; upgrade arc complete (sixth time)
 
 Reopened the upgrade arc post-Phase-8-close for a frontend aesthetic overhaul, closed in the same session. First tier in the arc that shipped visual-design work without an underlying contract change. Three commits this session: bundled redesign + `.control` recordkeeping (`397637c`), gitignore tweak for smoke artifacts (`307d79c`), and this phase-close.
