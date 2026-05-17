@@ -24,6 +24,17 @@ Severity:
 
 ## Open
 
+### U034 — `factory daemon stop` on Windows leaves a stale pidfile; SIGTERM is mapped to hard `TerminateProcess`
+
+- **Severity**: low
+- **Tier**: 13 (carry-forward candidate)
+- **Area**: cli + daemon
+- **Description**: `factory daemon stop` on Windows reports `factoryd stopped (pid <N>)` but leaves the pidfile on disk with the dead PID's contents. The CLI's `process.kill(info.pid, 'SIGTERM')` in `packages/cli/src/commands/daemon.ts:153` is mapped by Node-on-Windows to a hard `TerminateProcess` syscall (Node docs: "SIGTERM is not supported on Windows ... will cause the target process to exit unconditionally"). The factoryd shutdown handler at `apps/factoryd/src/main.ts:156-170` — which calls `stopDaemon(handle)` → `handle.stop()` → `pidFile?.release()` at `packages/daemon/src/index.ts:500` — never runs. Subsequent `factory daemon start` reaps the stale pidfile correctly via `processAlive(pid)` (the dead PID liveness probe returns false), so the bug is not load-bearing — it's a cosmetic / sloppy-shutdown issue, plus a small confusion vector for operators who inspect the pidfile post-stop and see a number that looks live. Observed 2026-05-17 stopping PID 51784; manual `Remove-Item factoryd.pid` cleared it.
+- **Hypothesis**: Two fixable layers, pick one:
+  1. **CLI-side belt-and-suspenders.** After the post-kill `waitPidGone()` returns true (PID 51784 is gone), the CLI's `stopDaemon()` in `packages/cli/src/commands/daemon.ts:141-164` explicitly unlinks the pidfile if it still exists AND still contains the same PID it just killed. Cheap; doesn't change the daemon's contract; handles both the Windows hard-kill case and any future scenario where a daemon dies before releasing its pidfile.
+  2. **Daemon-side `POST /shutdown` IPC route.** The CLI hits a localhost-bound `/shutdown` endpoint (bearer-gated) which schedules a graceful stop in the daemon's event loop, then waits for pidfile-gone. Gives the daemon's shutdown handler a real chance to run on Windows; works identically on Unix. More code; deeper testability; opens the door to richer shutdown lifecycle hooks (e.g., draining in-flight directives before exit). Probably the right long-term shape; consider the small ADR-amend if it ships.
+- **Resolution**: Discovered 2026-05-17 at session-end. Not load-bearing because next-start reaps stale pidfiles automatically. Fold into Phase 13's polish bucket alongside the U033 fix, or split into its own ~30-line sub-step.
+
 ### U033 — Operator-set `maxTurns*` is silently shadowed by planner-emit; live `[BUDGET]` askUser never fires from the Build form
 
 - **Severity**: high
