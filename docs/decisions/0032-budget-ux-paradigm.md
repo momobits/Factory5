@@ -159,3 +159,24 @@ Add `maxUsdPerTask` to the operator-facing set, mirroring `maxTurns` semantics. 
 - [ADR 0030](0030-pending-question-auto-answer.md) — auto-answer dispatcher this ADR extends with typed-prompt path
 - [Tier 12 plan](../../UPGRADE/plans/tier-12-budget-ux.md) — full budget audit (15 constants), per-step implementation breakdown
 - U032 — operator-felt incident driving this ADR (`automl` scaffolder hit 40-turn cap with 13 modules)
+
+## Amendment 2026-05-17 — operator budget is a ceiling on planner emit (U033 clarification)
+
+Phase 12's deferred browser smoke (run the day after the phase close) failed the operator-felt gate: a build with `maxTurnsScaffolder=10` set in the Web UI's Advanced budgets accordion persisted `payload.budgets.maxTurnsScaffolder=10` daemon-side, but the scaffolder ran 40 turns (planner-emitted) and completed `exitCode=0` with no `[BUDGET]` askUser. Investigation traced to `resolveTaskMaxTurns` in `packages/brain/src/budget-escalation.ts:105-112` preferring `task.maxTurns` (planner-emit, always set per the planner prompt's 10-160 range) over `directive.payload.budgets[axis]` (operator). Filed as U033 (high; Tier 13).
+
+The shipped Phase 12 resolver read this ADR's §6 docstring label ("operator override") as "operator value when planner is silent" — a fallback ordering. That reading is consistent with §6's literal text but inconsistent with §6's stated intent ("Every directive's `payload.budgets` ... MUST carry the **resolved** budget set the directive was built against") and with the Decision's §4 escalation rule (which exists precisely so the operator can interrupt a budget trip — pointless if the operator's cap can't reach the worker).
+
+The amended semantic (landed in Phase 13.3): the operator's `directive.payload.budgets[axis]` is a **ceiling** on the planner's per-task emit. `resolveTaskMaxTurns` returns `min(task.maxTurns, operator_ceiling)` when both are defined; `task.maxTurns` unchanged when the operator did not set the axis or set it to `0` (the "no ceiling" sentinel, matching ADR 0020's `maxUsd: 0 = unlimited` pattern). The planner's range guidance (10-160) stays — operators can refine _downward_, the planner refines _downward within the ceiling_, neither side raises caps the other set. The docstring rewrites from "operator override" to "operator ceiling — planner emit refines downward."
+
+This is a clarification of stated intent, not a paradigm change — supersedure-by-new-ADR is not warranted per CLAUDE.md's "do not edit accepted ADRs" rule, which targets _changes_ to a Decision's substance. The Decision's §4 (typed askUser on budget trip) and §6 (payload persistence + resume inheritance) both presupposed the operator-as-ceiling semantic; this amendment makes that explicit so future readers don't repeat the Phase 12 confusion.
+
+**What's covered by the regression tests** (added to `packages/brain/src/budget-escalation.test.ts` in 13.3):
+
+- `applies operator ceiling when planner emit exceeds it` — planner 200, operator 160 → 160.
+- `floors planner emit at the operator directive budget (U033 smoke regression)` — planner 40, operator 10 → 10 (the live smoke incident).
+- `applies the operator ceiling at the boundary` — planner 80, operator 80 → 80.
+- `lets the planner refine below the operator ceiling` — planner 30, operator 80 → 30 (planner-refined-down case; previous behavior preserved).
+- `treats operator-set 0 as a no-ceiling sentinel` — planner 40, operator 0 → 40 (matches `maxUsd: 0 = unlimited`).
+- `isolates ceilings per-axis` — scaffolder task with `maxTurnsBuilder=10` set only → planner emit wins (no cross-axis bleed).
+
+**Carried forward.** A belt-and-suspenders enhancement is open: feeding `directive.payload.budgets` into the planner prompt at `packages/brain/src/planner.ts:247-249` so the planner can self-clamp before emitting. Today the `Math.min()` clamp at consumption time is sufficient; deferred until a real-world case surfaces a too-eager planner.

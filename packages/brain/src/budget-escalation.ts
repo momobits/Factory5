@@ -89,25 +89,49 @@ export function budgetsFromDirective(directive: Directive): Record<string, numbe
 }
 
 /**
- * Compute the effective `maxTurns` cap for a given task. Resolution order
- * (ADR 0032 §1's four-tier collapses to two here because the daemon's POST
- * /builds + CLI build paths already collapse instance config / project
- * metadata into the resolved set written to `payload.budgets`):
+ * Compute the effective `maxTurns` cap for a given task. Phase 13.3 / U033
+ * semantic: the operator's `directive.payload.budgets[axis]` is a CEILING;
+ * the planner's per-task emit is refined downward within it.
  *
- *   1. `task.maxTurns` if the planner emitted one (per-task override).
- *   2. `directive.payload.budgets[axisForAgent(task.agent)]` (operator
- *      override on this directive).
- *   3. `BUDGET_DEFAULTS[axis].value` (canonical default).
+ * Resolution:
+ *
+ *   1. If the planner emitted `task.maxTurns` AND the operator set a
+ *      positive ceiling on this axis, return `min(task.maxTurns, ceiling)`.
+ *   2. If the planner emitted `task.maxTurns` and the operator did NOT
+ *      set the axis (or set it to 0 — the "no ceiling" sentinel), return
+ *      `task.maxTurns` unchanged.
+ *   3. If the planner did NOT emit and the operator set a positive value,
+ *      return the operator value.
+ *   4. Otherwise return `BUDGET_DEFAULTS[axis].value`.
  *
  * Returns `undefined` for read-only agents (no maxTurns axis). Tool-using
  * agents always get a concrete number.
+ *
+ * Pre-fix (Phase 12.7) the order was `task.maxTurns > payload.budgets >
+ * default`, which meant the planner's per-task emit always shadowed the
+ * operator's directive budget — Phase 12's deferred smoke surfaced this
+ * as U033 (operator-set `maxTurnsScaffolder=10` had no observable effect;
+ * scaffolder ran at the planner's 40). The fix flips the relationship to
+ * ceiling-and-refine so the documented Phase 12 promise — "set a low
+ * maxTurns in the UI → [BUDGET] askUser fires before the build burns
+ * past the cap" — materialises from the operator surface.
+ *
+ * The `payload.budgets` semantic this builds on is overrides-only (see
+ * ADR 0032 §6 + the Phase 12 retro note in STATE.md): the field carries
+ * only axes the operator explicitly set; absent axes mean "no operator
+ * override". The 0-sentinel handling matches the `maxUsd`/`maxSteps`
+ * pattern from ADR 0020 where `0 = unlimited`.
  */
 export function resolveTaskMaxTurns(task: Task, directive: Directive): number | undefined {
-  if (task.maxTurns !== undefined) return task.maxTurns;
   const axis = axisForAgent(task.agent);
   if (axis === undefined) return undefined;
   const fromPayload = budgetsFromDirective(directive)[axis];
-  if (fromPayload !== undefined) return fromPayload;
+  const operatorCeiling = fromPayload !== undefined && fromPayload > 0 ? fromPayload : undefined;
+  if (task.maxTurns !== undefined) {
+    if (operatorCeiling !== undefined) return Math.min(task.maxTurns, operatorCeiling);
+    return task.maxTurns;
+  }
+  if (operatorCeiling !== undefined) return operatorCeiling;
   return BUDGET_DEFAULTS[axis].value;
 }
 

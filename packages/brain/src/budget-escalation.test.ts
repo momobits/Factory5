@@ -281,9 +281,47 @@ describe('resolveTaskMaxTurns', () => {
     ...(maxTurns !== undefined ? { maxTurns } : {}),
   });
 
-  it('returns task.maxTurns when planner emitted one (highest priority)', () => {
+  // ADR 0032 §6 + Phase 13.3 (U033) — semantic: operator's
+  // payload.budgets[axis] is a CEILING; planner emit is refined downward
+  // within it. `min(planner_emit, operator_ceiling)` when both are set;
+  // planner-only or operator-only paths preserve their values; default
+  // applies when neither side spoke.
+
+  it('applies operator ceiling when planner emit exceeds it (U033 fix — operator ceiling wins)', () => {
     const t = baseTask('scaffolder', 200);
     const d = baseDirective({ budgets: { maxTurnsScaffolder: 160 } });
+    expect(resolveTaskMaxTurns(t, d)).toBe(160);
+  });
+
+  it('floors planner emit at the operator directive budget (U033 smoke regression: operator 10 vs planner 40)', () => {
+    const t = baseTask('scaffolder', 40);
+    const d = baseDirective({ budgets: { maxTurnsScaffolder: 10 } });
+    expect(resolveTaskMaxTurns(t, d)).toBe(10);
+  });
+
+  it('applies the operator ceiling at the boundary (planner emit equals ceiling)', () => {
+    const t = baseTask('scaffolder', 80);
+    const d = baseDirective({ budgets: { maxTurnsScaffolder: 80 } });
+    expect(resolveTaskMaxTurns(t, d)).toBe(80);
+  });
+
+  it('lets the planner refine below the operator ceiling (planner 30 stays 30 under ceiling 80)', () => {
+    const t = baseTask('scaffolder', 30);
+    const d = baseDirective({ budgets: { maxTurnsScaffolder: 80 } });
+    expect(resolveTaskMaxTurns(t, d)).toBe(30);
+  });
+
+  it('treats operator-set 0 as a no-ceiling sentinel (planner emit wins, no clamp)', () => {
+    const t = baseTask('scaffolder', 40);
+    const d = baseDirective({ budgets: { maxTurnsScaffolder: 0 } });
+    expect(resolveTaskMaxTurns(t, d)).toBe(40);
+  });
+
+  it('isolates ceilings per-axis (scaffolder task ignores operator-set maxTurnsBuilder)', () => {
+    const t = baseTask('scaffolder', 200);
+    const d = baseDirective({ budgets: { maxTurnsBuilder: 10 } });
+    // Operator set only the builder ceiling; scaffolder axis is unset, so
+    // there's no operator ceiling for THIS task — planner emit wins.
     expect(resolveTaskMaxTurns(t, d)).toBe(200);
   });
 
@@ -318,14 +356,6 @@ describe('resolveTaskMaxTurns', () => {
     expect(resolveTaskMaxTurns(baseTask('planner'), d)).toBeUndefined();
     expect(resolveTaskMaxTurns(baseTask('reviewer'), d)).toBeUndefined();
     expect(resolveTaskMaxTurns(baseTask('verifier'), d)).toBeUndefined();
-  });
-
-  it('respects per-task override even when directive carries an axis value', () => {
-    const t = baseTask('scaffolder', 40);
-    const d = baseDirective({ budgets: { maxTurnsScaffolder: 160 } });
-    // Planner-emitted wins: respects explicit per-task carving (some tasks
-    // need fewer turns than the directive-wide default).
-    expect(resolveTaskMaxTurns(t, d)).toBe(40);
   });
 });
 

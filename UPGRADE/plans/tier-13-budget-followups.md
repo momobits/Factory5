@@ -37,7 +37,7 @@ Deferred from Phase 13 to a future tier:
 
 ```ts
 export function resolveTaskMaxTurns(task: Task, directive: Directive): number | undefined {
-  if (task.maxTurns !== undefined) return task.maxTurns;          // ← BUG: planner emit always wins
+  if (task.maxTurns !== undefined) return task.maxTurns; // ← BUG: planner emit always wins
   const axis = axisForAgent(task.agent);
   if (axis === undefined) return undefined;
   const fromPayload = budgetsFromDirective(directive)[axis];
@@ -73,7 +73,7 @@ async function stopDaemon(): Promise<void> {
   }
   log.info({ pid: info.pid }, 'sending SIGTERM to factoryd');
   try {
-    process.kill(info.pid, 'SIGTERM');                           // ← Windows: TerminateProcess
+    process.kill(info.pid, 'SIGTERM'); // ← Windows: TerminateProcess
   } catch (err) {
     stdout.write(`factoryd: kill failed: ${(err as Error).message}\n`);
     exit(1);
@@ -83,7 +83,7 @@ async function stopDaemon(): Promise<void> {
     stdout.write(`factoryd: did not exit within 10s — consider \`kill -9 ${String(info.pid)}\`\n`);
     exit(2);
   }
-  stdout.write(`factoryd stopped (pid ${String(info.pid)})\n`);  // ← but pidfile remains
+  stdout.write(`factoryd stopped (pid ${String(info.pid)})\n`); // ← but pidfile remains
 }
 ```
 
@@ -178,9 +178,9 @@ Today `<project>/.factory/project.json` `metadata.budgetDefaults` (from Tier 8) 
       "askUserDeadlineMs": 600000,
       "maxTurnsScaffolder": 160,
       "maxTurnsBuilder": 80,
-      "maxTurnsFixer": 80
-    }
-  }
+      "maxTurnsFixer": 80,
+    },
+  },
 }
 ```
 
