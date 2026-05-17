@@ -48,7 +48,7 @@ See [`steps.md`](steps.md).
 - [x] `BUDGET_DEFAULTS` exported from `@factory5/core`; CLI + Web read from the same source
 - [x] Web UI Build form: Advanced budgets accordion (collapsed by default); six fields + defaults + explainers
 - [x] CLI: six new flags on `factory build` AND `factory resume`; `--help` post-text quotes explainers
-- [ ] Directive payload `budgets` field; resume route inherits it
+- [x] Directive payload `budgets` field; resume route inherits it
 - [x] Brain escalation: `error_max_turns` → typed askUser → on accept, relaunch task with bumped budget; on abort, mark failed (current behaviour)
 - [x] Tier 8 auto-answer: bump-by-one-bucket on first failure, abort on second
 - [x] Tests across the escalation path + ipc / cli / fe surfaces

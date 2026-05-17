@@ -1021,6 +1021,33 @@ function registerRoutes(
     const inheritedProjectId = prior.projectId;
     const nowIso = new Date().toISOString();
 
+    // Tier 12 / ADR 0032 §6 — inherit the prior directive's payload.budgets
+    // and merge with operator overrides on the resume (body wins per-axis).
+    // Missing axes on the body inherit verbatim from the prior; missing
+    // axes on the prior fall through to BUDGET_DEFAULTS at brain-consumption.
+    const priorBudgetsRaw = payload?.['budgets'];
+    const priorBudgets: Record<string, number> =
+      typeof priorBudgetsRaw === 'object' &&
+      priorBudgetsRaw !== null &&
+      !Array.isArray(priorBudgetsRaw)
+        ? (priorBudgetsRaw as Record<string, number>)
+        : {};
+    const mergedBudgets: Record<string, number> = { ...priorBudgets };
+    if (body.budgets !== undefined) {
+      for (const [k, v] of Object.entries(body.budgets)) {
+        if (typeof v === 'number') mergedBudgets[k] = v;
+      }
+    }
+    const hasMergedBudgets = Object.keys(mergedBudgets).length > 0;
+
+    // ADR 0020 limits merge: prior.limits is the base; body.limits overrides
+    // per-field. The shape is { maxUsd?, maxSteps? } so a body that supplies
+    // only maxSteps keeps prior.maxUsd.
+    const mergedLimits =
+      prior.limits !== undefined || body.limits !== undefined
+        ? { ...(prior.limits ?? {}), ...(body.limits ?? {}) }
+        : undefined;
+
     const directive = directiveSchema.parse({
       id: newId(),
       source: 'cli',
@@ -1033,13 +1060,14 @@ function registerRoutes(
         workspace: defaultWorkspace(),
         resumeFrom: prior.id,
         ...(carriedLanguage !== undefined ? { language: carriedLanguage } : {}),
+        ...(hasMergedBudgets ? { budgets: mergedBudgets } : {}),
       },
       autonomy,
       createdAt: nowIso,
       status: 'pending',
       parentDirectiveId: prior.id,
       ...(inheritedProjectId !== undefined ? { projectId: inheritedProjectId } : {}),
-      ...(prior.limits !== undefined ? { limits: prior.limits } : {}),
+      ...(mergedLimits !== undefined ? { limits: mergedLimits } : {}),
     });
     directivesQ.insert(opts.db, directive);
 

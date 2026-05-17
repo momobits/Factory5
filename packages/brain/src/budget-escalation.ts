@@ -23,6 +23,8 @@
  * @packageDocumentation
  */
 
+import type { Directive, Task } from '@factory5/core';
+import { BUDGET_DEFAULTS } from '@factory5/core/budgets';
 import { createLogger } from '@factory5/logger';
 import type { Database } from '@factory5/state';
 
@@ -67,6 +69,46 @@ const AGENT_TO_AXIS: Record<string, MaxTurnsAxis | undefined> = {
 /** Resolve the `maxTurns*` axis for a given tool-using agent role. */
 export function axisForAgent(agent: string): MaxTurnsAxis | undefined {
   return AGENT_TO_AXIS[agent];
+}
+
+/**
+ * Safely extract `payload.budgets` from a directive. Returns an empty object
+ * (not undefined) when the directive lacks the field or has an unexpected
+ * shape, so callers can treat the result as a partial Budgets bag.
+ */
+export function budgetsFromDirective(directive: Directive): Record<string, number> {
+  if (typeof directive.payload !== 'object' || directive.payload === null) return {};
+  const payload = directive.payload as Record<string, unknown>;
+  const raw = payload['budgets'];
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Compute the effective `maxTurns` cap for a given task. Resolution order
+ * (ADR 0032 §1's four-tier collapses to two here because the daemon's POST
+ * /builds + CLI build paths already collapse instance config / project
+ * metadata into the resolved set written to `payload.budgets`):
+ *
+ *   1. `task.maxTurns` if the planner emitted one (per-task override).
+ *   2. `directive.payload.budgets[axisForAgent(task.agent)]` (operator
+ *      override on this directive).
+ *   3. `BUDGET_DEFAULTS[axis].value` (canonical default).
+ *
+ * Returns `undefined` for read-only agents (no maxTurns axis). Tool-using
+ * agents always get a concrete number.
+ */
+export function resolveTaskMaxTurns(task: Task, directive: Directive): number | undefined {
+  if (task.maxTurns !== undefined) return task.maxTurns;
+  const axis = axisForAgent(task.agent);
+  if (axis === undefined) return undefined;
+  const fromPayload = budgetsFromDirective(directive)[axis];
+  if (fromPayload !== undefined) return fromPayload;
+  return BUDGET_DEFAULTS[axis].value;
 }
 
 /**

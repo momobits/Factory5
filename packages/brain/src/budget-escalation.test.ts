@@ -17,14 +17,18 @@ import {
   type Database,
 } from '@factory5/state';
 
+import type { Task } from '@factory5/core';
+
 import {
   axisForAgent,
   BUDGET_ESCALATION_MARKER,
+  budgetsFromDirective,
   escalateBudgetTrip,
   MAX_TURNS_CLAMP_MAX,
   MAX_TURNS_CLAMP_MIN,
   parseBudgetEscalationAnswer,
   renderBudgetEscalationQuestion,
+  resolveTaskMaxTurns,
   suggestedNextBucket,
 } from './budget-escalation.js';
 
@@ -180,6 +184,148 @@ describe('parseBudgetEscalationAnswer', () => {
       kind: 'abort',
       reason: 'parse-failed',
     });
+  });
+});
+
+describe('budgetsFromDirective', () => {
+  it('returns empty bag for a directive without payload.budgets', () => {
+    const d: Directive = {
+      id: newId(),
+      source: 'cli',
+      principal: 'tester',
+      channelRef: 'sess-1',
+      intent: 'build',
+      payload: { project: 'x' },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'running',
+    };
+    expect(budgetsFromDirective(d)).toEqual({});
+  });
+
+  it('extracts numeric axes from payload.budgets', () => {
+    const d: Directive = {
+      id: newId(),
+      source: 'cli',
+      principal: 'tester',
+      channelRef: 'sess-1',
+      intent: 'build',
+      payload: { budgets: { maxTurnsScaffolder: 160, askUserDeadlineMs: 600000 } },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'running',
+    };
+    expect(budgetsFromDirective(d)).toEqual({
+      maxTurnsScaffolder: 160,
+      askUserDeadlineMs: 600000,
+    });
+  });
+
+  it('filters non-numeric and non-finite values defensively', () => {
+    const d: Directive = {
+      id: newId(),
+      source: 'cli',
+      principal: 'tester',
+      channelRef: 'sess-1',
+      intent: 'build',
+      payload: { budgets: { maxTurnsScaffolder: 160, weird: 'no', alsoWeird: NaN } },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'running',
+    };
+    expect(budgetsFromDirective(d)).toEqual({ maxTurnsScaffolder: 160 });
+  });
+
+  it('returns empty bag for null / array / non-object payload.budgets', () => {
+    const base = (budgets: unknown): Directive => ({
+      id: newId(),
+      source: 'cli',
+      principal: 'tester',
+      channelRef: 'sess-1',
+      intent: 'build',
+      payload: { budgets },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'running',
+    });
+    expect(budgetsFromDirective(base(null))).toEqual({});
+    expect(budgetsFromDirective(base([1, 2, 3]))).toEqual({});
+    expect(budgetsFromDirective(base('not an object'))).toEqual({});
+  });
+});
+
+describe('resolveTaskMaxTurns', () => {
+  const baseDirective = (payload: Record<string, unknown> = {}): Directive => ({
+    id: newId(),
+    source: 'cli',
+    principal: 'tester',
+    channelRef: 'sess-1',
+    intent: 'build',
+    payload,
+    autonomy: 'autonomous',
+    createdAt: new Date().toISOString(),
+    status: 'running',
+  });
+
+  const baseTask = (agent: Task['agent'], maxTurns?: number): Task => ({
+    id: newId(),
+    planId: newId(),
+    title: 'task',
+    agent,
+    category: 'planning',
+    inputs: { files: [], context: '' },
+    expectedOutputs: { files: [], signals: [] },
+    dependsOn: [],
+    status: 'pending',
+    attempts: 0,
+    ...(maxTurns !== undefined ? { maxTurns } : {}),
+  });
+
+  it('returns task.maxTurns when planner emitted one (highest priority)', () => {
+    const t = baseTask('scaffolder', 200);
+    const d = baseDirective({ budgets: { maxTurnsScaffolder: 160 } });
+    expect(resolveTaskMaxTurns(t, d)).toBe(200);
+  });
+
+  it('falls back to directive.payload.budgets when planner did not set maxTurns', () => {
+    const t = baseTask('scaffolder');
+    const d = baseDirective({ budgets: { maxTurnsScaffolder: 160 } });
+    expect(resolveTaskMaxTurns(t, d)).toBe(160);
+  });
+
+  it('falls back to BUDGET_DEFAULTS when neither task nor payload set the axis', () => {
+    const t = baseTask('scaffolder');
+    const d = baseDirective({});
+    expect(resolveTaskMaxTurns(t, d)).toBe(120); // BUDGET_DEFAULTS.maxTurnsScaffolder.value
+  });
+
+  it('uses the builder axis for builder tasks', () => {
+    const t = baseTask('builder');
+    const d = baseDirective({ budgets: { maxTurnsBuilder: 160 } });
+    expect(resolveTaskMaxTurns(t, d)).toBe(160);
+  });
+
+  it('uses the fixer axis for fixer tasks', () => {
+    const t = baseTask('fixer');
+    const d = baseDirective({});
+    expect(resolveTaskMaxTurns(t, d)).toBe(80); // BUDGET_DEFAULTS.maxTurnsFixer.value
+  });
+
+  it('returns undefined for read-only agents (no maxTurns axis applies)', () => {
+    const d = baseDirective({});
+    expect(resolveTaskMaxTurns(baseTask('triage'), d)).toBeUndefined();
+    expect(resolveTaskMaxTurns(baseTask('architect'), d)).toBeUndefined();
+    expect(resolveTaskMaxTurns(baseTask('planner'), d)).toBeUndefined();
+    expect(resolveTaskMaxTurns(baseTask('reviewer'), d)).toBeUndefined();
+    expect(resolveTaskMaxTurns(baseTask('verifier'), d)).toBeUndefined();
+  });
+
+  it('respects per-task override even when directive carries an axis value', () => {
+    const t = baseTask('scaffolder', 40);
+    const d = baseDirective({ budgets: { maxTurnsScaffolder: 160 } });
+    // Planner-emitted wins: respects explicit per-task carving (some tasks
+    // need fewer turns than the directive-wide default).
+    expect(resolveTaskMaxTurns(t, d)).toBe(40);
   });
 });
 

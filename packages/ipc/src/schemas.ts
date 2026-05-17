@@ -411,6 +411,19 @@ export type ApiV1CreateBuildResponse = z.infer<typeof apiV1CreateBuildResponseSc
 export const apiV1ResumeRequestSchema = z.object({
   /** Override autonomy on the resumed run (defaults to the prior's). */
   autonomy: autonomyModeSchema.optional(),
+  /**
+   * Tier-12 operator overrides on the resumed run. The daemon inherits the
+   * prior directive's `payload.budgets` and merges these in per-axis (body
+   * wins). Missing axes inherit verbatim from the prior. ADR 0032 §6.
+   */
+  budgets: budgetsSchema.optional(),
+  /**
+   * ADR 0020 `limits` (maxUsd / maxSteps) override on the resumed run. The
+   * daemon inherits the prior directive's `limits` and merges these in
+   * per-field. Distinct from `budgets`; the `limits` shape is the pre-call
+   * enforcement surface, separate from the Tier-12 budget axes.
+   */
+  limits: directiveLimitsSchema.optional(),
 });
 export type ApiV1ResumeRequest = z.infer<typeof apiV1ResumeRequestSchema>;
 

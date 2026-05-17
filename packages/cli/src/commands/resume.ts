@@ -158,15 +158,31 @@ set per-axis. Omitted flags inherit from the prior directive (Tier 12.7).
               ? priorLanguage
               : undefined;
 
-          // Tier 12 / ADR 0032 §6 — collect operator-supplied budget overrides
-          // for this resume. Note: 12.5 only writes the overrides; the
-          // inheritance from `prior.payload.budgets` (so unset axes inherit
-          // from the original directive's resolved set) is 12.7's contract.
-          // Today an axis omitted on resume falls back to BUDGET_DEFAULTS at
-          // brain-consumption time.
+          // Tier 12 / ADR 0032 §6 — inherit prior.payload.budgets and merge
+          // operator overrides per-axis (operator wins). Missing axes on the
+          // resume inherit verbatim from the original; missing axes on the
+          // original fall through to BUDGET_DEFAULTS at brain consumption.
           const { limits: explicitLimits, budgets: budgetOverrides } = collectBudgetFlags(options);
-          const hasLimits = Object.keys(explicitLimits).length > 0;
-          const hasBudgets = Object.keys(budgetOverrides).length > 0;
+          const priorBudgetsRaw = priorPayload?.['budgets'];
+          const priorBudgets =
+            typeof priorBudgetsRaw === 'object' &&
+            priorBudgetsRaw !== null &&
+            !Array.isArray(priorBudgetsRaw)
+              ? (priorBudgetsRaw as Record<string, number>)
+              : {};
+          const mergedBudgets: Record<string, number> = {
+            ...priorBudgets,
+            ...budgetOverrides,
+          };
+          const hasMergedBudgets = Object.keys(mergedBudgets).length > 0;
+
+          // ADR 0020 limits merge: prior.limits is the base; CLI flag
+          // overrides per-field. Distinct from `budgets`; the limits shape
+          // is the pre-call enforcement surface.
+          const mergedLimits =
+            prior.limits !== undefined || Object.keys(explicitLimits).length > 0
+              ? { ...(prior.limits ?? {}), ...explicitLimits }
+              : undefined;
 
           const directive = directiveSchema.parse({
             id: newId(),
@@ -180,31 +196,20 @@ set per-axis. Omitted flags inherit from the prior directive (Tier 12.7).
               workspace: options.workspace ?? projectRow?.workspacePath ?? projectPath,
               resumeFrom: prior.id,
               ...(carriedLanguage !== undefined ? { language: carriedLanguage } : {}),
-              ...(hasBudgets ? { budgets: budgetOverrides } : {}),
+              ...(hasMergedBudgets ? { budgets: mergedBudgets } : {}),
             },
             autonomy: options.autonomy as Directive['autonomy'],
             createdAt: new Date().toISOString(),
             status: 'pending' as const,
             parentDirectiveId: prior.id,
             ...(inheritedProjectId !== undefined ? { projectId: inheritedProjectId } : {}),
-            ...(hasLimits
-              ? {
-                  limits: {
-                    ...(explicitLimits.maxUsd !== undefined
-                      ? { maxUsd: explicitLimits.maxUsd }
-                      : {}),
-                    ...(explicitLimits.maxSteps !== undefined
-                      ? { maxSteps: explicitLimits.maxSteps }
-                      : {}),
-                  },
-                }
-              : {}),
+            ...(mergedLimits !== undefined ? { limits: mergedLimits } : {}),
           });
           directivesQ.insert(db, directive);
 
-          const budgetsLine = hasBudgets
-            ? `  budgets:       ${(Object.keys(budgetOverrides) as BudgetAxis[])
-                .map((k) => `${k}=${String(budgetOverrides[k])}`)
+          const budgetsLine = hasMergedBudgets
+            ? `  budgets:       ${(Object.keys(mergedBudgets) as BudgetAxis[])
+                .map((k) => `${k}=${String(mergedBudgets[k])}`)
                 .join(' ')}\n`
             : '';
           stdout.write(

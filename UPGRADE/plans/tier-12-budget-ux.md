@@ -181,7 +181,7 @@ Standard gates + a live browser smoke: kick off a build via the Web UI with cust
 - [x] `BUDGET_DEFAULTS` exported from `@factory5/core`; CLI and Web read from the same source
 - [x] Web Build form: Advanced budgets accordion with all six fields + defaults + explainers
 - [x] CLI: six new flags on `factory build` and `factory resume`; `--help` quotes the same explainers
-- [ ] Directive payload carries `budgets`; resume inherits it
+- [x] Directive payload carries `budgets`; resume inherits it
 - [x] Brain escalation: `error_max_turns` triggers typed askUser with bump-suggestion
 - [x] Tier 8 auto-answer accepts the bump on first failure, aborts on second
 - [x] Tests cover the escalation path

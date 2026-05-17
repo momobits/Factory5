@@ -37,7 +37,7 @@ import {
 } from '@factory5/worker';
 
 import { assertBudget, BudgetExceededError } from './budget.js';
-import { axisForAgent, escalateBudgetTrip } from './budget-escalation.js';
+import { axisForAgent, escalateBudgetTrip, resolveTaskMaxTurns } from './budget-escalation.js';
 import { loadDaemonEndpoint } from './daemon-endpoint.js';
 import { emitLogLine } from './emit.js';
 import { buildAgentSystemPrompt } from './prompts.js';
@@ -259,9 +259,19 @@ async function executeTask(
   // through to the failed-task path (existing behaviour). The MCP-side
   // sandbox in-worker askUser flow keeps working — this is brain-side
   // escalation for the post-stream `error_max_turns` outcome.
+  // Tier 12 / ADR 0032 §6 — resolve the effective maxTurns from
+  // directive.payload.budgets[axisForAgent] when the planner didn't emit a
+  // per-task override. directive may be undefined for legacy / synthetic
+  // pool invocations (no directive row); fall through to planner value or
+  // provider default in that case.
+  const initialMaxTurns =
+    directive !== undefined ? resolveTaskMaxTurns(task, directive) : task.maxTurns;
   let outcome: WorkerOutcome;
   let escalations = 0;
-  let currentTask: Task = task;
+  let currentTask: Task =
+    initialMaxTurns !== undefined && initialMaxTurns !== task.maxTurns
+      ? { ...task, maxTurns: initialMaxTurns }
+      : task;
   while (true) {
     try {
       outcome = await runWorker({

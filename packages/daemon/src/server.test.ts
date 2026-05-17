@@ -2339,6 +2339,79 @@ describe('IPC server — POST /api/v1/directives/:id/resume (Tier 10 — HTTP mi
     await app.close();
   });
 
+  it('Tier 12 / ADR 0032 §6: resume inherits prior.payload.budgets verbatim', async () => {
+    const prior = insertPriorDirective({
+      payload: {
+        project: 'sample',
+        projectPath: projectDir,
+        workspace: projectDir,
+        language: 'node',
+        budgets: { maxTurnsScaffolder: 160, askUserDeadlineMs: 600_000 },
+      },
+    });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${prior.id}/resume`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { payload: { budgets?: Record<string, number> } };
+    };
+    expect(body.directive.payload.budgets).toEqual({
+      maxTurnsScaffolder: 160,
+      askUserDeadlineMs: 600_000,
+    });
+    await app.close();
+  });
+
+  it('Tier 12: body.budgets overrides prior.payload.budgets per-axis (merge semantics)', async () => {
+    const prior = insertPriorDirective({
+      payload: {
+        project: 'sample',
+        projectPath: projectDir,
+        workspace: projectDir,
+        budgets: { maxTurnsScaffolder: 120, maxTurnsBuilder: 80 },
+      },
+    });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${prior.id}/resume`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { budgets: { maxTurnsScaffolder: 160 } },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { payload: { budgets?: Record<string, number> } };
+    };
+    // Operator's override wins on the axis they set; the other axis is
+    // inherited verbatim from the prior.
+    expect(body.directive.payload.budgets).toEqual({
+      maxTurnsScaffolder: 160,
+      maxTurnsBuilder: 80,
+    });
+    await app.close();
+  });
+
+  it('Tier 12: body.limits overrides prior.limits per-field (merge semantics)', async () => {
+    const prior = insertPriorDirective({ limits: { maxUsd: 5, maxSteps: 100 } });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${prior.id}/resume`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { limits: { maxUsd: 10 } },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { directive: { limits?: { maxUsd: number; maxSteps: number } } };
+    // body.maxUsd overrides; prior.maxSteps inherits.
+    expect(body.directive.limits).toEqual({ maxUsd: 10, maxSteps: 100 });
+    await app.close();
+  });
+
   it('body.autonomy override wins over the prior autonomy', async () => {
     const prior = insertPriorDirective({ autonomy: 'autonomous' });
     const app = await buildIpcServer(baseOpts());
