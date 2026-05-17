@@ -12,6 +12,7 @@ import {
   loadOrCreateProjectMetadata,
   readProjectMetadata,
   resolveDirectiveLimits,
+  resolveDirectivePayloadBudgets,
   updateProjectMetadata,
   type ProjectMetadata,
 } from './project-metadata.js';
@@ -303,6 +304,146 @@ describe('budgetDefaultsFromProjectMeta (ADR 0027 §4 read helper)', () => {
       budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: 'unlimited' })),
     ).toBeUndefined();
     expect(budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: null }))).toBeUndefined();
+  });
+
+  // Phase 13.5 — widen the project metadata schema to cover all six Phase 12
+  // budget axes (ADR 0032 §1). Old projects with `{maxUsd, maxSteps}` only
+  // still parse; new projects can carry `{maxTurnsScaffolder, ...}` etc.
+
+  it('parses all six Phase 12 budget axes when set', () => {
+    expect(
+      budgetDefaultsFromProjectMeta(
+        baseMeta({
+          budgetDefaults: {
+            maxUsd: 5,
+            maxSteps: 100,
+            askUserDeadlineMs: 600_000,
+            maxTurnsScaffolder: 160,
+            maxTurnsBuilder: 80,
+            maxTurnsFixer: 80,
+          },
+        }),
+      ),
+    ).toEqual({
+      maxUsd: 5,
+      maxSteps: 100,
+      askUserDeadlineMs: 600_000,
+      maxTurnsScaffolder: 160,
+      maxTurnsBuilder: 80,
+      maxTurnsFixer: 80,
+    });
+  });
+
+  it('parses maxTurnsScaffolder alone (one new axis at a time)', () => {
+    expect(
+      budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { maxTurnsScaffolder: 160 } })),
+    ).toEqual({ maxTurnsScaffolder: 160 });
+  });
+
+  it('parses askUserDeadlineMs alone', () => {
+    expect(
+      budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { askUserDeadlineMs: 600_000 } })),
+    ).toEqual({ askUserDeadlineMs: 600_000 });
+  });
+
+  it('rejects malformed Phase 12 axis values (negative, non-integer, non-positive)', () => {
+    expect(
+      budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { maxTurnsScaffolder: -1 } })),
+    ).toBeUndefined();
+    expect(
+      budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { maxTurnsBuilder: 'wide' } })),
+    ).toBeUndefined();
+    expect(
+      budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { askUserDeadlineMs: 0 } })),
+    ).toBeUndefined(); // askUserDeadlineMs is .positive() — 0 makes no sense
+    expect(
+      budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { maxTurnsFixer: 1.5 } })),
+    ).toBeUndefined(); // .int() rejects fractions
+  });
+
+  it('accepts maxUsd: 0 as the unlimited sentinel (ADR 0032 + BUDGET_DEFAULTS alignment)', () => {
+    // Pre-13.5 the legacy schema required `.positive()`, rejecting 0. The 13.5
+    // widen-to-budgetsSchema aligns with ADR 0032's `0 = unlimited` semantic
+    // for maxUsd / maxSteps.
+    expect(budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { maxUsd: 0 } }))).toEqual({
+      maxUsd: 0,
+    });
+    expect(budgetDefaultsFromProjectMeta(baseMeta({ budgetDefaults: { maxSteps: 0 } }))).toEqual({
+      maxSteps: 0,
+    });
+  });
+});
+
+describe('resolveDirectivePayloadBudgets (Phase 13.5 — per-axis merge for directive.payload.budgets)', () => {
+  // Phase 13.5: per-project metadata.budgetDefaults flows into directive.payload.budgets
+  // for the new four Phase 12 axes (askUserDeadlineMs, maxTurnsScaffolder|Builder|Fixer).
+  // Body wins per-axis; absent axes fall through to project metadata; result is the
+  // overrides-only partial that the daemon persists on the new directive's payload
+  // (ADR 0032 §6 — overrides-only, not fully-resolved; brain fills defaults at
+  // consumption via resolveBudgets()).
+
+  it('returns undefined when both body and project are absent', () => {
+    expect(resolveDirectivePayloadBudgets({})).toBeUndefined();
+    expect(
+      resolveDirectivePayloadBudgets({ explicitBody: undefined, projectDefaults: undefined }),
+    ).toBeUndefined();
+  });
+
+  it('returns undefined when both body and project are empty objects', () => {
+    expect(
+      resolveDirectivePayloadBudgets({ explicitBody: {}, projectDefaults: {} }),
+    ).toBeUndefined();
+  });
+
+  it('returns the body value when only body is set', () => {
+    expect(resolveDirectivePayloadBudgets({ explicitBody: { maxTurnsScaffolder: 80 } })).toEqual({
+      maxTurnsScaffolder: 80,
+    });
+  });
+
+  it('falls back to projectDefaults when body unset (per-axis)', () => {
+    expect(
+      resolveDirectivePayloadBudgets({ projectDefaults: { maxTurnsScaffolder: 160 } }),
+    ).toEqual({ maxTurnsScaffolder: 160 });
+  });
+
+  it('body overrides projectDefaults per-axis', () => {
+    expect(
+      resolveDirectivePayloadBudgets({
+        explicitBody: { maxTurnsScaffolder: 80 },
+        projectDefaults: { maxTurnsScaffolder: 160 },
+      }),
+    ).toEqual({ maxTurnsScaffolder: 80 });
+  });
+
+  it('merges different axes per-axis (body sets one, project sets another)', () => {
+    expect(
+      resolveDirectivePayloadBudgets({
+        explicitBody: { maxTurnsScaffolder: 80 },
+        projectDefaults: { maxTurnsBuilder: 160, askUserDeadlineMs: 600_000 },
+      }),
+    ).toEqual({
+      maxTurnsScaffolder: 80,
+      maxTurnsBuilder: 160,
+      askUserDeadlineMs: 600_000,
+    });
+  });
+
+  it('per-axis independence — one body field does not flush the others from project', () => {
+    expect(
+      resolveDirectivePayloadBudgets({
+        explicitBody: { maxTurnsScaffolder: 80 },
+        projectDefaults: {
+          maxTurnsScaffolder: 160,
+          maxTurnsBuilder: 160,
+          maxTurnsFixer: 80,
+        },
+      }),
+    ).toEqual({
+      maxTurnsScaffolder: 80, // body wins
+      maxTurnsBuilder: 160, // project tier
+      maxTurnsFixer: 80, // project tier
+    });
   });
 });
 

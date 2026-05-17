@@ -124,6 +124,7 @@ import {
   ProjectMetadataNotFoundError,
   readProjectMetadata,
   resolveDirectiveLimits,
+  resolveDirectivePayloadBudgets,
   updateProjectMetadata,
 } from '@factory5/wiki';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
@@ -909,12 +910,24 @@ function registerRoutes(
     // which wins over instance-config `[budget.defaults]` (Phase 13.3
     // wired the third tier through `IpcServerOptions.configBudgetDefaults`
     // — pre-fix the daemon discarded it).
+    const projectBudgetDefaults = budgetDefaultsFromProjectMeta(projectMeta);
     const limits = resolveDirectiveLimits({
       explicitFlags: body.limits,
-      projectDefaults: budgetDefaultsFromProjectMeta(projectMeta),
+      projectDefaults: projectBudgetDefaults,
       configDefaults: opts.configBudgetDefaults,
     });
     const hasLimits = limits !== undefined;
+    // Phase 13.5 — per-project metadata.budgetDefaults flows into
+    // directive.payload.budgets for the four Phase 12 axes too (the same
+    // helper that handles maxUsd/maxSteps for directive.limits via
+    // resolveDirectiveLimits above; same on-disk key, different consumer).
+    // Body wins per-axis; absent axes fall through to project metadata.
+    // Persists the overrides-only partial per ADR 0032 §6; brain's
+    // resolveBudgets fills defaults at consumption.
+    const payloadBudgets = resolveDirectivePayloadBudgets({
+      explicitBody: body.budgets,
+      projectDefaults: projectBudgetDefaults,
+    });
     const directive = directiveSchema.parse({
       id: newId(),
       source: 'cli',
@@ -926,13 +939,7 @@ function registerRoutes(
         projectPath,
         workspace,
         ...(language !== undefined ? { language } : {}),
-        // Tier 12 / ADR 0032 §6 — persist the operator-supplied partial as-is
-        // (only the axes the operator overrode). The brain's resolver fills
-        // missing axes from BUDGET_DEFAULTS at consumption time; storing
-        // overrides-only here preserves intent for resume inheritance.
-        ...(body.budgets !== undefined && Object.keys(body.budgets).length > 0
-          ? { budgets: body.budgets }
-          : {}),
+        ...(payloadBudgets !== undefined ? { budgets: payloadBudgets } : {}),
       },
       autonomy,
       createdAt: nowIso,

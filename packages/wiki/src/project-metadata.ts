@@ -231,6 +231,50 @@ export function resolveDirectiveLimits(opts: {
 }
 
 /**
+ * Phase 13.5 — resolve `directive.payload.budgets` from operator body +
+ * per-project metadata defaults. Sibling to {@link resolveDirectiveLimits}
+ * for the Phase 12 / ADR 0032 axis set (`askUserDeadlineMs`,
+ * `maxTurnsScaffolder|Builder|Fixer`, plus `maxUsd`/`maxSteps` that mirror
+ * the legacy `limits` path).
+ *
+ * Resolution per-axis: `explicitBody` wins, else `projectDefaults`. Instance
+ * config tier is NOT consulted here (Tier 8's daemon-wide `config.json`
+ * carries `askUserDeadlineMs` for a different purpose — stamping
+ * `pending_questions.deadline_at` per ADR 0030; not a per-directive budget
+ * floor). Returns the overrides-only partial that {@link
+ * directive.payload.budgets} persists (ADR 0032 §6 + the Phase 12 retro note
+ * in STATE.md: payload carries overrides only, brain fills defaults at
+ * consumption via {@link resolveBudgets} in `@factory5/core/budgets`).
+ *
+ * Returns `undefined` when neither tier supplies any axis — the daemon
+ * persists nothing on `payload.budgets` in that case (current pre-13.5
+ * behavior preserved for the no-config case).
+ */
+export function resolveDirectivePayloadBudgets(opts: {
+  /** Operator body (`body.budgets` from POST /api/v1/builds). */
+  explicitBody?: ProjectBudgetDefaults | undefined;
+  /** Per-project tier (Web UI–writable). Read with {@link budgetDefaultsFromProjectMeta}. */
+  projectDefaults?: ProjectBudgetDefaults | undefined;
+}): ProjectBudgetDefaults | undefined {
+  const body = opts.explicitBody ?? {};
+  const project = opts.projectDefaults ?? {};
+  const merged: ProjectBudgetDefaults = {};
+  const axes = [
+    'maxUsd',
+    'maxSteps',
+    'askUserDeadlineMs',
+    'maxTurnsScaffolder',
+    'maxTurnsBuilder',
+    'maxTurnsFixer',
+  ] as const;
+  for (const axis of axes) {
+    const value = body[axis] ?? project[axis];
+    if (value !== undefined) merged[axis] = value;
+  }
+  return Object.keys(merged).length === 0 ? undefined : merged;
+}
+
+/**
  * Thrown by {@link updateProjectMetadata} when the project directory has
  * no `.factory/project.json` to update. The Web UI's budget route
  * (ADR 0027 §3) maps this to `404 PROJECT_PATH_UNREADABLE` — the project

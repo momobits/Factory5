@@ -2156,6 +2156,87 @@ describe('IPC server — POST /api/v1/builds (ADR 0027, sub-step 11.3)', () => {
     expect(body.directive.limits).toEqual({ maxUsd: 5, maxSteps: 999 });
     await app.close();
   });
+
+  it('Phase 13.5: project metadata.budgetDefaults.maxTurnsScaffolder flows into directive.payload.budgets', async () => {
+    // The project pins maxTurnsScaffolder=160 in its on-disk metadata; the
+    // build body omits it. Phase 13.5's per-project default extension means
+    // the resolved directive carries maxTurnsScaffolder=160 in payload.budgets
+    // (which, combined with Phase 13.3's ceiling semantic in
+    // resolveTaskMaxTurns, will FLOOR any planner emit above 160 down to 160).
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    const meta = {
+      id: '01KQ0P14MZZPJRPA5RW929TTSJ',
+      name: 'sample',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      factoryVersion: '0.x',
+      metadata: {
+        budgetDefaults: {
+          maxTurnsScaffolder: 160,
+          askUserDeadlineMs: 600_000,
+        },
+      },
+    };
+    await writeFile(join(factoryDir, 'project.json'), JSON.stringify(meta, null, 2));
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir }, // no body.budgets — project tier should fill
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { payload: { budgets?: Record<string, number> } };
+    };
+    expect(body.directive.payload.budgets).toEqual({
+      maxTurnsScaffolder: 160,
+      askUserDeadlineMs: 600_000,
+    });
+    await app.close();
+  });
+
+  it('Phase 13.5: body.budgets overrides project metadata defaults per-axis', async () => {
+    // Project pins maxTurnsScaffolder=160; body asks for 80. Body wins. The
+    // project's askUserDeadlineMs=600_000 flows through because the body
+    // didn't touch it — per-axis independence.
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    const meta = {
+      id: '01KQ0P14MZZPJRPA5RW929TTSJ',
+      name: 'sample',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      factoryVersion: '0.x',
+      metadata: {
+        budgetDefaults: {
+          maxTurnsScaffolder: 160,
+          askUserDeadlineMs: 600_000,
+        },
+      },
+    };
+    await writeFile(join(factoryDir, 'project.json'), JSON.stringify(meta, null, 2));
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {
+        project: projectDir,
+        budgets: { maxTurnsScaffolder: 80 },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { payload: { budgets?: Record<string, number> } };
+    };
+    expect(body.directive.payload.budgets).toEqual({
+      maxTurnsScaffolder: 80, // body wins
+      askUserDeadlineMs: 600_000, // project tier flows through (per-axis indep)
+    });
+    await app.close();
+  });
 });
 
 describe('IPC server — POST /api/v1/directives/:id/resume (Tier 10 — HTTP mirror of `factory resume`)', () => {

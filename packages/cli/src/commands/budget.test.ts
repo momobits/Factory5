@@ -132,10 +132,15 @@ describe('runBudgetSet', () => {
     expect(result.exitCode).toBe(2);
   });
 
-  it('rejects zero maxUsd with exit 2 (schema requires positive)', async () => {
+  it('accepts zero maxUsd as the unlimited sentinel (Phase 13.5 — ADR 0032 alignment)', async () => {
+    // Pre-13.5 the legacy `projectBudgetDefaultsSchema` required `.positive()`
+    // and rejected 0. Phase 13.5 swapped to `budgetsSchema` whose
+    // `.nonnegative()` accepts 0 — matches ADR 0032's `BUDGET_DEFAULTS.maxUsd`
+    // default of 0 meaning "unlimited". `factory budget set --max-usd 0`
+    // now writes the unlimited sentinel rather than rejecting at the CLI.
     await seedProject('alpha');
     const result = await runBudgetSet(db, { project: 'alpha', maxUsd: 0 });
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(0);
   });
 
   it('rejects fractional maxSteps with exit 2 (schema requires integer)', async () => {

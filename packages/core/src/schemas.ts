@@ -9,7 +9,7 @@
 
 import { z } from 'zod';
 
-import { BUDGET_DEFAULTS } from './budget-defaults.js';
+import { BUDGET_DEFAULTS, budgetsSchema } from './budget-defaults.js';
 import {
   AGENT_ROLES,
   AUTONOMY_MODES,
@@ -64,20 +64,30 @@ export const directiveLimitsSchema = z.object({
 });
 
 /**
- * Per-project budget defaults (ADR 0027 §4). Mirrors {@link directiveLimitsSchema}
- * shape but lives at `<project>/.factory/project.json` `metadata.budgetDefaults`
- * — see {@link wiki.budgetDefaultsFromProjectMeta} for the read helper.
+ * Per-project budget defaults at `<project>/.factory/project.json`
+ * `metadata.budgetDefaults` (ADR 0027 §4 — write surface; ADR 0032 §1 — schema).
+ *
+ * **Phase 13.5 widened this to the full Phase 12 axis set.** Pre-13.5 the schema
+ * carried only `maxUsd` + `maxSteps` (ADR 0027 era); Phase 13.5 swapped the
+ * definition to {@link budgetsSchema} so the on-disk shape matches the on-wire
+ * shape `directive.payload.budgets` carries (ADR 0032 §6 + §3 single-source-of-
+ * truth contract). Backward compat: pre-Phase-13 projects with just
+ * `{maxUsd, maxSteps}` parse unchanged; new projects can carry any of the six
+ * axes including `maxTurnsScaffolder|Builder|Fixer` and `askUserDeadlineMs`.
  *
  * Resolution order on directive creation (CLI + Web UI):
  *   `--max-usd flag` → project `metadata.budgetDefaults` → config `[budget.defaults]` → unlimited.
  *
+ * For `maxUsd`/`maxSteps` the resolution lands on `directive.limits` via
+ * {@link wiki.resolveDirectiveLimits}; for the other four axes it lands on
+ * `directive.payload.budgets` via {@link wiki.resolveDirectivePayloadBudgets}.
+ * Same source key on disk; two consumers because the legacy ADR 0020 path
+ * and the new ADR 0032 path persist to different directive fields.
+ *
  * The Web UI write path is `PUT /api/v1/projects/:id/budget` with full-document
  * replacement semantics (ADR 0027 §1): the request body is the new state.
  */
-export const projectBudgetDefaultsSchema = z.object({
-  maxUsd: z.number().positive().optional(),
-  maxSteps: z.number().int().positive().optional(),
-});
+export const projectBudgetDefaultsSchema = budgetsSchema;
 export type ProjectBudgetDefaults = z.infer<typeof projectBudgetDefaultsSchema>;
 
 export const directiveSchema = z.object({
