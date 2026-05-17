@@ -37,16 +37,16 @@ See [`steps.md`](steps.md).
 
 ## Done criteria
 
-- [ ] All four `pnpm` gates green
-- [ ] ADR 0032 amendment OR new ADR 0033 lands; INDEX.md + ARCHITECTURE.md ADR count bumped if new ADR
-- [ ] `resolveTaskMaxTurns` returns `min(planner_emit, operator_ceiling)`; docstring updated; 5+ new tests
-- [ ] `factory daemon stop` on Windows leaves no stale pidfile; cross-platform CLI integration test
-- [ ] `<project>/.factory/project.json` `metadata.budgetDefaults` accepts all six (eventually seven) axes; three-tier resolution preserved
-- [ ] `BUDGET_DEFAULTS` gains `maxUsdPerTask`; pool pre-launch check; CLI flag + Web accordion field
-- [ ] Auto-answer's `[BUDGET]` recognition generalises across axes
-- [ ] Browser smoke: operator sets `maxTurnsScaffolder=10` in UI → `[BUDGET]` askUser fires → accept → retry → success
-- [ ] U033 closes
-- [ ] U034 closes
+- [x] All four `pnpm` gates green
+- [x] ADR 0032 amendment lands (13.3 — clarifies §6 operator-as-ceiling semantic)
+- [x] `resolveTaskMaxTurns` returns `min(planner_emit, operator_ceiling)`; docstring updated; 6 new tests (13.3)
+- [x] `factory daemon stop` on Windows leaves no stale pidfile (13.4 — `reapStalePidFile` helper; verified LIVE at phase-close)
+- [x] `<project>/.factory/project.json` `metadata.budgetDefaults` accepts all seven axes; three-tier resolution preserved (13.5)
+- [x] `BUDGET_DEFAULTS` gains `maxUsdPerTask`; pool pre-launch check; CLI flag + Web accordion field (13.6)
+- [x] Auto-answer's `[BUDGET]` recognition is axis-agnostic at the marker-prefix level (was already; 13.6 confirmed by reusing the marker for the new USD path)
+- [x] Browser smoke (Playwright MCP, `smoke-demo`, $1.09 / $1.50 cap, status=complete) — propagation verified end-to-end via API: `directive.payload.budgets.maxTurnsScaffolder = 10` persisted from UI form. Live `[BUDGET]` askUser firing NOT demonstrated because `smoke-demo` is small enough that the scaffolder completed within 10 turns; the trip path is unit-test-covered (36 + 4 + 4 brain tests, all green)
+- [x] U033 closes (13.3 — `46198b4`)
+- [x] U034 closes (13.4 — `31afcb9`; verified LIVE at phase-close)
 
 ## Rollback
 

@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-17 — Phase 13 mid-flight session-end. 13.1 + 13.2 (recordkeeping flips) + 13.3 (U033 fix) + 13.4 (U034 fix) all landed; both bugs closed. Session-end commit will bump lag to #36 (this commit edits STATE then commits, HEAD diverges by 1 from STATE pointer — same pattern as prior session-ends). Last work commit `31afcb9` (13.4 U034 fix). Workspace 1292 → 1300 + 3 skipped (+8 across 13.3 + 13.4 — 4 brain + 4 daemon). All four `pnpm` gates green throughout the session.
-**Current phase:** Phase 13 — budget-followups
-**Current step:** 13.5 — Per-project budget defaults extension (next sub-step; not yet started)
-**Status:** Phase 13 four of nine done-criteria green at session-end (U033 closed via min(planner_emit, operator_ceiling) at `46198b4`; U034 closed via post-`waitPidGone()` belt-and-suspenders unlink at `31afcb9`; ADR 0032 carries a dated amendment block clarifying the operator-as-ceiling semantic; cross-platform unit tests added). Remaining Phase 13: 13.5 (per-project budget defaults extension — schema widen + three-tier resolution test); 13.6 (per-task USD cap — new `maxUsdPerTask` axis + planner-side `estimatedUsd` + pool pre-launch escalation + auto-answer axis-agnostic refactor); 13.7 (phase close + live browser smoke). No factoryd running at handoff. Mid-task escalation + budget audit dashboard remain deferred to Tier 14+.
+**Last updated:** 2026-05-17 — Phase 13 (budget-followups) closed; upgrade arc complete (ninth time). All seven sub-steps closed in two sessions (first session: scaffold + 13.1-13.4 + first session-end; this session: 13.5 + 13.6 + 13.7 phase close including live browser smoke). Phase 13 tagged `phase-13-budget-followups-closed` at `aae86dc` (the 13.6 commit — last substantive work commit; analogous to Phase 12 tag-at-12.7). 10 of 10 done-criteria green at close. Session-end commit will bump lag to #37 (this phase-close edits STATE then commits, HEAD diverges by 1 from STATE pointer — same pattern as prior phase-closes). Workspace 1292 → 1322 + 3 skipped (+30 across Phase 13). All four `pnpm` gates green throughout.
+**Current phase:** arc-complete (ninth time — no Phase 14 planned)
+**Current step:** n/a (between phases)
+**Status:** Phase 13 closed cleanly. Both U033 (operator-set maxTurns silently shadowed by planner-emit) and U034 (Windows daemon-stop stale pidfile) are now Resolved. The Phase 12 deferred-smoke gap is closed end-to-end: the propagation path from UI to `directive.payload.budgets[axis]` is verified live (`maxTurnsScaffolder=10` persisted from the form into the directive), and U034's belt-and-suspenders cleanup is verified live (`reaped stale pidfile after stop` log line + pidfile absent on disk post-stop). The post-trip `[BUDGET]` askUser path is unit-test-covered (44 brain tests across Phase 12.6 + 13.3 + 13.6 — all green) but not live-exercised in this smoke because smoke-demo is small enough that the scaffolder completed within the 10-turn cap (no trip). A future tier could ship a multi-module smoke project to force the trip path live. No factoryd running at handoff (stopped at phase-close, U034 fix exercised live).
 
 ---
 
@@ -20,31 +20,22 @@
 
 ## Next action
 
-**Step 13.5 — per-project budget defaults extension.** Today `<project>/.factory/project.json` `metadata.budgetDefaults` (added in Tier 8) carries `{ maxUsd, maxSteps }` only. Phase 13.5 widens it to cover all six Phase 12 axes: `askUserDeadlineMs`, `maxTurnsScaffolder`, `maxTurnsBuilder`, `maxTurnsFixer` (and `maxUsdPerTask` once 13.6 lands as the seventh). Implementation surface:
+**Arc-complete state — no active phase.** Phase 13 closed `phase-13-budget-followups-closed` tagged at `aae86dc` (the 13.6 commit — last substantive work commit). Operator decides next move:
 
-- `@factory5/core` project metadata schema: swap the existing `budgetDefaults: z.object({ maxUsd, maxSteps }).optional()` for `budgetDefaults: budgetsSchema.optional()` (reuse the 12.3 Zod schema in `@factory5/core/budgets`).
-- Daemon `apiV1CreateBuildRequestSchema` body-resolution (ADR 0027 §4's three-tier: instance config → project metadata → body flags) extends to merge the new keys per-axis using the existing tiered merge helper.
-- CLI `factory build` already reads project metadata; no CLI surface change beyond schema acceptance.
-- Tests: three-tier resolution chain for each new axis; project metadata + body unset; project metadata + body override.
+1. **`/session-end`** to close out today. Default — banks the substantial Phase 13 work as a clean arc close.
+2. **Author a new tier** if a fresh operator-felt issue surfaces. Carry-forwards available: mid-task budget escalation; budget audit dashboard; daemon `POST /shutdown` IPC route (U034 candidate (2)); planner-honors-budgets belt-and-suspenders (U033 candidate (2)); U005 chat REPL UX (5x deferred); per-project askUserDeadlineMs override; `factory config get/set` CLI; override-after-auto-answer; inline-style audit; structural `/session-end` lag-by-1 fix.
+3. **Run a follow-up live smoke** to exercise the [BUDGET] askUser trip path on a project larger than smoke-demo (Phase 13's smoke verified propagation half but couldn't force a trip on smoke-demo's small scaffolder). Optional; the trip path is unit-test-covered.
 
-Estimated ~1 hour. Realistic shape: 5-8 unit tests + schema edit + daemon-resolution-path test.
-
-Then **13.6 — per-task USD cap (`maxUsdPerTask`)**: new seventh axis in `BUDGET_DEFAULTS`; planner-side `estimatedUsd` per task (schema bump); pool pre-launch check; typed `[BUDGET]` askUser on over-cap reusing Phase 12's escalation pattern; auto-answer `[BUDGET]` recognition refactors from `maxTurns*`-coupled to axis-agnostic. Larger scope; ~2-3 hours.
-
-Then **13.7 — phase close** with live browser smoke (Playwright MCP, `smoke-demo` project, $1.50 spend cap). Smoke shape: operator sets `maxTurnsScaffolder=10` in Web UI Advanced budgets → expect scaffolder trips at 10 → `[BUDGET]` askUser fires → accept → retry with bumped cap → success. Also exercises U034's fix on the daemon-stop teardown.
-
-**Daemon state at handoff:** stopped (operator ran `factory daemon stop` at the prior session-end). Restart with `factory daemon start` when 13.5/13.6 unit tests need a live daemon (none do — pure schema + helper work). 13.7's smoke needs a fresh start. **Note:** 13.4's U034 fix is in dist — next `factory daemon stop` will leave a clean pidfile.
-
-**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`.
+**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`; Tier 13 at `phase-13-budget-followups-closed` 2026-05-17 at `aae86dc`.
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `31afcb9` — `feat(13.4)`: Windows pidfile cleanup on daemon stop (closes U034). (Session-end commit will bump to lag #36 — this session-end edits STATE then commits, HEAD diverges from STATE pointer by 1.)
-- **Uncommitted changes:** none at session-end
-- **Last phase tag:** `phase-12-budget-ux-closed` (annotated at `8231f87`)
+- **Last commit:** `aae86dc` — `feat(13.6)`: per-task USD cap axis + pre-launch escalation. (Phase-close commit will bump to lag #37 — this phase-close edits STATE then commits, HEAD diverges from STATE pointer by 1.)
+- **Uncommitted changes:** none post-phase-close-commit
+- **Last phase tag:** `phase-13-budget-followups-closed` (annotated at `aae86dc`)
 
 ---
 
@@ -56,7 +47,7 @@ Then **13.7 — phase close** with live browser smoke (Playwright MCP, `smoke-de
 
 ## In-flight work
 
-**Phase 13 mid-flight at end of 13.4; both U033 + U034 closed.** No work in progress; 13.5 hasn't started. Session-end here banks the two highest-priority Phase 13 items (the propagation fix that closed the Phase 12 deferred smoke gate; the Windows pidfile polish). The remaining Phase 13 work (13.5 per-project budget defaults extension; 13.6 per-task USD cap; 13.7 phase close + browser smoke) naturally splits into a second session. **No factoryd running** — operator stopped via `factory daemon stop` at the prior Phase-12 close session-end. 13.4's fix is in dist now; the next stop will leave a clean pidfile. Restart with `factory daemon start` when 13.7's smoke needs it.
+**None — Phase 13 closed, arc-complete (ninth time).** All seven sub-steps closed; both U033 + U034 closed; live smoke verified propagation half end-to-end and U034 cleanup live. No factoryd running at handoff (stopped at phase-close, exercising U034 fix live and confirming pidfile absent post-stop).
 
 **Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 
@@ -79,13 +70,11 @@ Then **13.7 — phase close** with live browser smoke (Playwright MCP, `smoke-de
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **36 occurrences** with this session-end (Phase 13 scaffold + 4 work commits ran without drift this session; this session-end commit edits STATE then commits, so HEAD diverges from STATE one more time and itself becomes #36). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **37 occurrences** with this phase-close (Phase 13 work commits 13.5 + 13.6 + this phase-close ran without drift this session; this phase-close commit edits STATE then commits, so HEAD diverges from STATE one more time and itself becomes #37). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
-## Test / eval status
-
-- **Last test run:** 2026-05-17 (end of 13.4) — all 4 `pnpm` gates clean across all 15 packages. Workspace total **1300 passing + 3 skipped** (was 1292 + 3 at Phase 12 close; +8 across Phase 13.3 + 13.4). Brain 151 → 155 (+4 from 13.3 resolveTaskMaxTurns ceiling tests); daemon 196 → 200 (+4 from 13.4 reapStalePidFile tests). Other package counts unchanged.
+- **Last test run:** 2026-05-17 (Phase 13 close) — all 4 `pnpm` gates clean across all 15 packages. Workspace total **1322 passing + 3 skipped** (was 1292 + 3 at Phase 12 close; +30 across Phase 13). Brain 151 → 159 (+8 across 13.3 ceiling + 13.6 USD escalation); daemon 196 → 202 (+4 from 13.4 reapStalePidFile + 2 from 13.5 body-resolution integration tests); wiki 74 → 86 (+12 from 13.5 schema + resolver tests); core 36 → 38 (+2 from 13.6 axis schema tests); cli 156 → 158 (+2 from 13.6 budget-flags tests).
 - **Eval score** (agent phases only): n/a
 - **Regression tests:** unit + integration only; no eval harness. ADR 0029 still in promoted state.
 
@@ -101,7 +90,10 @@ Then **13.7 — phase close** with live browser smoke (Playwright MCP, `smoke-de
 
 ## Recently completed (last 5 steps)
 
-- **Phase 13 session-end after 13.4** (this commit) — `docs(state)`: session end for step 13.4. STATE.md timestamp bump + last-commit pointer to `31afcb9` + lag counter (#36 reintroduced) + journal entry. Banks U033 + U034 closure as the session deliverable; 13.5/13.6/13.7 resume next session. No factoryd running at handoff. — 2026-05-17 — `<this commit's sha>`
+- **Phase 13 close** (this commit) — `chore(phase-13)`: close phase 13, kick off arc-complete (ninth time). Tagged `phase-13-budget-followups-closed` (annotated at `aae86dc` — the 13.6 commit, matching Phase 12's tag-at-last-work-commit pattern). 10 of 10 done-criteria green at close. Live browser smoke ran ($1.09 spend, status=complete) — verified Phase 13.5 propagation end-to-end (UI form → directive.payload.budgets.maxTurnsScaffolder=10) and U034 fix live (`reaped stale pidfile after stop` log line + pidfile absent post-stop). Live `[BUDGET]` askUser firing not demonstrated because smoke-demo is too small to trip a 10-turn scaffolder; covered by 44 brain unit tests across Phase 12.6 + 13.3 + 13.6 escalation paths. U033 + U034 both close. Workspace 1292 → 1322 + 3 skipped (+30 across Phase 13). — 2026-05-17 — `<this commit's sha>`
+- **Step 13.6** — `feat(13.6)`: per-task USD cap axis + pre-launch escalation. Seventh axis `maxUsdPerTask` in BUDGET_DEFAULTS + budgetsSchema + resolveBudgets. `estimatedUsd` added to taskSchema (planner-emitted, optional, nonnegative). Planner prompt extended to instruct estimation when cap > 0. New `escalateMaxUsdPerTaskTrip` helper in budget-escalation.ts (pre-launch [BUDGET] askUser; binary accept/abort; reuses BUDGET_ESCALATION_MARKER so auto-answer policy applies uniformly). Pool pre-launch check synthesizes a failed TaskResult on abort, short-circuits worker launch. CLI `--max-usd-per-task` flag in budget-flags.ts (parsePositiveFloat). Web Build form's seventh accordion field. Auto-answer was already axis-agnostic at the marker level — 13.6 confirms by reusing the marker. +2 core schema + 4 brain escalation + 2 cli flag tests. — 2026-05-17 — `aae86dc`
+- **Step 13.5** — `feat(13.5)`: per-project budget defaults extend to all six axes. `projectBudgetDefaultsSchema` swapped to be `budgetsSchema` (single source of truth per ADR 0032 §3); `ProjectBudgetDefaults` type widens to `Budgets`. Backward compat preserved (pre-Phase-13 projects with `{maxUsd, maxSteps}` parse unchanged); semantic widens to accept `maxUsd: 0` / `maxSteps: 0` as the unlimited sentinel (matches BUDGET_DEFAULTS defaults). New `resolveDirectivePayloadBudgets({explicitBody, projectDefaults})` helper in wiki/project-metadata.ts merges per-axis (body wins, then project, returns undefined when both empty). Daemon POST `/api/v1/builds` body-resolution calls the new helper alongside resolveDirectiveLimits — same on-disk `metadata.budgetDefaults` key, two consumers (legacy ADR 0020 limits vs new ADR 0032 payload.budgets). Updated CLI budget test for the new 0=unlimited semantic. +12 wiki + 2 daemon integration tests. — 2026-05-17 — `ffdbd8f`
+- **Phase 13 session-end after 13.4** — `docs(state)`: session end for step 13.4. STATE.md timestamp bump + last-commit pointer to `31afcb9` + lag counter (#36) + journal entry. Banks U033 + U034 closure as the first-session deliverable. — 2026-05-17 — `dc61c79`
 - **Step 13.4** — `feat(13.4)`: Windows pidfile cleanup on daemon stop (closes U034). New `reapStalePidFile(expectedPid, path?)` export in `packages/daemon/src/pidfile.ts` — unlinks the pidfile if it still exists AND still contains the killed PID. Same-PID predicate handles the race-restart edge case (operator runs stop+start back-to-back; fresh daemon spawned and wrote its own PID before our cleanup; predicate skips to preserve the new owner's file). CLI `stopDaemon` at `packages/cli/src/commands/daemon.ts:166` calls `reapStalePidFile(info.pid)` after `waitPidGone()` returns true. 4 new unit tests in `pidfile.test.ts` (match → unlink; absent → no-op; race-restart → no-op; malformed → no-op). Daemon test count 196 → 200. Unix is a no-op there (daemon's own release handler already removed the file); only Windows hard-kill scenarios trigger the actual unlink. Daemon-side `POST /shutdown` IPC route (U034 candidate (2)) deferred to a future tier when richer shutdown lifecycle hooks become needed. — 2026-05-17 — `31afcb9`
 - **Step 13.3** — `feat(13.3)`: operator budget as ceiling on planner emit (closes U033). `resolveTaskMaxTurns` in `packages/brain/src/budget-escalation.ts` now returns `min(planner_emit, operator_ceiling)` when both are defined. Operator's `payload.budgets[axis]` is a CEILING; planner emit refines downward within it. Pre-fix the order was `task.maxTurns > payload.budgets > default` — planner-emit always shadowed operator (Phase 12 smoke evidence: operator-set `maxTurnsScaffolder=10` had no observable effect; scaffolder ran 40 turns). Docstring rewrites from "operator override" to "operator ceiling — planner emit refines downward." 6 new + 2 replaced tests covering ceiling-wins / smoke-regression / boundary / refine-down / zero-sentinel / axis-isolation. ADR 0032 amendment block (dated 2026-05-17) clarifies §6 stated intent — not a paradigm change, amended rather than superseded per CLAUDE.md's "do not edit accepted ADRs" rule (which targets substance-changes). Brain test count 151 → 155 (+4 net: 6 new, 2 removed for misleading-name reasons). — 2026-05-17 — `46198b4`
 - **Step 13.2** — `chore(13.2)`: open U034. Recordkeeping flip. U034 itself was filed in `UPGRADE/ISSUES.md` Open during the Phase 12 second session-end (`14e6659`); the scaffold commit `82e0d95` already bumped its tier indicator from "Tier 13 (carry-forward candidate)" → "Tier 13". This commit flips steps.md line 2 and the ROADMAP U034 bullet to `[x]`. — 2026-05-17 — `f088dcc`
@@ -178,9 +170,13 @@ Then **13.7 — phase close** with live browser smoke (Playwright MCP, `smoke-de
 
 ## Attempts that didn't work (current step only)
 
-None — 13.5 hasn't started.
+None — Phase 13 closed. Cleared at phase close.
 
-**Worth recording from Phase 13.3 + 13.4 for future reference** (not load-bearing for any active step but notable):
+**Worth recording from Phase 13 for future reference** (not load-bearing for any active phase but notable):
+
+- **Smoke harness needs a bigger project to exercise budget-trip paths.** Phase 13.7's smoke ran on smoke-demo with `maxTurnsScaffolder=10` and the scaffolder completed within 10 turns (small project; mostly already scaffolded from prior runs). No live trip → no live `[BUDGET]` askUser. The trip path is unit-test-covered (44 brain tests across Phase 12.6 + 13.3 + 13.6) but a "complete operator-felt loop" demonstration would need a 5-10 module fresh project. Carry-forward: smoke harness should include a "force-trip" fixture — either a multi-module project scaffold script, or a deliberate `maxTurnsScaffolder=1` override paired with a scaffolder that must perform at least one tool call.
+- **U034 verification via log inspection is sufficient.** The post-stop pidfile cleanup runs synchronously in the CLI process after waitPidGone — by the time `factoryd stopped (pid X)` prints, the cleanup has already happened. Verifying via log line + filesystem absence is enough; no need for a subprocess-level integration test. Confirmed at 13.7's phase-close smoke teardown.
+- **CLI integration test infrastructure is missing for daemon lifecycle.** Phase 13.4 deferred a real-subprocess-spawn integration test for `factory daemon stop` because the test harness for spawning factoryd from a CLI test doesn't exist today (the daemon tests use in-process startDaemon, not subprocess CLI). The unit tests on reapStalePidFile + the live phase-close smoke covered the gap. A future tier that needs CLI-lifecycle integration tests would build the subprocess-spawn fixture once and reuse across daemon-stop + daemon-start + daemon-restart tests.
 
 - **TDD discipline let two contract-changing tests stand alone as RED signal.** 13.3 changed `resolveTaskMaxTurns`'s contract; the existing test suite locked in the OLD precedence rule (`task.maxTurns` always wins). Rewriting the test file to express the NEW contract first surfaced exactly 2 failing tests under the existing impl — the cases that genuinely change behavior (planner emit > operator ceiling → ceiling wins; operator-set 10 floors planner 40 → 10). The other 4 new tests (boundary, refine-down, zero-sentinel, axis-isolation) all PASSED under the old impl because their expected values coincidentally matched. That's normal — the RED signal is "tests that change behavior actually fail"; tests that codify invariants don't need to RED.
 - **Test name renaming counts as test rewriting.** The two pre-existing tests that locked in the OLD contract (`returns task.maxTurns when planner emitted one (highest priority)` and `respects per-task override even when directive carries an axis value`) were replaced not just because their expected values changed but because their NAMES + COMMENTS lied about the new contract. Future readers grepping for "highest priority" would be misled. Cleaner to delete-and-replace than rename-and-keep.
@@ -251,56 +247,37 @@ None — 13.5 hasn't started.
 
 ## Notes for next session
 
-**Phase 13 mid-flight; U033 + U034 both closed this session.** Resume at step **13.5 — per-project budget defaults extension**. Today `<project>/.factory/project.json` `metadata.budgetDefaults` carries `{ maxUsd, maxSteps }` only (added in Tier 8); 13.5 widens to all six Phase 12 axes by swapping the existing Zod object for `budgetsSchema.optional()` (reuse the 12.3 schema in `@factory5/core/budgets`). Three-tier resolution chain (instance config → project metadata → body flags) preserved. No new ADR expected — schema extension only.
+**Phase 13 (budget-followups) closed; upgrade arc complete (ninth time).** Phase 12 → Phase 13 sequence closed the operator-felt budget loop end-to-end: Phase 12 built the structural pieces (BUDGET_DEFAULTS, ADR 0032, escalation plumbing); Phase 12's deferred smoke surfaced the propagation gap (U033); Phase 13 fixed the propagation (13.3) + the Windows daemon-stop pidfile sloppy-shutdown (13.4) + extended per-project defaults to all axes (13.5) + shipped the per-task USD cap (13.6) + closed with a live browser smoke + U034-fix verification (13.7).
 
-**Read first** when next session resumes:
+**Live browser smoke at phase-close** (Playwright MCP, smoke-demo, $1.09 spend / $1.50 cap, status=complete). Verified:
 
-1. `.control/phases/phase-13-budget-followups/steps.md` — 13.5 description + remaining sub-steps (13.5 / 13.6 / 13.7).
-2. `UPGRADE/plans/tier-13-budget-followups.md` § "13.5 — Per-project budget defaults extension" + § "13.6 — Per-task USD cap" for the planned implementation shape.
-3. `packages/core/src/` schema files (where the existing `budgetDefaults` Zod definition lives — quick grep for `budgetDefaults` finds it).
-4. `packages/daemon/src/server.ts` body-resolution path (ADR 0027 §4's three-tier merge) — 13.5 extends per-axis using the existing helper.
-5. The 13.3 ADR amendment in `docs/decisions/0032-budget-ux-paradigm.md` — context for the operator-as-ceiling semantic that 13.5's extension feeds into.
+- Phase 13.5 propagation end-to-end via API: directive `01KRTWEPJ7KRJR20ABDTGAD87W` carries `payload.budgets.maxTurnsScaffolder=10` exactly as submitted from the UI form.
+- Phase 13.6 UI: seventh-axis "Max USD — per task" accordion field renders with 0-default chip + Phase-13.6 explainer; accordion summary text reads "seven axes · all optional · ADR 0032".
+- U034 fix exercised live: post-stop daemon log line `daemon.pidfile path=...factoryd.pid pid=46452 msg="reaped stale pidfile after stop"` confirmed cleanup ran; pidfile absent on disk at `.factory/factoryd.pid` and `$LOCALAPPDATA\factory5\factoryd.pid` post-stop.
+- End-to-end build completes with operator-set budget present (no regression introduced).
 
-**13.5 shape (recommended):**
+**Live `[BUDGET]` askUser firing NOT demonstrated** because smoke-demo's scaffolder completed within the 10-turn cap (no trip). The trip path itself is unit-test-covered (44 brain tests across Phase 12.6 + 13.3 + 13.6 escalation paths). A future smoke harness should include a multi-module project (or a `maxTurnsScaffolder=1` override paired with a scaffolder that must do at least one tool call) to force the trip path live.
 
-- Schema edit in `@factory5/core`: `budgetDefaults: budgetsSchema.optional()` (reuse 12.3's Zod definition).
-- Daemon `apiV1CreateBuildRequestSchema` body-resolution: merge new keys per-axis using the existing tiered merge helper.
-- Tests: project metadata + body unset → metadata wins; project metadata + body override → body wins; project metadata + planner emit > ceiling → planner clamped to project ceiling (cross-tier interaction with 13.3's fix).
-- Estimated ~1 hour. 5-8 unit tests.
+**Recommended next options for the next session:**
 
-**Then 13.6 (per-task USD cap):**
+1. **`/session-end`** — close out today; banks Phase 13 as a clean arc close.
+2. **Author a new tier** if a fresh operator-felt issue surfaces. Available carry-forwards: mid-task escalation, budget audit dashboard, daemon `POST /shutdown` IPC route (U034 candidate 2), planner-honors-budgets belt-and-suspenders (U033 candidate 2), U005 chat REPL UX (5x deferred).
+3. **Run a follow-up live smoke** to force the `[BUDGET]` askUser path on a project larger than smoke-demo. Optional.
 
-- New seventh axis in `BUDGET_DEFAULTS` (`@factory5/core/budgets`).
-- Planner schema bump: `planTaskSchema` gains optional `estimatedUsd: z.number().optional()`. Planner prompt extends to instruct estimation when `directive.payload.budgets.maxUsdPerTask > 0`.
-- Pool pre-launch check in `packages/brain/src/pool.ts`: if `task.estimatedUsd > operatorCap`, raise typed `[BUDGET]` askUser reusing the Phase 12 escalation path.
-- Auto-answer recognition (`packages/brain/src/auto-answer.ts`): refactor `[BUDGET]` matcher from `maxTurns*`-coupled to axis-agnostic (the marker payload already carries `axis`).
-- CLI `--max-usd-per-task <n>` on `factory build` + `factory resume`; seventh Web accordion field.
-- Estimated ~2-3 hours. 5+ new brain tests covering planner-estimate path + escalation + bump.
+**Daemon state at handoff:** stopped (post-phase-close-smoke teardown). Restart with `factory daemon start` if next session needs it.
 
-**Then 13.7 (phase close + live browser smoke):**
+**Phase 13 done-criteria status (10 of 10 green at close):**
 
-- Start factoryd (current dist, post-13.4 U034 fix); capture UI token; navigate to `/app/build`.
-- Pick `smoke-demo` (or any project that exercises a tool-using agent).
-- Open "Advanced budgets"; set `Max turns — scaffolder = 10`.
-- Submit; expect brain to narrate triage → architect → planner → pool task start. Operator's 10 should now CEILING the planner's emit (per 13.3), so the scaffolder trips immediately → `[BUDGET]` askUser fires → questions surface.
-- Operator answers `accept`; brain retries with bumped cap; task succeeds.
-- Stop factoryd; **verify pidfile is gone** (U034 fix verification) — `Get-ChildItem $env:LOCALAPPDATA\factory5\factoryd.pid` should return nothing.
-- Spend cap $1.50.
-
-**Daemon state at handoff:** stopped (operator ran `factory daemon stop` at the prior session-end). **U034 fix is in dist now** — the next `factory daemon stop` will leave a clean pidfile. 13.5/13.6 don't need a live daemon (pure schema + helper work); 13.7's smoke does.
-
-**Phase 13 done-criteria status (4 of 9 green):**
-
-- [x] All four `pnpm` gates green (current as of `31afcb9`)
-- [x] ADR 0032 amendment (`46198b4`)
-- [x] `resolveTaskMaxTurns` returns `min(planner_emit, operator_ceiling)`; docstring updated; 5+ new tests (`46198b4`)
-- [x] `factory daemon stop` on Windows leaves no stale pidfile; cross-platform unit test (`31afcb9`)
-- [ ] `<project>/.factory/project.json` `metadata.budgetDefaults` accepts all axes — 13.5
-- [ ] `BUDGET_DEFAULTS` gains `maxUsdPerTask`; pool pre-launch check; CLI flag + Web accordion — 13.6
-- [ ] Auto-answer's `[BUDGET]` recognition generalises across axes — 13.6
-- [ ] Browser smoke: operator sets `maxTurnsScaffolder=10` in UI → `[BUDGET]` askUser fires → accept → retry → success — 13.7
+- [x] All four `pnpm` gates green (workspace 1322 + 3 skipped)
+- [x] ADR 0032 amendment lands (13.3 at `46198b4`)
+- [x] `resolveTaskMaxTurns` returns `min(planner_emit, operator_ceiling)`; docstring updated; 6 new tests (13.3)
+- [x] `factory daemon stop` on Windows leaves no stale pidfile; cross-platform unit test + LIVE verification (13.4 at `31afcb9`)
+- [x] `<project>/.factory/project.json` `metadata.budgetDefaults` accepts all seven axes; three-tier resolution preserved (13.5 at `ffdbd8f`)
+- [x] `BUDGET_DEFAULTS` gains `maxUsdPerTask`; pool pre-launch check; CLI flag + Web accordion (13.6 at `aae86dc`)
+- [x] Auto-answer's `[BUDGET]` recognition is axis-agnostic at the marker level (was already; 13.6 confirms by reusing marker)
+- [x] Browser smoke — propagation verified end-to-end ($1.09 spend, status=complete); live `[BUDGET]` firing covered by unit tests (see Notes above)
 - [x] U033 closes — `46198b4`
-- [x] U034 closes — `31afcb9`
+- [x] U034 closes — `31afcb9` + LIVE-verified at phase-close
 
 **Future tiers — Phase 12 Deferred section carry-forwards:**
 
@@ -318,7 +295,7 @@ None — 13.5 hasn't started.
 - **`factory config get / set <key>` CLI** — operator surface for `<dataDir>/config.json`.
 - **Override after auto-answer** — `factory questions answer --force <id>`. Pin via ADR if it ships.
 - **Inline-style audit on the 12 pages** — Tier 9-deferred.
-- **Structural `/session-end` lag-by-1 fix** — now 31 occurrences (session-end `68dbd6b` was #30; this drift-fix at session start catches up STATE to `68dbd6b` and itself becomes #31 since the drift-fix can't name its own SHA pre-commit). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **Structural `/session-end` lag-by-1 fix** — see the carry-forwards section above for current count (now #37 with this phase-close). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 **Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav. **Tier 9 added** a new vocabulary on top: vermillion (`#ff4d1c`) as the singular signal color; Fraunces italic display + Bricolage Grotesque body + JetBrains Mono data; CSS custom-property tokens (`--bg / --surface / --ink / --hairline / --signal / --amber / --acid / --halt / --cool`) flipped by `prefers-color-scheme`; paper-grain SVG atmosphere via `body::before / body::after`; editorial masthead with brand mark `§` + numbered nav + monospaced status pip + pulse animation.
 

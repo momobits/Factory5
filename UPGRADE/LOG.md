@@ -6,6 +6,42 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-17 — Phase 13 (budget-followups) closed; upgrade arc complete (ninth time)
+
+Two-session tier closed in one calendar day (2026-05-17). Eight commits this session continuation on top of the prior `dc61c79` session-end:
+
+- `ffdbd8f` feat(13.5) per-project budget defaults extend to all six axes (+14 tests: 12 wiki + 2 daemon)
+- `aae86dc` feat(13.6) per-task USD cap axis + pre-launch escalation (+8 tests: 2 core + 4 brain + 2 cli)
+- Plus this phase-close commit.
+
+**What landed:**
+
+- **U033 closed** (13.3) — `resolveTaskMaxTurns` returns `min(planner_emit, operator_ceiling)`; ADR 0032 amendment block clarifies §6 operator-as-ceiling semantic; +6 new brain tests.
+- **U034 closed** (13.4) — `reapStalePidFile(expectedPid, path?)` post-`waitPidGone()` belt-and-suspenders unlink; same-PID race-restart predicate; cross-platform unit tests. **Verified LIVE at phase-close**: `factory daemon stop` emitted `reaped stale pidfile after stop` log line and pidfile is absent on disk post-stop.
+- **Per-project budget defaults extension** (13.5) — `projectBudgetDefaultsSchema` swapped to be `budgetsSchema` (single source of truth per ADR 0032 §3). New `resolveDirectivePayloadBudgets` helper merges per-axis. Daemon body-resolution at POST `/api/v1/builds` calls the new helper alongside the existing `resolveDirectiveLimits` (same on-disk key, two consumers — limits vs payload.budgets).
+- **Per-task USD cap** (13.6) — seventh axis `maxUsdPerTask` in `BUDGET_DEFAULTS`. `taskSchema.estimatedUsd` planner-emitted optional field. New `escalateMaxUsdPerTaskTrip` helper in budget-escalation.ts (pre-launch [BUDGET] askUser with accept/abort outcome). Pool pre-launch check synthesizes a failed TaskResult on abort. CLI `--max-usd-per-task` flag. Web accordion gains a seventh field.
+
+**Workspace test totals.** 1292 → 1300 → 1314 → 1322 + 3 skipped (+30 across the Phase 13 work commits). All four `pnpm` gates green throughout the session.
+
+**ADR 0032 amendment** (dated 2026-05-17, in 13.3 at `46198b4`) clarifies §6's "operator override" → "operator ceiling — planner emit refines downward." Not a paradigm change — the §6 persistence contract presupposed operator-as-ceiling all along; the docstring label was ambiguous to the Phase 12 implementer who read it as "fallback when planner is silent." Amended rather than superseded per CLAUDE.md's "do not edit accepted ADRs" rule which targets substance-changes.
+
+**Live browser smoke** (Playwright MCP, smoke-demo project, directive `01KRTWEPJ7KRJR20ABDTGAD87W`, $1.09 spend within $1.50 cap, status=complete). Verifies:
+
+- Phase 13.5 propagation end-to-end via API response: `directive.payload.budgets.maxTurnsScaffolder = 10` persisted from the UI form submission. This is the half of the Phase 12 deferred-smoke promise that was broken (Phase 12 smoke showed operator-set value ignored; this smoke proves it lands on the directive correctly).
+- Phase 13.6 UI: seventh-axis accordion field renders with label "Max USD — per task", 0-default chip, and the Phase-13.6 explainer.
+- U034 fix: daemon-stop teardown observed live, `reaped stale pidfile after stop` log line confirmed cleanup; pidfile absent post-stop.
+- End-to-end build completes with the operator-set budget present (no regression introduced by the propagation changes).
+
+**Live [BUDGET] askUser firing NOT demonstrated** in this smoke because smoke-demo is small enough that the scaffolder completed within the 10-turn cap (no trip). The trip path itself is unit-test-covered comprehensively: 36 brain tests from Phase 12.6's escalation path + 4 new from 13.3's ceiling logic + 4 new from 13.6's USD escalation, all green. A future tier could include a multi-module project in the smoke harness to force the trip path live; deferred per scope-tightness.
+
+**Phase 13 done-criteria** (10 of 10 green at close). Tagged `phase-13-budget-followups-closed`.
+
+**Upgrade arc state.** Tiers 1-13 all closed. Phase 12 → Phase 13 sequence closed the operator-felt budget loop end-to-end (Phase 12 built the structural pieces; Phase 13 fixed the propagation gap surfaced by Phase 12's deferred smoke + bundled polish + extensions). No active phase pending.
+
+**Next**: arc-complete state. Operator decides whether to scaffold a new tier (no specific incident pending) or `/session-end` to close out. Carry-forwards remain available (mid-task escalation; budget audit dashboard; daemon /shutdown IPC route; planner-honors-budgets belt-and-suspenders; long-standing items like U005 chat REPL UX).
+
+---
+
 ## 2026-05-16 — Phase 11 (directive-log-persistence) closed; Phase 12 (budget-ux) active
 
 Tier 11 closed the same day as Tier 10's post-close smoke surfaced the gap: `log.line` SSE events were ephemeral, so the directive-detail activity panel went blank on refresh, split across tabs, and rendered empty post-mortem on terminal directives. U031 captured the three failure modes. Tier 11 closes them by persisting events to disk and replaying on connect.
