@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-17 — Phase 12 close. Tagged `phase-12-budget-ux-closed` at this close commit. Seven tier-12 work commits this session (`37049e4` 12.1, `fd67b8a` 12.2 ADR 0032, `e535f5a` 12.3 BUDGET_DEFAULTS, `69de499` 12.4 Web UI accordion, `adc6129` 12.5 CLI flags, `8d21b56` 12.6 brain escalation, `8231f87` 12.7 payload inheritance) + this phase-close commit (10 commits total including the drift-fix). U032 closed. Upgrade arc complete (eighth time) — no Phase 13 in `phase-plan.md`; STATE awaits a new phase plan or `/session-end`. Browser smoke (budget-tripping task escalates → accept → retry → success) deferred to operator-driven verification.
+**Last updated:** 2026-05-17 — session end after Phase 12 close. STATE.md timestamp bump + last-commit pointer to `e3d14b7` (the phase-close commit) + lag counter (#33 reintroduced — this session-end edits STATE then commits, so HEAD diverges from STATE one more time). All 10 work commits + close commit landed cleanly this session. Upgrade arc complete (eighth time). No in-flight work; operator-deferred live browser smoke is the remaining acceptance gate.
 **Current phase:** arc-complete (eighth time — no Phase 13 planned)
 **Current step:** n/a (between phases)
 **Status:** Phase 12 closed cleanly with `phase-12-budget-ux-closed`. 9 of 11 done-criteria green automatically (4 `pnpm` gates clean; ADR 0032; BUDGET_DEFAULTS; Web UI accordion; CLI flags; payload.budgets + resume inheritance; brain escalation; auto-answer bump-then-abort; tests across the escalation path). U032 closed. Workspace 1216 → 1292 + 3 skipped (+76 across 12.3 +22, 12.4 +3, 12.5 +15, 12.6 +22, 12.7 +11+3). **Deferred:** live browser smoke (operator-felt acceptance gate; live-spend $0.5-1.5 budget). README's smoke checkbox left unchecked at close — that's the visible record of the remaining gate.
@@ -33,8 +33,8 @@
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `<this phase-close commit>` — `chore(phase-12)`: close phase 12, kick off arc-complete (eighth time). Phase 12 budget-ux closed; U032 resolved; tag `phase-12-budget-ux-closed` placed at the prior 12.7 commit (the close commit itself is the STATE-update commit per Control's pattern).
-- **Uncommitted changes:** none at phase-close
+- **Last commit:** `e3d14b7` — `chore(phase-12)`: close phase 12, kick off arc-complete (eighth time). (Session-end commit will bump to lag #33.)
+- **Uncommitted changes:** none at session-end
 - **Last phase tag:** `phase-12-budget-ux-closed` (annotated at `8231f87`)
 
 ---
@@ -70,7 +70,7 @@
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **32 occurrences** with this Phase 12 close (the prior drift-fix `ffe1dd6` was #31; this phase-close commit itself becomes lag #32 since it can't name its own SHA pre-commit). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **33 occurrences** with this session-end (phase-close `e3d14b7` was #32; this session-end commit edits STATE then commits, so HEAD diverges from STATE one more time and itself becomes #33). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
@@ -92,7 +92,8 @@
 
 ## Recently completed (last 5 steps)
 
-- **Phase 12 close** — `chore(phase-12)`: close phase 12, kick off arc-complete (eighth time). Tagged `phase-12-budget-ux-closed` at `8231f87`. 9 of 11 done-criteria green automatically; the live browser smoke is operator-deferred and stays the visible remaining gate. U032 closed. Workspace 1216 → 1292 + 3 skipped (+76 across the seven work commits). — 2026-05-17 — this commit
+- **Session-end after Phase 12 close** (this commit) — `docs(state)`: session end for Phase 12 close. STATE.md timestamp bump + last-commit pointer to `e3d14b7` + lag counter (#33 reintroduced) + journal entry. No phase work; pure session-end housekeeping. — 2026-05-17
+- **Phase 12 close** — `chore(phase-12)`: close phase 12, kick off arc-complete (eighth time). Tagged `phase-12-budget-ux-closed` at `8231f87`. 9 of 11 done-criteria green automatically; the live browser smoke is operator-deferred and stays the visible remaining gate. U032 closed. Workspace 1216 → 1292 + 3 skipped (+76 across the seven work commits). — 2026-05-17 — `e3d14b7`
 - **Step 12.7** — `feat(12.7)`: directive payload.budgets inheritance + brain consumption. New `budgetsFromDirective` + `resolveTaskMaxTurns` helpers in `budget-escalation.ts`; pool uses them to fill effective maxTurns from `directive.payload.budgets` when the planner didn't emit a per-task override. Daemon `/api/v1/directives/:id/resume` + CLI `factory resume` inherit `prior.payload.budgets` and merge body overrides per-axis; same pattern for `limits` (ADR 0020 path). 11 new brain + 3 new daemon tests. — 2026-05-17 — `8231f87`
 - **Step 12.6** — `feat(12.6)`: brain escalation on error_max_turns. New `ClaudeCliStreamError` typed-error class in `@factory5/providers` carries the result-event subtype as a structured field; worker captures `errorSubtype` on TaskResult; `taskResultSchema` extended. New `packages/brain/src/budget-escalation.ts` with `axisForAgent` + `suggestedNextBucket` + `parseBudgetEscalationAnswer` + `escalateBudgetTrip`. Pool `executeTask` wraps `runWorker` in a retry-on-`error_max_turns` loop with a per-task cap of 2 escalations; heartbeat lifecycle adjusted (cleared while waiting on operator; restarted on retry). Tier-8 `autoAnswerOne` recognises the `[BUDGET]` marker and applies a deterministic bump-then-abort policy (no LLM call). 22 new brain tests. — 2026-05-17 — `8d21b56`
 - **Step 12.5** — `feat(12.5)`: CLI budget flags on build + resume. New shared `packages/cli/src/commands/budget-flags.ts` with `addBudgetFlags(cmd)` + `collectBudgetFlags(opts)` — single source for CLI flag wiring across `factory build` and `factory resume`. Plan deviation: `--ask-deadline-ms` renamed to `--ask-user-deadline-ms` so Commander's automatic camelCase derivation aligns with the canonical `askUserDeadlineMs` axis name. `parsePositiveInt` tightened to reject float-shaped input (root-cause fix for parseInt's silent truncation). 15 new cli tests. — 2026-05-17 — `adc6129`

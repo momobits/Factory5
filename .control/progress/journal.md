@@ -2,6 +2,13 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-17 — Session end after Phase 12 close
+
+- Pure session-end housekeeping: STATE.md timestamp bump, last-commit pointer to `e3d14b7` (the phase-close commit), lag counter bumped to #33 (reintroduces — this session-end commit will diverge from STATE pointer once committed), journal entry, next.md regen.
+- No new code, ADRs, or tests this commit.
+- Tag `phase-12-budget-ux-closed` lives at `8231f87` (the 12.7 commit).
+- Next session: operator decides — run the deferred live browser smoke (intentionally-low maxTurns → askUser → accept → retry → success; ~$1.50 spend cap), author a Phase 13 plan if a new operator-felt closure surfaces, or another `/session-end` to close out today.
+
 ## 2026-05-17 — Phase 12 (budget-ux) closed; upgrade arc complete (eighth time)
 
 - All seven Tier-12 work commits landed this session (drift-fix `ffe1dd6` + 12.1 `37049e4` + 12.2 ADR 0032 `fd67b8a` + 12.3 BUDGET_DEFAULTS `e535f5a` + 12.4 Web UI accordion `69de499` + 12.5 CLI flags `adc6129` + 12.6 brain escalation `8d21b56` + 12.7 payload inheritance `8231f87`) + this phase-close commit.
