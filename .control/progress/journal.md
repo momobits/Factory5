@@ -2,6 +2,14 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-17 — Session end after Phase 12 smoke + U033 filing
+
+- Pure session-end housekeeping: STATE.md timestamp bump, last-commit pointer to `eab1362` (the smoke-finding commit), lag counter bumped to #34 (reintroduces — this session-end commit will diverge from STATE pointer once committed), journal entry, next.md regen.
+- No new code, ADRs, or tests this commit.
+- Tag `phase-12-budget-ux-closed` still at `8231f87`.
+- Daemon state at session-end: fresh PID 51784 running with current Phase 12 dist; old pre-Phase-12 daemon (PID 45508) stopped this session.
+- Next session: operator decides — author Phase 13 (recommended; center on U033 + the Phase 12 carry-forwards), re-run the live smoke after a U033 fix lands, or another `/session-end` to close out today.
+
 ## 2026-05-17 — Phase 12 live browser smoke — failed operator-felt gate; U033 filed
 
 - **Smoke executed end-to-end via Playwright MCP** against the running daemon: navigated to `/app/build`, expanded Advanced budgets accordion, set `Max turns — scaffolder = 10`, submitted. Directive `01KRSQC5EWWCTEJK4PXEM69K30` minted, brain narrated triage → architect (66s, $0.31) → planner (38s, $0.11) → pool dispatched 3 tasks. Scaffolder ran at **40 turns** (planner-emitted), not 10 (operator-set). All 3 tasks completed exitCode=0; **no `[BUDGET]` askUser ever surfaced**.

@@ -1,7 +1,7 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-17T01:22:47Z by
-> `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-17T08:30:51Z by
+> `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
 
@@ -16,13 +16,16 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-**Upgrade arc complete (eighth time).** Phase 12 (budget-ux) closed cleanly with all structural pieces shipped — surface-and-escalate budget model in place across CLI / Web / brain / daemon. No Phase 13 in `phase-plan.md` yet. Three operator-facing next actions:
+**Smoke ran; the operator-felt gate failed; U033 captures the bug.** Phase 12's structural pieces are healthy (daemon-side persistence, escalation code path), but the propagation step from operator intent to worker `maxTurns` is broken: `resolveTaskMaxTurns` prefers `task.maxTurns` (always emitted by the planner per its prompt) over `directive.payload.budgets[axis]` (operator). The documented Phase 12 promise — "set a low maxTurns in the UI, see the [BUDGET] askUser fire" — doesn't fire because the planner's per-task emit always shadows the operator's directive budget. Three operator-facing next actions:
 
-1. **Run the deferred live browser smoke** — kick off a build via the Web UI with an intentionally low `--max-turns-scaffolder` cap on a multi-module project; confirm the brain raises the `[BUDGET]` askUser, operator picks `accept`, task retries with the bumped cap, build proceeds. Spend cap $1.50. This is the gate Phase 12's README left unchecked at close.
-2. **Author Phase 13** if a new operator-felt closure surfaces (carry-forwards from Phase 12's Deferred section: per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard).
-3. **`/session-end`** to close out today.
+1. **Author Phase 13 (recommended)** — center on closing U033, plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). U033's three resolution candidates listed in `UPGRADE/ISSUES.md` — pick one (probably (1) `min(planner_emit, directive_budget)`) in the Phase 13 ADR.
+2. **Re-run the live smoke** after U033's fix lands; or run it now with manual surgery on `plan.json` between planner emit and pool dispatch to confirm the escalation plumbing fires end-to-end despite the propagation bug. Manual-surgery option doesn't satisfy the operator-felt gate but does verify the post-trip retry loop.
+3. **`/session-end`** to close out today; resume Phase 13 fresh.
+
+**Operational gotcha discovered this session.** The running daemon at session-start (PID 45508) was started 2026-05-16 21:21 UTC — that's BEFORE Phase 12's first commit landed. The daemon was running pre-Phase-12 dist and silently dropped `body.budgets` for any new build. Killed + restarted to PID 51784 (current dist). Worth a one-line addition to phase-close runbooks: "Restart `factoryd` after the phase tag so live smokes hit the current code." The fresh daemon (PID 51784) is currently running and current.
 
 **Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at this phase-close commit.
+
 
 ## Notes for next session
 

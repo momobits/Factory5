@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-17 — Phase 12 live browser smoke executed. **Result: failed the operator-felt gate; opened U033.** Structural plumbing all healthy (daemon persists `body.budgets` → `payload.budgets`; escalation code path tested green) but operator's UI-set `maxTurnsScaffolder` is silently shadowed by planner-emitted per-task `maxTurns`. Spend ~$1.61 on the failed smoke run. README's smoke checkbox stays unchecked.
+**Last updated:** 2026-05-17 — session end after Phase 12 live smoke + U033 filing. STATE.md timestamp bump + last-commit pointer to `eab1362` (the smoke-finding commit) + lag counter (#34 reintroduced — this session-end edits STATE then commits, so HEAD diverges from STATE one more time). Smoke result: failed the operator-felt gate; structural plumbing healthy but operator's UI-set `maxTurnsScaffolder` is silently shadowed by planner-emitted per-task `maxTurns`. Spend $1.61 on the diagnostic run. U033 filed (high, Tier 13 carry-forward).
 **Current phase:** arc-complete (eighth time — no Phase 13 planned)
 **Current step:** n/a (between phases)
-**Status:** Phase 12 closed cleanly with `phase-12-budget-ux-closed`. 9 of 11 done-criteria green automatically; the deferred live browser smoke (criterion 10) **failed** in this session — see "Next action" + U033 for the gap. U032 stays Resolved (the structural budget-UX paradigm landed; this is a propagation bug atop it). Workspace 1216 → 1292 + 3 skipped at last test run.
+**Status:** Phase 12 closed cleanly with `phase-12-budget-ux-closed`. 9 of 11 done-criteria green automatically; the deferred live browser smoke (criterion 10) **failed** in this session — see "Next action" + U033 for the gap. U032 stays Resolved (the structural budget-UX paradigm landed; this is a propagation bug atop it). Workspace 1216 → 1292 + 3 skipped at last test run. Fresh daemon (PID 51784) up-to-date with current Phase 12 dist; old pre-Phase-12 daemon stopped this session.
 
 ---
 
@@ -35,7 +35,7 @@
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `e3d14b7` — `chore(phase-12)`: close phase 12, kick off arc-complete (eighth time). (Session-end commit will bump to lag #33.)
+- **Last commit:** `eab1362` — `docs(state)`: post-phase-12 smoke result — failed operator-felt gate, U033 filed. (Session-end commit will bump to lag #34.)
 - **Uncommitted changes:** none at session-end
 - **Last phase tag:** `phase-12-budget-ux-closed` (annotated at `8231f87`)
 
@@ -49,7 +49,7 @@
 
 ## In-flight work
 
-**None — Phase 12 closed.** Upgrade arc complete (eighth time). Operator-driven gate remaining: live browser smoke against the budget-escalation path (intentionally low `--max-turns-scaffolder`, confirm askUser appears, accept → retry → success). README's smoke checkbox stays unchecked to mark the visible state.
+**None — Phase 12 closed; smoke ran with the failed result captured in U033.** Upgrade arc complete (eighth time). Live browser smoke executed this session; structural pieces healthy but the operator-set budget propagation gap (U033) prevents the `[BUDGET]` askUser from firing naturally from the UI surface. Phase 13 should center on closing U033. Fresh daemon (PID 51784) running with current dist as of session-end; operator can `factory daemon status` to confirm or restart at will.
 
 **Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 
@@ -72,7 +72,7 @@
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **33 occurrences** with this session-end (phase-close `e3d14b7` was #32; this session-end commit edits STATE then commits, so HEAD diverges from STATE one more time and itself becomes #33). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **34 occurrences** with this session-end (smoke-finding `eab1362` was #33's catch-up; this session-end commit edits STATE then commits, so HEAD diverges from STATE one more time and itself becomes #34). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
@@ -94,7 +94,9 @@
 
 ## Recently completed (last 5 steps)
 
-- **Session-end after Phase 12 close** (this commit) — `docs(state)`: session end for Phase 12 close. STATE.md timestamp bump + last-commit pointer to `e3d14b7` + lag counter (#33 reintroduced) + journal entry. No phase work; pure session-end housekeeping. — 2026-05-17
+- **Session-end after Phase 12 smoke** (this commit) — `docs(state)`: session end after smoke + U033. STATE.md timestamp bump + last-commit pointer to `eab1362` + lag counter (#34 reintroduced) + journal entry. No phase work; pure session-end housekeeping. — 2026-05-17
+- **Phase 12 smoke result + U033** — `docs(state)`: post-phase-12 smoke result — failed operator-felt gate, U033 filed. Live browser smoke via Playwright MCP against the running daemon; scaffolder ran 40 turns (planner-emitted) not 10 (operator-set), no [BUDGET] askUser surfaced. Operational discovery: running daemon was pre-Phase-12 dist; restarted fresh. U033 filed in `UPGRADE/ISSUES.md` Open with three resolution candidates. — 2026-05-17 — `eab1362`
+- **Session-end after Phase 12 close** — `docs(state)`: session end for Phase 12 close. STATE.md timestamp bump + last-commit pointer to `e3d14b7` + lag counter (#33 reintroduced) + journal entry. No phase work; pure session-end housekeeping. — 2026-05-17 — `e270781`
 - **Phase 12 close** — `chore(phase-12)`: close phase 12, kick off arc-complete (eighth time). Tagged `phase-12-budget-ux-closed` at `8231f87`. 9 of 11 done-criteria green automatically; the live browser smoke is operator-deferred and stays the visible remaining gate. U032 closed. Workspace 1216 → 1292 + 3 skipped (+76 across the seven work commits). — 2026-05-17 — `e3d14b7`
 - **Step 12.7** — `feat(12.7)`: directive payload.budgets inheritance + brain consumption. New `budgetsFromDirective` + `resolveTaskMaxTurns` helpers in `budget-escalation.ts`; pool uses them to fill effective maxTurns from `directive.payload.budgets` when the planner didn't emit a per-task override. Daemon `/api/v1/directives/:id/resume` + CLI `factory resume` inherit `prior.payload.budgets` and merge body overrides per-axis; same pattern for `limits` (ADR 0020 path). 11 new brain + 3 new daemon tests. — 2026-05-17 — `8231f87`
 - **Step 12.6** — `feat(12.6)`: brain escalation on error_max_turns. New `ClaudeCliStreamError` typed-error class in `@factory5/providers` carries the result-event subtype as a structured field; worker captures `errorSubtype` on TaskResult; `taskResultSchema` extended. New `packages/brain/src/budget-escalation.ts` with `axisForAgent` + `suggestedNextBucket` + `parseBudgetEscalationAnswer` + `escalateBudgetTrip`. Pool `executeTask` wraps `runWorker` in a retry-on-`error_max_turns` loop with a per-task cap of 2 escalations; heartbeat lifecycle adjusted (cleared while waiting on operator; restarted on retry). Tier-8 `autoAnswerOne` recognises the `[BUDGET]` marker and applies a deterministic bump-then-abort policy (no LLM call). 22 new brain tests. — 2026-05-17 — `8d21b56`
