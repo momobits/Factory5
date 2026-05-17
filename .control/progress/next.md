@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-17T08:54:31Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-17T09:58:23Z by
 > `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
@@ -16,40 +16,75 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-**Smoke ran; the operator-felt gate failed; U033 captures the bug.** Phase 12's structural pieces are healthy (daemon-side persistence, escalation code path), but the propagation step from operator intent to worker `maxTurns` is broken: `resolveTaskMaxTurns` prefers `task.maxTurns` (always emitted by the planner per its prompt) over `directive.payload.budgets[axis]` (operator). The documented Phase 12 promise — "set a low maxTurns in the UI, see the [BUDGET] askUser fire" — doesn't fire because the planner's per-task emit always shadows the operator's directive budget. Three operator-facing next actions:
+**Step 13.5 — per-project budget defaults extension.** Today `<project>/.factory/project.json` `metadata.budgetDefaults` (added in Tier 8) carries `{ maxUsd, maxSteps }` only. Phase 13.5 widens it to cover all six Phase 12 axes: `askUserDeadlineMs`, `maxTurnsScaffolder`, `maxTurnsBuilder`, `maxTurnsFixer` (and `maxUsdPerTask` once 13.6 lands as the seventh). Implementation surface:
 
-1. **Author Phase 13 (recommended)** — center on closing **U033**, bundle **U034** (Windows pidfile cleanup) as polish, plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). U033's three resolution candidates listed in `UPGRADE/ISSUES.md` — pick one (probably (1) `min(planner_emit, directive_budget)`) in the Phase 13 ADR. U034 is ~30 lines, either CLI-side belt-and-suspenders or a daemon-side `/shutdown` IPC.
-2. **Re-run the live smoke** after U033's fix lands; or run it now with manual surgery on `plan.json` between planner emit and pool dispatch to confirm the escalation plumbing fires end-to-end despite the propagation bug. Manual-surgery option doesn't satisfy the operator-felt gate but does verify the post-trip retry loop.
-3. **`/session-end`** to close out today; resume Phase 13 fresh.
+- `@factory5/core` project metadata schema: swap the existing `budgetDefaults: z.object({ maxUsd, maxSteps }).optional()` for `budgetDefaults: budgetsSchema.optional()` (reuse the 12.3 Zod schema in `@factory5/core/budgets`).
+- Daemon `apiV1CreateBuildRequestSchema` body-resolution (ADR 0027 §4's three-tier: instance config → project metadata → body flags) extends to merge the new keys per-axis using the existing tiered merge helper.
+- CLI `factory build` already reads project metadata; no CLI surface change beyond schema acceptance.
+- Tests: three-tier resolution chain for each new axis; project metadata + body unset; project metadata + body override.
 
-**Operational gotcha discovered this session.** The running daemon at session-start (PID 45508) was started 2026-05-16 21:21 UTC — that's BEFORE Phase 12's first commit landed. The daemon was running pre-Phase-12 dist and silently dropped `body.budgets` for any new build. Killed + restarted to PID 51784 (current dist). Worth a one-line addition to phase-close runbooks: "Restart `factoryd` after the phase tag so live smokes hit the current code." The fresh daemon (PID 51784) is currently running and current.
+Estimated ~1 hour. Realistic shape: 5-8 unit tests + schema edit + daemon-resolution-path test.
 
-**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at this phase-close commit.
+Then **13.6 — per-task USD cap (`maxUsdPerTask`)**: new seventh axis in `BUDGET_DEFAULTS`; planner-side `estimatedUsd` per task (schema bump); pool pre-launch check; typed `[BUDGET]` askUser on over-cap reusing Phase 12's escalation pattern; auto-answer `[BUDGET]` recognition refactors from `maxTurns*`-coupled to axis-agnostic. Larger scope; ~2-3 hours.
+
+Then **13.7 — phase close** with live browser smoke (Playwright MCP, `smoke-demo` project, $1.50 spend cap). Smoke shape: operator sets `maxTurnsScaffolder=10` in Web UI Advanced budgets → expect scaffolder trips at 10 → `[BUDGET]` askUser fires → accept → retry with bumped cap → success. Also exercises U034's fix on the daemon-stop teardown.
+
+**Daemon state at handoff:** stopped (operator ran `factory daemon stop` at the prior session-end). Restart with `factory daemon start` when 13.5/13.6 unit tests need a live daemon (none do — pure schema + helper work). 13.7's smoke needs a fresh start. **Note:** 13.4's U034 fix is in dist — next `factory daemon stop` will leave a clean pidfile.
+
+**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`.
 
 ## Notes for next session
 
-**Phase 12 smoke ran and failed the operator-felt gate.** Structural plumbing is healthy but the propagation step from operator intent to worker `maxTurns` is broken: `resolveTaskMaxTurns` (`packages/brain/src/budget-escalation.ts:105-112`) prefers `task.maxTurns` (planner-emitted, always set per the planner prompt's 10-160 range) over `directive.payload.budgets[axis]` (operator). The planner prompt at `packages/brain/src/planner.ts:247-249` doesn't see the directive's budgets, so it always emits its own per-task value, which shadows the operator's setting. Result: setting `Max turns — scaffolder = 10` in the UI has no observable effect. Filed as **U033** (high, Tier 13 carry-forward) in `UPGRADE/ISSUES.md` Open with three resolution candidates.
+**Phase 13 mid-flight; U033 + U034 both closed this session.** Resume at step **13.5 — per-project budget defaults extension**. Today `<project>/.factory/project.json` `metadata.budgetDefaults` carries `{ maxUsd, maxSteps }` only (added in Tier 8); 13.5 widens to all six Phase 12 axes by swapping the existing Zod object for `budgetsSchema.optional()` (reuse the 12.3 schema in `@factory5/core/budgets`). Three-tier resolution chain (instance config → project metadata → body flags) preserved. No new ADR expected — schema extension only.
 
 **Read first** when next session resumes:
 
-1. `UPGRADE/ISSUES.md` Open — **U033** has the full bug narrative + the three resolution candidates (most likely fix: `resolveTaskMaxTurns` returns `min(planner_emit, directive_budget)`).
-2. `.control/phases/phase-12-budget-ux/README.md` — done-criteria checklist with the smoke checkbox still unchecked as the visible record of the gap.
-3. ADR 0032 — Budget UX paradigm (`docs/decisions/0032-budget-ux-paradigm.md`). §6's "operator override" label in the docstring of `resolveTaskMaxTurns` is misleading post-smoke; the ADR-amendment vs new-ADR vs in-Phase-13-ADR decision is open.
-4. `packages/brain/src/budget-escalation.ts:105-112` (`resolveTaskMaxTurns`) and `packages/brain/src/planner.ts:247-249` (the planner prompt's `maxTurns` instruction) — the two ends of the propagation gap.
+1. `.control/phases/phase-13-budget-followups/steps.md` — 13.5 description + remaining sub-steps (13.5 / 13.6 / 13.7).
+2. `UPGRADE/plans/tier-13-budget-followups.md` § "13.5 — Per-project budget defaults extension" + § "13.6 — Per-task USD cap" for the planned implementation shape.
+3. `packages/core/src/` schema files (where the existing `budgetDefaults` Zod definition lives — quick grep for `budgetDefaults` finds it).
+4. `packages/daemon/src/server.ts` body-resolution path (ADR 0027 §4's three-tier merge) — 13.5 extends per-axis using the existing helper.
+5. The 13.3 ADR amendment in `docs/decisions/0032-budget-ux-paradigm.md` — context for the operator-as-ceiling semantic that 13.5's extension feeds into.
 
-**Recommended next action — author Phase 13.** Center the plan on closing **U033** + **U034** plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). The U033 fix is ~30 lines + tests; U034 is ~30 lines + a CLI integration test; the carry-forwards are ~3-5 sub-steps each. The whole tier is a natural 2-3 session phase.
+**13.5 shape (recommended):**
 
-**Alternative — re-run the live smoke after a U033 fix.** The smoke shape is the same as before but should now produce the `[BUDGET]` askUser correctly:
+- Schema edit in `@factory5/core`: `budgetDefaults: budgetsSchema.optional()` (reuse 12.3's Zod definition).
+- Daemon `apiV1CreateBuildRequestSchema` body-resolution: merge new keys per-axis using the existing tiered merge helper.
+- Tests: project metadata + body unset → metadata wins; project metadata + body override → body wins; project metadata + planner emit > ceiling → planner clamped to project ceiling (cross-tier interaction with 13.3's fix).
+- Estimated ~1 hour. 5-8 unit tests.
 
-- Start factoryd; capture UI token; navigate to `/app/build`.
-- Pick a project that exercises a tool-using agent (`smoke-demo` works).
-- Open the "Advanced budgets" accordion; set `Max turns — scaffolder` to a low value (e.g. 10) so the trip is guaranteed.
-- Submit; watch the directive-detail activity panel.
-- Brain should narrate triage → architect → planner → pool task start → `pool: task "..." tripped error_max_turns at 10 — escalating via askUser (ADR 0032 §4)` → questions surface in `/app/questions`.
-- Operator answers `accept` (or auto-answer fires if the deadline passes); brain logs `retrying with maxTurnsScaffolder=80 (was 10)`; task re-runs.
-- Spend cap recommendation: $1.50 to bound the live model spend.
+**Then 13.6 (per-task USD cap):**
 
-**Operational gotcha.** The running daemon at the prior session's start (PID 45508, started 2026-05-16 21:21 UTC) was pre-Phase-12 dist; killed and restarted to PID 51784 against current dist mid-session, then operator stopped via `factory daemon stop` at session-end. **No daemon running at handoff.** If you `factory daemon status` after a fresh start and the PID predates the most recent code change in `packages/daemon/` or `packages/brain/`, `factory daemon restart` before running a live smoke. Note **U034**: `factory daemon stop` on Windows leaves a stale pidfile — the next-start auto-reaps it, but if you inspect the pidfile post-stop you'll see a dead PID. Not a problem for normal lifecycle.
+- New seventh axis in `BUDGET_DEFAULTS` (`@factory5/core/budgets`).
+- Planner schema bump: `planTaskSchema` gains optional `estimatedUsd: z.number().optional()`. Planner prompt extends to instruct estimation when `directive.payload.budgets.maxUsdPerTask > 0`.
+- Pool pre-launch check in `packages/brain/src/pool.ts`: if `task.estimatedUsd > operatorCap`, raise typed `[BUDGET]` askUser reusing the Phase 12 escalation path.
+- Auto-answer recognition (`packages/brain/src/auto-answer.ts`): refactor `[BUDGET]` matcher from `maxTurns*`-coupled to axis-agnostic (the marker payload already carries `axis`).
+- CLI `--max-usd-per-task <n>` on `factory build` + `factory resume`; seventh Web accordion field.
+- Estimated ~2-3 hours. 5+ new brain tests covering planner-estimate path + escalation + bump.
+
+**Then 13.7 (phase close + live browser smoke):**
+
+- Start factoryd (current dist, post-13.4 U034 fix); capture UI token; navigate to `/app/build`.
+- Pick `smoke-demo` (or any project that exercises a tool-using agent).
+- Open "Advanced budgets"; set `Max turns — scaffolder = 10`.
+- Submit; expect brain to narrate triage → architect → planner → pool task start. Operator's 10 should now CEILING the planner's emit (per 13.3), so the scaffolder trips immediately → `[BUDGET]` askUser fires → questions surface.
+- Operator answers `accept`; brain retries with bumped cap; task succeeds.
+- Stop factoryd; **verify pidfile is gone** (U034 fix verification) — `Get-ChildItem $env:LOCALAPPDATA\factory5\factoryd.pid` should return nothing.
+- Spend cap $1.50.
+
+**Daemon state at handoff:** stopped (operator ran `factory daemon stop` at the prior session-end). **U034 fix is in dist now** — the next `factory daemon stop` will leave a clean pidfile. 13.5/13.6 don't need a live daemon (pure schema + helper work); 13.7's smoke does.
+
+**Phase 13 done-criteria status (4 of 9 green):**
+
+- [x] All four `pnpm` gates green (current as of `31afcb9`)
+- [x] ADR 0032 amendment (`46198b4`)
+- [x] `resolveTaskMaxTurns` returns `min(planner_emit, operator_ceiling)`; docstring updated; 5+ new tests (`46198b4`)
+- [x] `factory daemon stop` on Windows leaves no stale pidfile; cross-platform unit test (`31afcb9`)
+- [ ] `<project>/.factory/project.json` `metadata.budgetDefaults` accepts all axes — 13.5
+- [ ] `BUDGET_DEFAULTS` gains `maxUsdPerTask`; pool pre-launch check; CLI flag + Web accordion — 13.6
+- [ ] Auto-answer's `[BUDGET]` recognition generalises across axes — 13.6
+- [ ] Browser smoke: operator sets `maxTurnsScaffolder=10` in UI → `[BUDGET]` askUser fires → accept → retry → success — 13.7
+- [x] U033 closes — `46198b4`
+- [x] U034 closes — `31afcb9`
 
 **Future tiers — Phase 12 Deferred section carry-forwards:**
 
