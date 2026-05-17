@@ -14,7 +14,7 @@ import { dirname, join, resolve } from 'node:path';
 import process, { exit, stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { readPidFile } from '@factory5/daemon';
+import { reapStalePidFile, readPidFile } from '@factory5/daemon';
 import { loadDaemonEndpoint } from '@factory5/brain';
 import { createDaemonClient } from '@factory5/ipc';
 import { createLogger } from '@factory5/logger';
@@ -160,6 +160,13 @@ async function stopDaemon(): Promise<void> {
     stdout.write(`factoryd: did not exit within 10s — consider \`kill -9 ${String(info.pid)}\`\n`);
     exit(2);
   }
+  // Phase 13.4 / U034 — Windows maps SIGTERM to TerminateProcess (hard
+  // kill), so factoryd's shutdown handler never runs and the pidfile
+  // stays on disk. Belt-and-suspenders: unlink it ourselves if it still
+  // contains the killed PID. The same-PID predicate inside
+  // reapStalePidFile handles the race where a fresh daemon spawned and
+  // wrote its own PID between waitPidGone() and our cleanup.
+  reapStalePidFile(info.pid);
   stdout.write(`factoryd stopped (pid ${String(info.pid)})\n`);
 }
 

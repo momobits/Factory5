@@ -150,3 +150,43 @@ export function readPidFile(
   if (pid === undefined) return undefined;
   return { pid, alive: processAlive(pid) };
 }
+
+/**
+ * Phase 13.4 / U034 — clean up a stale pidfile after the owning daemon is
+ * known to be gone.
+ *
+ * Used by `factory daemon stop` to defensively unlink the pidfile when the
+ * daemon's own shutdown handler couldn't release it. On Windows,
+ * `process.kill(pid, 'SIGTERM')` is mapped to `TerminateProcess` — a hard
+ * kill that bypasses the daemon's `release()` cleanup. The CLI calls this
+ * after {@link readPidFile}'s `alive` flag flips to false, so the pidfile
+ * doesn't sit on disk pointing at a dead PID until the next `daemon start`
+ * auto-reaps it.
+ *
+ * The same-PID predicate handles the race-restart edge case: if a fresh
+ * daemon spawned and wrote its own PID between `waitPidGone()` returning
+ * and our cleanup call, the predicate skips the unlink so we don't clobber
+ * the new owner's file.
+ *
+ * Malformed pidfile contents (non-integer) are left in place — let
+ * {@link acquirePidFile}'s existing stale-file reaper handle them via its
+ * `unreadable → treat as stale` path on the next acquire.
+ *
+ * @returns `true` if we unlinked the pidfile; `false` if it was absent,
+ *          unreadable, or contained a different PID (race-restart).
+ */
+export function reapStalePidFile(expectedPid: number, path = defaultPidFilePath()): boolean {
+  const current = readPidFromFile(path);
+  if (current === undefined) return false;
+  if (current !== expectedPid) return false;
+  try {
+    unlinkSync(path);
+    log.info({ path, pid: expectedPid }, 'reaped stale pidfile after stop');
+    return true;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return false;
+    log.warn({ err, path, pid: expectedPid }, 'failed to reap stale pidfile');
+    return false;
+  }
+}

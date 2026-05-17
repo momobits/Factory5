@@ -184,7 +184,7 @@ Phase 12 closed structurally green but the deferred live browser smoke failed th
 - [x] Open U033 (operator-set `maxTurns*` silently shadowed by planner-emit)
 - [x] Open U034 (Windows daemon-stop leaves stale pidfile)
 - [x] Fix U033: `resolveTaskMaxTurns` returns `min(planner_emit, operator_ceiling)`; docstring rewrites; ADR 0032 amendment OR new ADR 0033
-- [ ] Fix U034: post-`waitPidGone()` belt-and-suspenders pidfile cleanup with same-PID race-restart predicate; cross-platform integration test
+- [x] Fix U034: post-`waitPidGone()` belt-and-suspenders pidfile cleanup with same-PID race-restart predicate; cross-platform integration test
 - [ ] Per-project budget defaults extension — `<project>/.factory/project.json` `metadata.budgetDefaults` widens from `{maxUsd, maxSteps}` to all axes; three-tier resolution preserved
 - [ ] Per-task USD cap (`maxUsdPerTask`) — new seventh axis in `BUDGET_DEFAULTS`; pool pre-launch check; planner emits per-task `estimatedUsd`; auto-answer recognition generalises across axes
 - [ ] Browser smoke (Playwright MCP, `smoke-demo`, $1.50 cap) — operator-set `maxTurnsScaffolder=10` floors the planner emit → `[BUDGET]` askUser fires → accept → retry → success
