@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-16T22:28:35Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-17T00:46:51Z by
 > `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
@@ -16,44 +16,43 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-**Phase 12 (budget-ux) active — next is 12.1 (open U032).** Phase 11 closed cleanly with the live browser smoke confirming all three operator-felt failure modes are gone (refresh-restores, multi-tab consistency, terminal post-mortem visibility). Tier 12 was scaffolded in the same scaffold commit as Tier 11 (`c22cb71`); plan + phase dir + ROADMAP rows + U032 in ISSUES are all in place.
+**Upgrade arc complete (eighth time).** Phase 12 (budget-ux) closed cleanly with all structural pieces shipped — surface-and-escalate budget model in place across CLI / Web / brain / daemon. No Phase 13 in `phase-plan.md` yet. Three operator-facing next actions:
 
-**Tier 12 sub-steps** (per `.control/phases/phase-12-budget-ux/steps.md`):
-1. **12.1** — Open U032 in `UPGRADE/ISSUES.md` Open section (recordkeeping flip; U032 already added in the scaffold commit).
-2. **12.2** — ADR 0033 pins the budget UX paradigm: operator-facing vs internal-pacing budgets; escalation rule; default-publication contract; persistence contract.
-3. **12.3** — `BUDGET_DEFAULTS` exported from `@factory5/core` as the single source of truth for six operator-facing budgets (maxUsd, maxSteps, askUserDeadlineMs, maxTurnsScaffolder, maxTurnsBuilder, maxTurnsFixer) + defaults + explainers.
-4. **12.4** — Web UI Build form: "Advanced budgets" accordion (collapsed by default) with the six fields + defaults + explainers from the constant.
-5. **12.5** — CLI: six new flags on `factory build` AND `factory resume`; `--help` post-text quotes the explainers verbatim.
-6. **12.6** — Directive payload gains `budgets` field; Tier 10 resume route inherits the full set.
-7. **12.7** — Brain escalation: `pool.ts` catches `error_max_turns` subtype → typed askUser ("Task X ran out of turns at N; bump to M?") → on accept, relaunches the task with the bumped budget; on abort, current failed-task behaviour.
-8. **12.8** — Tier 8 auto-answer adapts: bump on first failure, abort on second.
-9. **12.9** — Tests across the escalation path + ipc / cli / fe surfaces.
-10. **12.10** — `/phase-close` + live browser smoke (budget-tripping task escalates → accept → retry → success).
+1. **Run the deferred live browser smoke** — kick off a build via the Web UI with an intentionally low `--max-turns-scaffolder` cap on a multi-module project; confirm the brain raises the `[BUDGET]` askUser, operator picks `accept`, task retries with the bumped cap, build proceeds. Spend cap $1.50. This is the gate Phase 12's README left unchecked at close.
+2. **Author Phase 13** if a new operator-felt closure surfaces (carry-forwards from Phase 12's Deferred section: per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard).
+3. **`/session-end`** to close out today.
 
-**Driving operator quote 2026-05-16:** *"why are we failing instead of asking the user if we should continue over the budget? why do we have a max cost and max steps that we ask the user and have other limits the user does not see?"* — captured in U032. The automl scaffolder hitting `error_max_turns` at 40 (then 80 post-Tier-10-bump) was the canonical example.
-
-**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at this phase-close commit.
+**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at this phase-close commit.
 
 ## Notes for next session
 
-**Phase 12 (budget-ux) is the active phase.** Tier 11 (`phase-11-directive-log-persistence-closed`) ships persistent log lines + replay; Tier 12 is the next operator-felt closure (operator-invisible turn budgets; hard-fail without retry-question escalation). Tier 12 was scaffolded in the same commit as Tier 11 (`c22cb71`) — plan, phase dir, ROADMAP, U032 in ISSUES all in place. Pick up at **12.1 — open U032** (recordkeeping flip mirroring 11.1).
+**Upgrade arc complete (eighth time).** Tier 12 (`phase-12-budget-ux-closed`) shipped the surface-and-escalate budget model. The structural work is complete and unit-tested end-to-end; the live browser smoke is the remaining operator-felt acceptance gate (intentionally deferred this session per operator decision).
 
-**Read first** when next session resumes:
+**Read first** when next session resumes (or operator runs the deferred smoke):
 
-1. `UPGRADE/plans/tier-12-budget-ux.md` — the full Tier 12 plan including the budget audit (15 hardcoded budgets vs 6 operator-facing), ADR 0033 sketch, brain escalation flow, Tier 8 auto-answer adaptation.
-2. `.control/phases/phase-12-budget-ux/steps.md` — the per-step checklist.
-3. `UPGRADE/ISSUES.md` — U032 description + hypothesis.
-4. ADR 0030 (auto-answer contract) — 12.7/12.8 adapt the auto-answer dispatcher.
+1. `.control/phases/phase-12-budget-ux/README.md` — done-criteria checklist with the smoke checkbox still unchecked as the visible record.
+2. `UPGRADE/plans/tier-12-budget-ux.md` — Tier 12 plan including the budget audit (15 hardcoded budgets vs 6 operator-facing).
+3. ADR 0032 — Budget UX paradigm (`docs/decisions/0032-budget-ux-paradigm.md`).
+4. `UPGRADE/ISSUES.md` Resolved section — U032 entry has the full resolution narrative (which commits shipped which piece + each plan deviation).
 
-**Tier 12 driving incident:** the automl scaffolder hit `error_max_turns` at 40 (pre-Tier-10), then again at 80 (post-Tier-10-bump). Each time the worker reported the failure, the task marked failed, and the brain raised a generic `askUser("what next?")` with no bump-suggestion context. The operator could only see "Task failed" with no diagnostic and no recovery path. Tier 11's activity panel persistence (now visible post-mortem) makes the failure visible; Tier 12 makes it ACTIONABLE.
+**Deferred live browser smoke shape:**
 
-**Tier 11 post-close** — three deferred items moved to Phase 12 Deferred section of phase-11 README and to Tier 12's plan if relevant:
-- **Auto-prune retention policy** for `directive_log_lines` (sweep older than N days). Defer-until-signal that the table is growing meaningfully.
-- **Search / filter in the activity panel** (free-text grep + level + component filters). UX polish.
-- **Persist task / finding / spend events too** (unify replay across all six SSE event types). Would unify the code path.
-- **CLI tail** — `factory directive tail <id>` consumes the new logs endpoint. Composition tier.
+- Start factoryd; capture UI token; navigate to `/app/build`.
+- Pick a project that exercises a tool-using agent (the `smoke-demo` Phase 11 used works; the `automl` scaffolder hitting `error_max_turns` was the canonical Tier 12 incident).
+- Open the "Advanced budgets" accordion; set `Max turns — scaffolder` to a low value (e.g. 10) so the trip is guaranteed.
+- Submit; watch the directive-detail activity panel.
+- Brain should narrate triage → architect → planner → pool task start → `pool: task "..." tripped error_max_turns at 10 — escalating via askUser (ADR 0032 §4)` → questions surface in `/app/questions`.
+- Operator answers `accept` (or auto-answer fires if the deadline passes); brain logs `retrying with maxTurnsScaffolder=80 (was 10)`; task re-runs.
+- Spend cap recommendation: $1.50 to bound the live model spend.
 
-**Previous arc-closes (for context):** see "Notes for next session" intro above for the full list of tags. The carry-forward items below (U005, `/session-end` lag-by-1, etc.) all stay open into the Tier 12 session — they're not Tier 12 work but operators may opt to bundle one if 12.x finishes early.
+**Future tiers — Phase 12 Deferred section carry-forwards:**
+
+- **Per-task USD cap** — `maxUsdPerTask` axis; same escalation pattern. Defer-until-incident.
+- **Mid-task escalation** — proactive warning before the worker actually trips. Bigger surface; defer until the post-failure escalation proves out in real use.
+- **Per-project default overrides for the new budget axes** — extend `<project>/.factory/project.json` `metadata.budgetDefaults` to cover maxTurns + askUserDeadlineMs. Small; bundle with a future build-form-related tier.
+- **Budget audit dashboard** — multi-build telemetry view of "you've burned $X across the last N directives; here's where it went."
+
+**Previous arc-closes (for context):** Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 closes the eighth upgrade arc. The carry-forward items below (U005, `/session-end` lag-by-1, etc.) all stay open — they're not load-bearing for any active phase but operators may opt to bundle one if a future tier surfaces.
 
 **Long-standing carry-forwards** (none load-bearing for Tier 12; bundle opportunistically):
 
@@ -62,7 +61,7 @@ see a structured `[control:state]` block instead of doing them by hand.
 - **`factory config get / set <key>` CLI** — operator surface for `<dataDir>/config.json`.
 - **Override after auto-answer** — `factory questions answer --force <id>`. Pin via ADR if it ships.
 - **Inline-style audit on the 12 pages** — Tier 9-deferred.
-- **Structural `/session-end` lag-by-1 fix** — now 30 occurrences (phase-close `343f101` was a non-lagging instance because it named itself in STATE.md; this session-end commit reintroduces the lag at #30 — STATE.md correctly points at `343f101` right now, but once this session-end commit lands, HEAD diverges from STATE). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **Structural `/session-end` lag-by-1 fix** — now 31 occurrences (session-end `68dbd6b` was #30; this drift-fix at session start catches up STATE to `68dbd6b` and itself becomes #31 since the drift-fix can't name its own SHA pre-commit). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 **Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav. **Tier 9 added** a new vocabulary on top: vermillion (`#ff4d1c`) as the singular signal color; Fraunces italic display + Bricolage Grotesque body + JetBrains Mono data; CSS custom-property tokens (`--bg / --surface / --ink / --hairline / --signal / --amber / --acid / --halt / --cool`) flipped by `prefers-color-scheme`; paper-grain SVG atmosphere via `body::before / body::after`; editorial masthead with brand mark `§` + numbered nav + monospaced status pip + pulse animation.
 

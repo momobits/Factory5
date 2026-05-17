@@ -2,6 +2,20 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-17 — Phase 12 (budget-ux) closed; upgrade arc complete (eighth time)
+
+- All seven Tier-12 work commits landed this session (drift-fix `ffe1dd6` + 12.1 `37049e4` + 12.2 ADR 0032 `fd67b8a` + 12.3 BUDGET_DEFAULTS `e535f5a` + 12.4 Web UI accordion `69de499` + 12.5 CLI flags `adc6129` + 12.6 brain escalation `8d21b56` + 12.7 payload inheritance `8231f87`) + this phase-close commit.
+- **Surface-and-escalate budget model now in place.** Every operator-felt budget exposed at build time with defaults + explainers (CLI + Web UI read the same `BUDGET_DEFAULTS` module); persisted on `directive.payload.budgets`; resume inherits with body overrides per-axis; brain catches `error_max_turns` and raises a typed askUser with `[BUDGET]` marker — operator picks accept/custom/abort; Tier-8 auto-answer applies a deterministic bump-then-abort policy on the same prompt type.
+- **Workspace totals.** 1216 → 1292 + 3 skipped (+76 across all of Phase 12). Brain 118 → 151; core 14 → 36; cli 141 → 156; daemon 190 → 196. All four `pnpm` gates green at close.
+- **ADR 0032 — Budget UX paradigm** (`fd67b8a`). Five-part decision: closed set of six operator-facing axes, internal-pacing constants stay hidden, `BUDGET_DEFAULTS` single source of truth, escalation rule, persistence contract. Plan deviation: numbered 0032 not 0033 since Tier 11 closed without an ADR; the plan + steps + ROADMAP + README + ISSUES + STATE were all renumbered in 12.2's commit to fix the underlying scaffold anticipation error.
+- **Plan deviations** (six this tier; all documented in commit bodies + the new "Worth recording from Phase 12" STATE section): (1) ADR 0033 → 0032; (2) `@factory5/core/budgets` sub-path export to avoid Astro SSR pulling ulid; (3) top-row maxUsd/maxSteps moved INTO the accordion per plan-literal "all six fields"; (4) `--ask-deadline-ms` → `--ask-user-deadline-ms` for Commander camelCase alignment; (5) `parsePositiveInt` tightened to reject float input (root-cause fix for the silent-truncate footgun); (6) `payload.budgets` stores overrides-only — brain resolver fills defaults at consumption (lighter payloads, intent preserved across resume).
+- **Visual verification (Playwright MCP)** confirmed the editorial control-room aesthetic carries through to the new "Advanced budgets" accordion: vermillion `+` glyph that rotates 45° → `×` on open, italic Fraunces label, uppercase mono meta, asymmetric two-column rows (mono inputs left, italic explainers right) with dashed hairlines, default-value chips below each input. Token-gated content panel was forced-unhidden in the dev server for the screenshot — the FE wiring itself works end-to-end against a real daemon.
+- **Live browser smoke deferred to operator-driven verification.** The structural work is complete and unit-tested end-to-end; the live-spend acceptance gate (intentionally-low maxTurns → escalates via askUser → accept → retry → success) benefits from a fresh session and ~$0.5-1.5 model spend. STATE's "Notes for next session" + the README's `[ ] Browser smoke` checkbox carry the deferred-gate signal forward.
+- **U032 closed.** Resolution narrative in `UPGRADE/ISSUES.md` Resolved section names every commit + every plan deviation.
+- **Lag-by-1** counter now at #32 (this phase-close commit itself becomes the next instance since it names its own SHA in STATE.md only post-commit).
+- **Tag**: `phase-12-budget-ux-closed` (annotated at `8231f87`, the 12.7 commit).
+- **Next**: arc-complete state. Operator decides: run the deferred smoke, author Phase 13 if a new operator-felt closure surfaces, or `/session-end` to close out today.
+
 ## 2026-05-17 — Drift-fix at session start
 
 - SessionStart hook reported `commit-mismatch`: STATE.md named `343f101` (the phase-close) as the last commit, but HEAD was `68dbd6b` (the prior session's session-end commit). Lag-by-1 #30, anticipated by STATE.md's own "Last commit" line.
