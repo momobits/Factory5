@@ -2,6 +2,16 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-17 — Third session-end after Phase 13 close (second consecutive no-op session)
+
+- Pure session-end housekeeping with no work between SessionStart hook and `/session-end` — STATE.md timestamp bump, last-commit pointer to `ff94ed1` (the prior no-op session-end commit), lag counter caught up #39 then reintroduces #40, journal entry, next.md regen folded into this commit.
+- SessionStart hook flagged the expected `commit-mismatch` drift (STATE.md said `0e2e24b`, HEAD was `ff94ed1`). Operator accepted the canonical `/session-end` path over a separate drift-fix commit; rationale unchanged from the prior no-op session (drift-fix in a no-work session just bounces the count from #39 to #40 to #41 without eliminating the structural lag).
+- No new code, ADRs, or tests this commit.
+- Tag `phase-13-budget-followups-closed` still at `aae86dc` (the 13.6 commit).
+- No factoryd running at handoff.
+- Three consecutive no-op session-ends now demonstrate the lag-by-1 has zero observable cost in the no-work case — each session-end is internally self-consistent against the prior commit, just one step behind HEAD. If a fourth no-op comes, the structural fix becomes a viable Tier-14-as-micro-tier candidate; today it's still cheaper to bounce than to scaffold a tier.
+- Next session: operator decides — same three paths as the prior two session-ends (close again with `/session-end`, scaffold a new tier on a fresh operator-felt issue, or run a follow-up live smoke on a bigger project to force the `[BUDGET]` askUser trip path).
+
 ## 2026-05-17 — Second session-end after Phase 13 close (no-op session)
 
 - Pure session-end housekeeping with no work between SessionStart hook and `/session-end` — STATE.md timestamp bump, last-commit pointer to `0e2e24b` (the prior session-end commit), lag counter caught up #38 then reintroduces #39, journal entry, next.md regen folded into this commit.

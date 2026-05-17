@@ -1,7 +1,7 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-17T16:14:56Z by
-> `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-17T20:05:25Z by
+> `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
 
@@ -24,12 +24,11 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 **Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`; Tier 13 at `phase-13-budget-followups-closed` 2026-05-17 at `aae86dc`.
 
-
 ## Notes for next session
 
 **Phase 13 (budget-followups) closed; upgrade arc complete (ninth time).** Phase 12 → Phase 13 sequence closed the operator-felt budget loop end-to-end: Phase 12 built the structural pieces (BUDGET_DEFAULTS, ADR 0032, escalation plumbing); Phase 12's deferred smoke surfaced the propagation gap (U033); Phase 13 fixed the propagation (13.3) + the Windows daemon-stop pidfile sloppy-shutdown (13.4) + extended per-project defaults to all axes (13.5) + shipped the per-task USD cap (13.6) + closed with a live browser smoke + U034-fix verification (13.7).
 
-**This session was a no-op `/session-end`** opened at arc-complete after the prior session's Phase 13 close. Operator accepted the canonical `/session-end` path over a separate drift-fix commit since the cosmetic structural lag bounces from #38 to #39 to #40 either way in a no-work session. Lag count now #39.
+**This was the second consecutive no-op `/session-end`** opened at arc-complete after the prior no-op. Operator accepted the canonical `/session-end` path again over a separate drift-fix commit — same rationale as the prior no-op (the cosmetic structural lag bounces by one either way). Lag count now #40. Three consecutive no-op session-ends now in the log; if a fourth no-op comes, consider whether the structural fix is worth bundling as a Tier 14 micro-tier or whether opening a bigger tier on a fresh issue is the better path.
 
 **Live browser smoke at phase-close** (Playwright MCP, smoke-demo, $1.09 spend / $1.50 cap, status=complete). Verified:
 
