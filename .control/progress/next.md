@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-17T08:32:18Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-17T08:52:51Z by
 > `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
@@ -18,7 +18,7 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 **Smoke ran; the operator-felt gate failed; U033 captures the bug.** Phase 12's structural pieces are healthy (daemon-side persistence, escalation code path), but the propagation step from operator intent to worker `maxTurns` is broken: `resolveTaskMaxTurns` prefers `task.maxTurns` (always emitted by the planner per its prompt) over `directive.payload.budgets[axis]` (operator). The documented Phase 12 promise — "set a low maxTurns in the UI, see the [BUDGET] askUser fire" — doesn't fire because the planner's per-task emit always shadows the operator's directive budget. Three operator-facing next actions:
 
-1. **Author Phase 13 (recommended)** — center on closing U033, plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). U033's three resolution candidates listed in `UPGRADE/ISSUES.md` — pick one (probably (1) `min(planner_emit, directive_budget)`) in the Phase 13 ADR.
+1. **Author Phase 13 (recommended)** — center on closing **U033**, bundle **U034** (Windows pidfile cleanup) as polish, plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). U033's three resolution candidates listed in `UPGRADE/ISSUES.md` — pick one (probably (1) `min(planner_emit, directive_budget)`) in the Phase 13 ADR. U034 is ~30 lines, either CLI-side belt-and-suspenders or a daemon-side `/shutdown` IPC.
 2. **Re-run the live smoke** after U033's fix lands; or run it now with manual surgery on `plan.json` between planner emit and pool dispatch to confirm the escalation plumbing fires end-to-end despite the propagation bug. Manual-surgery option doesn't satisfy the operator-felt gate but does verify the post-trip retry loop.
 3. **`/session-end`** to close out today; resume Phase 13 fresh.
 
@@ -38,7 +38,7 @@ see a structured `[control:state]` block instead of doing them by hand.
 3. ADR 0032 — Budget UX paradigm (`docs/decisions/0032-budget-ux-paradigm.md`). §6's "operator override" label in the docstring of `resolveTaskMaxTurns` is misleading post-smoke; the ADR-amendment vs new-ADR vs in-Phase-13-ADR decision is open.
 4. `packages/brain/src/budget-escalation.ts:105-112` (`resolveTaskMaxTurns`) and `packages/brain/src/planner.ts:247-249` (the planner prompt's `maxTurns` instruction) — the two ends of the propagation gap.
 
-**Recommended next action — author Phase 13.** Center the plan on closing U033 plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). The U033 fix is ~30 lines + tests; the carry-forwards are ~3-5 sub-steps each. The whole tier is a natural 2-3 session phase.
+**Recommended next action — author Phase 13.** Center the plan on closing **U033** + **U034** plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). The U033 fix is ~30 lines + tests; U034 is ~30 lines + a CLI integration test; the carry-forwards are ~3-5 sub-steps each. The whole tier is a natural 2-3 session phase.
 
 **Alternative — re-run the live smoke after a U033 fix.** The smoke shape is the same as before but should now produce the `[BUDGET]` askUser correctly:
 
@@ -50,7 +50,7 @@ see a structured `[control:state]` block instead of doing them by hand.
 - Operator answers `accept` (or auto-answer fires if the deadline passes); brain logs `retrying with maxTurnsScaffolder=80 (was 10)`; task re-runs.
 - Spend cap recommendation: $1.50 to bound the live model spend.
 
-**Operational gotcha.** The running daemon at this session's start (PID 45508, started 2026-05-16 21:21 UTC) was pre-Phase-12 dist; killed and restarted to PID 51784 against current dist. If you `factory daemon status` and the PID predates the most recent code change in `packages/daemon/` or `packages/brain/`, `factory daemon restart` before running a live smoke.
+**Operational gotcha.** The running daemon at the prior session's start (PID 45508, started 2026-05-16 21:21 UTC) was pre-Phase-12 dist; killed and restarted to PID 51784 against current dist mid-session, then operator stopped via `factory daemon stop` at session-end. **No daemon running at handoff.** If you `factory daemon status` after a fresh start and the PID predates the most recent code change in `packages/daemon/` or `packages/brain/`, `factory daemon restart` before running a live smoke. Note **U034**: `factory daemon stop` on Windows leaves a stale pidfile — the next-start auto-reaps it, but if you inspect the pidfile post-stop you'll see a dead PID. Not a problem for normal lifecycle.
 
 **Future tiers — Phase 12 Deferred section carry-forwards:**
 

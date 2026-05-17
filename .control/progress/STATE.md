@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-17 — session end after Phase 12 live smoke + U033 filing. STATE.md timestamp bump + last-commit pointer to `eab1362` (the smoke-finding commit) + lag counter (#34 reintroduced — this session-end edits STATE then commits, so HEAD diverges from STATE one more time). Smoke result: failed the operator-felt gate; structural plumbing healthy but operator's UI-set `maxTurnsScaffolder` is silently shadowed by planner-emitted per-task `maxTurns`. Spend $1.61 on the diagnostic run. U033 filed (high, Tier 13 carry-forward).
+**Last updated:** 2026-05-17 — second session-end after operator stopped daemon + filed U034 (Windows pidfile cleanup bug). STATE.md timestamp bump + last-commit pointer to `14e6659` (the U034 commit) + lag counter (#35 reintroduced — this session-end edits STATE then commits, so HEAD diverges from STATE one more time). Smoke result still stands: failed the operator-felt gate, U033 filed. Daemon stopped this session — no factoryd running at handoff. Spend total this session $1.61.
 **Current phase:** arc-complete (eighth time — no Phase 13 planned)
 **Current step:** n/a (between phases)
 **Status:** Phase 12 closed cleanly with `phase-12-budget-ux-closed`. 9 of 11 done-criteria green automatically; the deferred live browser smoke (criterion 10) **failed** in this session — see "Next action" + U033 for the gap. U032 stays Resolved (the structural budget-UX paradigm landed; this is a propagation bug atop it). Workspace 1216 → 1292 + 3 skipped at last test run. Fresh daemon (PID 51784) up-to-date with current Phase 12 dist; old pre-Phase-12 daemon stopped this session.
@@ -22,7 +22,7 @@
 
 **Smoke ran; the operator-felt gate failed; U033 captures the bug.** Phase 12's structural pieces are healthy (daemon-side persistence, escalation code path), but the propagation step from operator intent to worker `maxTurns` is broken: `resolveTaskMaxTurns` prefers `task.maxTurns` (always emitted by the planner per its prompt) over `directive.payload.budgets[axis]` (operator). The documented Phase 12 promise — "set a low maxTurns in the UI, see the [BUDGET] askUser fire" — doesn't fire because the planner's per-task emit always shadows the operator's directive budget. Three operator-facing next actions:
 
-1. **Author Phase 13 (recommended)** — center on closing U033, plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). U033's three resolution candidates listed in `UPGRADE/ISSUES.md` — pick one (probably (1) `min(planner_emit, directive_budget)`) in the Phase 13 ADR.
+1. **Author Phase 13 (recommended)** — center on closing **U033**, bundle **U034** (Windows pidfile cleanup) as polish, plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). U033's three resolution candidates listed in `UPGRADE/ISSUES.md` — pick one (probably (1) `min(planner_emit, directive_budget)`) in the Phase 13 ADR. U034 is ~30 lines, either CLI-side belt-and-suspenders or a daemon-side `/shutdown` IPC.
 2. **Re-run the live smoke** after U033's fix lands; or run it now with manual surgery on `plan.json` between planner emit and pool dispatch to confirm the escalation plumbing fires end-to-end despite the propagation bug. Manual-surgery option doesn't satisfy the operator-felt gate but does verify the post-trip retry loop.
 3. **`/session-end`** to close out today; resume Phase 13 fresh.
 
@@ -35,7 +35,7 @@
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `eab1362` — `docs(state)`: post-phase-12 smoke result — failed operator-felt gate, U033 filed. (Session-end commit will bump to lag #34.)
+- **Last commit:** `14e6659` — `docs(issues)`: file U034 — Windows SIGTERM hard-kill leaves stale pidfile. (Session-end commit will bump to lag #35.)
 - **Uncommitted changes:** none at session-end
 - **Last phase tag:** `phase-12-budget-ux-closed` (annotated at `8231f87`)
 
@@ -43,13 +43,13 @@
 
 ## Open blockers
 
-- None
+- None (U033 high but not blocking; U034 low; U005 medium, defer-until-signal)
 
 ---
 
 ## In-flight work
 
-**None — Phase 12 closed; smoke ran with the failed result captured in U033.** Upgrade arc complete (eighth time). Live browser smoke executed this session; structural pieces healthy but the operator-set budget propagation gap (U033) prevents the `[BUDGET]` askUser from firing naturally from the UI surface. Phase 13 should center on closing U033. Fresh daemon (PID 51784) running with current dist as of session-end; operator can `factory daemon status` to confirm or restart at will.
+**None — Phase 12 closed; smoke ran with the failed result captured in U033; daemon stopped at operator request.** Upgrade arc complete (eighth time). Live browser smoke executed this session; structural pieces healthy but the operator-set budget propagation gap (U033) prevents the `[BUDGET]` askUser from firing naturally from the UI surface. Phase 13 should center on closing U033 and can bundle U034 (Windows pidfile cleanup) as polish. **No factoryd running at handoff** — operator stopped via `factory daemon stop` (PID 51784 gone, stale pidfile cleaned manually because of U034); start with `factory daemon start` when next needed.
 
 **Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 
@@ -72,7 +72,7 @@
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **34 occurrences** with this session-end (smoke-finding `eab1362` was #33's catch-up; this session-end commit edits STATE then commits, so HEAD diverges from STATE one more time and itself becomes #34). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **35 occurrences** with this session-end (U034 commit `14e6659` was #34's catch-up; this session-end commit edits STATE then commits, so HEAD diverges from STATE one more time and itself becomes #35). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
@@ -94,7 +94,10 @@
 
 ## Recently completed (last 5 steps)
 
-- **Session-end after Phase 12 smoke** (this commit) — `docs(state)`: session end after smoke + U033. STATE.md timestamp bump + last-commit pointer to `eab1362` + lag counter (#34 reintroduced) + journal entry. No phase work; pure session-end housekeeping. — 2026-05-17
+- **Second session-end after U034 filing** (this commit) — `docs(state)`: session end after daemon-stop + U034. STATE.md timestamp bump + last-commit pointer to `14e6659` + lag counter (#35 reintroduced) + journal entry. No phase work; pure session-end housekeeping. — 2026-05-17
+- **U034 — Windows pidfile cleanup bug** — `docs(issues)`: file U034 — Windows SIGTERM hard-kill leaves stale pidfile. Observed at session-end stopping the fresh daemon (PID 51784): `factory daemon stop` reported success but the pidfile stayed on disk because on Windows Node maps `process.kill(pid, 'SIGTERM')` to `TerminateProcess`, so factoryd's shutdown handler (which calls `pidFile.release()`) never runs. Not load-bearing — next start reaps stale pidfiles automatically — but cosmetically sloppy. Two resolution candidates documented. — 2026-05-17 — `14e6659`
+- **First session-end refresh — Notes section** — `docs(state)`: refresh Notes for next session to point at U033. The prior `/session-end` missed the "Notes for next session" section so the regenerated next.md kickoff still carried the pre-smoke "deferred live smoke" framing. Updated to put U033 + Phase 13 framing at the top. — 2026-05-17 — `f42a736`
+- **Session-end after Phase 12 smoke** — `docs(state)`: session end after Phase 12 smoke + U033 filing. STATE.md timestamp bump + last-commit pointer to `eab1362` + lag counter (#34 reintroduced) + journal entry. — 2026-05-17 — `a4bec35`
 - **Phase 12 smoke result + U033** — `docs(state)`: post-phase-12 smoke result — failed operator-felt gate, U033 filed. Live browser smoke via Playwright MCP against the running daemon; scaffolder ran 40 turns (planner-emitted) not 10 (operator-set), no [BUDGET] askUser surfaced. Operational discovery: running daemon was pre-Phase-12 dist; restarted fresh. U033 filed in `UPGRADE/ISSUES.md` Open with three resolution candidates. — 2026-05-17 — `eab1362`
 - **Session-end after Phase 12 close** — `docs(state)`: session end for Phase 12 close. STATE.md timestamp bump + last-commit pointer to `e3d14b7` + lag counter (#33 reintroduced) + journal entry. No phase work; pure session-end housekeeping. — 2026-05-17 — `e270781`
 - **Phase 12 close** — `chore(phase-12)`: close phase 12, kick off arc-complete (eighth time). Tagged `phase-12-budget-ux-closed` at `8231f87`. 9 of 11 done-criteria green automatically; the live browser smoke is operator-deferred and stays the visible remaining gate. U032 closed. Workspace 1216 → 1292 + 3 skipped (+76 across the seven work commits). — 2026-05-17 — `e3d14b7`
@@ -236,7 +239,7 @@ None — Phase 12 closed. Cleared at phase close.
 3. ADR 0032 — Budget UX paradigm (`docs/decisions/0032-budget-ux-paradigm.md`). §6's "operator override" label in the docstring of `resolveTaskMaxTurns` is misleading post-smoke; the ADR-amendment vs new-ADR vs in-Phase-13-ADR decision is open.
 4. `packages/brain/src/budget-escalation.ts:105-112` (`resolveTaskMaxTurns`) and `packages/brain/src/planner.ts:247-249` (the planner prompt's `maxTurns` instruction) — the two ends of the propagation gap.
 
-**Recommended next action — author Phase 13.** Center the plan on closing U033 plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). The U033 fix is ~30 lines + tests; the carry-forwards are ~3-5 sub-steps each. The whole tier is a natural 2-3 session phase.
+**Recommended next action — author Phase 13.** Center the plan on closing **U033** + **U034** plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). The U033 fix is ~30 lines + tests; U034 is ~30 lines + a CLI integration test; the carry-forwards are ~3-5 sub-steps each. The whole tier is a natural 2-3 session phase.
 
 **Alternative — re-run the live smoke after a U033 fix.** The smoke shape is the same as before but should now produce the `[BUDGET]` askUser correctly:
 
@@ -248,7 +251,7 @@ None — Phase 12 closed. Cleared at phase close.
 - Operator answers `accept` (or auto-answer fires if the deadline passes); brain logs `retrying with maxTurnsScaffolder=80 (was 10)`; task re-runs.
 - Spend cap recommendation: $1.50 to bound the live model spend.
 
-**Operational gotcha.** The running daemon at this session's start (PID 45508, started 2026-05-16 21:21 UTC) was pre-Phase-12 dist; killed and restarted to PID 51784 against current dist. If you `factory daemon status` and the PID predates the most recent code change in `packages/daemon/` or `packages/brain/`, `factory daemon restart` before running a live smoke.
+**Operational gotcha.** The running daemon at the prior session's start (PID 45508, started 2026-05-16 21:21 UTC) was pre-Phase-12 dist; killed and restarted to PID 51784 against current dist mid-session, then operator stopped via `factory daemon stop` at session-end. **No daemon running at handoff.** If you `factory daemon status` after a fresh start and the PID predates the most recent code change in `packages/daemon/` or `packages/brain/`, `factory daemon restart` before running a live smoke. Note **U034**: `factory daemon stop` on Windows leaves a stale pidfile — the next-start auto-reaps it, but if you inspect the pidfile post-stop you'll see a dead PID. Not a problem for normal lifecycle.
 
 **Future tiers — Phase 12 Deferred section carry-forwards:**
 

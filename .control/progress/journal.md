@@ -2,6 +2,16 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-17 — Second session-end after daemon-stop + U034 filing
+
+- Operator ran `factory daemon stop` (PID 51784 SIGTERM'd cleanly, CLI reported success).
+- Spotted at the same moment: pidfile still on disk with the dead PID. Investigated and confirmed Windows root cause — Node maps `process.kill(pid, 'SIGTERM')` to `TerminateProcess`, so factoryd's shutdown handler at `apps/factoryd/src/main.ts:156-170` never runs, and `pidFile.release()` at `packages/daemon/src/index.ts:500` is never called. Manually `Remove-Item`'d the stale pidfile.
+- **U034 filed** in `UPGRADE/ISSUES.md` Open (low severity, Tier 13 carry-forward candidate). Two resolution candidates documented: CLI-side belt-and-suspenders unlink vs daemon-side `/shutdown` IPC route.
+- Pure session-end housekeeping after that: STATE.md timestamp bump, last-commit pointer to `14e6659`, lag counter to #35, journal entry, next.md regen.
+- No daemon running at handoff.
+- Tag `phase-12-budget-ux-closed` still at `8231f87`.
+- Next session: still author Phase 13 — now centered on U033 + U034 polish bundle.
+
 ## 2026-05-17 — Session end after Phase 12 smoke + U033 filing
 
 - Pure session-end housekeeping: STATE.md timestamp bump, last-commit pointer to `eab1362` (the smoke-finding commit), lag counter bumped to #34 (reintroduces — this session-end commit will diverge from STATE pointer once committed), journal entry, next.md regen.
