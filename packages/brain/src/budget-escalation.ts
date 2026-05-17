@@ -278,3 +278,83 @@ export async function escalateBudgetTrip(
   }
   return parseBudgetEscalationAnswer(result.answer, suggestedNext);
 }
+
+/**
+ * Phase 13.6 — pre-launch USD-budget escalation for per-task spend.
+ *
+ * Called from the pool BEFORE a tool-using worker launches, when the
+ * planner-emitted `task.estimatedUsd` exceeds the operator-set
+ * `directive.payload.budgets.maxUsdPerTask` cap. Uses the same {@link
+ * askUser} + auto-answer plumbing as {@link escalateBudgetTrip} but with
+ * a different prompt (estimated vs actual; USD vs turns) and a binary
+ * outcome:
+ *
+ *   - `accept` — operator (or auto-answer) acknowledged the over-cap
+ *     spend; the pool launches the worker. Equivalent to raising the
+ *     cap to `estimatedUsd` for this task only.
+ *   - `abort` — pool skips the worker, synthesizes a failed TaskResult,
+ *     and falls through to the existing failed-task path.
+ *
+ * No `custom <n>` path here — operator can't realistically pre-budget a
+ * task's USD spend tighter than the planner's estimate, and the "set
+ * different cap" pattern fits the directive-level `maxUsdPerTask` axis
+ * if the operator wants persistence (re-submit with a higher cap).
+ *
+ * The {@link BUDGET_ESCALATION_MARKER} prefix is preserved so the Tier-8
+ * auto-answer dispatcher picks this up via its existing `[BUDGET]` marker
+ * matching, and its bump-or-abort policy applies uniformly. The "first
+ * trip = accept" policy is the right default for pre-launch USD: a
+ * single over-estimate gets a one-shot acknowledgment; repeated trips
+ * on the same (directive, task) collapse to abort.
+ */
+export async function escalateMaxUsdPerTaskTrip(opts: {
+  db: Database;
+  directiveId: string;
+  taskId: string;
+  taskTitle: string;
+  estimatedUsd: number;
+  capUsd: number;
+  signal?: AbortSignal;
+  /** Test-only — passed straight through to {@link askUser}. */
+  pollIntervalMs?: number;
+}): Promise<
+  | { kind: 'accept' }
+  | { kind: 'abort'; reason: 'operator' | 'timeout' | 'aborted' | 'parse-failed' }
+> {
+  const question = [
+    `${BUDGET_ESCALATION_MARKER} Task "${opts.taskTitle}" pre-launch USD estimate exceeds cap.`,
+    `Axis: maxUsdPerTask. Estimated: $${opts.estimatedUsd.toFixed(2)}. Current cap: $${opts.capUsd.toFixed(2)}.`,
+    `Choose: 'accept' to launch this task (cap raised to estimate for this task only), or 'abort' to skip.`,
+  ].join('\n');
+
+  log.info(
+    {
+      directiveId: opts.directiveId,
+      taskId: opts.taskId,
+      taskTitle: opts.taskTitle,
+      axis: 'maxUsdPerTask',
+      estimatedUsd: opts.estimatedUsd,
+      capUsd: opts.capUsd,
+    },
+    'budget-escalation: raising pre-launch USD askUser',
+  );
+
+  const result = await askUser({
+    db: opts.db,
+    directiveId: opts.directiveId,
+    taskId: opts.taskId,
+    question,
+    options: ['accept', 'abort'],
+    ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
+    ...(opts.pollIntervalMs !== undefined ? { pollIntervalMs: opts.pollIntervalMs } : {}),
+  });
+
+  if (result.aborted) return { kind: 'abort', reason: 'aborted' };
+  if (result.timedOut || result.answer === undefined) {
+    return { kind: 'abort', reason: 'timeout' };
+  }
+  const trimmed = result.answer.trim().toLowerCase();
+  if (trimmed === 'accept') return { kind: 'accept' };
+  if (trimmed === 'abort') return { kind: 'abort', reason: 'operator' };
+  return { kind: 'abort', reason: 'parse-failed' };
+}

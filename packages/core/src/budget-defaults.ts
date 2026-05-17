@@ -29,6 +29,7 @@ export const BUDGET_AXES = [
   'maxTurnsScaffolder',
   'maxTurnsBuilder',
   'maxTurnsFixer',
+  'maxUsdPerTask',
 ] as const;
 
 export type BudgetAxis = (typeof BUDGET_AXES)[number];
@@ -76,6 +77,11 @@ export const BUDGET_DEFAULTS: Readonly<Record<BudgetAxis, { value: number; expla
     value: 80,
     explainer: 'Per-task tool-conversation cap for fixers. Defaults to 80.',
   },
+  maxUsdPerTask: {
+    value: 0,
+    explainer:
+      'Per-task USD ceiling. 0 = unlimited (default). When the planner estimates a single task above this cap, the brain escalates via askUser before launching the worker (Phase 13.6).',
+  },
 };
 
 /**
@@ -104,6 +110,7 @@ export const budgetsSchema = z
     maxTurnsScaffolder: z.number().int().positive(),
     maxTurnsBuilder: z.number().int().positive(),
     maxTurnsFixer: z.number().int().positive(),
+    maxUsdPerTask: z.number().nonnegative(),
   })
   .partial();
 
@@ -136,5 +143,6 @@ export function resolveBudgets(partial?: Budgets): ResolvedBudgets {
     maxTurnsScaffolder: input.maxTurnsScaffolder ?? BUDGET_DEFAULTS.maxTurnsScaffolder.value,
     maxTurnsBuilder: input.maxTurnsBuilder ?? BUDGET_DEFAULTS.maxTurnsBuilder.value,
     maxTurnsFixer: input.maxTurnsFixer ?? BUDGET_DEFAULTS.maxTurnsFixer.value,
+    maxUsdPerTask: input.maxUsdPerTask ?? BUDGET_DEFAULTS.maxUsdPerTask.value,
   };
 }

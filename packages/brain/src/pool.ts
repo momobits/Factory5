@@ -17,7 +17,8 @@
 import { cpus } from 'node:os';
 import { env } from 'node:process';
 
-import type { DirectiveLimits, Finding, Plan, Task } from '@factory5/core';
+import type { DirectiveLimits, Finding, Plan, Task, TaskResult } from '@factory5/core';
+import { BUDGET_DEFAULTS } from '@factory5/core/budgets';
 import { createLogger } from '@factory5/logger';
 import type { DirectiveEventEmitter } from '@factory5/ipc';
 import type { ProviderRegistry } from '@factory5/providers';
@@ -37,7 +38,13 @@ import {
 } from '@factory5/worker';
 
 import { assertBudget, BudgetExceededError } from './budget.js';
-import { axisForAgent, escalateBudgetTrip, resolveTaskMaxTurns } from './budget-escalation.js';
+import {
+  axisForAgent,
+  budgetsFromDirective,
+  escalateBudgetTrip,
+  escalateMaxUsdPerTaskTrip,
+  resolveTaskMaxTurns,
+} from './budget-escalation.js';
 import { loadDaemonEndpoint } from './daemon-endpoint.js';
 import { emitLogLine } from './emit.js';
 import { buildAgentSystemPrompt } from './prompts.js';
@@ -272,95 +279,165 @@ async function executeTask(
     initialMaxTurns !== undefined && initialMaxTurns !== task.maxTurns
       ? { ...task, maxTurns: initialMaxTurns }
       : task;
-  while (true) {
-    try {
-      outcome = await runWorker({
-        task: currentTask,
-        projectPath: plan.projectPath,
-        registry,
-        systemPrompt,
-        userPrompt,
-        findingRegistry: {
-          db,
-          // Project identity (ADR 0021). Pulled from the directive — populated
-          // either at directive creation (CLI build) or by migration 006's
-          // backfill. Undefined only for legacy directives that predate the
-          // backfill running (which would be a deployment in an unmigrated
-          // state). Wiki's `mirrorToRegistry` skips the registry write
-          // when projectId is undefined rather than falling back to basename
-          // (which was the I008 collision trap).
-          ...(projectId !== undefined ? { projectId } : {}),
-          originDirectiveId: directiveId,
-        },
-        ...(askUserConfig !== undefined ? { askUserConfig } : {}),
-        ...(signal !== undefined ? { signal } : {}),
-      });
-    } finally {
-      // Stop the heartbeat while we wait on the operator (or timeout/abort).
-      // A fresh heartbeat starts on the retry path below.
-      clearInterval(hb);
-    }
 
-    if (
-      outcome.result.errorSubtype !== 'error_max_turns' ||
-      escalations >= MAX_BUDGET_ESCALATIONS_PER_TASK ||
-      signal?.aborted === true
-    ) {
-      break;
-    }
-    const axis = axisForAgent(currentTask.agent);
-    if (axis === undefined) break;
-    const currentValue = currentTask.maxTurns ?? 0;
-    emitLogLine(
-      emit,
-      directiveId,
-      'warn',
-      'brain.pool',
-      `pool: task "${currentTask.title}" tripped error_max_turns at ${String(currentValue)} — escalating via askUser (ADR 0032 §4)`,
-      { taskId: currentTask.id, axis, currentValue, attempt: escalations + 1 },
-    );
-    escalations += 1;
-    const decision = await escalateBudgetTrip({
-      db,
-      directiveId,
-      taskId: currentTask.id,
-      taskTitle: currentTask.title,
-      axis,
-      currentValue,
-      ...(signal !== undefined ? { signal } : {}),
-    });
-    if (decision.kind === 'abort') {
+  // Phase 13.6 — pre-launch USD check (ADR 0032 §1 + maxUsdPerTask).
+  // When the planner emits an `estimatedUsd` AND the operator-set
+  // `maxUsdPerTask` cap is > 0 AND the estimate exceeds the cap, raise a
+  // typed [BUDGET] askUser BEFORE the worker spawns. On 'accept': launch
+  // the worker (operator has acknowledged the over-cap spend, effectively
+  // raising the cap to the estimate for this task only). On 'abort':
+  // synthesize a failed TaskResult so the post-loop tasksInflight + emit
+  // logic flips this task to failed without spending any model budget.
+  let preLaunchAbortResult: TaskResult | undefined;
+  if (directive !== undefined && task.estimatedUsd !== undefined && task.estimatedUsd > 0) {
+    const cap =
+      budgetsFromDirective(directive)['maxUsdPerTask'] ?? BUDGET_DEFAULTS.maxUsdPerTask.value;
+    if (cap > 0 && task.estimatedUsd > cap) {
       emitLogLine(
         emit,
         directiveId,
         'warn',
         'brain.pool',
-        `pool: task "${currentTask.title}" budget-escalation aborted (${decision.reason}) — keeping failed outcome`,
-        { taskId: currentTask.id, axis },
+        `pool: task "${task.title}" pre-launch USD estimate $${task.estimatedUsd.toFixed(2)} exceeds cap $${cap.toFixed(2)} — escalating via askUser (ADR 0032 §4 + Phase 13.6)`,
+        {
+          taskId: task.id,
+          axis: 'maxUsdPerTask',
+          estimatedUsd: task.estimatedUsd,
+          capUsd: cap,
+        },
       );
-      break;
-    }
-    emitLogLine(
-      emit,
-      directiveId,
-      'info',
-      'brain.pool',
-      `pool: task "${currentTask.title}" retrying with ${axis}=${String(decision.newValue)} (was ${String(currentValue)})`,
-      { taskId: currentTask.id, axis, newValue: decision.newValue, kind: decision.kind },
-    );
-    currentTask = { ...currentTask, maxTurns: decision.newValue };
-    // Restart the heartbeat for the retry attempt; refresh tasks_inflight's
-    // last-heartbeat so a supervisor doesn't mark this row stale during the
-    // re-run.
-    hb = setInterval(() => {
-      try {
-        tasksInflight.heartbeat(db, task.id, now());
-      } catch (err) {
-        log.warn({ err, taskId: task.id }, 'pool: heartbeat write failed');
+      const escalation = await escalateMaxUsdPerTaskTrip({
+        db,
+        directiveId,
+        taskId: task.id,
+        taskTitle: task.title,
+        estimatedUsd: task.estimatedUsd,
+        capUsd: cap,
+        ...(signal !== undefined ? { signal } : {}),
+      });
+      if (escalation.kind === 'abort') {
+        emitLogLine(
+          emit,
+          directiveId,
+          'warn',
+          'brain.pool',
+          `pool: task "${task.title}" pre-launch USD escalation aborted (${escalation.reason}) — skipping worker`,
+          { taskId: task.id, axis: 'maxUsdPerTask' },
+        );
+        preLaunchAbortResult = {
+          exitCode: 1,
+          filesChanged: [],
+          findingsRaised: [],
+          signalsEmitted: [],
+          error: `budget pre-launch abort: maxUsdPerTask cap $${cap.toFixed(2)} < estimated $${task.estimatedUsd.toFixed(2)} (${escalation.reason})`,
+          durationMs: 0,
+        };
+      } else {
+        emitLogLine(
+          emit,
+          directiveId,
+          'info',
+          'brain.pool',
+          `pool: task "${task.title}" pre-launch USD escalation accepted — launching at estimated $${task.estimatedUsd.toFixed(2)}`,
+          { taskId: task.id, axis: 'maxUsdPerTask' },
+        );
       }
-    }, HEARTBEAT_INTERVAL_MS);
-    tasksInflight.heartbeat(db, task.id, now());
+    }
   }
+
+  if (preLaunchAbortResult !== undefined) {
+    clearInterval(hb);
+    outcome = { result: preLaunchAbortResult };
+  } else
+    while (true) {
+      try {
+        outcome = await runWorker({
+          task: currentTask,
+          projectPath: plan.projectPath,
+          registry,
+          systemPrompt,
+          userPrompt,
+          findingRegistry: {
+            db,
+            // Project identity (ADR 0021). Pulled from the directive — populated
+            // either at directive creation (CLI build) or by migration 006's
+            // backfill. Undefined only for legacy directives that predate the
+            // backfill running (which would be a deployment in an unmigrated
+            // state). Wiki's `mirrorToRegistry` skips the registry write
+            // when projectId is undefined rather than falling back to basename
+            // (which was the I008 collision trap).
+            ...(projectId !== undefined ? { projectId } : {}),
+            originDirectiveId: directiveId,
+          },
+          ...(askUserConfig !== undefined ? { askUserConfig } : {}),
+          ...(signal !== undefined ? { signal } : {}),
+        });
+      } finally {
+        // Stop the heartbeat while we wait on the operator (or timeout/abort).
+        // A fresh heartbeat starts on the retry path below.
+        clearInterval(hb);
+      }
+
+      if (
+        outcome.result.errorSubtype !== 'error_max_turns' ||
+        escalations >= MAX_BUDGET_ESCALATIONS_PER_TASK ||
+        signal?.aborted === true
+      ) {
+        break;
+      }
+      const axis = axisForAgent(currentTask.agent);
+      if (axis === undefined) break;
+      const currentValue = currentTask.maxTurns ?? 0;
+      emitLogLine(
+        emit,
+        directiveId,
+        'warn',
+        'brain.pool',
+        `pool: task "${currentTask.title}" tripped error_max_turns at ${String(currentValue)} — escalating via askUser (ADR 0032 §4)`,
+        { taskId: currentTask.id, axis, currentValue, attempt: escalations + 1 },
+      );
+      escalations += 1;
+      const decision = await escalateBudgetTrip({
+        db,
+        directiveId,
+        taskId: currentTask.id,
+        taskTitle: currentTask.title,
+        axis,
+        currentValue,
+        ...(signal !== undefined ? { signal } : {}),
+      });
+      if (decision.kind === 'abort') {
+        emitLogLine(
+          emit,
+          directiveId,
+          'warn',
+          'brain.pool',
+          `pool: task "${currentTask.title}" budget-escalation aborted (${decision.reason}) — keeping failed outcome`,
+          { taskId: currentTask.id, axis },
+        );
+        break;
+      }
+      emitLogLine(
+        emit,
+        directiveId,
+        'info',
+        'brain.pool',
+        `pool: task "${currentTask.title}" retrying with ${axis}=${String(decision.newValue)} (was ${String(currentValue)})`,
+        { taskId: currentTask.id, axis, newValue: decision.newValue, kind: decision.kind },
+      );
+      currentTask = { ...currentTask, maxTurns: decision.newValue };
+      // Restart the heartbeat for the retry attempt; refresh tasks_inflight's
+      // last-heartbeat so a supervisor doesn't mark this row stale during the
+      // re-run.
+      hb = setInterval(() => {
+        try {
+          tasksInflight.heartbeat(db, task.id, now());
+        } catch (err) {
+          log.warn({ err, taskId: task.id }, 'pool: heartbeat write failed');
+        }
+      }, HEARTBEAT_INTERVAL_MS);
+      tasksInflight.heartbeat(db, task.id, now());
+    }
 
   if (outcome.usage !== undefined) {
     recordUsage({

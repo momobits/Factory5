@@ -233,6 +233,15 @@ export const taskSchema = z.object({
    * ADR 0016.
    */
   maxTurns: z.number().int().positive().optional(),
+  /**
+   * Planner-emitted USD estimate for this task. Phase 13.6 — the pool's
+   * pre-launch check compares this against `directive.payload.budgets.
+   * maxUsdPerTask` (or its `BUDGET_DEFAULTS` value when unset); on over,
+   * the brain raises a `[BUDGET]` askUser before spawning the worker.
+   * Optional — planners that don't emit (legacy / chat-only directives /
+   * estimateless planners) skip the check (uncapped path).
+   */
+  estimatedUsd: z.number().nonnegative().optional(),
 });
 
 export const planSchema = z.object({

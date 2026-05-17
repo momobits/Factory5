@@ -17,7 +17,7 @@ function parseArgs(argv: readonly string[]): Record<string, unknown> {
 }
 
 describe('addBudgetFlags', () => {
-  it('registers all six axes as long flags', () => {
+  it('registers all seven axes as long flags (Phase 13.6 adds maxUsdPerTask)', () => {
     const program = new Command();
     const cmd = program.command('test');
     addBudgetFlags(cmd);
@@ -29,6 +29,7 @@ describe('addBudgetFlags', () => {
       '--max-turns-scaffolder',
       '--max-turns-builder',
       '--max-turns-fixer',
+      '--max-usd-per-task',
     ]);
   });
 
@@ -46,6 +47,11 @@ describe('addBudgetFlags', () => {
   it('parses --max-usd as a positive float', () => {
     const opts = parseArgs(['--max-usd', '5.50']);
     expect(opts['maxUsd']).toBe(5.5);
+  });
+
+  it('parses --max-usd-per-task as a positive float (Phase 13.6)', () => {
+    const opts = parseArgs(['--max-usd-per-task', '1.25']);
+    expect(opts['maxUsdPerTask']).toBe(1.25);
   });
 
   it('parses integer flags as integers', () => {
@@ -97,6 +103,7 @@ describe('addBudgetFlags', () => {
     expect(opts['maxTurnsScaffolder']).toBeUndefined();
     expect(opts['maxTurnsBuilder']).toBeUndefined();
     expect(opts['maxTurnsFixer']).toBeUndefined();
+    expect(opts['maxUsdPerTask']).toBeUndefined();
   });
 });
 
@@ -112,13 +119,14 @@ describe('collectBudgetFlags', () => {
     });
   });
 
-  it('routes the four Tier-12 axes to budgets (ADR 0032 §6 payload path)', () => {
+  it('routes the five Tier-12+13 axes to budgets (ADR 0032 §6 payload path)', () => {
     expect(
       collectBudgetFlags({
         askUserDeadlineMs: 600_000,
         maxTurnsScaffolder: 160,
         maxTurnsBuilder: 100,
         maxTurnsFixer: 100,
+        maxUsdPerTask: 1.5,
       }),
     ).toEqual({
       limits: {},
@@ -127,7 +135,15 @@ describe('collectBudgetFlags', () => {
         maxTurnsScaffolder: 160,
         maxTurnsBuilder: 100,
         maxTurnsFixer: 100,
+        maxUsdPerTask: 1.5,
       },
+    });
+  });
+
+  it('routes maxUsdPerTask to budgets (Phase 13.6 — payload axis, not directive limit)', () => {
+    expect(collectBudgetFlags({ maxUsdPerTask: 0.75 })).toEqual({
+      limits: {},
+      budgets: { maxUsdPerTask: 0.75 },
     });
   });
 

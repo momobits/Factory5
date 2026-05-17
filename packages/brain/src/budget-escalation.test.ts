@@ -24,6 +24,7 @@ import {
   BUDGET_ESCALATION_MARKER,
   budgetsFromDirective,
   escalateBudgetTrip,
+  escalateMaxUsdPerTaskTrip,
   MAX_TURNS_CLAMP_MAX,
   MAX_TURNS_CLAMP_MIN,
   parseBudgetEscalationAnswer,
@@ -446,6 +447,104 @@ describe('escalateBudgetTrip — integration with askUser', () => {
     const open = pendingQuestions.openForDirective(db, d.id);
     expect(open[0]?.question.startsWith(BUDGET_ESCALATION_MARKER)).toBe(true);
     expect(open[0]?.taskId).toBe(taskId);
+    pendingQuestions.answer(db, open[0]!.id, 'abort', new Date().toISOString());
+    await pending;
+  });
+});
+
+describe('escalateMaxUsdPerTaskTrip — Phase 13.6 pre-launch USD escalation', () => {
+  let db: Database;
+  beforeEach(() => {
+    db = freshDb();
+  });
+  afterEach(() => {
+    db.close();
+  });
+
+  it("returns { kind: 'accept' } when the operator writes 'accept'", async () => {
+    const d = seedDirective(db);
+    const taskId = newId();
+    const pending = escalateMaxUsdPerTaskTrip({
+      db,
+      directiveId: d.id,
+      taskId,
+      taskTitle: 'expensive scaffolder',
+      estimatedUsd: 1.5,
+      capUsd: 1.0,
+      pollIntervalMs: 5,
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    const open = pendingQuestions.openForDirective(db, d.id);
+    expect(open).toHaveLength(1);
+    pendingQuestions.answer(db, open[0]!.id, 'accept', new Date().toISOString());
+    const outcome = await pending;
+    expect(outcome).toEqual({ kind: 'accept' });
+  });
+
+  it("returns { kind: 'abort', reason: 'operator' } when the operator writes 'abort'", async () => {
+    const d = seedDirective(db);
+    const taskId = newId();
+    const pending = escalateMaxUsdPerTaskTrip({
+      db,
+      directiveId: d.id,
+      taskId,
+      taskTitle: 'expensive builder',
+      estimatedUsd: 2.5,
+      capUsd: 1.0,
+      pollIntervalMs: 5,
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    const open = pendingQuestions.openForDirective(db, d.id);
+    pendingQuestions.answer(db, open[0]!.id, 'abort', new Date().toISOString());
+    const outcome = await pending;
+    expect(outcome).toEqual({ kind: 'abort', reason: 'operator' });
+  });
+
+  it("returns { kind: 'abort', reason: 'parse-failed' } on a malformed answer", async () => {
+    const d = seedDirective(db);
+    const taskId = newId();
+    const pending = escalateMaxUsdPerTaskTrip({
+      db,
+      directiveId: d.id,
+      taskId,
+      taskTitle: 'expensive fixer',
+      estimatedUsd: 0.5,
+      capUsd: 0.25,
+      pollIntervalMs: 5,
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    const open = pendingQuestions.openForDirective(db, d.id);
+    // Operator types 'maybe' — not a recognised verb. Pre-launch USD
+    // escalation has no `custom <n>` path (unlike maxTurns), so anything
+    // outside accept/abort falls through to parse-failed.
+    pendingQuestions.answer(db, open[0]!.id, 'maybe', new Date().toISOString());
+    const outcome = await pending;
+    expect(outcome).toEqual({ kind: 'abort', reason: 'parse-failed' });
+  });
+
+  it('stamps the question with the BUDGET marker + axis name + USD context', async () => {
+    const d = seedDirective(db);
+    const taskId = newId();
+    const pending = escalateMaxUsdPerTaskTrip({
+      db,
+      directiveId: d.id,
+      taskId,
+      taskTitle: 'multi-module scaffold',
+      estimatedUsd: 1.23,
+      capUsd: 0.5,
+      pollIntervalMs: 5,
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    const open = pendingQuestions.openForDirective(db, d.id);
+    expect(open).toHaveLength(1);
+    const q = open[0]!.question;
+    expect(q.startsWith(BUDGET_ESCALATION_MARKER)).toBe(true);
+    expect(q).toContain('maxUsdPerTask');
+    expect(q).toContain('$1.23');
+    expect(q).toContain('$0.50');
+    expect(q).toContain('multi-module scaffold');
+    expect(open[0]?.taskId).toBe(taskId);
+    // Clean up — answer to release the pending promise.
     pendingQuestions.answer(db, open[0]!.id, 'abort', new Date().toISOString());
     await pending;
   });

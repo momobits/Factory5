@@ -38,6 +38,7 @@ const AXIS_FLAG: Record<BudgetAxis, string> = {
   maxTurnsScaffolder: '--max-turns-scaffolder',
   maxTurnsBuilder: '--max-turns-builder',
   maxTurnsFixer: '--max-turns-fixer',
+  maxUsdPerTask: '--max-usd-per-task',
 };
 
 /** Per-axis CLI value type — `usd` permits fractional dollars; everything else is integer. */
@@ -48,6 +49,7 @@ const AXIS_KIND: Record<BudgetAxis, 'usd' | 'int'> = {
   maxTurnsScaffolder: 'int',
   maxTurnsBuilder: 'int',
   maxTurnsFixer: 'int',
+  maxUsdPerTask: 'usd',
 };
 
 function parsePositiveFloat(flag: string, raw: string): number {
@@ -128,6 +130,7 @@ export function collectBudgetFlags(options: BudgetOptions): CollectedBudgets {
     budgets.maxTurnsScaffolder = options.maxTurnsScaffolder;
   if (options.maxTurnsBuilder !== undefined) budgets.maxTurnsBuilder = options.maxTurnsBuilder;
   if (options.maxTurnsFixer !== undefined) budgets.maxTurnsFixer = options.maxTurnsFixer;
+  if (options.maxUsdPerTask !== undefined) budgets.maxUsdPerTask = options.maxUsdPerTask;
 
   return { limits, budgets };
 }

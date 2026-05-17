@@ -18,7 +18,7 @@ describe('BUDGET_DEFAULTS', () => {
     }
   });
 
-  it('declares the six operator-facing axes from ADR 0032 §1', () => {
+  it('declares the seven operator-facing axes (ADR 0032 §1 + Phase 13.6 maxUsdPerTask)', () => {
     expect([...BUDGET_AXES]).toEqual([
       'maxUsd',
       'maxSteps',
@@ -26,12 +26,14 @@ describe('BUDGET_DEFAULTS', () => {
       'maxTurnsScaffolder',
       'maxTurnsBuilder',
       'maxTurnsFixer',
+      'maxUsdPerTask',
     ]);
   });
 
-  it('uses 0 as the "unlimited" sentinel for maxUsd and maxSteps', () => {
+  it('uses 0 as the "unlimited" sentinel for maxUsd, maxSteps, and maxUsdPerTask', () => {
     expect(BUDGET_DEFAULTS.maxUsd.value).toBe(0);
     expect(BUDGET_DEFAULTS.maxSteps.value).toBe(0);
+    expect(BUDGET_DEFAULTS.maxUsdPerTask.value).toBe(0);
   });
 
   it('seeds askUserDeadlineMs to 5 minutes matching ADR 0030 §2', () => {
@@ -64,15 +66,25 @@ describe('budgetsSchema', () => {
       maxTurnsScaffolder: 160,
       maxTurnsBuilder: 100,
       maxTurnsFixer: 100,
+      maxUsdPerTask: 1.5,
     };
     expect(budgetsSchema.parse(all)).toEqual(all);
   });
 
-  it('accepts 0 for maxUsd and maxSteps (unlimited sentinel)', () => {
-    expect(budgetsSchema.parse({ maxUsd: 0, maxSteps: 0 })).toEqual({
+  it('accepts 0 for maxUsd, maxSteps, and maxUsdPerTask (unlimited sentinel)', () => {
+    expect(budgetsSchema.parse({ maxUsd: 0, maxSteps: 0, maxUsdPerTask: 0 })).toEqual({
       maxUsd: 0,
       maxSteps: 0,
+      maxUsdPerTask: 0,
     });
+  });
+
+  it('accepts a fractional maxUsdPerTask (USD with decimals)', () => {
+    expect(budgetsSchema.parse({ maxUsdPerTask: 0.75 })).toEqual({ maxUsdPerTask: 0.75 });
+  });
+
+  it('rejects negative maxUsdPerTask', () => {
+    expect(() => budgetsSchema.parse({ maxUsdPerTask: -1 })).toThrow();
   });
 
   it('rejects negative maxUsd', () => {
@@ -113,6 +125,7 @@ describe('resolveBudgets', () => {
       maxTurnsScaffolder: 120,
       maxTurnsBuilder: 80,
       maxTurnsFixer: 80,
+      maxUsdPerTask: 0,
     });
   });
 
@@ -124,6 +137,7 @@ describe('resolveBudgets', () => {
       maxTurnsScaffolder: 120,
       maxTurnsBuilder: 80,
       maxTurnsFixer: 80,
+      maxUsdPerTask: 0,
     });
   });
 
@@ -135,6 +149,7 @@ describe('resolveBudgets', () => {
       maxTurnsScaffolder: 160,
       maxTurnsBuilder: 80,
       maxTurnsFixer: 80,
+      maxUsdPerTask: 0,
     });
   });
 
@@ -160,6 +175,7 @@ describe('resolveBudgets', () => {
       maxTurnsScaffolder: 160,
       maxTurnsBuilder: 160,
       maxTurnsFixer: 160,
+      maxUsdPerTask: 2.5,
     };
     expect(resolveBudgets(full)).toEqual(full);
   });
