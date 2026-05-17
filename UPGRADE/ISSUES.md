@@ -24,6 +24,18 @@ Severity:
 
 ## Open
 
+### U033 — Operator-set `maxTurns*` is silently shadowed by planner-emit; live `[BUDGET]` askUser never fires from the Build form
+
+- **Severity**: high
+- **Tier**: 13 (carry-forward from 12)
+- **Area**: brain + docs
+- **Description**: Phase 12's Web Build form + CLI flags persist `directive.payload.budgets.maxTurnsScaffolder|Builder|Fixer` correctly (verified via direct API POST). But `resolveTaskMaxTurns` (`packages/brain/src/budget-escalation.ts:105-112`) returns `task.maxTurns` (planner-emitted, range 10-160) whenever it's defined, falling through to `payload.budgets[axis]` only when the planner emitted nothing. The planner's prompt (`packages/brain/src/planner.ts:247-249`) instructs the model to emit `maxTurns` 10-160 on every tool-using task; with no mention of operator overrides in the prompt or the planner's `userPrompt` context, it always emits a value. Net: setting `Max turns — scaffolder = 10` in the UI has no observable effect — the worker runs at the planner's number. The `[BUDGET]` askUser path tested in Phase 12.6 only fires when the planner itself happens to emit a too-low cap; the documented Phase 12 promise ("set a budget → see the brain ask before failing → accept the bump → watch the retry") doesn't materialize from the operator surface.
+- **Hypothesis**: Three resolution candidates (Phase 13 author picks):
+  1. **`resolveTaskMaxTurns` returns `min(planner_emit, directive_budget)`** — operator can FLOOR the cap (lower it from planner's number) without raising it. Simplest fix; matches the "budget is a ceiling, planner refines" mental model. Update the docstring + ADR 0032 §6.
+  2. **Planner prompt is fed `directive.payload.budgets`** and instructed to honor it. More LLM-trust, requires a regression test for prompt-honoring; doesn't help if the planner ignores the instruction. Combine with #1 as a belt-and-suspenders.
+  3. **Operator's directive-budget always wins** (planner emit becomes the fallback, not the override). Strictest; loses the planner's per-task tailoring when an operator sets ANY axis. Probably wrong default.
+- **Resolution**: Discovered 2026-05-17 in the deferred Phase 12 live browser smoke. Smoke evidence: a build on `smoke-demo` with `maxTurnsScaffolder=10` in the UI persisted `payload.budgets.maxTurnsScaffolder=10` correctly, planner emitted `maxTurns: 40` for the scaffolder task, scaffolder ran 40 turns and completed exitCode=0; no `[BUDGET]` askUser fired. A second direct-API POST with `maxTurnsScaffolder=3` showed the same persistence path is healthy daemon-side. The escalation plumbing itself is fine (Phase 12.6 + .7's 36 brain tests + 3 daemon tests all green) — what's broken is the propagation step between operator intent and the worker's effective `maxTurns`.
+
 ### U005 — `factory chat` REPL turn timeout is 120 s
 
 - **Severity**: medium

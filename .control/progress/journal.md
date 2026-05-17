@@ -2,6 +2,16 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-17 — Phase 12 live browser smoke — failed operator-felt gate; U033 filed
+
+- **Smoke executed end-to-end via Playwright MCP** against the running daemon: navigated to `/app/build`, expanded Advanced budgets accordion, set `Max turns — scaffolder = 10`, submitted. Directive `01KRSQC5EWWCTEJK4PXEM69K30` minted, brain narrated triage → architect (66s, $0.31) → planner (38s, $0.11) → pool dispatched 3 tasks. Scaffolder ran at **40 turns** (planner-emitted), not 10 (operator-set). All 3 tasks completed exitCode=0; **no `[BUDGET]` askUser ever surfaced**.
+- **Operational gotcha (not a code bug).** Running daemon (PID 45508) was started 2026-05-16 21:21 UTC — before Phase 12's first commit landed. Pre-Phase-12 dist in memory silently dropped `body.budgets` for new builds; that initially looked like a daemon-side persistence bug. Restarted to PID 51784 against current dist; direct API POST with `body.budgets={"maxTurnsScaffolder":3}` then correctly persisted to `payload.budgets`. Carry-forward: phase-close runbook should grow a "restart factoryd if `packages/daemon/` or `packages/brain/` changed" note.
+- **U033 — Operator-set `maxTurns*` silently shadowed by planner-emit; live `[BUDGET]` askUser never fires from the Build form.** Filed in `UPGRADE/ISSUES.md` Open (high severity, Tier 13 carry-forward). `resolveTaskMaxTurns` at `packages/brain/src/budget-escalation.ts:105-112` returns `task.maxTurns` (always set by planner emit per the prompt at `packages/brain/src/planner.ts:247-249`) over `directive.payload.budgets[axis]` (operator). The "operator override" label in the docstring is misleading — in practice the operator's UI setting is only consulted when the planner is silent, which is never for tool-using tasks. Three resolution candidates listed; `(1) min(planner_emit, directive_budget)` is the cheapest.
+- **Spend $1.61** (vs $1.50 cap) — $0.11 over, accrued mostly during the diagnostic full directive that ran before the planner-shadow gap was confirmed. The cancelled fresh-daemon test directive added $0.
+- **Cleanup state.** Fresh daemon PID 51784 still running with current dist; old daemon PID 45508 stopped. Two cancelled test directives (`01KRSR5KKP7FPTZYAPE9401C44`, `01KRSRCQWBASMKRG7HZVVGFK14`) and the failed-but-completed smoke directive (`01KRSQC5EWWCTEJK4PXEM69K30`) live in the DB as terminal-status rows. Web UI / Playwright session closed.
+- **Phase 12 README smoke checkbox stays unchecked** — that's the visible record of the gap. ADR-amendment vs new-ADR vs in-Phase-13 ADR decision deferred to Phase 13 author.
+- **Next.** Phase 13 plan: center on closing U033 plus the original Phase 12 carry-forwards (per-task USD cap, mid-task escalation, per-project default overrides for the new axes, budget audit dashboard).
+
 ## 2026-05-17 — Session end after Phase 12 close
 
 - Pure session-end housekeeping: STATE.md timestamp bump, last-commit pointer to `e3d14b7` (the phase-close commit), lag counter bumped to #33 (reintroduces — this session-end commit will diverge from STATE pointer once committed), journal entry, next.md regen.
