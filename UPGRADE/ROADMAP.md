@@ -182,7 +182,7 @@ Plan: [`plans/tier-12-budget-ux.md`](plans/tier-12-budget-ux.md)
 Phase 12 closed structurally green but the deferred live browser smoke failed the operator-felt gate: a build with `maxTurnsScaffolder=10` in the UI persisted `payload.budgets.maxTurnsScaffolder=10` daemon-side, planner emitted `maxTurns: 40`, scaffolder ran 40 turns with no `[BUDGET]` askUser. Investigation traced to `resolveTaskMaxTurns` preferring `task.maxTurns` (planner-emit, always set per the planner prompt's 10-160 range) over `directive.payload.budgets[axis]` (operator). Tier 13 closes that loop, polishes the Windows daemon-stop sloppy-shutdown bug (U034) discovered at the Phase 12 close arc, extends per-project default overrides to cover all axes, and ships the per-task USD cap Phase 12 carry-forwarded. Mid-task escalation + budget audit dashboard remain deferred to Tier 14+. Estimated **2-3 sessions**.
 
 - [x] Open U033 (operator-set `maxTurns*` silently shadowed by planner-emit)
-- [ ] Open U034 (Windows daemon-stop leaves stale pidfile)
+- [x] Open U034 (Windows daemon-stop leaves stale pidfile)
 - [ ] Fix U033: `resolveTaskMaxTurns` returns `min(planner_emit, operator_ceiling)`; docstring rewrites; ADR 0032 amendment OR new ADR 0033
 - [ ] Fix U034: post-`waitPidGone()` belt-and-suspenders pidfile cleanup with same-PID race-restart predicate; cross-platform integration test
 - [ ] Per-project budget defaults extension — `<project>/.factory/project.json` `metadata.budgetDefaults` widens from `{maxUsd, maxSteps}` to all axes; three-tier resolution preserved
