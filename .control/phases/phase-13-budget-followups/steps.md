@@ -1,6 +1,6 @@
 # Phase 13 Steps
 
-- [ ] 13.1 — Open U033 in `UPGRADE/ISSUES.md` Open section (already filed during Phase 12 smoke; flip ROADMAP row + bump tier indicator from "Tier 13 (carry-forward from 12)" → "Tier 13"). Severity high; Tier 13; Area brain + docs.
+- [x] 13.1 — Open U033 in `UPGRADE/ISSUES.md` Open section (already filed during Phase 12 smoke; flip ROADMAP row + bump tier indicator from "Tier 13 (carry-forward from 12)" → "Tier 13"). Severity high; Tier 13; Area brain + docs.
 - [ ] 13.2 — Open U034 in `UPGRADE/ISSUES.md` Open section (already filed during Phase 12 session-end; flip ROADMAP row + bump tier indicator from "Tier 13 (carry-forward candidate)" → "Tier 13"). Severity low; Tier 13; Area cli + daemon.
 - [ ] 13.3 — Fix U033: `resolveTaskMaxTurns` in `packages/brain/src/budget-escalation.ts` returns `min(planner_emit, operator_ceiling)`. Docstring rewrites from "operator override" to "operator ceiling — planner emit refines downward." ADR decision at this step: ADR 0032 amendment block (default — clarifies stated intent) OR new ADR 0033 (only if paradigm shifts). 5+ new tests covering ceiling / refine-down / unset / read-only-agent / edge-case-zero. Closes U033.
 - [ ] 13.4 — Fix U034: post-`waitPidGone()` belt-and-suspenders in `packages/cli/src/commands/daemon.ts`. New `unlinkPidFile()` export in `packages/daemon/src/pidfile.ts` (or routed through `@factory5/state` if cleaner). Predicate: still-present pidfile AND same-PID-as-killed. Cross-platform CLI integration test (real subprocess spawn + stop + assert pidfile absent). Closes U034.
