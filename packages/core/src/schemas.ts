@@ -183,6 +183,16 @@ export const taskResultSchema = z.object({
   findingsRaised: z.array(z.string()),
   signalsEmitted: z.array(z.string()),
   error: z.string().optional(),
+  /**
+   * Tier-12 / ADR 0032 §4 — typed error subtype the worker bubbles up from
+   * the provider when the model layer reports a structured failure. Today
+   * the only populator is the claude-cli provider's `error_max_turns`
+   * result event, surfaced as `'error_max_turns'`. The pool reads this to
+   * trigger the budget-escalation askUser flow instead of hard-failing
+   * the task. Optional: read-only-agent failures + worker-internal errors
+   * (worktree allocation, cleanup, sandbox) carry only `error` text.
+   */
+  errorSubtype: z.string().optional(),
   durationMs: z.number().int().nonnegative(),
 });
 

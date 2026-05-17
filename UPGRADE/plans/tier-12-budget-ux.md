@@ -182,9 +182,9 @@ Standard gates + a live browser smoke: kick off a build via the Web UI with cust
 - [x] Web Build form: Advanced budgets accordion with all six fields + defaults + explainers
 - [x] CLI: six new flags on `factory build` and `factory resume`; `--help` quotes the same explainers
 - [ ] Directive payload carries `budgets`; resume inherits it
-- [ ] Brain escalation: `error_max_turns` triggers typed askUser with bump-suggestion
-- [ ] Tier 8 auto-answer accepts the bump on first failure, aborts on second
-- [ ] Tests cover the escalation path
+- [x] Brain escalation: `error_max_turns` triggers typed askUser with bump-suggestion
+- [x] Tier 8 auto-answer accepts the bump on first failure, aborts on second
+- [x] Tests cover the escalation path
 - [ ] Browser smoke: budget-tripping task escalates via askUser, accept → retry → success
 - [ ] U032 closes
 

@@ -49,6 +49,27 @@ import type {
 
 const log = createLogger('providers.claude-cli');
 
+/**
+ * Typed error emitted when claude-cli streams a `result` event with an error
+ * subtype (`error`, `error_max_turns`, etc., per
+ * `@anthropic-ai/claude-code`'s stream-json result schema).
+ *
+ * Carries the subtype as a structured field so callers (worker, pool) can
+ * branch on it without parsing the error message. Tier 12 / ADR 0032 §4 uses
+ * `subtype === 'error_max_turns'` to trigger the budget-escalation askUser
+ * instead of hard-failing the task.
+ */
+export class ClaudeCliStreamError extends Error {
+  /** Stream-json result subtype, e.g. `'error_max_turns'`. */
+  readonly subtype: string;
+
+  constructor(subtype: string, message: string) {
+    super(message);
+    this.name = 'ClaudeCliStreamError';
+    this.subtype = subtype;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // JSON envelope — `claude -p --output-format json`
 // ---------------------------------------------------------------------------
@@ -493,7 +514,8 @@ async function* streamClaude(
       if (resultIsError(event)) {
         finish({
           kind: 'error',
-          error: new Error(
+          error: new ClaudeCliStreamError(
+            event.subtype,
             `claude-cli reported error (subtype=${event.subtype}): ${event.error ?? '<no error field>'}`,
           ),
         });

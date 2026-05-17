@@ -37,6 +37,7 @@ import {
 } from '@factory5/worker';
 
 import { assertBudget, BudgetExceededError } from './budget.js';
+import { axisForAgent, escalateBudgetTrip } from './budget-escalation.js';
 import { loadDaemonEndpoint } from './daemon-endpoint.js';
 import { emitLogLine } from './emit.js';
 import { buildAgentSystemPrompt } from './prompts.js';
@@ -46,6 +47,17 @@ const log = createLogger('brain.pool');
 
 /** How often to refresh `tasks_inflight.last_heartbeat` while a task is running. */
 const HEARTBEAT_INTERVAL_MS = 10_000;
+
+/**
+ * Tier 12 / ADR 0032 §4 — safety cap on consecutive budget escalations
+ * within a single `executeTask` invocation. The first trip raises an
+ * askUser; on accept, the task retries with the bumped budget. If the
+ * retry trips again, a second askUser fires. Beyond that, the loop bails
+ * to the failed-task path so a buggy task can't escalate forever. The
+ * Tier-8 auto-answer's policy is bump-once-then-abort, which naturally
+ * keeps autonomous runs within this cap.
+ */
+const MAX_BUDGET_ESCALATIONS_PER_TASK = 2;
 
 export interface TaskOutcome {
   taskId: string;
@@ -215,7 +227,7 @@ async function executeTask(
     startedAt,
   });
 
-  const hb = setInterval(() => {
+  let hb = setInterval(() => {
     try {
       tasksInflight.heartbeat(db, task.id, now());
     } catch (err) {
@@ -241,31 +253,103 @@ async function executeTask(
     ? await buildAskUserConfig(directiveId)
     : undefined;
 
+  // Tier 12 / ADR 0032 §4 — when a tool-using task trips `error_max_turns`,
+  // raise a typed askUser instead of hard-failing; on `accept`/`custom`,
+  // retry the worker with the bumped maxTurns; on `abort` or timeout, fall
+  // through to the failed-task path (existing behaviour). The MCP-side
+  // sandbox in-worker askUser flow keeps working — this is brain-side
+  // escalation for the post-stream `error_max_turns` outcome.
   let outcome: WorkerOutcome;
-  try {
-    outcome = await runWorker({
-      task,
-      projectPath: plan.projectPath,
-      registry,
-      systemPrompt,
-      userPrompt,
-      findingRegistry: {
-        db,
-        // Project identity (ADR 0021). Pulled from the directive — populated
-        // either at directive creation (CLI build) or by migration 006's
-        // backfill. Undefined only for legacy directives that predate the
-        // backfill running (which would be a deployment in an unmigrated
-        // state). Wiki's `mirrorToRegistry` skips the registry write
-        // when projectId is undefined rather than falling back to basename
-        // (which was the I008 collision trap).
-        ...(projectId !== undefined ? { projectId } : {}),
-        originDirectiveId: directiveId,
-      },
-      ...(askUserConfig !== undefined ? { askUserConfig } : {}),
+  let escalations = 0;
+  let currentTask: Task = task;
+  while (true) {
+    try {
+      outcome = await runWorker({
+        task: currentTask,
+        projectPath: plan.projectPath,
+        registry,
+        systemPrompt,
+        userPrompt,
+        findingRegistry: {
+          db,
+          // Project identity (ADR 0021). Pulled from the directive — populated
+          // either at directive creation (CLI build) or by migration 006's
+          // backfill. Undefined only for legacy directives that predate the
+          // backfill running (which would be a deployment in an unmigrated
+          // state). Wiki's `mirrorToRegistry` skips the registry write
+          // when projectId is undefined rather than falling back to basename
+          // (which was the I008 collision trap).
+          ...(projectId !== undefined ? { projectId } : {}),
+          originDirectiveId: directiveId,
+        },
+        ...(askUserConfig !== undefined ? { askUserConfig } : {}),
+        ...(signal !== undefined ? { signal } : {}),
+      });
+    } finally {
+      // Stop the heartbeat while we wait on the operator (or timeout/abort).
+      // A fresh heartbeat starts on the retry path below.
+      clearInterval(hb);
+    }
+
+    if (
+      outcome.result.errorSubtype !== 'error_max_turns' ||
+      escalations >= MAX_BUDGET_ESCALATIONS_PER_TASK ||
+      signal?.aborted === true
+    ) {
+      break;
+    }
+    const axis = axisForAgent(currentTask.agent);
+    if (axis === undefined) break;
+    const currentValue = currentTask.maxTurns ?? 0;
+    emitLogLine(
+      emit,
+      directiveId,
+      'warn',
+      'brain.pool',
+      `pool: task "${currentTask.title}" tripped error_max_turns at ${String(currentValue)} — escalating via askUser (ADR 0032 §4)`,
+      { taskId: currentTask.id, axis, currentValue, attempt: escalations + 1 },
+    );
+    escalations += 1;
+    const decision = await escalateBudgetTrip({
+      db,
+      directiveId,
+      taskId: currentTask.id,
+      taskTitle: currentTask.title,
+      axis,
+      currentValue,
       ...(signal !== undefined ? { signal } : {}),
     });
-  } finally {
-    clearInterval(hb);
+    if (decision.kind === 'abort') {
+      emitLogLine(
+        emit,
+        directiveId,
+        'warn',
+        'brain.pool',
+        `pool: task "${currentTask.title}" budget-escalation aborted (${decision.reason}) — keeping failed outcome`,
+        { taskId: currentTask.id, axis },
+      );
+      break;
+    }
+    emitLogLine(
+      emit,
+      directiveId,
+      'info',
+      'brain.pool',
+      `pool: task "${currentTask.title}" retrying with ${axis}=${String(decision.newValue)} (was ${String(currentValue)})`,
+      { taskId: currentTask.id, axis, newValue: decision.newValue, kind: decision.kind },
+    );
+    currentTask = { ...currentTask, maxTurns: decision.newValue };
+    // Restart the heartbeat for the retry attempt; refresh tasks_inflight's
+    // last-heartbeat so a supervisor doesn't mark this row stale during the
+    // re-run.
+    hb = setInterval(() => {
+      try {
+        tasksInflight.heartbeat(db, task.id, now());
+      } catch (err) {
+        log.warn({ err, taskId: task.id }, 'pool: heartbeat write failed');
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+    tasksInflight.heartbeat(db, task.id, now());
   }
 
   if (outcome.usage !== undefined) {

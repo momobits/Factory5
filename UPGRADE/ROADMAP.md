@@ -171,8 +171,8 @@ Operator complaint 2026-05-16: _"why are we failing instead of asking the user i
 - [x] Web UI Build form: "Advanced budgets" accordion (collapsed by default) with six fields + defaults + explainers
 - [x] CLI flags on `factory build` and `factory resume`: `--max-usd`, `--max-steps`, `--ask-user-deadline-ms`, `--max-turns-scaffolder`, `--max-turns-builder`, `--max-turns-fixer`; `--help` post-text quotes explainers
 - [ ] Directive `payload.budgets` field; Tier 10 resume route inherits full budget set
-- [ ] Brain escalation in `pool.ts` — detect `error_max_turns` subtype, raise typed askUser with bump suggestion; relaunch task on accept; abort path mirrors current failed-task behaviour
-- [ ] Tier 8 auto-answer adapter — bump-by-one-bucket on first budget failure, abort on second
+- [x] Brain escalation in `pool.ts` — detect `error_max_turns` subtype, raise typed askUser with bump suggestion; relaunch task on accept; abort path mirrors current failed-task behaviour
+- [x] Tier 8 auto-answer adapter — bump-by-one-bucket on first budget failure, abort on second
 - [ ] U032 closes
 
 Plan: [`plans/tier-12-budget-ux.md`](plans/tier-12-budget-ux.md)

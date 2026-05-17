@@ -26,6 +26,7 @@ import { createLogger } from '@factory5/logger';
 import type { ProviderRegistry } from '@factory5/providers';
 import { directives as directivesQ, pendingQuestions, type Database } from '@factory5/state';
 
+import { BUDGET_ESCALATION_MARKER } from './budget-escalation.js';
 import { recordUsage } from './usage.js';
 
 const log = createLogger('brain.auto-answer');
@@ -113,6 +114,32 @@ export async function autoAnswerOne(q: PendingQuestion, deps: AutoAnswerOneDeps)
       `[auto-answer failed: directive ${q.directiveId} not found]`,
       new Date(now()).toISOString(),
       'agent-failed',
+    );
+    return;
+  }
+
+  // Tier 12 / ADR 0032 §5 — budget-escalation questions follow a
+  // deterministic policy (bump-by-one-bucket on first failure, abort on
+  // second), NOT an LLM dispatch. The policy is keyed off the count of
+  // already-agent-answered budget-escalation questions on this directive,
+  // so consecutive trips on the same axis follow bump-then-abort. Skip
+  // the generic prompt-builder + LLM call entirely.
+  if (q.question.startsWith(BUDGET_ESCALATION_MARKER)) {
+    const answer = pickBudgetEscalationAnswer(deps.db, q);
+    pendingQuestions.finalizeAutoAnswer(
+      deps.db,
+      q.id,
+      answer,
+      new Date(now()).toISOString(),
+      'agent',
+    );
+    log.info(
+      {
+        questionId: q.id,
+        directiveId: q.directiveId,
+        answer,
+      },
+      'auto-answer: budget-escalation deterministic policy applied',
     );
     return;
   }
@@ -314,4 +341,37 @@ function sleep(ms: number): Promise<void> {
     const t = setTimeout(resolve, ms);
     if (typeof t.unref === 'function') t.unref();
   });
+}
+
+/**
+ * Tier 12 / ADR 0032 §5 — deterministic auto-answer for budget-escalation
+ * questions.
+ *
+ * Policy:
+ *   - First budget-escalation question on this directive scoped to the
+ *     SAME task → `'accept'` (bump-by-one-bucket).
+ *   - Second + → `'abort'` (let the directive's normal failed-task
+ *     handling take over; prevents runaway bump loops).
+ *
+ * The count is scoped per task so a directive with multiple independent
+ * tasks that each trip once gets one accept each; only repeated trips on
+ * the SAME task abort. The query counts answered (final, not in-flight)
+ * budget-escalation rows tagged `agent` whose task_id matches.
+ */
+function pickBudgetEscalationAnswer(db: Database, q: PendingQuestion): string {
+  if (q.taskId === undefined) return 'abort';
+  const priorAgentBumps = db
+    .prepare(
+      `SELECT COUNT(*) AS n
+         FROM pending_questions
+        WHERE directive_id = ?
+          AND task_id = ?
+          AND id != ?
+          AND answered_by = 'agent'
+          AND answer = 'accept'
+          AND question LIKE ? || '%'`,
+    )
+    .get(q.directiveId, q.taskId, q.id, BUDGET_ESCALATION_MARKER) as { n: number };
+  if (priorAgentBumps.n === 0) return 'accept';
+  return 'abort';
 }

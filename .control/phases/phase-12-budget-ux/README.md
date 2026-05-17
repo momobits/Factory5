@@ -49,9 +49,9 @@ See [`steps.md`](steps.md).
 - [x] Web UI Build form: Advanced budgets accordion (collapsed by default); six fields + defaults + explainers
 - [x] CLI: six new flags on `factory build` AND `factory resume`; `--help` post-text quotes explainers
 - [ ] Directive payload `budgets` field; resume route inherits it
-- [ ] Brain escalation: `error_max_turns` → typed askUser → on accept, relaunch task with bumped budget; on abort, mark failed (current behaviour)
-- [ ] Tier 8 auto-answer: bump-by-one-bucket on first failure, abort on second
-- [ ] Tests across the escalation path + ipc / cli / fe surfaces
+- [x] Brain escalation: `error_max_turns` → typed askUser → on accept, relaunch task with bumped budget; on abort, mark failed (current behaviour)
+- [x] Tier 8 auto-answer: bump-by-one-bucket on first failure, abort on second
+- [x] Tests across the escalation path + ipc / cli / fe surfaces
 - [ ] Browser smoke: budget-tripping task escalates via askUser; accept → retry → success
 - [ ] U032 closes
 

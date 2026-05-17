@@ -31,11 +31,12 @@ import { env, execPath } from 'node:process';
 
 import type { AgentRole, Finding, Task, TaskResult } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
-import type {
-  CategoryResolution,
-  ProviderRegistry,
-  ProviderResponse,
-  ProviderUsage,
+import {
+  ClaudeCliStreamError,
+  type CategoryResolution,
+  type ProviderRegistry,
+  type ProviderResponse,
+  type ProviderUsage,
 } from '@factory5/providers';
 import {
   addFinding,
@@ -526,6 +527,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
   let responseText = '';
   let finalUsage: ProviderUsage | undefined;
   let error: string | undefined;
+  let errorSubtype: string | undefined;
 
   try {
     const iter = resolution.provider.stream({
@@ -552,6 +554,13 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
     }
   } catch (err) {
     error = (err as Error).message;
+    // Tier 12 / ADR 0032 §4 — capture the typed subtype when the provider
+    // surfaces one (today: claude-cli's `error_max_turns` and friends). The
+    // pool reads `result.errorSubtype` to decide whether to escalate via
+    // an askUser instead of hard-failing the task.
+    if (err instanceof ClaudeCliStreamError) {
+      errorSubtype = err.subtype;
+    }
     if ((err as Error).name === 'AbortError') {
       log.warn({ taskId: opts.task.id }, 'worker: aborted by caller');
     } else {
@@ -621,6 +630,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
     findingsRaised: findingIds,
     signalsEmitted: [],
     ...(error !== undefined ? { error } : {}),
+    ...(errorSubtype !== undefined ? { errorSubtype } : {}),
     durationMs,
   };
 
@@ -631,6 +641,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
       findings: findingIds.length,
       filesChanged: filesChanged.length,
       durationMs,
+      ...(errorSubtype !== undefined ? { errorSubtype } : {}),
     },
     'worker: complete (tool-using)',
   );
