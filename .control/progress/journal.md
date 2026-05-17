@@ -2,6 +2,15 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-17 — Session-end after Phase 13 close
+
+- Pure session-end housekeeping: STATE.md timestamp bump, last-commit pointer to `9b095f1` (the phase-close commit), lag counter bumped to #38, journal entry, next.md regen.
+- No new code, ADRs, or tests this commit.
+- Tag `phase-13-budget-followups-closed` lives at `aae86dc` (the 13.6 commit — last substantive work; matches Phase 12 tag-at-last-work-commit pattern).
+- Three commits this continuation since the prior session-end `dc61c79`: `ffdbd8f` 13.5 per-project budget defaults, `aae86dc` 13.6 per-task USD cap, `9b095f1` phase-close. Plus this session-end commit.
+- Live browser smoke at phase-close ($1.09 spend / $1.50 cap, status=complete) verified Phase 13.5 propagation end-to-end via API + Phase 13.6 UI rendering + U034 fix LIVE (reaped pidfile after stop log line + pidfile absent on disk).
+- Next session: operator decides — `/session-end` is naturally fitting since arc just closed; or scaffold a new tier if a fresh operator-felt issue surfaces; or run a follow-up live smoke on a bigger project to force the `[BUDGET]` askUser trip path live (covered by unit tests today).
+
 ## 2026-05-17 — Phase 13 mid-flight session-end after 13.4; U033 + U034 both closed
 
 - Five commits this session: scaffold `82e0d95` + 13.1 `fd7f077` + 13.2 `f088dcc` + 13.3 `46198b4` (U033 fix) + 13.4 `31afcb9` (U034 fix). Plus this session-end commit which reintroduces lag #36 (HEAD diverges from STATE pointer once it lands).
