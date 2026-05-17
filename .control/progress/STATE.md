@@ -227,24 +227,28 @@ None — Phase 12 closed. Cleared at phase close.
 
 ## Notes for next session
 
-**Upgrade arc complete (eighth time).** Tier 12 (`phase-12-budget-ux-closed`) shipped the surface-and-escalate budget model. The structural work is complete and unit-tested end-to-end; the live browser smoke is the remaining operator-felt acceptance gate (intentionally deferred this session per operator decision).
+**Phase 12 smoke ran and failed the operator-felt gate.** Structural plumbing is healthy but the propagation step from operator intent to worker `maxTurns` is broken: `resolveTaskMaxTurns` (`packages/brain/src/budget-escalation.ts:105-112`) prefers `task.maxTurns` (planner-emitted, always set per the planner prompt's 10-160 range) over `directive.payload.budgets[axis]` (operator). The planner prompt at `packages/brain/src/planner.ts:247-249` doesn't see the directive's budgets, so it always emits its own per-task value, which shadows the operator's setting. Result: setting `Max turns — scaffolder = 10` in the UI has no observable effect. Filed as **U033** (high, Tier 13 carry-forward) in `UPGRADE/ISSUES.md` Open with three resolution candidates.
 
-**Read first** when next session resumes (or operator runs the deferred smoke):
+**Read first** when next session resumes:
 
-1. `.control/phases/phase-12-budget-ux/README.md` — done-criteria checklist with the smoke checkbox still unchecked as the visible record.
-2. `UPGRADE/plans/tier-12-budget-ux.md` — Tier 12 plan including the budget audit (15 hardcoded budgets vs 6 operator-facing).
-3. ADR 0032 — Budget UX paradigm (`docs/decisions/0032-budget-ux-paradigm.md`).
-4. `UPGRADE/ISSUES.md` Resolved section — U032 entry has the full resolution narrative (which commits shipped which piece + each plan deviation).
+1. `UPGRADE/ISSUES.md` Open — **U033** has the full bug narrative + the three resolution candidates (most likely fix: `resolveTaskMaxTurns` returns `min(planner_emit, directive_budget)`).
+2. `.control/phases/phase-12-budget-ux/README.md` — done-criteria checklist with the smoke checkbox still unchecked as the visible record of the gap.
+3. ADR 0032 — Budget UX paradigm (`docs/decisions/0032-budget-ux-paradigm.md`). §6's "operator override" label in the docstring of `resolveTaskMaxTurns` is misleading post-smoke; the ADR-amendment vs new-ADR vs in-Phase-13-ADR decision is open.
+4. `packages/brain/src/budget-escalation.ts:105-112` (`resolveTaskMaxTurns`) and `packages/brain/src/planner.ts:247-249` (the planner prompt's `maxTurns` instruction) — the two ends of the propagation gap.
 
-**Deferred live browser smoke shape:**
+**Recommended next action — author Phase 13.** Center the plan on closing U033 plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). The U033 fix is ~30 lines + tests; the carry-forwards are ~3-5 sub-steps each. The whole tier is a natural 2-3 session phase.
+
+**Alternative — re-run the live smoke after a U033 fix.** The smoke shape is the same as before but should now produce the `[BUDGET]` askUser correctly:
 
 - Start factoryd; capture UI token; navigate to `/app/build`.
-- Pick a project that exercises a tool-using agent (the `smoke-demo` Phase 11 used works; the `automl` scaffolder hitting `error_max_turns` was the canonical Tier 12 incident).
+- Pick a project that exercises a tool-using agent (`smoke-demo` works).
 - Open the "Advanced budgets" accordion; set `Max turns — scaffolder` to a low value (e.g. 10) so the trip is guaranteed.
 - Submit; watch the directive-detail activity panel.
 - Brain should narrate triage → architect → planner → pool task start → `pool: task "..." tripped error_max_turns at 10 — escalating via askUser (ADR 0032 §4)` → questions surface in `/app/questions`.
 - Operator answers `accept` (or auto-answer fires if the deadline passes); brain logs `retrying with maxTurnsScaffolder=80 (was 10)`; task re-runs.
 - Spend cap recommendation: $1.50 to bound the live model spend.
+
+**Operational gotcha.** The running daemon at this session's start (PID 45508, started 2026-05-16 21:21 UTC) was pre-Phase-12 dist; killed and restarted to PID 51784 against current dist. If you `factory daemon status` and the PID predates the most recent code change in `packages/daemon/` or `packages/brain/`, `factory daemon restart` before running a live smoke.
 
 **Future tiers — Phase 12 Deferred section carry-forwards:**
 
