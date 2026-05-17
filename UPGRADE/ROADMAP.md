@@ -1,6 +1,6 @@
 # Roadmap — factory5 first-class upgrade
 
-Twelve tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent. Tier 9 reopens the arc again for the first frontend aesthetic overhaul in the project — porting the "Editorial Control Room" aesthetic from the sibling conductor project to `apps/factory-web` as a single-session, dual-theme redesign (informal cadence — no per-step commits, no ADR).
+Thirteen tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent. Tier 9 reopens the arc again for the first frontend aesthetic overhaul in the project — porting the "Editorial Control Room" aesthetic from the sibling conductor project to `apps/factory-web` as a single-session, dual-theme redesign (informal cadence — no per-step commits, no ADR). Tier 13 reopens the arc once more to close the operator-felt loop Tier 12 structurally built but couldn't demonstrate end-to-end — the propagation gap surfaced by Phase 12's deferred smoke (operator-set `maxTurns*` is silently shadowed by planner-emit), plus polish (Windows daemon-stop pidfile cleanup) and two cheap Phase 12 carry-forwards (per-project default overrides extending to all axes; per-task USD cap).
 
 ## Status legend
 
@@ -173,9 +173,23 @@ Operator complaint 2026-05-16: _"why are we failing instead of asking the user i
 - [x] Directive `payload.budgets` field; Tier 10 resume route inherits full budget set
 - [x] Brain escalation in `pool.ts` — detect `error_max_turns` subtype, raise typed askUser with bump suggestion; relaunch task on accept; abort path mirrors current failed-task behaviour
 - [x] Tier 8 auto-answer adapter — bump-by-one-bucket on first budget failure, abort on second
-- [ ] U032 closes
+- [x] U032 closes
 
 Plan: [`plans/tier-12-budget-ux.md`](plans/tier-12-budget-ux.md)
+
+## Tier 13 — Budget followups: propagation fix + per-project defaults + per-task USD cap
+
+Phase 12 closed structurally green but the deferred live browser smoke failed the operator-felt gate: a build with `maxTurnsScaffolder=10` in the UI persisted `payload.budgets.maxTurnsScaffolder=10` daemon-side, planner emitted `maxTurns: 40`, scaffolder ran 40 turns with no `[BUDGET]` askUser. Investigation traced to `resolveTaskMaxTurns` preferring `task.maxTurns` (planner-emit, always set per the planner prompt's 10-160 range) over `directive.payload.budgets[axis]` (operator). Tier 13 closes that loop, polishes the Windows daemon-stop sloppy-shutdown bug (U034) discovered at the Phase 12 close arc, extends per-project default overrides to cover all axes, and ships the per-task USD cap Phase 12 carry-forwarded. Mid-task escalation + budget audit dashboard remain deferred to Tier 14+. Estimated **2-3 sessions**.
+
+- [ ] Open U033 (operator-set `maxTurns*` silently shadowed by planner-emit) + U034 (Windows daemon-stop leaves stale pidfile)
+- [ ] Fix U033: `resolveTaskMaxTurns` returns `min(planner_emit, operator_ceiling)`; docstring rewrites; ADR 0032 amendment OR new ADR 0033
+- [ ] Fix U034: post-`waitPidGone()` belt-and-suspenders pidfile cleanup with same-PID race-restart predicate; cross-platform integration test
+- [ ] Per-project budget defaults extension — `<project>/.factory/project.json` `metadata.budgetDefaults` widens from `{maxUsd, maxSteps}` to all axes; three-tier resolution preserved
+- [ ] Per-task USD cap (`maxUsdPerTask`) — new seventh axis in `BUDGET_DEFAULTS`; pool pre-launch check; planner emits per-task `estimatedUsd`; auto-answer recognition generalises across axes
+- [ ] Browser smoke (Playwright MCP, `smoke-demo`, $1.50 cap) — operator-set `maxTurnsScaffolder=10` floors the planner emit → `[BUDGET]` askUser fires → accept → retry → success
+- [ ] U033 + U034 close
+
+Plan: [`plans/tier-13-budget-followups.md`](plans/tier-13-budget-followups.md)
 
 ## Out of scope (now)
 

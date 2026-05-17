@@ -27,7 +27,7 @@ Severity:
 ### U034 — `factory daemon stop` on Windows leaves a stale pidfile; SIGTERM is mapped to hard `TerminateProcess`
 
 - **Severity**: low
-- **Tier**: 13 (carry-forward candidate)
+- **Tier**: 13
 - **Area**: cli + daemon
 - **Description**: `factory daemon stop` on Windows reports `factoryd stopped (pid <N>)` but leaves the pidfile on disk with the dead PID's contents. The CLI's `process.kill(info.pid, 'SIGTERM')` in `packages/cli/src/commands/daemon.ts:153` is mapped by Node-on-Windows to a hard `TerminateProcess` syscall (Node docs: "SIGTERM is not supported on Windows ... will cause the target process to exit unconditionally"). The factoryd shutdown handler at `apps/factoryd/src/main.ts:156-170` — which calls `stopDaemon(handle)` → `handle.stop()` → `pidFile?.release()` at `packages/daemon/src/index.ts:500` — never runs. Subsequent `factory daemon start` reaps the stale pidfile correctly via `processAlive(pid)` (the dead PID liveness probe returns false), so the bug is not load-bearing — it's a cosmetic / sloppy-shutdown issue, plus a small confusion vector for operators who inspect the pidfile post-stop and see a number that looks live. Observed 2026-05-17 stopping PID 51784; manual `Remove-Item factoryd.pid` cleared it.
 - **Hypothesis**: Two fixable layers, pick one:
@@ -38,7 +38,7 @@ Severity:
 ### U033 — Operator-set `maxTurns*` is silently shadowed by planner-emit; live `[BUDGET]` askUser never fires from the Build form
 
 - **Severity**: high
-- **Tier**: 13 (carry-forward from 12)
+- **Tier**: 13
 - **Area**: brain + docs
 - **Description**: Phase 12's Web Build form + CLI flags persist `directive.payload.budgets.maxTurnsScaffolder|Builder|Fixer` correctly (verified via direct API POST). But `resolveTaskMaxTurns` (`packages/brain/src/budget-escalation.ts:105-112`) returns `task.maxTurns` (planner-emitted, range 10-160) whenever it's defined, falling through to `payload.budgets[axis]` only when the planner emitted nothing. The planner's prompt (`packages/brain/src/planner.ts:247-249`) instructs the model to emit `maxTurns` 10-160 on every tool-using task; with no mention of operator overrides in the prompt or the planner's `userPrompt` context, it always emits a value. Net: setting `Max turns — scaffolder = 10` in the UI has no observable effect — the worker runs at the planner's number. The `[BUDGET]` askUser path tested in Phase 12.6 only fires when the planner itself happens to emit a too-low cap; the documented Phase 12 promise ("set a budget → see the brain ask before failing → accept the bump → watch the retry") doesn't materialize from the operator surface.
 - **Hypothesis**: Three resolution candidates (Phase 13 author picks):

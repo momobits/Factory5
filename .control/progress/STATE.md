@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-17 — second session-end after operator stopped daemon + filed U034 (Windows pidfile cleanup bug). STATE.md timestamp bump + last-commit pointer to `14e6659` (the U034 commit) + lag counter (#35 reintroduced — this session-end edits STATE then commits, so HEAD diverges from STATE one more time). Smoke result still stands: failed the operator-felt gate, U033 filed. Daemon stopped this session — no factoryd running at handoff. Spend total this session $1.61.
-**Current phase:** arc-complete (eighth time — no Phase 13 planned)
-**Current step:** n/a (between phases)
-**Status:** Phase 12 closed cleanly with `phase-12-budget-ux-closed`. 9 of 11 done-criteria green automatically; the deferred live browser smoke (criterion 10) **failed** in this session — see "Next action" + U033 for the gap. U032 stays Resolved (the structural budget-UX paradigm landed; this is a propagation bug atop it). Workspace 1216 → 1292 + 3 skipped at last test run. Fresh daemon (PID 51784) up-to-date with current Phase 12 dist; old pre-Phase-12 daemon stopped this session.
+**Last updated:** 2026-05-17 — Phase 13 scaffold lands. Cursor flips arc-complete → Phase 13 active at step 13.1. Tier 13 plan + phase dir + phase-plan row + ROADMAP section + ISSUES.md tier indicator bumps (U033 + U034 from "carry-forward" → "Tier 13") + recordkeeping fix (Phase 12 ROADMAP "U032 closes" flip — was unchecked at Phase 12 close despite U032 being Resolved) + phase-plan ADR mention corrected (Phase 12 row said "ADR 0033" but shipped ADR 0032 because Tier 11 closed without an ADR). STATE last-commit pointer to `93634d1` (predecessor of this scaffold commit) — lag-by-1 occurrence #36 reintroduced (this scaffold edits STATE then commits, same pattern as prior scaffolds).
+**Current phase:** Phase 13 — budget-followups
+**Current step:** 13.1 — open U033 (recordkeeping flip)
+**Status:** Phase 13 scaffolded, starting 13.1. Closes the operator-felt budget loop Phase 12 structurally built but couldn't demonstrate end-to-end (U033 — `resolveTaskMaxTurns` ignores `payload.budgets[axis]` because `task.maxTurns` always wins) plus polish (U034 — Windows daemon-stop pidfile cleanup) plus two cheapest Phase 12 carry-forwards (per-project default overrides extension; per-task USD cap). Mid-task escalation + budget audit dashboard remain deferred to Tier 14+. Workspace 1292 + 3 skipped at last test run (Phase 12 close). No factoryd running at handoff — operator stopped at second-session-end of Phase 12 close arc.
 
 ---
 
@@ -20,36 +20,42 @@
 
 ## Next action
 
-**Smoke ran; the operator-felt gate failed; U033 captures the bug.** Phase 12's structural pieces are healthy (daemon-side persistence, escalation code path), but the propagation step from operator intent to worker `maxTurns` is broken: `resolveTaskMaxTurns` prefers `task.maxTurns` (always emitted by the planner per its prompt) over `directive.payload.budgets[axis]` (operator). The documented Phase 12 promise — "set a low maxTurns in the UI, see the [BUDGET] askUser fire" — doesn't fire because the planner's per-task emit always shadows the operator's directive budget. Three operator-facing next actions:
+**Step 13.1 — open U033 (recordkeeping flip).** U033 is already filed in `UPGRADE/ISSUES.md` Open section from the Phase 12 smoke session; the Phase 13 scaffold already bumped its tier indicator from "Tier 13 (carry-forward from 12)" → "Tier 13". 13.1 itself is the ROADMAP recordkeeping flip — change the Tier 13 ROADMAP row `[ ] Open U033 + U034` → split into individual flips as work proceeds. Per CLAUDE.md "tick the matching item in UPGRADE/ROADMAP.md in the same commit", the ROADMAP row flips alongside the steps.md checkbox. Commit shape: `chore(13.1): open U033`.
 
-1. **Author Phase 13 (recommended)** — center on closing **U033**, bundle **U034** (Windows pidfile cleanup) as polish, plus the original Phase 12 Deferred carry-forwards (per-task USD cap; mid-task escalation; per-project default overrides for the new axes; budget audit dashboard). U033's three resolution candidates listed in `UPGRADE/ISSUES.md` — pick one (probably (1) `min(planner_emit, directive_budget)`) in the Phase 13 ADR. U034 is ~30 lines, either CLI-side belt-and-suspenders or a daemon-side `/shutdown` IPC.
-2. **Re-run the live smoke** after U033's fix lands; or run it now with manual surgery on `plan.json` between planner emit and pool dispatch to confirm the escalation plumbing fires end-to-end despite the propagation bug. Manual-surgery option doesn't satisfy the operator-felt gate but does verify the post-trip retry loop.
-3. **`/session-end`** to close out today; resume Phase 13 fresh.
+Same shape for **13.2 — open U034** afterwards.
 
-**Operational gotcha discovered this session.** The running daemon at session-start (PID 45508) was started 2026-05-16 21:21 UTC — that's BEFORE Phase 12's first commit landed. The daemon was running pre-Phase-12 dist and silently dropped `body.budgets` for any new build. Killed + restarted to PID 51784 (current dist). Worth a one-line addition to phase-close runbooks: "Restart `factoryd` after the phase tag so live smokes hit the current code." The fresh daemon (PID 51784) is currently running and current.
+Then the substantive steps:
 
-**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at this phase-close commit.
+- **13.3 — fix U033** (the main work). `resolveTaskMaxTurns` returns `min(planner_emit, operator_ceiling)`; docstring rewrites; ADR 0032 amendment block (default) or new ADR 0033 (only if paradigm shifts meaningfully); 5+ new tests. Implementation candidate (1) per U033's hypothesis — the recommended fix.
+- **13.4 — fix U034** (the polish). Post-`waitPidGone()` belt-and-suspenders pidfile cleanup; cross-platform CLI integration test.
+- **13.5 — per-project budget defaults extension**. `<project>/.factory/project.json` `metadata.budgetDefaults` widens from `{maxUsd, maxSteps}` (Tier 8) to all six axes.
+- **13.6 — per-task USD cap (`maxUsdPerTask`)**. New seventh axis with planner-side `estimatedUsd` + pool pre-launch check; auto-answer generalises across axes.
+- **13.7 — phase close** with browser smoke (Playwright MCP, `smoke-demo`, $1.50 cap) closing the Phase 12 deferred gate.
+
+**Daemon state:** stopped at handoff. Restart with `factory daemon start` before running 13.7's smoke. Note U034 — the existing stop leaves a stale pidfile on Windows (auto-reaped at next start; cosmetic). 13.4 fixes this.
+
+**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`.
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `14e6659` — `docs(issues)`: file U034 — Windows SIGTERM hard-kill leaves stale pidfile. (Session-end commit will bump to lag #35.)
-- **Uncommitted changes:** none at session-end
+- **Last commit:** `93634d1` — `docs(state)`: second session end — after daemon-stop + U034 filing. (Phase 13 scaffold commit will bump to lag #36 — this scaffold edits STATE then commits, same pattern as prior scaffolds.)
+- **Uncommitted changes:** none post-scaffold-commit
 - **Last phase tag:** `phase-12-budget-ux-closed` (annotated at `8231f87`)
 
 ---
 
 ## Open blockers
 
-- None (U033 high but not blocking; U034 low; U005 medium, defer-until-signal)
+- None (U033 high but not blocking — being addressed in Phase 13 step 13.3; U034 low — being addressed in 13.4; U005 medium, defer-until-signal)
 
 ---
 
 ## In-flight work
 
-**None — Phase 12 closed; smoke ran with the failed result captured in U033; daemon stopped at operator request.** Upgrade arc complete (eighth time). Live browser smoke executed this session; structural pieces healthy but the operator-set budget propagation gap (U033) prevents the `[BUDGET]` askUser from firing naturally from the UI surface. Phase 13 should center on closing U033 and can bundle U034 (Windows pidfile cleanup) as polish. **No factoryd running at handoff** — operator stopped via `factory daemon stop` (PID 51784 gone, stale pidfile cleaned manually because of U034); start with `factory daemon start` when next needed.
+**Phase 13 scaffolded, starting 13.1.** Tier 13 plan + phase dir + phase-plan row + ROADMAP section all landed in the scaffold commit; U033 + U034 tier indicators bumped in ISSUES.md. Two recordkeeping fixes also folded into the scaffold: (a) Phase 12 ROADMAP row's unchecked `U032 closes` line flipped to `[x]` (U032 had been Resolved at Phase 12 close but the ROADMAP row was missed); (b) phase-plan.md Phase 12 row's "ADR 0033 pins the budget UX paradigm" corrected to "ADR 0032" (Tier 11 closed without an ADR so Tier 12 took 0032; the phase-plan summary had pre-numbered before that decision). **No factoryd running** — operator stopped via `factory daemon stop` at the second Phase-12 session-end. Restart with `factory daemon start` when 13.7's smoke needs it; 13.4's fix lands before then so the post-smoke stop won't reproduce U034.
 
 **Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 
@@ -94,7 +100,8 @@
 
 ## Recently completed (last 5 steps)
 
-- **Second session-end after U034 filing** (this commit) — `docs(state)`: session end after daemon-stop + U034. STATE.md timestamp bump + last-commit pointer to `14e6659` + lag counter (#35 reintroduced) + journal entry. No phase work; pure session-end housekeeping. — 2026-05-17
+- **Phase 13 scaffold** (this commit) — `chore(phase-13)`: scaffold tier 13 budget followups. `UPGRADE/plans/tier-13-budget-followups.md` (~220 lines, 7 sub-steps + risks-and-decisions section); `.control/phases/phase-13-budget-followups/{README.md,steps.md}`; phase-plan.md Phase 13 row + summary + ordering-paragraph sentence; ROADMAP Tier 13 section + intro count bump "Twelve tiers → Thirteen tiers"; ISSUES.md tier indicator bumps on U033 + U034 ("(carry-forward...)" → "Tier 13"); two recordkeeping fixes folded in (Phase 12 ROADMAP `[x] U032 closes` flip — was unchecked at Phase 12 close despite U032 being Resolved; phase-plan.md Phase 12 row "ADR 0033" → "ADR 0032" correction — Tier 11 closed without an ADR so Tier 12 took 0032); STATE.md cursor flip arc-complete → Phase 13 active at 13.1; regenerated next.md via SessionStart hook on first session-start post-commit. — 2026-05-17 — `<this commit's sha>`
+- **Second session-end after U034 filing** — `docs(state)`: session end after daemon-stop + U034. STATE.md timestamp bump + last-commit pointer to `14e6659` + lag counter (#35 reintroduced) + journal entry. No phase work; pure session-end housekeeping. — 2026-05-17 — `93634d1`
 - **U034 — Windows pidfile cleanup bug** — `docs(issues)`: file U034 — Windows SIGTERM hard-kill leaves stale pidfile. Observed at session-end stopping the fresh daemon (PID 51784): `factory daemon stop` reported success but the pidfile stayed on disk because on Windows Node maps `process.kill(pid, 'SIGTERM')` to `TerminateProcess`, so factoryd's shutdown handler (which calls `pidFile.release()`) never runs. Not load-bearing — next start reaps stale pidfiles automatically — but cosmetically sloppy. Two resolution candidates documented. — 2026-05-17 — `14e6659`
 - **First session-end refresh — Notes section** — `docs(state)`: refresh Notes for next session to point at U033. The prior `/session-end` missed the "Notes for next session" section so the regenerated next.md kickoff still carried the pre-smoke "deferred live smoke" framing. Updated to put U033 + Phase 13 framing at the top. — 2026-05-17 — `f42a736`
 - **Session-end after Phase 12 smoke** — `docs(state)`: session end after Phase 12 smoke + U033 filing. STATE.md timestamp bump + last-commit pointer to `eab1362` + lag counter (#34 reintroduced) + journal entry. — 2026-05-17 — `a4bec35`
@@ -165,7 +172,7 @@
 
 ## Attempts that didn't work (current step only)
 
-None — Phase 12 closed. Cleared at phase close.
+None — Phase 13 starting. 13.1 is a recordkeeping flip; no attempts to record yet.
 
 **Worth recording from Phase 12 for future reference** (not load-bearing for any active step but notable):
 
