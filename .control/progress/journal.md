@@ -2,6 +2,15 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-17 — Second session-end after Phase 13 close (no-op session)
+
+- Pure session-end housekeeping with no work between SessionStart hook and `/session-end` — STATE.md timestamp bump, last-commit pointer to `0e2e24b` (the prior session-end commit), lag counter caught up #38 then reintroduces #39, journal entry, next.md regen folded into this commit.
+- SessionStart hook flagged the expected `commit-mismatch` drift (STATE.md said `9b095f1`, HEAD was `0e2e24b`). Operator accepted the canonical `/session-end` path over a separate drift-fix commit; rationale: in a no-work session a drift-fix commit just bounces the lag count from #38 to #39 to #40 instead of from #38 to #39 directly, without eliminating the structural lag.
+- No new code, ADRs, or tests this commit.
+- Tag `phase-13-budget-followups-closed` still at `aae86dc` (the 13.6 commit).
+- No factoryd running at handoff.
+- Next session: operator decides — same three paths as the previous session-end already documented (close again with `/session-end`, scaffold a new tier on a fresh operator-felt issue, or run a follow-up live smoke on a bigger project to force the `[BUDGET]` askUser trip path).
+
 ## 2026-05-17 — Session-end after Phase 13 close
 
 - Pure session-end housekeeping: STATE.md timestamp bump, last-commit pointer to `9b095f1` (the phase-close commit), lag counter bumped to #38, journal entry, next.md regen.

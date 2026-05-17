@@ -1,7 +1,7 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-17T12:35:58Z by
-> `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-17T16:14:56Z by
+> `.claude/hooks/regenerate-next-md.ps1`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
 
@@ -24,9 +24,12 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 **Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`; Tier 13 at `phase-13-budget-followups-closed` 2026-05-17 at `aae86dc`.
 
+
 ## Notes for next session
 
 **Phase 13 (budget-followups) closed; upgrade arc complete (ninth time).** Phase 12 → Phase 13 sequence closed the operator-felt budget loop end-to-end: Phase 12 built the structural pieces (BUDGET_DEFAULTS, ADR 0032, escalation plumbing); Phase 12's deferred smoke surfaced the propagation gap (U033); Phase 13 fixed the propagation (13.3) + the Windows daemon-stop pidfile sloppy-shutdown (13.4) + extended per-project defaults to all axes (13.5) + shipped the per-task USD cap (13.6) + closed with a live browser smoke + U034-fix verification (13.7).
+
+**This session was a no-op `/session-end`** opened at arc-complete after the prior session's Phase 13 close. Operator accepted the canonical `/session-end` path over a separate drift-fix commit since the cosmetic structural lag bounces from #38 to #39 to #40 either way in a no-work session. Lag count now #39.
 
 **Live browser smoke at phase-close** (Playwright MCP, smoke-demo, $1.09 spend / $1.50 cap, status=complete). Verified:
 
@@ -74,7 +77,7 @@ see a structured `[control:state]` block instead of doing them by hand.
 - **`factory config get / set <key>` CLI** — operator surface for `<dataDir>/config.json`.
 - **Override after auto-answer** — `factory questions answer --force <id>`. Pin via ADR if it ships.
 - **Inline-style audit on the 12 pages** — Tier 9-deferred.
-- **Structural `/session-end` lag-by-1 fix** — see the carry-forwards section above for current count (now #37 with this phase-close). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **Structural `/session-end` lag-by-1 fix** — see the carry-forwards section above for current count (now #39 after this second session-end). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 **Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav. **Tier 9 added** a new vocabulary on top: vermillion (`#ff4d1c`) as the singular signal color; Fraunces italic display + Bricolage Grotesque body + JetBrains Mono data; CSS custom-property tokens (`--bg / --surface / --ink / --hairline / --signal / --amber / --acid / --halt / --cool`) flipped by `prefers-color-scheme`; paper-grain SVG atmosphere via `body::before / body::after`; editorial masthead with brand mark `§` + numbered nav + monospaced status pip + pulse animation.
 

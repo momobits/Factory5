@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-17 — session-end after Phase 13 close. Pure session-end housekeeping: STATE.md timestamp bump + last-commit pointer to `9b095f1` (the phase-close commit) + lag counter bumped to #38 (this session-end edits STATE then commits, HEAD diverges from STATE pointer once more). Phase 13 tagged `phase-13-budget-followups-closed` at `aae86dc` (the 13.6 commit). 10 of 10 done-criteria green at close. Workspace 1322 + 3 skipped at last test run. All four `pnpm` gates green at close.
+**Last updated:** 2026-05-17 — second session-end after Phase 13 close. Pure session-end housekeeping with no work between bootstrap and close: STATE.md timestamp bump + last-commit pointer to `0e2e24b` (the prior session-end commit) + lag counter caught up #38 then reintroduces #39 (this session-end commit edits STATE then commits; HEAD diverges from STATE pointer once more). Phase 13 tag `phase-13-budget-followups-closed` still at `aae86dc` (the 13.6 commit). Workspace 1322 + 3 skipped from last test run (Phase 13 close). All four `pnpm` gates still green from that run.
 **Current phase:** arc-complete (ninth time — no Phase 14 planned)
 **Current step:** n/a (between phases)
-**Status:** Phase 13 closed cleanly. Both U033 (operator-set maxTurns silently shadowed by planner-emit) and U034 (Windows daemon-stop stale pidfile) are now Resolved. The Phase 12 deferred-smoke gap is closed end-to-end: the propagation path from UI to `directive.payload.budgets[axis]` is verified live (`maxTurnsScaffolder=10` persisted from the form into the directive), and U034's belt-and-suspenders cleanup is verified live (`reaped stale pidfile after stop` log line + pidfile absent on disk post-stop). The post-trip `[BUDGET]` askUser path is unit-test-covered (44 brain tests across Phase 12.6 + 13.3 + 13.6 — all green) but not live-exercised in this smoke because smoke-demo is small enough that the scaffolder completed within the 10-turn cap (no trip). A future tier could ship a multi-module smoke project to force the trip path live. No factoryd running at handoff (stopped at phase-close, U034 fix exercised live).
+**Status:** No-op session. Operator opened the session at arc-complete after the prior session-end's Phase 13 close, accepted the canonical `/session-end` path without a separate drift-fix commit (since the lag is cosmetic and a drift-fix at the head of a no-work session just bounces the count from #38 to #39 to #40 without benefit). Phase 13 results unchanged: U033 + U034 both Resolved; propagation path verified live; U034 cleanup verified live; `[BUDGET]` askUser trip path unit-test-covered (44 brain tests) but not live-exercised because smoke-demo's scaffolder completed under the 10-turn cap at phase-close. No factoryd running at handoff.
 
 ---
 
@@ -33,7 +33,7 @@
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `9b095f1` — `chore(phase-13)`: close phase 13, kick off arc-complete (ninth time). (Session-end commit will bump to lag #38 — this session-end edits STATE then commits, HEAD diverges from STATE pointer once more.)
+- **Last commit:** `0e2e24b` — `docs(state)`: session end after Phase 13 close. (This second session-end caught up lag #38; the resulting commit will bump to lag #39 — this session-end edits STATE then commits, HEAD diverges from STATE pointer once more.)
 - **Uncommitted changes:** none at session-end
 - **Last phase tag:** `phase-13-budget-followups-closed` (annotated at `aae86dc`)
 
@@ -70,7 +70,7 @@
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **38 occurrences** with this session-end (Phase 13 close commit `9b095f1` was caught up in STATE during the close itself; this session-end commit edits STATE then commits, so HEAD diverges from STATE one more time and itself becomes #38). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **39 occurrences** (this second session-end after Phase 13 close caught up #38 from the prior session-end commit `0e2e24b`, then this session-end commit reintroduces lag #39 by editing STATE then committing). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
@@ -90,7 +90,8 @@
 
 ## Recently completed (last 5 steps)
 
-- **Session-end after Phase 13 close** (this commit) — `docs(state)`: session end after Phase 13 close. STATE.md timestamp bump + last-commit pointer to `9b095f1` + lag counter (#38 reintroduced) + journal entry. No phase work; pure session-end housekeeping. — 2026-05-17
+- **Second session-end after Phase 13 close (no-op session)** (this commit) — `docs(state)`: session end (arc-complete, no work). STATE.md timestamp bump + last-commit pointer to `0e2e24b` + lag counter caught up #38 then reintroduces #39 + journal entry + next.md regen folds in. SessionStart hook flagged the expected commit-mismatch drift; operator accepted canonical `/session-end` path over a separate drift-fix commit (drift-fix in a no-work session just shifts the lag, doesn't eliminate it). No phase work. — 2026-05-17
+- **Session-end after Phase 13 close** — `docs(state)`: session end after Phase 13 close. STATE.md timestamp bump + last-commit pointer to `9b095f1` + lag counter (#38 reintroduced) + journal entry. No phase work; pure session-end housekeeping. — 2026-05-17 — `0e2e24b`
 - **Phase 13 close** — `chore(phase-13)`: close phase 13, kick off arc-complete (ninth time). Tagged `phase-13-budget-followups-closed` (annotated at `aae86dc` — the 13.6 commit, matching Phase 12's tag-at-last-work-commit pattern). 10 of 10 done-criteria green at close. Live browser smoke ran ($1.09 spend, status=complete) — verified Phase 13.5 propagation end-to-end (UI form → directive.payload.budgets.maxTurnsScaffolder=10) and U034 fix live (`reaped stale pidfile after stop` log line + pidfile absent post-stop). Live `[BUDGET]` askUser firing not demonstrated because smoke-demo is too small to trip a 10-turn scaffolder; covered by 44 brain unit tests across Phase 12.6 + 13.3 + 13.6 escalation paths. U033 + U034 both close. Workspace 1292 → 1322 + 3 skipped (+30 across Phase 13). — 2026-05-17 — `9b095f1`
 - **Step 13.6** — `feat(13.6)`: per-task USD cap axis + pre-launch escalation. Seventh axis `maxUsdPerTask` in BUDGET_DEFAULTS + budgetsSchema + resolveBudgets. `estimatedUsd` added to taskSchema (planner-emitted, optional, nonnegative). Planner prompt extended to instruct estimation when cap > 0. New `escalateMaxUsdPerTaskTrip` helper in budget-escalation.ts (pre-launch [BUDGET] askUser; binary accept/abort; reuses BUDGET_ESCALATION_MARKER so auto-answer policy applies uniformly). Pool pre-launch check synthesizes a failed TaskResult on abort, short-circuits worker launch. CLI `--max-usd-per-task` flag in budget-flags.ts (parsePositiveFloat). Web Build form's seventh accordion field. Auto-answer was already axis-agnostic at the marker level — 13.6 confirms by reusing the marker. +2 core schema + 4 brain escalation + 2 cli flag tests. — 2026-05-17 — `aae86dc`
 - **Step 13.5** — `feat(13.5)`: per-project budget defaults extend to all six axes. `projectBudgetDefaultsSchema` swapped to be `budgetsSchema` (single source of truth per ADR 0032 §3); `ProjectBudgetDefaults` type widens to `Budgets`. Backward compat preserved (pre-Phase-13 projects with `{maxUsd, maxSteps}` parse unchanged); semantic widens to accept `maxUsd: 0` / `maxSteps: 0` as the unlimited sentinel (matches BUDGET_DEFAULTS defaults). New `resolveDirectivePayloadBudgets({explicitBody, projectDefaults})` helper in wiki/project-metadata.ts merges per-axis (body wins, then project, returns undefined when both empty). Daemon POST `/api/v1/builds` body-resolution calls the new helper alongside resolveDirectiveLimits — same on-disk `metadata.budgetDefaults` key, two consumers (legacy ADR 0020 limits vs new ADR 0032 payload.budgets). Updated CLI budget test for the new 0=unlimited semantic. +12 wiki + 2 daemon integration tests. — 2026-05-17 — `ffdbd8f`
@@ -250,6 +251,8 @@ None — Phase 13 closed. Cleared at phase close.
 
 **Phase 13 (budget-followups) closed; upgrade arc complete (ninth time).** Phase 12 → Phase 13 sequence closed the operator-felt budget loop end-to-end: Phase 12 built the structural pieces (BUDGET_DEFAULTS, ADR 0032, escalation plumbing); Phase 12's deferred smoke surfaced the propagation gap (U033); Phase 13 fixed the propagation (13.3) + the Windows daemon-stop pidfile sloppy-shutdown (13.4) + extended per-project defaults to all axes (13.5) + shipped the per-task USD cap (13.6) + closed with a live browser smoke + U034-fix verification (13.7).
 
+**This session was a no-op `/session-end`** opened at arc-complete after the prior session's Phase 13 close. Operator accepted the canonical `/session-end` path over a separate drift-fix commit since the cosmetic structural lag bounces from #38 to #39 to #40 either way in a no-work session. Lag count now #39.
+
 **Live browser smoke at phase-close** (Playwright MCP, smoke-demo, $1.09 spend / $1.50 cap, status=complete). Verified:
 
 - Phase 13.5 propagation end-to-end via API: directive `01KRTWEPJ7KRJR20ABDTGAD87W` carries `payload.budgets.maxTurnsScaffolder=10` exactly as submitted from the UI form.
@@ -296,7 +299,7 @@ None — Phase 13 closed. Cleared at phase close.
 - **`factory config get / set <key>` CLI** — operator surface for `<dataDir>/config.json`.
 - **Override after auto-answer** — `factory questions answer --force <id>`. Pin via ADR if it ships.
 - **Inline-style audit on the 12 pages** — Tier 9-deferred.
-- **Structural `/session-end` lag-by-1 fix** — see the carry-forwards section above for current count (now #37 with this phase-close). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **Structural `/session-end` lag-by-1 fix** — see the carry-forwards section above for current count (now #39 after this second session-end). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 **Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav. **Tier 9 added** a new vocabulary on top: vermillion (`#ff4d1c`) as the singular signal color; Fraunces italic display + Bricolage Grotesque body + JetBrains Mono data; CSS custom-property tokens (`--bg / --surface / --ink / --hairline / --signal / --amber / --acid / --halt / --cool`) flipped by `prefers-color-scheme`; paper-grain SVG atmosphere via `body::before / body::after`; editorial masthead with brand mark `§` + numbered nav + monospaced status pip + pulse animation.
 
