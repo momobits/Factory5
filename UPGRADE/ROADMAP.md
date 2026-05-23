@@ -202,7 +202,7 @@ The `checkModules` regex in `packages/wiki/src/readiness.ts` fires on most build
 - [x] `agentsConfigSchema` + `resolveAgentCategory` + `DEFAULT_AGENT_CATEGORIES` in state
 - [x] `runWikiCritic` (brain, TDD)
 - [x] `runArchitect` modifications (priorCritique param + agent-category resolution; default flips to `planning`)
-- [ ] `runArchitectWithCritique` wrapper (brain, TDD)
+- [x] `runArchitectWithCritique` wrapper (brain, TDD)
 - [ ] loop integration + delete `wikiReadiness()` + delete old tests
 - [ ] Daemon schema acceptance + persistence + resume inheritance
 - [ ] CLI `--max-wiki-readiness-attempts` flag
