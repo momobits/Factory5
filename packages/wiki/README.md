@@ -47,11 +47,6 @@ All functions are async and operate on a project path (project root directory).
 - `writePlan(plan)` — validates via `planSchema`, writes `plan.json` + rendered `plan.md`
 - `readPlan(root)` → `Plan | undefined`
 
-**Readiness:**
-
-- `wikiReadiness(root)` → `{ ok, checks: [{ id, description, ok, detail? }] }`
-  - `overview-exists`, `modules-documented`, `testing-documented`, `minimum-content`
-
 ## Status
 
 Implemented in Phase 1. 18 unit tests.

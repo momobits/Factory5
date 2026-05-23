@@ -22,7 +22,6 @@ import {
   readWiki,
   rebuildFindingsTable,
   updateFindingStatus,
-  wikiReadiness,
   writePlan,
   writeWikiPage,
 } from './index.js';
@@ -466,36 +465,6 @@ describe('plan', () => {
 
   it('readPlan returns undefined when no plan written', async () => {
     expect(await readPlan(projectDir)).toBeUndefined();
-  });
-});
-
-describe('readiness', () => {
-  it('fails everything for an empty wiki', async () => {
-    const report = await wikiReadiness(projectDir);
-    expect(report.ok).toBe(false);
-    expect(report.checks.map((c) => c.id)).toContain('overview-exists');
-  });
-
-  it('passes when all required sections exist and content is substantial', async () => {
-    const body = 'x'.repeat(400);
-    await writeWikiPage(projectDir, 'overview.md', `# Overview\n\n${body}`);
-    await writeWikiPage(projectDir, 'modules/api.md', `# API\n\n${body}`);
-    await writeWikiPage(projectDir, 'testing.md', `# Testing\n\n${body}`);
-    const report = await wikiReadiness(projectDir);
-    expect(report.ok).toBe(true);
-  });
-
-  it('recognizes an inline `## Modules` section as module documentation', async () => {
-    const body = 'x'.repeat(400);
-    await writeWikiPage(
-      projectDir,
-      'overview.md',
-      `# Overview\n\n${body}\n\n## Modules\n\n- a\n- b`,
-    );
-    await writeWikiPage(projectDir, 'testing.md', `# Testing\n\n${body}`);
-    const report = await wikiReadiness(projectDir);
-    const modules = report.checks.find((c) => c.id === 'modules-documented');
-    expect(modules?.ok).toBe(true);
   });
 });
 

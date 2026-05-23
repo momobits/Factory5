@@ -39,6 +39,7 @@ const AXIS_FLAG: Record<BudgetAxis, string> = {
   maxTurnsBuilder: '--max-turns-builder',
   maxTurnsFixer: '--max-turns-fixer',
   maxUsdPerTask: '--max-usd-per-task',
+  maxWikiReadinessAttempts: '--max-wiki-readiness-attempts',
 };
 
 /** Per-axis CLI value type — `usd` permits fractional dollars; everything else is integer. */
@@ -50,6 +51,7 @@ const AXIS_KIND: Record<BudgetAxis, 'usd' | 'int'> = {
   maxTurnsBuilder: 'int',
   maxTurnsFixer: 'int',
   maxUsdPerTask: 'usd',
+  maxWikiReadinessAttempts: 'int',
 };
 
 function parsePositiveFloat(flag: string, raw: string): number {
@@ -131,6 +133,8 @@ export function collectBudgetFlags(options: BudgetOptions): CollectedBudgets {
   if (options.maxTurnsBuilder !== undefined) budgets.maxTurnsBuilder = options.maxTurnsBuilder;
   if (options.maxTurnsFixer !== undefined) budgets.maxTurnsFixer = options.maxTurnsFixer;
   if (options.maxUsdPerTask !== undefined) budgets.maxUsdPerTask = options.maxUsdPerTask;
+  if (options.maxWikiReadinessAttempts !== undefined)
+    budgets.maxWikiReadinessAttempts = options.maxWikiReadinessAttempts;
 
   return { limits, budgets };
 }

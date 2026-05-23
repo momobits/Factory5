@@ -17,13 +17,7 @@ import { createLogger } from '@factory5/logger';
 import type { ProviderRegistry } from '@factory5/providers';
 import type { Database } from '@factory5/state';
 import { resolveAgentCategory } from '@factory5/state';
-import {
-  projectPaths,
-  wikiReadiness,
-  writeWikiPage,
-  type ReadinessReport,
-  type WikiPage,
-} from '@factory5/wiki';
+import { projectPaths, writeWikiPage, type WikiPage } from '@factory5/wiki';
 import { simpleGit } from 'simple-git';
 import { z } from 'zod';
 
@@ -52,7 +46,6 @@ const architectJsonSchema = z.object({
 export interface ArchitectResult {
   projectPath: string;
   pages: WikiPage[];
-  readiness: ReadinessReport;
   rawResponse: string;
 }
 
@@ -289,29 +282,9 @@ export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectRes
     ...(opts.directiveId !== undefined ? { directiveId: opts.directiveId } : {}),
   });
 
-  const readiness = await wikiReadiness(opts.projectPath);
-  const failedChecks = readiness.checks.filter((c) => !c.ok).map((c) => c.id);
-  log.info(
-    { projectPath: opts.projectPath, readinessOk: readiness.ok, failedChecks },
-    'architect: readiness evaluated',
-  );
-  if (opts.directiveId !== undefined) {
-    emitLogLine(
-      opts.emit,
-      opts.directiveId,
-      readiness.ok ? 'info' : 'warn',
-      'brain.architect',
-      readiness.ok
-        ? 'wiki readiness: all checks passed'
-        : `wiki readiness: failed (${failedChecks.join(', ')}) — continuing per Phase 1 policy`,
-      { failed: failedChecks },
-    );
-  }
-
   return {
     projectPath: opts.projectPath,
     pages: writtenPages,
-    readiness,
     rawResponse: response.text,
   };
 }

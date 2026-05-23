@@ -13,8 +13,8 @@
  * `mode: 'serve'` (long-running claim loop) lands in Phase 3.
  */
 
-import type { AutonomyMode, Directive, DirectiveLimits, Plan } from '@factory5/core';
-import { newId } from '@factory5/core';
+import type { AutonomyMode, Budgets, Directive, DirectiveLimits, Plan } from '@factory5/core';
+import { newId, resolveBudgets } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import { assess, type AssessResult, type Runtime } from '@factory5/assessor';
 import type { DirectiveEventEmitter } from '@factory5/ipc';
@@ -27,9 +27,11 @@ import {
   runMigrations,
   type Database,
 } from '@factory5/state';
-import { appendBuildLog, isAdvisory, listFindings, readPlan, wikiReadiness } from '@factory5/wiki';
+import { appendBuildLog, isAdvisory, listFindings, readPlan, readWiki } from '@factory5/wiki';
 
 import { runArchitect, type ArchitectResult } from './architect.js';
+import { runArchitectWithCritique, WikiReadinessAbortError } from './architect-loop.js';
+import { runWikiCritic } from './critic.js';
 import { askUser, escalateBlocked, type AskUserResult } from './ask-user.js';
 import { BudgetExceededError, formatBlockedReason } from './budget.js';
 import { runPlanner } from './planner.js';
@@ -260,12 +262,16 @@ async function runInline(
       };
 
       // -------- ARCHITECT --------
-      // Skip when the wiki is already ready (resume path); otherwise run.
-      const existingReadiness = await wikiReadiness(projectPath);
+      // Skip when the wiki already has pages (resume path); otherwise run the
+      // architect→critic loop (ADR 0033 / Tier 14).
+      const existingPages = await readWiki(projectPath);
       let architect: ArchitectResult | undefined;
-      if (existingReadiness.ok) {
-        log.info({ projectPath }, 'architect: skipped — wiki already ready');
-        await appendBuildLog(projectPath, 'architect skipped (wiki already ready)');
+      if (existingPages.length > 0) {
+        log.info(
+          { projectPath, pageCount: existingPages.length },
+          'architect: skipped — wiki pages already on disk',
+        );
+        await appendBuildLog(projectPath, 'architect skipped (wiki already on disk; resume path)');
         emitLogLine(
           emit,
           directive.id,
@@ -274,24 +280,70 @@ async function runInline(
           'architect: skipped (wiki already on disk; resume path)',
         );
       } else {
-        architect = await runArchitect({
-          registry,
-          projectPath,
-          db,
-          directiveId: directive.id,
-          ...(limits !== undefined ? { limits } : {}),
-          ...(emit !== undefined ? { emit } : {}),
-        });
-        if (!architect.readiness.ok) {
-          const failed = architect.readiness.checks.filter((c) => !c.ok).map((c) => c.id);
-          log.warn(
-            { failed, projectPath },
-            'wiki not ready after architect pass — continuing anyway in Phase 1',
-          );
-          await appendBuildLog(
+        // Resolve attempt cap from directive payload budgets (ADR 0032 / Tier 14.3).
+        const directiveBudgets =
+          typeof directive.payload === 'object' && directive.payload !== null
+            ? ((directive.payload as Record<string, unknown>)['budgets'] as Budgets | undefined)
+            : undefined;
+        const resolvedBudgets = resolveBudgets(directiveBudgets);
+        const maxAttempts = resolvedBudgets.maxWikiReadinessAttempts;
+
+        // Build an adapter from the real askUser (AskUserOptions → AskUserResult)
+        // to the wrapper's convenience shape (prompt/options → string).
+        const askUserAdapter = async (opts: {
+          prompt: string;
+          options: readonly string[];
+          directiveId?: string;
+        }): Promise<string> => {
+          const res = await askUser({
+            db,
+            directiveId: directive.id,
+            question: opts.prompt,
+            options: [...opts.options],
+            ...(checkpointSignal !== undefined ? { signal: checkpointSignal } : {}),
+          });
+          // Treat timeout/abort the same as 'continue' (ADR 0030 default).
+          return res.answer ?? 'continue';
+        };
+
+        try {
+          const architectLoopResult = await runArchitectWithCritique({
+            runArchitect,
+            runWikiCritic,
+            askUser: askUserAdapter,
+            registry,
             projectPath,
-            `wiki readiness failed: ${failed.join(', ')} — continuing (Phase 1 policy)`,
-          );
+            directiveBody: renderDirectiveForTriage(directive),
+            maxAttempts,
+            db,
+            directiveId: directive.id,
+            ...(limits !== undefined
+              ? {
+                  limits: {
+                    ...(limits.maxUsd !== undefined ? { maxUsd: limits.maxUsd } : {}),
+                    ...(limits.maxSteps !== undefined ? { maxSteps: limits.maxSteps } : {}),
+                  },
+                }
+              : {}),
+            ...(emit !== undefined ? { emit } : {}),
+          });
+          architect = architectLoopResult.architectResult;
+        } catch (err) {
+          if (err instanceof WikiReadinessAbortError) {
+            await appendBuildLog(
+              projectPath,
+              `wiki-readiness aborted by operator: ${err.lastCritique.summary}`,
+            );
+            directivesQ.updateStatus(db, directive.id, 'blocked');
+            emitDirectiveCompleted(emit, directive.id, 'blocked', undefined);
+            return {
+              directive,
+              triage,
+              taskResults: [],
+              terminalStatus: 'blocked',
+            };
+          }
+          throw err;
         }
       }
 

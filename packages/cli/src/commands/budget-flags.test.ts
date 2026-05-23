@@ -17,7 +17,7 @@ function parseArgs(argv: readonly string[]): Record<string, unknown> {
 }
 
 describe('addBudgetFlags', () => {
-  it('registers all seven axes as long flags (Phase 13.6 adds maxUsdPerTask)', () => {
+  it('registers all eight axes as long flags (Phase 14.3 adds maxWikiReadinessAttempts)', () => {
     const program = new Command();
     const cmd = program.command('test');
     addBudgetFlags(cmd);
@@ -30,6 +30,7 @@ describe('addBudgetFlags', () => {
       '--max-turns-builder',
       '--max-turns-fixer',
       '--max-usd-per-task',
+      '--max-wiki-readiness-attempts',
     ]);
   });
 
@@ -104,6 +105,7 @@ describe('addBudgetFlags', () => {
     expect(opts['maxTurnsBuilder']).toBeUndefined();
     expect(opts['maxTurnsFixer']).toBeUndefined();
     expect(opts['maxUsdPerTask']).toBeUndefined();
+    expect(opts['maxWikiReadinessAttempts']).toBeUndefined();
   });
 });
 
@@ -119,7 +121,7 @@ describe('collectBudgetFlags', () => {
     });
   });
 
-  it('routes the five Tier-12+13 axes to budgets (ADR 0032 §6 payload path)', () => {
+  it('routes the six Tier-12+13+14 axes to budgets (ADR 0032 §6 payload path)', () => {
     expect(
       collectBudgetFlags({
         askUserDeadlineMs: 600_000,
@@ -127,6 +129,7 @@ describe('collectBudgetFlags', () => {
         maxTurnsBuilder: 100,
         maxTurnsFixer: 100,
         maxUsdPerTask: 1.5,
+        maxWikiReadinessAttempts: 5,
       }),
     ).toEqual({
       limits: {},
@@ -136,6 +139,7 @@ describe('collectBudgetFlags', () => {
         maxTurnsBuilder: 100,
         maxTurnsFixer: 100,
         maxUsdPerTask: 1.5,
+        maxWikiReadinessAttempts: 5,
       },
     });
   });

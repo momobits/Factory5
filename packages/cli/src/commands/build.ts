@@ -302,10 +302,7 @@ async function runInline(
     );
   }
   if (result.architect !== undefined) {
-    const failedChecks = result.architect.readiness.checks.filter((c) => !c.ok).map((c) => c.id);
-    stdout.write(
-      `architect: pages=${String(result.architect.pages.length)} readiness=${result.architect.readiness.ok ? 'ok' : `failed: ${failedChecks.join(',')}`}\n`,
-    );
+    stdout.write(`architect: pages=${String(result.architect.pages.length)}\n`);
   }
   if (result.plan !== undefined) {
     stdout.write(`plan:      ${String(result.plan.tasks.length)} tasks\n`);

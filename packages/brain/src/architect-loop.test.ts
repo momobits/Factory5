@@ -141,10 +141,10 @@ describe('runArchitectWithCritique', () => {
     const lastBeforeExtend = failing('blocking');
     const crit = vi
       .fn()
-      .mockResolvedValueOnce(failing('major'))   // attempt 1 (fails)
-      .mockResolvedValueOnce(failing('major'))   // attempt 2 (fails)
-      .mockResolvedValueOnce(lastBeforeExtend)   // attempt 3 (fails — exhausted)
-      .mockResolvedValueOnce(passing());         // attempt 4 (first extended — passes)
+      .mockResolvedValueOnce(failing('major')) // attempt 1 (fails)
+      .mockResolvedValueOnce(failing('major')) // attempt 2 (fails)
+      .mockResolvedValueOnce(lastBeforeExtend) // attempt 3 (fails — exhausted)
+      .mockResolvedValueOnce(passing()); // attempt 4 (first extended — passes)
     const askUser = vi.fn().mockResolvedValue('extend-3');
     await runArchitectWithCritique({
       runArchitect: arch,
@@ -238,8 +238,7 @@ describe('runArchitectWithCritique', () => {
     const emit = vi.fn();
     await runWithExhaustionAnswer('continue', emit);
     const msgs = emit.mock.calls.map(
-      (c) =>
-        (c[0] as { msg?: string; attrs?: { lastSummary?: string } }) ?? {},
+      (c) => (c[0] as { msg?: string; attrs?: { lastSummary?: string } }) ?? {},
     );
     const exhaustedMsg = msgs.find((m) => m.msg?.includes('exhausted'));
     expect(exhaustedMsg).toBeDefined();
