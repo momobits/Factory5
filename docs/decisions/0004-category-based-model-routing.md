@@ -86,3 +86,15 @@ reasoning = ["claude-cli/opus", "anthropic-api/opus", "openai/gpt-5"]
 - **Single model for everything** (always Opus, etc.). Rejected: wastes budget on triage tasks; defeats the purpose of supporting multiple providers.
 - **Per-agent provider config** (no category abstraction; each agent names its provider in config). Rejected: more verbose, doesn't share across agents that want the same tier, harder to express fallback chains.
 - **Capability-based routing** (agent says "I need vision and 200k context", system picks). Considered: more flexible but more complex to specify and reason about. Categories give 90% of the benefit with 20% of the complexity. Capability routing could be added on top later.
+
+## Amendment — 2026-05-23 (Phase 14)
+
+Adds a per-agent category override layer on top of the existing category→model routing. New `[agents.*]` table in `<dataDir>/config.json` (managed by `@factory5/state`'s `loadConfig`) lets operators flip an agent's resolved category without remapping the global category→model bindings.
+
+Resolution order (additive layer above existing routing):
+
+1. `config.agents?.[role]` if present
+2. else `DEFAULT_AGENT_CATEGORIES[role]` from `@factory5/state`
+3. (existing routing) category → provider+model via `[categories.*]`
+
+`DEFAULT_AGENT_CATEGORIES.architect = 'planning'` (Sonnet) and `DEFAULT_AGENT_CATEGORIES.critic = 'reasoning'` (Opus) ship in Tier 14. Other agents keep their hardcoded built-in defaults; `agentsConfigSchema` is `.strict()` so extending to additional agents is a deliberate future schema bump.

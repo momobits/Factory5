@@ -180,3 +180,7 @@ This is a clarification of stated intent, not a paradigm change — supersedure-
 - `isolates ceilings per-axis` — scaffolder task with `maxTurnsBuilder=10` set only → planner emit wins (no cross-axis bleed).
 
 **Carried forward.** A belt-and-suspenders enhancement is open: feeding `directive.payload.budgets` into the planner prompt at `packages/brain/src/planner.ts:247-249` so the planner can self-clamp before emitting. Today the `Math.min()` clamp at consumption time is sufficient; deferred until a real-world case surfaces a too-eager planner.
+
+## Amendment — 2026-05-23 (Phase 14)
+
+§1's closed-set axis table extends to eight axes with the addition of `maxWikiReadinessAttempts` (default 3) — the architect+critic retry cap from ADR 0033's wiki-readiness critique loop. Zero sentinel = unlimited, matching `maxUsd: 0` / `maxSteps: 0`. §3 `BUDGET_DEFAULTS` source-of-truth contract unchanged; the table just grows. No supersedure per CLAUDE.md "do not edit accepted ADRs" — this is a contract-preserving extension, not a paradigm change (precedent: Phase 13.3's amendment for U033 clarification).

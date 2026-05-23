@@ -197,7 +197,7 @@ Plan: [`plans/tier-13-budget-followups.md`](plans/tier-13-budget-followups.md)
 The `checkModules` regex in `packages/wiki/src/readiness.ts` fires on most builds because the architect (Opus) produces `# Modules` H1, `## Components`, scattered headings, or other semantically-correct shapes where the regex expects a literal `\n## Modules` H2. Phase 11 retro called this "Opus non-determinism, not a load-bearing gate bug" and parked it. Operator-felt problem: the warn fires on most projects, training operators to ignore it; when the warn IS load-bearing (genuinely thin wiki) the noise masks the signal. Tier 14 replaces the regex with an LLM judge per `docs/superpowers/specs/2026-05-18-tier-14-wiki-readiness-llm-judge-design.md`. Estimated **2-3 sessions**.
 
 - [x] U035 opened
-- [ ] ADR 0033 (new) + ADR 0032/0004/0030 amendment blocks
+- [x] ADR 0033 (new) + ADR 0032/0004/0030 amendment blocks
 - [ ] `wikiCritiqueSchema` + `AGENT_ROLES` += `'critic'` + `BUDGET_DEFAULTS` 8th axis (`maxWikiReadinessAttempts`)
 - [ ] `agentsConfigSchema` + `resolveAgentCategory` + `DEFAULT_AGENT_CATEGORIES` in state
 - [ ] `runWikiCritic` (brain, TDD)
