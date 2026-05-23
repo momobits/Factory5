@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-24 — Phase 15 scaffold commit. Tier 15 budget-ux-overhaul scaffolded: U036/U037/U038 opened in ISSUES.md; ROADMAP Tier 15 section added; phase-plan.md Phase 15 row + summary; `.control/phases/phase-15-budget-ux-overhaul/` created with README.md + steps.md; STATE cursor flipped to Phase 15 active at 15.1. No code changed. Workspace 1388 passing + 3 skipped (unchanged from Phase 14 close). Daemon stopped at handoff.
+**Last updated:** 2026-05-24 — Drift-fix #47: flip steps.md 15.1 checkbox to [x] (scaffold commit IS the completion of step 15.1 per CLAUDE.md) + bump Last commit pointer from `0e76df1` to `30fc07f`. No phase work; pure housekeeping. Daemon stopped at handoff.
 **Current phase:** Phase 15 (budget-ux-overhaul) active at 15.1
 **Current step:** 15.1
 **Status:** Phase 15 scaffolded. Tier 14 delivered end-to-end (arc-complete tenth time). Tier 15 opened in response to the 2026-05-23 pythonetl incident where `parseBudgetEscalationAnswer` rejected a natural-language reply, cascading 12 task failures (U036). Root cause: the structured-reply paradigm itself, not the parser. Tier 15 replaces `[BUDGET]` askUser with a project-level budget cockpit (pool model for `maxTurns*` axes + live re-resolve from `project.json` + optional auto-increase, ADR 0034). No factoryd running at handoff.
@@ -31,7 +31,7 @@ Read `docs/superpowers/plans/2026-05-24-tier-15-budget-ux-overhaul.md` Task 2 fo
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `0e76df1` — `docs(state)`: bump last-commit pointer to `7998f45` (drift-fix). (This session-end catches up the drift-fix-introduced lag #45; the resulting session-end commit will bump to lag #46 — same structural pattern as every other session-end.)
+- **Last commit:** `30fc07f` — `fix(15.1)`: flip steps.md checkbox + catch STATE pointer up (drift-fix #47). Bumps Last commit lag from #46 to #47 — same structural lag-by-1 pattern; this commit itself becomes the new lag.
 - **Uncommitted changes:** pre-existing dirty paths only (`.agents/`, `.claude/skills/`, `AGENTS.md`, `GEMINI.md`, `docs/superpowers/{plans,specs}/*` prettier reformatting, `pnpm-lock.yaml` 3-line drift) — accepted out-of-scope per operator's standing directive
 - **Last phase tag:** `phase-14-wiki-readiness-judge-closed` (annotated at `431c7da`)
 
@@ -68,7 +68,7 @@ Read `docs/superpowers/plans/2026-05-24-tier-15-budget-ux-overhaul.md` Task 2 fo
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **46 occurrences** (today added a drift-fix `0e76df1` and a session-end commit, each carrying the structural lag). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit. The Tier-14-as-Tier-15-micro-tier idea raised at the prior session-end stays a viable candidate.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **47 occurrences** (drift-fix #47 added at `30fc07f`; itself carries the structural lag). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit. The Tier-14-as-Tier-15-micro-tier idea raised at the prior session-end stays a viable candidate.
 
 ---
 
@@ -89,6 +89,7 @@ Read `docs/superpowers/plans/2026-05-24-tier-15-budget-ux-overhaul.md` Task 2 fo
 
 ## Recently completed (last 5 steps)
 
+- **Drift-fix #47** — `fix(15.1)`: flip steps.md checkbox + catch STATE pointer up (drift-fix #47). Flipped steps.md line 1 from `- [ ]` to `- [x] 15.1 Scaffold tier (committed at 30fc07f)` per CLAUDE.md "same commit that closes a sub-step" rule. Updated Last commit pointer from `0e76df1` → `30fc07f`. Lag counter bumps from #46 to #47; same structural pattern. No production code changed. — 2026-05-24 — `30fc07f`
 - **Phase 15 scaffold** — `chore(phase-15)`: scaffold tier 15 budget UX overhaul. U036/U037/U038 opened in `UPGRADE/ISSUES.md`; ROADMAP Tier 15 section + intro "Fourteen → Fifteen tiers"; phase-plan.md Phase 15 row + summary + ordering-paragraph sentence; `.control/phases/phase-15-budget-ux-overhaul/{README.md,steps.md}` created; STATE.md cursor flipped arc-complete → Phase 15 active at 15.1. No production code touched. — 2026-05-24
 - **Session-end after drift-fix `0e76df1`** (prior commit) — `docs(state)`: session end after drift-fix. STATE.md timestamp bump + last-commit pointer to `0e76df1` + lag counter (#46 reintroduced) + journal entry + next.md regen folds in. No phase work; pure session-start drift-fix + session-end housekeeping. — 2026-05-23
 - **Drift-fix** — `docs(state)`: bump last-commit pointer to `7998f45` (drift-fix). Catches STATE.md up to HEAD after the prior session's session-end lag-by-1 (#44). Pure session-start reconciliation; no phase work. Folds in the SessionStart hook's `next.md` timestamp regen. — 2026-05-23 — `0e76df1`
