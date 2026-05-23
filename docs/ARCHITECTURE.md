@@ -2,7 +2,7 @@
 
 Factory 5 is a multi-channel autonomous software builder. It accepts requirements via CLI, Discord, Telegram, or web UI; designs, implements, tests, and verifies projects through a verification-first build loop; and runs against any of four supported language runtimes (Python, Node, Go, Rust). The operator's Claude subscription is the primary model provider, with category-based routing and provider fallback.
 
-This document is the canonical system reference. Per-decision rationale lives in [`decisions/`](decisions) (33 ADRs). Data shapes live in [`CONTRACTS.md`](CONTRACTS.md). For the operator-facing view of how to drive factory5 — the four canonical loops, when to use which surface, how to author a `CLAUDE.md` spec — see [`WORKFLOWS.md`](WORKFLOWS.md).
+This document is the canonical system reference. Per-decision rationale lives in [`decisions/`](decisions) (34 ADRs). Data shapes live in [`CONTRACTS.md`](CONTRACTS.md). For the operator-facing view of how to drive factory5 — the four canonical loops, when to use which surface, how to author a `CLAUDE.md` spec — see [`WORKFLOWS.md`](WORKFLOWS.md).
 
 ---
 
@@ -204,4 +204,4 @@ Three-tier merge (`resolveDirectiveLimits` in `@factory5/wiki`): per-flag → pe
 | [`SKILLS.md`](SKILLS.md)             | Skill catalog — methodology files injected into agent prompts                                                                   |
 | [`AGENTS.md`](AGENTS.md)             | Agent role catalog — `triage`, `architect`, `planner`, `builder`, `reviewer`, `fixer`, `investigator`, `verifier`, `scaffolder` |
 | [`ONBOARDING.md`](ONBOARDING.md)     | Clone-to-first-build walkthrough                                                                                                |
-| [`decisions/`](decisions)            | 33 ADRs + INDEX                                                                                                                 |
+| [`decisions/`](decisions)            | 34 ADRs + INDEX                                                                                                                 |

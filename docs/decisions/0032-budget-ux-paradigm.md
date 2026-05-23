@@ -1,6 +1,6 @@
 # 0032 — Budget UX paradigm: operator-facing vs internal-pacing, default-publication, escalation, persistence
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR 0034 (2026-05-24)
 - **Date:** 2026-05-17
 - **Builds on:** [ADR 0020](0020-pre-call-budget-enforcement.md) — pinned the pre-call `BudgetExceededError` shape for `maxUsd` / `maxSteps`. [ADR 0027](0027-web-ui-mutation-surface.md) §4 — pinned the four-tier resolution order for per-project budget defaults (instance config → project metadata → directive payload → CLI override). [ADR 0030](0030-pending-question-auto-answer.md) — pinned the `askUser` deadline-driven LLM auto-answer dispatcher this ADR extends with a typed-prompt path.
 

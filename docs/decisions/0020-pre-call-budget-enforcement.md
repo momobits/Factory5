@@ -358,3 +358,7 @@ Tests:
 `CompleteArchitecture.md` §12 line 454 ("configurable `max_usd` or
 `max_steps`") gets an inline pointer to this ADR in the same commit
 that lands 7a.4.
+
+## Amendment — 2026-05-24 (Tier 15)
+
+Pool semantics across `maxUsd`, `maxSteps`, `maxTurnsScaffolder`, `maxTurnsBuilder`, `maxTurnsFixer` are now unified per ADR 0034. ADR 0020's `maxUsd` / `maxSteps` already pool directive-wide; the three `maxTurns*` axes were per-task pre-Tier-15. ADR 0034 is the canonical reference for the pool model going forward.

@@ -134,3 +134,7 @@ The auto-answer is bounded by the parent directive's existing budget. If the dir
 ## Amendment — 2026-05-23 (Phase 14)
 
 The auto-answer dispatcher's marker-recognition path (Phase 12.6) extends to recognize `[CRITIC]` alongside `[BUDGET]`. When a pending question's prompt begins with the `[CRITIC]` marker, the dispatcher applies a deterministic answer: `continue` (the wiki-readiness-exhausted default). No LLM call required — matches the `[BUDGET]` deterministic-bump-then-abort precedent. `answered_by = 'agent'` per the existing enum (rendered as "agent (auto)" in the Web UI).
+
+## Amendment — 2026-05-24 (Tier 15)
+
+The `[BUDGET]` marker branch added in Tier 12 (ADR 0032) and extended in the prior Tier 14 amendment block is removed. Per ADR 0034 (Budget Pool Paradigm), the `[BUDGET]` askUser is no longer created — pool exhaustion now parks the directive with a structured `blockedReason` and the operator unblocks via the project page Live tab. The auto-answer dispatcher now handles only the `[CRITIC]` marker (Tier 14) and generic LLM dispatch. `pickBudgetEscalationAnswer` helper deleted along with `packages/brain/src/budget-escalation.ts`. No supersedure — this is the consequence of ADR 0034's `[BUDGET]` deletion, mechanically removing a dependency.

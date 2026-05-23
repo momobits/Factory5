@@ -43,8 +43,9 @@ Decisions are append-only. To overturn a decision, write a new ADR with `Superse
 | [0029](0029-directive-stream-protocol.md)                | Directive-stream protocol: SSE for live build observation, six event types, brain-side optional-callback emission                   | Accepted           | 2026-05-05 |
 | [0030](0030-pending-question-auto-answer.md)             | Pending-question auto-answer: deadline-driven LLM dispatch, structured `answered_by` provenance, daemon-wide config                 | Accepted           | 2026-05-08 |
 | [0031](0031-log-forwarder-design.md)                     | Log-forwarder design: manual `emitLogLine` sites at brain stage breakpoints; pino-transport-tap deferred to Tier 11+                | Accepted           | 2026-05-16 |
-| [0032](0032-budget-ux-paradigm.md)                       | Budget UX paradigm: operator-facing vs internal-pacing budgets; default-publication; escalation rule; persistence                   | Accepted           | 2026-05-17 |
+| [0032](0032-budget-ux-paradigm.md)                       | Budget UX paradigm: operator-facing vs internal-pacing budgets; default-publication; escalation rule; persistence                   | Superseded by 0034 | 2026-05-17 |
 | [0033](0033-wiki-readiness-critique-loop.md)             | Wiki-readiness critique loop: LLM judge replaces regex, architect–critic retry, exhaustion escalation, per-agent category overrides | Accepted           | 2026-05-23 |
+| [0034](0034-budget-pool-paradigm.md)                     | Budget Pool Paradigm: directive-wide pools for `maxTurns*` axes, live re-resolve from `project.json`, auto-increase toggle          | Accepted           | 2026-05-24 |
 
 ## Adding a new ADR
 

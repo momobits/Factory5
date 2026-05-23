@@ -1,7 +1,7 @@
 # Phase 15 steps
 
 - [x] 15.1 Scaffold tier (committed at 30fc07f)
-- [ ] 15.2 ADR 0034 (new) + ADR 0032 Status update + ADR 0030 amendment + ADR 0020 amendment
+- [x] 15.2 ADR 0034 (new) + ADR 0032 Status update + ADR 0030 amendment + ADR 0020 amendment
 - [ ] 15.3 Core: project-level config scalars (`autoIncreaseBudgets`, `autoIncreaseCeilingMultiplier`)
 - [ ] 15.4 State (wiki): project-metadata reads/writes for new scalars; delete `resolveDirectivePayloadBudgets`
 - [ ] 15.5 Brain: `computePoolUsage` helper in `pool-usage.ts`
