@@ -2,6 +2,16 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-23 — Session-end after Phase 14 close
+
+- Pure session-end housekeeping after the `/phase-close` commit (`bce66d9`): STATE.md timestamp bump, last-commit pointer to `bce66d9`, lag counter (#44 reintroduced), this journal entry, next.md regen folded in.
+- No new code, ADRs, or tests this commit.
+- Tag `phase-14-wiki-readiness-judge-closed` still at `431c7da` (last substantive work commit).
+- Pre-existing dirty paths (`.agents/`, `.claude/skills/`, `AGENTS.md`, `GEMINI.md`, `docs/superpowers/{plans,specs}/*` prettier reformatting, `pnpm-lock.yaml`) explicitly accepted out-of-scope by the operator's standing directive — not staged.
+- No factoryd running at handoff.
+- This was a single very long session that scaffolded Tier 14, executed all 12 plan tasks via subagent-driven-development (60+ subagent dispatches), ran the live smoke, closed the phase, and now ends. Intra-tier session boundaries that would normally have been separate session-ends were inlined here, so this single session-end commit covers what would have been ~4-5 historically.
+- Next session: operator decides — `/session-end` if more no-op time accumulates, or pick a fresh operator-felt issue from the carry-forward list in STATE.md "Next action" (mid-task budget escalation, planner-critic, build-critic, `factory config get/set` CLI, U005 chat REPL UX, structural `/session-end` lag fix, etc.).
+
 ## 2026-05-23 — Phase 14 closed (Wiki-readiness LLM judge) — arc-complete (tenth time)
 
 - **Tier 14 shipped end-to-end via subagent-driven-development.** 25 commits across 12 plan tasks (each task = implementer + spec reviewer + code-quality reviewer + fix loops as needed). Total ~60 subagent dispatches across the session. Tag `phase-14-wiki-readiness-judge-closed` placed at `431c7da` (last substantive work commit per Phase 12/13 tag-at-last-work pattern).

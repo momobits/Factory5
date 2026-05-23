@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-23T16:56:28Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-23T17:07:27Z by
 > `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
@@ -26,57 +26,57 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Notes for next session
 
-**Phase 13 (budget-followups) closed; upgrade arc complete (ninth time).** Phase 12 → Phase 13 sequence closed the operator-felt budget loop end-to-end: Phase 12 built the structural pieces (BUDGET_DEFAULTS, ADR 0032, escalation plumbing); Phase 12's deferred smoke surfaced the propagation gap (U033); Phase 13 fixed the propagation (13.3) + the Windows daemon-stop pidfile sloppy-shutdown (13.4) + extended per-project defaults to all axes (13.5) + shipped the per-task USD cap (13.6) + closed with a live browser smoke + U034-fix verification (13.7).
+**Phase 14 (wiki-readiness-judge) closed; upgrade arc complete (tenth time).** Replaced the regex `wikiReadiness` gate with an LLM critic loop per ADR 0033. Architect default flipped Opus → Sonnet; critic defaults Opus; both overridable via new `[agents.*]` config table. 8th budget axis `maxWikiReadinessAttempts` (default 3) caps architect+critic retry cycles; on exhaustion the brain files an askUser with `[continue/abort/extend-N]` and the auto-answer dispatcher recognizes the `[CRITIC]` marker for deterministic `continue`.
 
-**This was the second consecutive no-op `/session-end`** opened at arc-complete after the prior no-op. Operator accepted the canonical `/session-end` path again over a separate drift-fix commit — same rationale as the prior no-op (the cosmetic structural lag bounces by one either way). Lag count now #40. Three consecutive no-op session-ends now in the log; if a fourth no-op comes, consider whether the structural fix is worth bundling as a Tier 14 micro-tier or whether opening a bigger tier on a fresh issue is the better path.
+**Live smoke verified end-to-end** (Playwright MCP, directive `01KSAVBNVNTARM6EPFPPJFQZKT`, project tier-14-smoke, 2026-05-23). Activity panel narrated the full flow: `brain.architect-loop: critic: evaluating wiki (attempt 1/3)` → `brain.architect: calling claude-sonnet-4-6` (Sonnet flip live) → `architect: wrote 3 wiki pages` → `brain.critic: calling claude-opus-4-7 (category reasoning)` → `critic: passed — <full Opus verdict>` → planner runs normally. Wiki-phase spend $0.282 (architect $0.110 + critic $0.172). Critic passed first try — retry path NOT live-exercised (covered by 42 unit tests across critic/architect-loop/auto-answer modules). Persistence verified via API GET: `directive.payload.budgets.maxWikiReadinessAttempts: 3` round-tripped.
 
-**Live browser smoke at phase-close** (Playwright MCP, smoke-demo, $1.09 spend / $1.50 cap, status=complete). Verified:
+**Two pre-existing bugs incidentally caught and fixed during Tier 14:**
 
-- Phase 13.5 propagation end-to-end via API: directive `01KRTWEPJ7KRJR20ABDTGAD87W` carries `payload.budgets.maxTurnsScaffolder=10` exactly as submitted from the UI form.
-- Phase 13.6 UI: seventh-axis "Max USD — per task" accordion field renders with 0-default chip + Phase-13.6 explainer; accordion summary text reads "seven axes · all optional · ADR 0032".
-- U034 fix exercised live: post-stop daemon log line `daemon.pidfile path=...factoryd.pid pid=46452 msg="reaped stale pidfile after stop"` confirmed cleanup ran; pidfile absent on disk at `.factory/factoryd.pid` and `$LOCALAPPDATA\factory5\factoryd.pid` post-stop.
-- End-to-end build completes with operator-set budget present (no regression introduced).
-
-**Live `[BUDGET]` askUser firing NOT demonstrated** because smoke-demo's scaffolder completed within the 10-turn cap (no trip). The trip path itself is unit-test-covered (44 brain tests across Phase 12.6 + 13.3 + 13.6 escalation paths). A future smoke harness should include a multi-module project (or a `maxTurnsScaffolder=1` override paired with a scaffolder that must do at least one tool call) to force the trip path live.
+1. Phase 13.6's `maxUsdPerTask` was silently dropped by a hardcoded 6-axis list in `packages/wiki/src/project-metadata.ts::resolveDirectivePayloadBudgets`. Fixed in Task 14.9 by replacing the hardcoded list with `BUDGET_AXES` iteration. Regression tests added.
+2. ADR 0030's promised `[CRITIC]` marker handler was written in the amendment block but never implemented in `auto-answer.ts`. Caught by the final code reviewer; fix at `431c7da`.
 
 **Recommended next options for the next session:**
 
-1. **`/session-end`** — close out today; banks Phase 13 as a clean arc close.
-2. **Author a new tier** if a fresh operator-felt issue surfaces. Available carry-forwards: mid-task escalation, budget audit dashboard, daemon `POST /shutdown` IPC route (U034 candidate 2), planner-honors-budgets belt-and-suspenders (U033 candidate 2), U005 chat REPL UX (5x deferred).
-3. **Run a follow-up live smoke** to force the `[BUDGET]` askUser path on a project larger than smoke-demo. Optional.
+1. **`/session-end`** — bank the day; arc-complete state is the natural resting point.
+2. **Author a new tier** if a fresh operator-felt issue surfaces. Available carry-forwards from Tier 14 §9 (Out of scope): generic critic loops for other stages (planner critic, build critic — the `critic` agent role was made generic for this); diff-style architect output on retry; per-directive model category overrides; critic prompt context expansion; `maxWikiJudgeUsd` dollar cap; mid-task budget escalation; budget audit dashboard. Long-standing carry-forwards below.
+3. **Run a follow-up live smoke** exercising the retry/exhaustion paths (today's smoke had the critic pass first try). An `--max-wiki-readiness-attempts 1` build against a deliberately bad spec would force the askUser exhaustion path live, demonstrating the `[CRITIC]` marker + auto-answer handler in production.
 
-**Daemon state at handoff:** stopped (post-phase-close-smoke teardown). Restart with `factory daemon start` if next session needs it.
+**Daemon state at handoff:** stopped (post-smoke teardown). Restart with `pnpm factory daemon start` if next session needs it.
 
-**Phase 13 done-criteria status (10 of 10 green at close):**
+**Phase 14 done-criteria status (11 of 11 green at close):**
 
-- [x] All four `pnpm` gates green (workspace 1322 + 3 skipped)
-- [x] ADR 0032 amendment lands (13.3 at `46198b4`)
-- [x] `resolveTaskMaxTurns` returns `min(planner_emit, operator_ceiling)`; docstring updated; 6 new tests (13.3)
-- [x] `factory daemon stop` on Windows leaves no stale pidfile; cross-platform unit test + LIVE verification (13.4 at `31afcb9`)
-- [x] `<project>/.factory/project.json` `metadata.budgetDefaults` accepts all seven axes; three-tier resolution preserved (13.5 at `ffdbd8f`)
-- [x] `BUDGET_DEFAULTS` gains `maxUsdPerTask`; pool pre-launch check; CLI flag + Web accordion (13.6 at `aae86dc`)
-- [x] Auto-answer's `[BUDGET]` recognition is axis-agnostic at the marker level (was already; 13.6 confirms by reusing marker)
-- [x] Browser smoke — propagation verified end-to-end ($1.09 spend, status=complete); live `[BUDGET]` firing covered by unit tests (see Notes above)
-- [x] U033 closes — `46198b4`
-- [x] U034 closes — `31afcb9` + LIVE-verified at phase-close
+- [x] All four `pnpm` gates green (workspace 1388 + 3 skipped; +66 from Phase 13's 1322)
+- [x] ADR 0033 lands (14.2 at `50d38a8`); ADR 0032/0004/0030 amendment blocks appended
+- [x] `wikiReadiness()` and its 4 helpers deleted (14.8 at `02adf0c`); no remaining importers
+- [x] `runWikiCritic` (14.5) + `runArchitectWithCritique` (14.7) + `runArchitect priorCritique` (14.6) all tested
+- [x] `BUDGET_DEFAULTS` has 8 axes; `maxWikiReadinessAttempts` flows through CLI + Web UI + per-project + payload + resume
+- [x] `[agents.*]` config table parses; `resolveAgentCategory` defaults correctly (architect→planning, critic→reasoning)
+- [x] `AGENT_ROLES` has 10 entries including `'critic'`
+- [x] Live browser smoke verified at `01KSAVBNVNTARM6EPFPPJFQZKT` (see Notes above)
+- [x] Auto-answer dispatcher recognizes `[CRITIC]` marker; defaults to `continue`
+- [x] Workspace test count ≥ 1340 passing (actual: 1388)
+- [x] U035 closes (`02adf0c`)
 
-**Future tiers — Phase 12 Deferred section carry-forwards:**
+**Future tiers — Phase 14 Deferred section carry-forwards:**
 
-- **Per-task USD cap** — `maxUsdPerTask` axis; same escalation pattern. Defer-until-incident.
-- **Mid-task escalation** — proactive warning before the worker actually trips. Bigger surface; defer until the post-failure escalation proves out in real use.
-- **Per-project default overrides for the new budget axes** — extend `<project>/.factory/project.json` `metadata.budgetDefaults` to cover maxTurns + askUserDeadlineMs. Small; bundle with a future build-form-related tier.
-- **Budget audit dashboard** — multi-build telemetry view of "you've burned $X across the last N directives; here's where it went."
+- **Generic critic loops for other stages** — planner critic, build critic. The `critic` agent role is generic for future-proofing.
+- **Diff-style architect output on retry** — architect rewrites full wiki on retry; optimize if cost becomes a problem.
+- **Per-directive model category overrides** — `[agents.*]` lives in daemon-wide config; per-build model switching deferred.
+- **Critic prompt context expansion** — task_log, findings, prior similar projects. Expand when quality data shows the lean prompt underperforms.
+- **Cost-axis enforcement** (`maxWikiJudgeUsd`) — count-only for first ship; add a dedicated dollar cap later if needed.
+- **Mid-task budget escalation** — carried forward from Phase 13; bigger surface still.
+- **Budget audit dashboard** — needs telemetry foundation first.
 
-**Previous arc-closes (for context):** Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 closes the eighth upgrade arc. The carry-forward items below (U005, `/session-end` lag-by-1, etc.) all stay open — they're not load-bearing for any active phase but operators may opt to bundle one if a future tier surfaces.
+**Long-standing carry-forwards** (bundle opportunistically):
 
-**Long-standing carry-forwards** (none load-bearing for Tier 12; bundle opportunistically):
-
-- **U005** — `factory chat` REPL cancel UX path (a+). Five-times-deferred (Phase 2 → 4 → 8 → 9 → 10 → 11). Promote when false-timeout pain surfaces in real use.
+- **U005** — `factory chat` REPL cancel UX path (a+). Five-times-deferred. Promote when false-timeout pain surfaces in real use.
 - **Per-project `askUserDeadlineMs` override** — CLAUDE.md frontmatter or `<project>/.factory/project.json` `metadata`. Non-breaking atop Tier 8's daemon-wide config.
 - **`factory config get / set <key>` CLI** — operator surface for `<dataDir>/config.json`.
 - **Override after auto-answer** — `factory questions answer --force <id>`. Pin via ADR if it ships.
 - **Inline-style audit on the 12 pages** — Tier 9-deferred.
-- **Structural `/session-end` lag-by-1 fix** — see the carry-forwards section above for current count (now #39 after this second session-end). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **Structural `/session-end` lag-by-1 fix** — now at #44 occurrences after Tier 14's commit-heavy session. Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit. The Tier-14-as-Tier-15-micro-tier framing from prior session-ends is more attractive now that Tier 14 alone burned 4 lag increments.
+- **`pnpm-lock.yaml` 3-line drift** — uncommitted on disk; probably a transitive resolution change from one of the workspace dep updates during Tier 14. Worth a `pnpm install` audit at next session.
+- **`docs/superpowers/{plans,specs}` prettier reformatting** — uncommitted on disk from format:check runs. Either commit the reformat or add the paths to `.prettierignore`.
 
 **Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav. **Tier 9 added** a new vocabulary on top: vermillion (`#ff4d1c`) as the singular signal color; Fraunces italic display + Bricolage Grotesque body + JetBrains Mono data; CSS custom-property tokens (`--bg / --surface / --ink / --hairline / --signal / --amber / --acid / --halt / --cool`) flipped by `prefers-color-scheme`; paper-grain SVG atmosphere via `body::before / body::after`; editorial masthead with brand mark `§` + numbered nav + monospaced status pip + pulse animation.
 
