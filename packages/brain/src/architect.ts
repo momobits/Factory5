@@ -101,7 +101,7 @@ async function readClaudeMd(projectPath: string): Promise<string> {
 }
 
 /**
- * Run the architect: ask the reasoning model to produce a wiki plan,
+ * Run the architect: ask the configured model to produce a wiki plan,
  * write all pages, then evaluate readiness. Readiness is returned for the
  * caller to decide whether to iterate.
  */

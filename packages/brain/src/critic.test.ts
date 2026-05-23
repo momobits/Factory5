@@ -10,6 +10,7 @@ import { openDatabase, runMigrations, type Database } from '@factory5/state';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { runWikiCritic } from './critic.js';
+import { makeFakeRegistry } from './test-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Logger init — suppresses noise in test output
@@ -40,59 +41,6 @@ const FAILING_JSON = JSON.stringify({
   findings: [{ aspect: 'modules', gap: 'no relationships', suggestion: 'add section' }],
   summary: 'modules missing',
 });
-
-interface FakeRegistryOpts {
-  /** Text the fake provider returns as `response.text`. */
-  response: string;
-  /** If set, the resolved category is appended here on each `resolve()` call. */
-  captureCategoryTo?: string[];
-  /** If set, the full `ProviderRequest` is appended here on each `call()`. */
-  captureTo?: unknown[];
-  /** If set, `{ userPrompt }` is appended here on each `call()`. */
-  capturePromptTo?: { userPrompt: string }[];
-}
-
-/**
- * Build a minimal fake `ProviderRegistry` whose single provider returns a
- * fixed response string. All shapes match the real `ProviderRegistry` /
- * `CategoryResolution` / `ProviderResponse` contracts.
- */
-function makeFakeRegistry(opts: FakeRegistryOpts) {
-  return {
-    resolve: async (category: string) => {
-      opts.captureCategoryTo?.push(category);
-      return {
-        provider: {
-          id: 'fake',
-          call: async (req: {
-            systemPrompt: string;
-            messages: { role: string; content: string }[];
-          }) => {
-            if (opts.captureTo !== undefined) opts.captureTo.push(req);
-            if (opts.capturePromptTo !== undefined) {
-              opts.capturePromptTo.push({
-                userPrompt: req.messages.map((m) => m.content).join('\n'),
-              });
-            }
-            return {
-              text: opts.response,
-              usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
-              resolvedProvider: 'fake',
-              resolvedModel: 'fake-model',
-            };
-          },
-          available: async () => true,
-          stream: async function* () {
-            yield { delta: '', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
-          },
-        },
-        model: 'fake-model',
-        chainIndex: 0,
-        category,
-      };
-    },
-  };
-}
 
 /** Open an in-memory SQLite DB with migrations applied. */
 function freshDb(): Database {

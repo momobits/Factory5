@@ -23,6 +23,7 @@ import { simpleGit } from 'simple-git';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { commitArchitectWritesIfRepo, runArchitect } from './architect.js';
+import { makeFakeRegistry, tmpProjectWithClaudeMd } from './test-helpers.js';
 
 beforeAll(() => {
   initLogger({ processName: 'architect-test', noFile: true, noConsole: true });
@@ -276,63 +277,6 @@ describe('commitArchitectWritesIfRepo (I014 fix — Phase 13.4)', () => {
     expect(filesInCommit).toEqual(['docs/knowledge/overview.md']);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Helpers for Tier 14 runArchitect tests
-// ---------------------------------------------------------------------------
-
-interface FakeRegistryOpts {
-  /** Text the fake provider returns as `response.text`. */
-  response: string;
-  /** If set, the resolved category is appended here on each `resolve()` call. */
-  captureCategoryTo?: string[];
-  /** If set, `{ userPrompt }` is appended here on each `call()`. */
-  capturePromptTo?: { userPrompt: string }[];
-}
-
-/** Minimal fake ProviderRegistry — matches ProviderRegistry / CategoryResolution / ProviderResponse shapes. */
-function makeFakeRegistry(opts: FakeRegistryOpts) {
-  return {
-    resolve: async (category: string) => {
-      opts.captureCategoryTo?.push(category);
-      return {
-        provider: {
-          id: 'fake',
-          call: async (req: {
-            systemPrompt: string;
-            messages: { role: string; content: string }[];
-          }) => {
-            if (opts.capturePromptTo !== undefined) {
-              opts.capturePromptTo.push({
-                userPrompt: req.messages.map((m) => m.content).join('\n'),
-              });
-            }
-            return {
-              text: opts.response,
-              usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
-              resolvedProvider: 'fake',
-              resolvedModel: 'fake-model',
-            };
-          },
-          available: async () => true,
-          stream: async function* () {
-            yield { delta: '', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
-          },
-        },
-        model: 'fake-model',
-        chainIndex: 0,
-        category,
-      };
-    },
-  };
-}
-
-/** Create a temp directory containing a minimal CLAUDE.md so readArchitect won't throw. */
-async function tmpProjectWithClaudeMd(): Promise<string> {
-  const projectPath = mkdtempSync(join(tmpdir(), 'factory5-architect-tier14-'));
-  writeFileSync(join(projectPath, 'CLAUDE.md'), '# Test Project\n\nA minimal test project.\n');
-  return projectPath;
-}
 
 // ---------------------------------------------------------------------------
 // Tier 14 modifications — runArchitect (ADR 0033)

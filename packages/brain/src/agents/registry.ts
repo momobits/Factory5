@@ -39,6 +39,8 @@ const AGENTS: Record<AgentRole, AgentDefinition> = {
     defaultSkills: [],
     promptPath: 'triage.md',
   },
+  // Pool-path category for task-spawning architects (NOT runArchitect's direct
+  // call, which defaults to 'planning' per ADR 0033 §6 via resolveAgentCategory).
   architect: {
     role: 'architect',
     category: 'reasoning',
