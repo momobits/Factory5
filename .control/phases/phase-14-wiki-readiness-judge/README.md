@@ -40,7 +40,7 @@ See [`steps.md`](steps.md).
 ## Done criteria
 
 - [ ] All four `pnpm` gates green (build / test / lint / format:check) across all 15 packages
-- [ ] ADR 0033 lands; ADR 0032/0004/0030 amendment blocks dated 2026-05-18
+- [ ] ADR 0033 lands (14.2); ADR 0032/0004/0030 amendment blocks appended
 - [ ] `wikiReadiness()` and its 4 helpers deleted; no remaining importers (`ReadinessCheck` / `ReadinessReport` types deleted, no deprecated aliases)
 - [ ] `runWikiCritic` + `runArchitectWithCritique` + `runArchitect priorCritique` parameter all tested per spec §8
 - [ ] `BUDGET_DEFAULTS` has 8 axes; `maxWikiReadinessAttempts` flows through CLI (`--max-wiki-readiness-attempts`) + Web UI accordion (8th row) + per-project metadata + payload + resume inheritance
