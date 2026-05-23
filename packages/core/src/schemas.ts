@@ -38,6 +38,9 @@ export const taskStatusSchema = z.enum(TASK_STATUSES);
 export const agentRoleSchema = z.enum(AGENT_ROLES);
 export const modelCategorySchema = z.enum(MODEL_CATEGORIES);
 
+/** Resolved type for a model category string — derived from {@link modelCategorySchema}. */
+type ModelCategory = z.infer<typeof modelCategorySchema>;
+
 // -----------------------------------------------------------------------------
 // Wiki critique (Tier 14 / ADR 0033)
 // -----------------------------------------------------------------------------
@@ -402,6 +405,7 @@ export const factoryConfigFileSchema = z.object({
    * Per-agent category override layer (ADR 0004 amendment, Phase 14).
    * Managed and resolved by `@factory5/state` via `resolveAgentCategory`.
    */
+  // Shape must be kept in sync with agentsConfigSchema in @factory5/state.
   agents: z
     .object({
       architect: modelCategorySchema.optional(),
@@ -424,8 +428,8 @@ export interface FactoryConfig {
    * When present, overrides the built-in defaults in `DEFAULT_AGENT_CATEGORIES`.
    */
   agents?: {
-    architect?: z.infer<typeof modelCategorySchema> | undefined;
-    critic?: z.infer<typeof modelCategorySchema> | undefined;
+    architect?: ModelCategory | undefined;
+    critic?: ModelCategory | undefined;
   };
 }
 

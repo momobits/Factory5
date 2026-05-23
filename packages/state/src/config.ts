@@ -50,6 +50,7 @@ export type { FactoryConfig };
  * global `[categories.*]` table. `.strict()` so adding a third overridable
  * agent later requires a deliberate schema bump.
  */
+// Must mirror factoryConfigFileSchema.agents in @factory5/core — co-change these when adding roles.
 export const agentsConfigSchema = z
   .object({
     architect: modelCategorySchema.optional(),
