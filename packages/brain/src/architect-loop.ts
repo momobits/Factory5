@@ -127,10 +127,11 @@ export async function runArchitectWithCritique(
 async function runLoop(
   opts: RunArchitectWithCritiqueOptions,
   claudeMd: string,
+  initialPriorCritique?: WikiCritique,
 ): Promise<ArchitectLoopResult> {
   let architectResult!: ArchitectResult;
   let critique!: WikiCritique;
-  let priorCritique: WikiCritique | undefined;
+  let priorCritique: WikiCritique | undefined = initialPriorCritique;
   let attempts = 0;
   const cap = opts.maxAttempts === 0 ? Number.POSITIVE_INFINITY : opts.maxAttempts;
   const capLabel = opts.maxAttempts === 0 ? '∞' : String(opts.maxAttempts);
@@ -270,7 +271,7 @@ async function runLoop(
   if (answer === 'extend-3') {
     // Recurse with 3 more attempts. The recursed call will re-use the same
     // claudeMd (already read) — pass it directly to avoid re-reading disk.
-    const extended = await runLoop({ ...opts, maxAttempts: 3 }, claudeMd);
+    const extended = await runLoop({ ...opts, maxAttempts: 3 }, claudeMd, critique);
     return {
       ...extended,
       attempts: attempts + extended.attempts,

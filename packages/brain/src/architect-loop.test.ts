@@ -123,6 +123,41 @@ describe('runArchitectWithCritique', () => {
     expect(arch).toHaveBeenCalledTimes(6);
     expect(askUser).toHaveBeenCalledTimes(2);
     expect(result.exhausted).toBe(true);
+    expect(result.attempts).toBe(6);
+  });
+
+  it('unrecognized answer falls through to continue (ADR 0030 default)', async () => {
+    const result = await runWithExhaustionAnswer('banana');
+    expect(result.exhausted).toBe(true);
+    expect(result.attempts).toBe(3);
+  });
+
+  it('extend-3 passes the last critique forward to the first extended attempt', async () => {
+    const arch = vi.fn().mockResolvedValue({
+      projectPath: '/p',
+      pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+      rawResponse: '',
+    });
+    const lastBeforeExtend = failing('blocking');
+    const crit = vi
+      .fn()
+      .mockResolvedValueOnce(failing('major'))   // attempt 1 (fails)
+      .mockResolvedValueOnce(failing('major'))   // attempt 2 (fails)
+      .mockResolvedValueOnce(lastBeforeExtend)   // attempt 3 (fails — exhausted)
+      .mockResolvedValueOnce(passing());         // attempt 4 (first extended — passes)
+    const askUser = vi.fn().mockResolvedValue('extend-3');
+    await runArchitectWithCritique({
+      runArchitect: arch,
+      runWikiCritic: crit,
+      askUser,
+      readClaudeMd: vi.fn().mockResolvedValue('# md'),
+      registry: {} as any,
+      projectPath: '/p',
+      directiveBody: 'x',
+      maxAttempts: 3,
+    });
+    // The 4th architect call (first of extended round) should receive the last critique from before extend
+    expect(arch.mock.calls[3][0].priorCritique).toBe(lastBeforeExtend);
   });
 
   it('maxAttempts: 0 (unlimited) — passes after N attempts without askUser', async () => {
@@ -194,19 +229,24 @@ describe('runArchitectWithCritique', () => {
       emit,
     });
     // Verify the emit function was called with messages containing "attempt 1/3" and "attempt 2/3"
-    const allCalls = emit.mock.calls;
-    const matched = allCalls.some((c) => {
-      const callStr = JSON.stringify(c);
-      return callStr.includes('attempt 1') || callStr.includes('attempt 2');
-    });
-    expect(matched).toBe(true);
+    const msgs = emit.mock.calls.map((c) => (c[0] as { msg?: string }).msg ?? '');
+    expect(msgs.some((m) => m.includes('attempt 1/3'))).toBe(true);
+    expect(msgs.some((m) => m.includes('attempt 2/3'))).toBe(true);
   });
 
   it('exhaustion log line carries last critique summary', async () => {
     const emit = vi.fn();
     await runWithExhaustionAnswer('continue', emit);
-    const callStr = JSON.stringify(emit.mock.calls);
-    expect(callStr).toContain('exhausted');
+    const msgs = emit.mock.calls.map(
+      (c) =>
+        (c[0] as { msg?: string; attrs?: { lastSummary?: string } }) ?? {},
+    );
+    const exhaustedMsg = msgs.find((m) => m.msg?.includes('exhausted'));
+    expect(exhaustedMsg).toBeDefined();
+    expect(exhaustedMsg?.msg).toMatch(/exhausted.*3.*attempts/i);
+    // The summary is in attrs.lastSummary per the emitLogLine call
+    const summaryPresent = msgs.some((m) => m.attrs?.lastSummary?.includes('wiki not ready'));
+    expect(summaryPresent).toBe(true);
   });
 
   it('throws if architect throws on first attempt', async () => {
