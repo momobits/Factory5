@@ -99,3 +99,59 @@ describe('@factory5/state config — loadConfig / writeConfig', () => {
     ).toThrow();
   });
 });
+
+// ----------------------------------------------------------------------------
+// Per-agent category override layer (ADR 0004 amendment, Phase 14)
+// ----------------------------------------------------------------------------
+
+import { DEFAULT_AGENT_CATEGORIES, agentsConfigSchema, resolveAgentCategory } from './config.js';
+
+describe('agentsConfigSchema', () => {
+  it('accepts empty object', () => {
+    expect(() => agentsConfigSchema.parse({})).not.toThrow();
+  });
+
+  it('accepts architect-only override', () => {
+    const result = agentsConfigSchema.parse({ architect: 'planning' });
+    expect(result?.architect).toBe('planning');
+  });
+
+  it('accepts architect + critic', () => {
+    const result = agentsConfigSchema.parse({ architect: 'deep', critic: 'reasoning' });
+    expect(result?.architect).toBe('deep');
+    expect(result?.critic).toBe('reasoning');
+  });
+
+  it('rejects unknown agent role (strict mode)', () => {
+    expect(() => agentsConfigSchema.parse({ triage: 'quick' })).toThrow();
+  });
+
+  it('rejects unknown category', () => {
+    expect(() => agentsConfigSchema.parse({ architect: 'cheap' })).toThrow();
+  });
+});
+
+describe('DEFAULT_AGENT_CATEGORIES', () => {
+  it('architect defaults to planning (Sonnet)', () => {
+    expect(DEFAULT_AGENT_CATEGORIES.architect).toBe('planning');
+  });
+
+  it('critic defaults to reasoning (Opus)', () => {
+    expect(DEFAULT_AGENT_CATEGORIES.critic).toBe('reasoning');
+  });
+});
+
+describe('resolveAgentCategory', () => {
+  it('returns config value when present', () => {
+    expect(resolveAgentCategory({ agents: { architect: 'deep' } }, 'architect')).toBe('deep');
+  });
+
+  it('returns default when config absent', () => {
+    expect(resolveAgentCategory({}, 'architect')).toBe('planning');
+    expect(resolveAgentCategory({}, 'critic')).toBe('reasoning');
+  });
+
+  it('returns default when role key absent in agents', () => {
+    expect(resolveAgentCategory({ agents: { critic: 'deep' } }, 'architect')).toBe('planning');
+  });
+});

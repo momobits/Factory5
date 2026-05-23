@@ -29,12 +29,66 @@ import { pid } from 'node:process';
 import {
   DEFAULT_ASK_USER_DEADLINE_MS,
   factoryConfigFileSchema,
+  modelCategorySchema,
   type FactoryConfig,
+  type ModelCategory,
 } from '@factory5/core';
 import { dataDir } from '@factory5/logger/paths';
+import { z } from 'zod';
 
 export { DEFAULT_ASK_USER_DEADLINE_MS };
 export type { FactoryConfig };
+
+// ----------------------------------------------------------------------------
+// Per-agent category override layer (ADR 0004 amendment, Phase 14)
+// ----------------------------------------------------------------------------
+
+/**
+ * Per-agent category override layer (ADR 0004 amendment, Phase 14).
+ *
+ * Lets operators flip an agent's resolved category without touching the
+ * global `[categories.*]` table. `.strict()` so adding a third overridable
+ * agent later requires a deliberate schema bump.
+ */
+export const agentsConfigSchema = z
+  .object({
+    architect: modelCategorySchema.optional(),
+    critic: modelCategorySchema.optional(),
+  })
+  .strict()
+  .optional();
+
+/**
+ * Built-in defaults used when `config.agents[role]` is absent.
+ *
+ * Tier 14 flipped `architect` from `reasoning` (Opus) to `planning` (Sonnet);
+ * `critic` is new in Tier 14 and defaults to `reasoning` (Opus). Both can be
+ * overridden via the `[agents.*]` table in `<dataDir>/config.json`.
+ */
+export const DEFAULT_AGENT_CATEGORIES = {
+  architect: 'planning',
+  critic: 'reasoning',
+} as const satisfies Record<'architect' | 'critic', ModelCategory>;
+
+/** The agent roles that can have their category overridden via config. */
+export type ConfigurableAgentRole = keyof typeof DEFAULT_AGENT_CATEGORIES;
+
+/**
+ * Resolve an agent role to its model category, applying the override-then-
+ * default precedence from the ADR 0004 amendment.
+ *
+ * Resolution order:
+ * 1. `config.agents?.[role]` if present
+ * 2. `DEFAULT_AGENT_CATEGORIES[role]`
+ */
+export function resolveAgentCategory(
+  config: {
+    agents?: { architect?: ModelCategory | undefined; critic?: ModelCategory | undefined };
+  },
+  role: ConfigurableAgentRole,
+): ModelCategory {
+  return config.agents?.[role] ?? DEFAULT_AGENT_CATEGORIES[role];
+}
 
 /**
  * Default location of `<dataDir>/config.json`. Same root `factory.db`
@@ -68,6 +122,7 @@ export function loadConfig(dataDirPath?: string): FactoryConfig {
   const validated = factoryConfigFileSchema.parse(parsed);
   return {
     askUserDeadlineMs: validated.askUserDeadlineMs ?? DEFAULT_ASK_USER_DEADLINE_MS,
+    ...(validated.agents !== undefined ? { agents: validated.agents } : {}),
   };
 }
 

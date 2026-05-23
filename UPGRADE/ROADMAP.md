@@ -199,7 +199,7 @@ The `checkModules` regex in `packages/wiki/src/readiness.ts` fires on most build
 - [x] U035 opened
 - [x] ADR 0033 (new) + ADR 0032/0004/0030 amendment blocks
 - [x] `wikiCritiqueSchema` + `AGENT_ROLES` += `'critic'` + `BUDGET_DEFAULTS` 8th axis (`maxWikiReadinessAttempts`)
-- [ ] `agentsConfigSchema` + `resolveAgentCategory` + `DEFAULT_AGENT_CATEGORIES` in state
+- [x] `agentsConfigSchema` + `resolveAgentCategory` + `DEFAULT_AGENT_CATEGORIES` in state
 - [ ] `runWikiCritic` (brain, TDD)
 - [ ] `runArchitect` modifications (priorCritique param + agent-category resolution; default flips to `planning`)
 - [ ] `runArchitectWithCritique` wrapper (brain, TDD)

@@ -3,7 +3,7 @@
 - [x] 14.1 Scaffold tier (this commit)
 - [x] 14.2 ADR 0033 + ADR 0032/0004/0030 amendments
 - [x] 14.3 Core: `wikiCritiqueSchema`, `AGENT_ROLES` += `critic`, `BUDGET_DEFAULTS` 8th axis
-- [ ] 14.4 State: `agentsConfigSchema` + `resolveAgentCategory`
+- [x] 14.4 State: `agentsConfigSchema` + `resolveAgentCategory`
 - [ ] 14.5 Brain: `runWikiCritic`
 - [ ] 14.6 Brain: `runArchitect` modifications (priorCritique + agent-category resolution)
 - [ ] 14.7 Brain: `runArchitectWithCritique` wrapper

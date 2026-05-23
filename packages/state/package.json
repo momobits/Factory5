@@ -27,7 +27,8 @@
   "dependencies": {
     "@factory5/core": "workspace:*",
     "@factory5/logger": "workspace:*",
-    "better-sqlite3": "^11.3.0"
+    "better-sqlite3": "^11.3.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",

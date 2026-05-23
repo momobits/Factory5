@@ -398,6 +398,17 @@ export const DEFAULT_ASK_USER_DEADLINE_MS = BUDGET_DEFAULTS.askUserDeadlineMs.va
 export const factoryConfigFileSchema = z.object({
   /** ADR 0030 §2 — auto-answer deadline. Positive integer milliseconds. */
   askUserDeadlineMs: z.number().int().positive().optional(),
+  /**
+   * Per-agent category override layer (ADR 0004 amendment, Phase 14).
+   * Managed and resolved by `@factory5/state` via `resolveAgentCategory`.
+   */
+  agents: z
+    .object({
+      architect: modelCategorySchema.optional(),
+      critic: modelCategorySchema.optional(),
+    })
+    .strict()
+    .optional(),
 });
 
 /**
@@ -408,6 +419,14 @@ export const factoryConfigFileSchema = z.object({
 export interface FactoryConfig {
   /** ADR 0030 §2 — auto-answer deadline in ms. Defaults to 5 min. */
   askUserDeadlineMs: number;
+  /**
+   * Per-agent category override layer (ADR 0004 amendment, Phase 14).
+   * When present, overrides the built-in defaults in `DEFAULT_AGENT_CATEGORIES`.
+   */
+  agents?: {
+    architect?: z.infer<typeof modelCategorySchema> | undefined;
+    critic?: z.infer<typeof modelCategorySchema> | undefined;
+  };
 }
 
 // -----------------------------------------------------------------------------
