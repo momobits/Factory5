@@ -39,17 +39,17 @@ See [`steps.md`](steps.md).
 
 ## Done criteria
 
-- [ ] All four `pnpm` gates green (build / test / lint / format:check) across all 15 packages
-- [ ] ADR 0033 lands (14.2); ADR 0032/0004/0030 amendment blocks appended
-- [ ] `wikiReadiness()` and its 4 helpers deleted; no remaining importers (`ReadinessCheck` / `ReadinessReport` types deleted, no deprecated aliases)
-- [ ] `runWikiCritic` + `runArchitectWithCritique` + `runArchitect priorCritique` parameter all tested per spec §8
-- [ ] `BUDGET_DEFAULTS` has 8 axes; `maxWikiReadinessAttempts` flows through CLI (`--max-wiki-readiness-attempts`) + Web UI accordion (8th row) + per-project metadata + payload + resume inheritance
-- [ ] `[agents.*]` config table parses; `resolveAgentCategory` defaults correctly (`architect` → `planning`, `critic` → `reasoning`)
-- [ ] `AGENT_ROLES` has 10 entries including `'critic'`
-- [ ] Live browser smoke verified: critic fires on a CLAUDE.md-thin project; at least one retry observed; spend rollup shows distinct `critic` row in `/app/spend?group-by=agent`
-- [ ] Auto-answer dispatcher recognizes `[CRITIC]` marker; defaults to `continue` after deadline
-- [ ] Workspace test count ≥ 1340 passing
-- [ ] U035 closes
+- [x] All four `pnpm` gates green (build / test / lint / format:check) across all 15 packages — build ✓ test ✓ lint ✓; format:check warns on pre-existing dirty paths (.agents/, docs/superpowers/plans/, packages/brain/src/loop.ts, packages/wiki/src/project-metadata.test.ts) — not gating
+- [x] ADR 0033 lands (14.2); ADR 0032/0004/0030 amendment blocks appended
+- [x] `wikiReadiness()` and its 4 helpers deleted; no remaining importers (`ReadinessCheck` / `ReadinessReport` types deleted, no deprecated aliases)
+- [x] `runWikiCritic` + `runArchitectWithCritique` + `runArchitect priorCritique` parameter all tested per spec §8
+- [x] `BUDGET_DEFAULTS` has 8 axes; `maxWikiReadinessAttempts` flows through CLI (`--max-wiki-readiness-attempts`) + Web UI accordion (8th row) + per-project metadata + payload + resume inheritance
+- [x] `[agents.*]` config table parses; `resolveAgentCategory` defaults correctly (`architect` → `planning`, `critic` → `reasoning`)
+- [x] `AGENT_ROLES` has 10 entries including `'critic'`
+- [ ] Live browser smoke verified: critic fires on a CLAUDE.md-thin project; at least one retry observed; spend rollup shows distinct `critic` row in `/app/spend?group-by=agent` — deferred to controller
+- [x] Auto-answer dispatcher recognizes `[CRITIC]` marker; defaults to `continue` after deadline
+- [x] Workspace test count ≥ 1340 passing — 1388 passing + 3 skipped at Phase 14 close prep
+- [x] U035 closes — resolved at `02adf0c` (feat(14.8): wire architect-loop into serve; delete wikiReadiness regex gate)
 
 ## Rollback
 

@@ -56,19 +56,6 @@ Severity:
 - **Hypothesis**: Path (a+) bumps the timeout to ~10 min AND prints the directive id when minted AND adds a periodic "still working..." heartbeat AND adds a SIGINT handler so first Ctrl-C cancels just the in-flight directive (returns to `you>`) and second Ctrl-C exits the REPL AND prompts before exiting if a directive is still in flight. Bare path (a) — bump only — would actually make UX worse (longer staring at a dead prompt). Path (b) — daemon-side streaming partial responses — is the better UX but requires daemon-side support and is a multi-step tier.
 - **Resolution**: Tier 9 candidate. Twice-deferred (Phase 2 → Phase 4 → still open). Parked at Phase 8 scaffold time per operator decision; promote when the false-timeout pain surfaces in real use.
 
-### U035 — Wiki-readiness regex over-literal; modules-documented fires on most builds
-
-- **Filed**: 2026-05-23
-- **Severity**: medium
-- **Tier**: 14
-- **Area**: brain + wiki
-
-`packages/wiki/src/readiness.ts`'s `checkModules` requires either `modules/` subdirectory pages OR a literal `\n## Modules` H2 header. The architect (Opus) frequently produces `# Modules` H1, `## Components`, scattered headings, or other shapes; the regex misses them. Phase 11 retro called this "Opus non-determinism, not a load-bearing gate bug." Operator-felt as recurring warn that creates noise — when the warn IS load-bearing (genuinely thin wiki) the noise mixes it into the chaff. Tier 14 replaces the regex with an LLM judge per `docs/superpowers/specs/2026-05-18-tier-14-wiki-readiness-llm-judge-design.md`.
-
-**Hypothesis**: regex too literal; LLM judge can evaluate against directive intent.
-
-**Resolution candidates**: see Tier 14 spec.
-
 ## Resolved
 
 ### U032 — Operator-invisible turn budgets; hard-fail without retry-question escalation
@@ -326,3 +313,13 @@ Severity:
 - **Area**: docs / skills
 - **Description**: All 12 skills in `skills/` carried the "Initial skills ported from factory2/skills/. New skills follow the same shape." provenance line in `docs/SKILLS.md:7` without an audit pass against factory5 architecture. Tier 5 5.4–5.7 prompt rewrites referenced six skills by name without deep-reading their bodies; reference-only inspection at use-site missed body-level drift.
 - **Resolution**: Resolved 2026-05-07 — Tier 6 steps 6.2 (audit verdicts) + 6.4..6.9 (per-skill rewrites) + 6.last (provenance drop + hot-fixes), final commit `<this commit's sha>`. 6.2's audit classified the 12 skills as 4 clean (`architect`, `ask-user`, `documentation`, `tdd`), 2 hot-fix (`brainstorming`, `integration-testing`), 6 rewrite (`code-review`, `dependency-install`, `error-recovery`, `progress-tracking`, `scaffolding`, `work-verification`). 6.4..6.9 landed factory5-native rewrites for the 6 (commits `1ea2d82`, `1e5a67e`, `d7a9b7e`, `7b409ac`, `f1e1075`, `a4b51e6`) — common drift addressed: BUILD.md as canonical persistence surface (replaced with findings_registry per ADR 0021); CRITICAL/WARNING/INFO severity terminology (replaced with FINDING [LOW|MEDIUM|HIGH|CRITICAL] grammar); `--break-system-packages` antipattern (replaced with venv discipline); FACTORY_COMPLETE legacy token (replaced with FINDING-as-output + ADR 0018 advisory framing); npm vs pnpm; sparse TypeScript sections (expanded to factory5-equal depth). 6.last applied the two hot-fixes (brainstorming line 14 BUILD.md from source list; integration-testing line 94 BUILD.md completion-marker → tests-green signal + FINDING [HIGH]), dropped the "Initial skills ported from factory2/skills/" provenance line in `docs/SKILLS.md:7` (replaced with "Skills are factory5-native"), updated the `factory2/src/factory/skills.py` historical analog reference at `docs/SKILLS.md:45` (now points at `packages/brain/src/prompts.ts`'s `loadSkill(id)`), and updated `scaffolding.md`'s frontmatter description to drop the BUILD.md-as-project-state-signal framing. Final state: zero `factory2` references in skill bodies or `docs/SKILLS.md`; zero canonical-BUILD.md prescriptions (instructive negative references — "you don't write BUILD.md" — preserved in `progress-tracking.md` + `scaffolding.md` per the runtime reality that the worker auto-appends per-task lines).
+
+### U035 — Wiki-readiness regex over-literal; modules-documented fires on most builds
+
+- **Filed**: 2026-05-23
+- **Severity**: medium
+- **Tier**: 14
+- **Area**: brain + wiki
+- **Description**: `packages/wiki/src/readiness.ts`'s `checkModules` requires either `modules/` subdirectory pages OR a literal `\n## Modules` H2 header. The architect (Opus) frequently produces `# Modules` H1, `## Components`, scattered headings, or other shapes; the regex misses them. Phase 11 retro called this "Opus non-determinism, not a load-bearing gate bug." Operator-felt as recurring warn that creates noise — when the warn IS load-bearing (genuinely thin wiki) the noise mixes it into the chaff. Tier 14 replaces the regex with an LLM judge per `docs/superpowers/specs/2026-05-18-tier-14-wiki-readiness-llm-judge-design.md`.
+- **Hypothesis**: regex too literal; LLM judge can evaluate against directive intent.
+- **Resolution**: Resolved 2026-05-23 at commit `02adf0c` (feat(14.8): wire architect-loop into serve; delete wikiReadiness regex gate) — Tier 14. `packages/wiki/src/readiness.ts` and its four helpers (`checkModules`, `checkRootIndex`, `checkIntro`, `checkFindingsRef`) deleted in full along with `ReadinessCheck` / `ReadinessReport` types and all importers. Replaced by `runWikiCritic` (brain, `packages/brain/src/critic.ts`) — an LLM judge that evaluates the wiki against the directive's intent, the project's CLAUDE.md, and all wiki pages, returning a structured `WikiCritique` (pass/fail + gap array + suggestion array). On fail, `runArchitectWithCritique` reruns the architect with the critique as feedback (up to `maxWikiReadinessAttempts`, default 3). On exhaustion the brain files an `askUser` for operator decision with a `[CRITIC]` marker so the auto-answer dispatcher recognises it and defaults to `continue`. New `critic` agent role (10th `AGENT_ROLES` entry); `maxWikiReadinessAttempts` is the 8th `BUDGET_DEFAULTS` axis flowing through CLI (`--max-wiki-readiness-attempts`) + Web UI accordion (8th row) + per-project metadata + payload + resume inheritance. Architect default category flipped from `reasoning` (Opus) to `planning` (Sonnet); configurable via `[agents.architect]` in `.factory/config.toml`. U033 + U034 preconditions: none (standalone Tier 14 issue). **Resolved**: 2026-05-23 at commit `02adf0c`.
