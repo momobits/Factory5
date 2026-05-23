@@ -231,6 +231,28 @@ describe('wikiCritiqueSchema', () => {
       }),
     ).toThrow();
   });
+
+  it('rejects empty gap string', () => {
+    expect(() =>
+      wikiCritiqueSchema.parse({
+        passes: false,
+        severity: 'minor',
+        findings: [{ aspect: 'modules', gap: '', suggestion: 'add a section' }],
+        summary: 'x',
+      }),
+    ).toThrow();
+  });
+
+  it('rejects empty suggestion string', () => {
+    expect(() =>
+      wikiCritiqueSchema.parse({
+        passes: false,
+        severity: 'minor',
+        findings: [{ aspect: 'modules', gap: 'something missing', suggestion: '' }],
+        summary: 'x',
+      }),
+    ).toThrow();
+  });
 });
 
 describe('plan and task schemas', () => {

@@ -95,6 +95,7 @@ const AGENTS: Record<AgentRole, AgentDefinition> = {
     defaultSkills: ['work-verification', 'integration-testing', 'documentation'],
     promptPath: 'verifier.md',
   },
+  // New in Tier 14 (ADR 0033). promptPath `critic.md` is created in step 14.5.
   critic: {
     role: 'critic',
     category: 'reasoning',
