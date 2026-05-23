@@ -356,12 +356,8 @@ describe('runWikiCritic', () => {
       response: JSON.stringify({ passes: true, severity: 'pass', findings: [], summary: 'ok' }),
     });
 
-    // If assertBudget throws BudgetExceededError it means it was called.
-    // Set maxSteps = 0 to guarantee a trip (0 steps → 1 > 0 trips immediately).
-    // Actually maxSteps is positive-only per the schema, but assertBudget checks callsMadeSoFar + 1 > maxSteps.
-    // Set maxSteps = 0 — actually budget.ts only checks if maxSteps !== undefined.
-    // Use maxSteps: 1 and pre-seed one call so the budget fires.
-    // Simpler: just confirm the call completes without error with a real db + limits.
+    // Two cases: (1) high ceiling, call succeeds and assertBudget passed;
+    // (2) seed spend exceeding maxUsd, assertBudget throws before any LLM call.
     await expect(
       runWikiCritic({
         registry: registry as Parameters<typeof runWikiCritic>[0]['registry'],

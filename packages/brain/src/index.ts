@@ -14,6 +14,8 @@ export * from './cancellation.js';
 export * from './loop.js';
 export * from './triage.js';
 export * from './architect.js';
+// `runWikiCritic` (critic.ts) intentionally not exported here — consumed internally by
+// runArchitectWithCritique in architect-loop.ts (Task 7, ADR 0033).
 export * from './planner.js';
 export * from './prompts.js';
 export * from './provider-config.js';

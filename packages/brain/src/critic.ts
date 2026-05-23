@@ -114,6 +114,7 @@ export async function runWikiCritic(opts: RunWikiCriticOptions): Promise<WikiCri
       provider: resolution.provider.id,
       model: resolution.model,
       category,
+      ...(opts.directiveId !== undefined ? { directiveId: opts.directiveId } : {}),
     },
     'critic: calling',
   );
