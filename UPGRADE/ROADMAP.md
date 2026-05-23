@@ -1,6 +1,6 @@
 # Roadmap — factory5 first-class upgrade
 
-Fourteen tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent. Tier 9 reopens the arc again for the first frontend aesthetic overhaul in the project — porting the "Editorial Control Room" aesthetic from the sibling conductor project to `apps/factory-web` as a single-session, dual-theme redesign (informal cadence — no per-step commits, no ADR). Tier 13 reopens the arc once more to close the operator-felt loop Tier 12 structurally built but couldn't demonstrate end-to-end — the propagation gap surfaced by Phase 12's deferred smoke (operator-set `maxTurns*` is silently shadowed by planner-emit), plus polish (Windows daemon-stop pidfile cleanup) and two cheap Phase 12 carry-forwards (per-project default overrides extending to all axes; per-task USD cap).
+Fifteen tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent. Tier 9 reopens the arc again for the first frontend aesthetic overhaul in the project — porting the "Editorial Control Room" aesthetic from the sibling conductor project to `apps/factory-web` as a single-session, dual-theme redesign (informal cadence — no per-step commits, no ADR). Tier 13 reopens the arc once more to close the operator-felt loop Tier 12 structurally built but couldn't demonstrate end-to-end — the propagation gap surfaced by Phase 12's deferred smoke (operator-set `maxTurns*` is silently shadowed by planner-emit), plus polish (Windows daemon-stop pidfile cleanup) and two cheap Phase 12 carry-forwards (per-project default overrides extending to all axes; per-task USD cap).
 
 ## Status legend
 
@@ -211,6 +211,28 @@ The `checkModules` regex in `packages/wiki/src/readiness.ts` fires on most build
 - [x] U035 closes — resolved at `02adf0c` (feat(14.8): wire architect-loop into serve; delete wikiReadiness regex gate)
 
 Plan: [`plans/tier-14-wiki-readiness-judge.md`](plans/tier-14-wiki-readiness-judge.md)
+
+## Tier 15 — Budget UX overhaul: pool model + project cockpit
+
+Replace the entire `[BUDGET]` askUser path with a project-level budget cockpit. Switch the three `maxTurns*` axes from per-task caps to per-agent-class directive-wide pools. Live re-resolve from `project.json` with per-build override as a floor. Optional auto-increase toggle bounded by safety multiplier ceiling. The parser, the askUser, the structured-options-UI gap, and the per-axis bucket schedule all disappear together. Estimated **2-3 sessions**.
+
+- [x] U036 opened
+- [x] U037 opened
+- [x] U038 opened
+- [ ] ADR 0034 (new, supersedes ADR 0032) + ADR 0032 Status update + ADR 0030 amendment + ADR 0020 amendment
+- [ ] Core: `autoIncreaseBudgets` + `autoIncreaseCeilingMultiplier` scalars in project metadata schema
+- [ ] Wiki: project-metadata round-trip for new scalars; delete `resolveDirectivePayloadBudgets`
+- [ ] Brain: `computePoolUsage` helper (`pool-usage.ts`)
+- [ ] Brain: `pool-resume.ts` chokidar watcher (parked → raise → auto-resume)
+- [ ] Brain: pool-driven dispatcher rewrite (`pool.ts`) + planner stops emitting `task.maxTurns` + worker watchdog
+- [ ] Brain: delete `budget-escalation.ts` + `[BUDGET]` branch in `auto-answer.ts`
+- [ ] Daemon: `PUT /budget-defaults` extended (8 axes + 2 scalars); new `GET /pool-usage`; `pool.tally` SSE event
+- [ ] Web UI: project page tabbed cockpit (Live / Defaults / History / Settings)
+- [ ] Web UI: directive detail pool pill + build form copy update
+- [ ] Browser smoke verified live (parked → raise → auto-resume; auto-increase flow; multi-class isolation)
+- [ ] U036 + U037 close; U038 stays Open as Tier-16+ candidate
+
+Plan: [`plans/tier-15-budget-ux-overhaul.md`](plans/tier-15-budget-ux-overhaul.md)
 
 ## Out of scope (now)
 

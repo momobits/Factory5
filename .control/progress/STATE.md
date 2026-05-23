@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-23 — session-end after drift-fix `0e76df1`. STATE.md timestamp bump + last-commit pointer to `0e76df1` + lag counter (lag #46 — this session-end commit edits STATE then commits, HEAD diverges from STATE pointer once more) + journal entry + next.md regen folds in. No phase work this session; pure session-start drift-fix + session-end housekeeping. Phase 14 tag `phase-14-wiki-readiness-judge-closed` still at `431c7da` (last substantive work commit). Workspace 1388 passing + 3 skipped from the Phase 14 close gate run; all four `pnpm` gates still green. Daemon stopped at handoff.
-**Current phase:** arc-complete (tenth time — no Phase 15 planned)
-**Current step:** n/a (between phases)
-**Status:** Tier 14 wiki-readiness LLM judge delivered end-to-end: regex `wikiReadiness` gate deleted, LLM critic wired, 8th budget axis (`maxWikiReadinessAttempts`) flows through CLI + Web UI + per-project + payload + resume, `[agents.*]` per-agent category override layer (architect defaults flipped to Sonnet, critic defaults Opus), auto-answer `[CRITIC]` marker support, U035 resolved. Live smoke ran cleanly — Sonnet architect ($0.110) + Opus critic ($0.172) = $0.282 wiki-phase spend; critic passed first try with full Opus verdict rendered in the activity panel. Two pre-existing bugs incidentally caught and fixed during the tier: Phase 13.6's `maxUsdPerTask` silently dropped by hardcoded axis list in `resolveDirectivePayloadBudgets`; ADR 0030's `[CRITIC]` marker handler was never implemented despite the amendment. No factoryd running at handoff.
+**Last updated:** 2026-05-24 — Phase 15 scaffold commit. Tier 15 budget-ux-overhaul scaffolded: U036/U037/U038 opened in ISSUES.md; ROADMAP Tier 15 section added; phase-plan.md Phase 15 row + summary; `.control/phases/phase-15-budget-ux-overhaul/` created with README.md + steps.md; STATE cursor flipped to Phase 15 active at 15.1. No code changed. Workspace 1388 passing + 3 skipped (unchanged from Phase 14 close). Daemon stopped at handoff.
+**Current phase:** Phase 15 (budget-ux-overhaul) active at 15.1
+**Current step:** 15.1
+**Status:** Phase 15 scaffolded. Tier 14 delivered end-to-end (arc-complete tenth time). Tier 15 opened in response to the 2026-05-23 pythonetl incident where `parseBudgetEscalationAnswer` rejected a natural-language reply, cascading 12 task failures (U036). Root cause: the structured-reply paradigm itself, not the parser. Tier 15 replaces `[BUDGET]` askUser with a project-level budget cockpit (pool model for `maxTurns*` axes + live re-resolve from `project.json` + optional auto-increase, ADR 0034). No factoryd running at handoff.
 
 ---
 
@@ -20,11 +20,9 @@
 
 ## Next action
 
-**Arc-complete (tenth time — no Phase 15 planned).** Phase 14 closed and tagged. Operator decides next move:
+**Phase 15 active at step 15.1 (scaffold done).** Next: **15.2 — ADR 0034 (new) + ADR 0032 Status update + ADR 0030 amendment + ADR 0020 amendment.**
 
-1. **`/session-end`** to close out today (default — Tier 14 was a substantial 25-commit tier with a clean arc close).
-2. **Author a new tier** if a fresh operator-felt issue surfaces. Carry-forwards available from spec §9 (Out of scope for Tier 14): generic critic loops for other stages (planner critic, build critic); diff-style architect output on retry; per-directive model category overrides; critic prompt context expansion (task_log, findings, prior similar projects); `maxWikiJudgeUsd` dollar cap; mid-task budget escalation; budget audit dashboard. Plus standing carry-forwards: U005 chat REPL UX (5x deferred), `/session-end` lag-by-1 structural fix (~#42 now), per-project `askUserDeadlineMs` override, `factory config get/set` CLI, etc.
-3. **Run a follow-up live smoke** exercising the retry/exhaustion paths (today's smoke had the critic pass first try; an `--max-wiki-readiness-attempts 1` build against a deliberately bad spec would force the askUser exhaustion path live).
+Read `docs/superpowers/plans/2026-05-24-tier-15-budget-ux-overhaul.md` Task 2 for the exact step-by-step instructions. Read `docs/decisions/0033-wiki-readiness-critique-loop.md` for the current ADR shape. ADR 0034 supersedes ADR 0032 — set Status line on 0032 to `Superseded by ADR 0034 (2026-05-24)` (only that line; no other edits per CLAUDE.md).
 
 **Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`; Tier 13 at `phase-13-budget-followups-closed` 2026-05-17 at `aae86dc`; Tier 14 at `phase-14-wiki-readiness-judge-closed` 2026-05-23 at `431c7da`.
 
@@ -47,7 +45,7 @@
 
 ## In-flight work
 
-**None — Phase 14 closed, arc-complete (tenth time).** All 12 sub-steps done; U035 resolved; live smoke verified end-to-end. No factoryd running at handoff (stopped post-smoke).
+**Phase 15 active at step 15.1.** Scaffold commit in progress — creating phase dir, ISSUES entries, ROADMAP section, phase-plan row, STATE cursor. No production code changed. Next sub-step is 15.2 (ADR 0034 + amendments).
 
 **Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 
@@ -91,7 +89,8 @@
 
 ## Recently completed (last 5 steps)
 
-- **Session-end after drift-fix `0e76df1`** (this commit) — `docs(state)`: session end after drift-fix. STATE.md timestamp bump + last-commit pointer to `0e76df1` + lag counter (#46 reintroduced) + journal entry + next.md regen folds in. No phase work; pure session-start drift-fix + session-end housekeeping. — 2026-05-23
+- **Phase 15 scaffold** — `chore(phase-15)`: scaffold tier 15 budget UX overhaul. U036/U037/U038 opened in `UPGRADE/ISSUES.md`; ROADMAP Tier 15 section + intro "Fourteen → Fifteen tiers"; phase-plan.md Phase 15 row + summary + ordering-paragraph sentence; `.control/phases/phase-15-budget-ux-overhaul/{README.md,steps.md}` created; STATE.md cursor flipped arc-complete → Phase 15 active at 15.1. No production code touched. — 2026-05-24
+- **Session-end after drift-fix `0e76df1`** (prior commit) — `docs(state)`: session end after drift-fix. STATE.md timestamp bump + last-commit pointer to `0e76df1` + lag counter (#46 reintroduced) + journal entry + next.md regen folds in. No phase work; pure session-start drift-fix + session-end housekeeping. — 2026-05-23
 - **Drift-fix** — `docs(state)`: bump last-commit pointer to `7998f45` (drift-fix). Catches STATE.md up to HEAD after the prior session's session-end lag-by-1 (#44). Pure session-start reconciliation; no phase work. Folds in the SessionStart hook's `next.md` timestamp regen. — 2026-05-23 — `0e76df1`
 - **Session-end after Phase 14 close** — `docs(state)`: session end for Phase 14 close. STATE.md timestamp bump + last-commit pointer to `bce66d9` + lag counter (#44 reintroduced) + journal entry + next.md regen folds in. No phase work; pure session-end housekeeping. — 2026-05-23 — `7998f45`
 - **Phase 14 close** — `chore(phase-14)`: close phase 14, kick off arc-complete (tenth time). Tagged `phase-14-wiki-readiness-judge-closed` at `431c7da` (last substantive work commit per Phase 12/13 pattern). All 11 done-criteria green including the live browser smoke at directive `01KSAVBNVNTARM6EPFPPJFQZKT`. Workspace 1388 passing + 3 skipped (+66 across Phase 14). 25 commits total across the tier. — 2026-05-23 — `bce66d9`
