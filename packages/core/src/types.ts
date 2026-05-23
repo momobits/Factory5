@@ -32,6 +32,10 @@ import type {
   taskResultSchema,
   taskSchema,
   taskStatusSchema,
+  wikiCritiqueAspectSchema,
+  wikiCritiqueFindingSchema,
+  wikiCritiqueSchema,
+  wikiCritiqueSeveritySchema,
 } from './schemas.js';
 
 // -----------------------------------------------------------------------------
@@ -66,3 +70,12 @@ export type PendingQuestion = z.infer<typeof pendingQuestionSchema>;
 export type Project = z.infer<typeof projectSchema>;
 export type DirectiveLogLine = z.infer<typeof directiveLogLineSchema>;
 export type DirectiveLogLineInput = z.infer<typeof directiveLogLineInputSchema>;
+
+// -----------------------------------------------------------------------------
+// Wiki critique (Tier 14 / ADR 0033)
+// -----------------------------------------------------------------------------
+
+export type WikiCritiqueAspect = z.infer<typeof wikiCritiqueAspectSchema>;
+export type WikiCritiqueSeverity = z.infer<typeof wikiCritiqueSeveritySchema>;
+export type WikiCritiqueFinding = z.infer<typeof wikiCritiqueFindingSchema>;
+export type WikiCritique = z.infer<typeof wikiCritiqueSchema>;

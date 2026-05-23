@@ -30,6 +30,7 @@ export const BUDGET_AXES = [
   'maxTurnsBuilder',
   'maxTurnsFixer',
   'maxUsdPerTask',
+  'maxWikiReadinessAttempts',
 ] as const;
 
 export type BudgetAxis = (typeof BUDGET_AXES)[number];
@@ -82,6 +83,11 @@ export const BUDGET_DEFAULTS: Readonly<Record<BudgetAxis, { value: number; expla
     explainer:
       'Per-task USD ceiling. 0 = unlimited (default). When the planner estimates a single task above this cap, the brain escalates via askUser before launching the worker (Phase 13.6).',
   },
+  maxWikiReadinessAttempts: {
+    value: 3,
+    explainer:
+      'Architect+critic cycles per build before escalating to operator (ADR 0033). 0 = unlimited.',
+  },
 };
 
 /**
@@ -111,6 +117,7 @@ export const budgetsSchema = z
     maxTurnsBuilder: z.number().int().positive(),
     maxTurnsFixer: z.number().int().positive(),
     maxUsdPerTask: z.number().nonnegative(),
+    maxWikiReadinessAttempts: z.number().int().nonnegative(),
   })
   .partial();
 
@@ -144,5 +151,7 @@ export function resolveBudgets(partial?: Budgets): ResolvedBudgets {
     maxTurnsBuilder: input.maxTurnsBuilder ?? BUDGET_DEFAULTS.maxTurnsBuilder.value,
     maxTurnsFixer: input.maxTurnsFixer ?? BUDGET_DEFAULTS.maxTurnsFixer.value,
     maxUsdPerTask: input.maxUsdPerTask ?? BUDGET_DEFAULTS.maxUsdPerTask.value,
+    maxWikiReadinessAttempts:
+      input.maxWikiReadinessAttempts ?? BUDGET_DEFAULTS.maxWikiReadinessAttempts.value,
   };
 }

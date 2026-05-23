@@ -95,6 +95,13 @@ const AGENTS: Record<AgentRole, AgentDefinition> = {
     defaultSkills: ['work-verification', 'integration-testing', 'documentation'],
     promptPath: 'verifier.md',
   },
+  critic: {
+    role: 'critic',
+    category: 'reasoning',
+    tools: ['Read', 'Glob', 'Grep'],
+    defaultSkills: ['documentation'],
+    promptPath: 'critic.md',
+  },
 };
 
 /** Look up an agent definition by role. Throws on unknown role. */

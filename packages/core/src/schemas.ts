@@ -38,6 +38,42 @@ export const taskStatusSchema = z.enum(TASK_STATUSES);
 export const agentRoleSchema = z.enum(AGENT_ROLES);
 export const modelCategorySchema = z.enum(MODEL_CATEGORIES);
 
+// -----------------------------------------------------------------------------
+// Wiki critique (Tier 14 / ADR 0033)
+// -----------------------------------------------------------------------------
+
+/** The structural aspect of a wiki a critic finding addresses. */
+export const wikiCritiqueAspectSchema = z.enum([
+  'overview',
+  'modules',
+  'testing',
+  'hygiene',
+  'directive-fit',
+  'other',
+]);
+
+/** Aggregate severity of a wiki critique response from the LLM critic. */
+export const wikiCritiqueSeveritySchema = z.enum(['pass', 'minor', 'major', 'blocking']);
+
+/** A single gap + suggestion pair surfaced by the critic. */
+export const wikiCritiqueFindingSchema = z.object({
+  aspect: wikiCritiqueAspectSchema,
+  gap: z.string().min(1),
+  suggestion: z.string().min(1),
+});
+
+/**
+ * Structured response from the wiki-readiness critic agent (ADR 0033).
+ * Parsed from the LLM's JSON output; used by `runArchitectWithCritique` to
+ * decide whether another architect+critic cycle is needed.
+ */
+export const wikiCritiqueSchema = z.object({
+  passes: z.boolean(),
+  severity: wikiCritiqueSeveritySchema,
+  findings: z.array(wikiCritiqueFindingSchema),
+  summary: z.string().min(1),
+});
+
 /** ISO8601 timestamp string. */
 export const isoDateTimeSchema = z.string().datetime({ offset: true });
 

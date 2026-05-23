@@ -78,6 +78,7 @@ export const AGENT_ROLES = [
   'fixer',
   'investigator',
   'verifier',
+  'critic',
 ] as const;
 
 /**

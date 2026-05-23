@@ -18,7 +18,7 @@ describe('BUDGET_DEFAULTS', () => {
     }
   });
 
-  it('declares the seven operator-facing axes (ADR 0032 §1 + Phase 13.6 maxUsdPerTask)', () => {
+  it('declares the eight operator-facing axes (ADR 0032 §1 + Phase 13.6 maxUsdPerTask + Phase 14.3 maxWikiReadinessAttempts)', () => {
     expect([...BUDGET_AXES]).toEqual([
       'maxUsd',
       'maxSteps',
@@ -27,6 +27,7 @@ describe('BUDGET_DEFAULTS', () => {
       'maxTurnsBuilder',
       'maxTurnsFixer',
       'maxUsdPerTask',
+      'maxWikiReadinessAttempts',
     ]);
   });
 
@@ -67,6 +68,7 @@ describe('budgetsSchema', () => {
       maxTurnsBuilder: 100,
       maxTurnsFixer: 100,
       maxUsdPerTask: 1.5,
+      maxWikiReadinessAttempts: 3,
     };
     expect(budgetsSchema.parse(all)).toEqual(all);
   });
@@ -116,6 +118,39 @@ describe('budgetsSchema', () => {
   });
 });
 
+describe('BUDGET_AXES — 8th axis maxWikiReadinessAttempts', () => {
+  it('includes maxWikiReadinessAttempts at length 8', () => {
+    expect(BUDGET_AXES).toContain('maxWikiReadinessAttempts');
+    expect(BUDGET_AXES.length).toBe(8);
+  });
+
+  it('default value is 3 with explainer mentioning architect+critic cycles', () => {
+    expect(BUDGET_DEFAULTS.maxWikiReadinessAttempts.value).toBe(3);
+    expect(BUDGET_DEFAULTS.maxWikiReadinessAttempts.explainer.toLowerCase()).toContain('architect');
+    expect(BUDGET_DEFAULTS.maxWikiReadinessAttempts.explainer.toLowerCase()).toContain('critic');
+  });
+
+  it('budgetsSchema accepts an integer value', () => {
+    expect(() => budgetsSchema.parse({ maxWikiReadinessAttempts: 5 })).not.toThrow();
+  });
+
+  it('budgetsSchema rejects negative', () => {
+    expect(() => budgetsSchema.parse({ maxWikiReadinessAttempts: -1 })).toThrow();
+  });
+
+  it('budgetsSchema accepts 0 (unlimited sentinel)', () => {
+    expect(() => budgetsSchema.parse({ maxWikiReadinessAttempts: 0 })).not.toThrow();
+  });
+
+  it('resolveBudgets fills the default when absent', () => {
+    expect(resolveBudgets({}).maxWikiReadinessAttempts).toBe(3);
+  });
+
+  it('resolveBudgets keeps the operator value when present', () => {
+    expect(resolveBudgets({ maxWikiReadinessAttempts: 5 }).maxWikiReadinessAttempts).toBe(5);
+  });
+});
+
 describe('resolveBudgets', () => {
   it('returns all defaults when input is omitted', () => {
     expect(resolveBudgets()).toEqual({
@@ -126,6 +161,7 @@ describe('resolveBudgets', () => {
       maxTurnsBuilder: 80,
       maxTurnsFixer: 80,
       maxUsdPerTask: 0,
+      maxWikiReadinessAttempts: 3,
     });
   });
 
@@ -138,6 +174,7 @@ describe('resolveBudgets', () => {
       maxTurnsBuilder: 80,
       maxTurnsFixer: 80,
       maxUsdPerTask: 0,
+      maxWikiReadinessAttempts: 3,
     });
   });
 
@@ -150,6 +187,7 @@ describe('resolveBudgets', () => {
       maxTurnsBuilder: 80,
       maxTurnsFixer: 80,
       maxUsdPerTask: 0,
+      maxWikiReadinessAttempts: 3,
     });
   });
 
@@ -176,6 +214,7 @@ describe('resolveBudgets', () => {
       maxTurnsBuilder: 160,
       maxTurnsFixer: 160,
       maxUsdPerTask: 2.5,
+      maxWikiReadinessAttempts: 5,
     };
     expect(resolveBudgets(full)).toEqual(full);
   });

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { directiveSchema, eventSchema, findingSchema, planSchema, taskSchema } from './schemas.js';
+import {
+  directiveSchema,
+  eventSchema,
+  findingSchema,
+  planSchema,
+  taskSchema,
+  wikiCritiqueSchema,
+} from './schemas.js';
 import { findingId, newId } from './ulid.js';
 
 describe('newId', () => {
@@ -161,6 +168,68 @@ describe('findingSchema', () => {
     };
     const parsed = findingSchema.parse(f);
     expect(parsed.advisory).toBeUndefined();
+  });
+});
+
+describe('wikiCritiqueSchema', () => {
+  it('parses a valid passing critique with empty findings', () => {
+    const result = wikiCritiqueSchema.parse({
+      passes: true,
+      severity: 'pass',
+      findings: [],
+      summary: 'Wiki satisfies the directive',
+    });
+    expect(result.passes).toBe(true);
+    expect(result.severity).toBe('pass');
+  });
+
+  it('parses a valid failing critique with findings', () => {
+    const result = wikiCritiqueSchema.parse({
+      passes: false,
+      severity: 'major',
+      findings: [
+        {
+          aspect: 'modules',
+          gap: 'no module relationships',
+          suggestion: 'add a section listing module imports',
+        },
+      ],
+      summary: 'Wiki missing module-relationship documentation',
+    });
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].aspect).toBe('modules');
+  });
+
+  it('rejects an unknown severity', () => {
+    expect(() =>
+      wikiCritiqueSchema.parse({
+        passes: false,
+        severity: 'catastrophic',
+        findings: [],
+        summary: 'x',
+      }),
+    ).toThrow();
+  });
+
+  it('rejects an unknown aspect', () => {
+    expect(() =>
+      wikiCritiqueSchema.parse({
+        passes: false,
+        severity: 'minor',
+        findings: [{ aspect: 'database', gap: 'x', suggestion: 'y' }],
+        summary: 'x',
+      }),
+    ).toThrow();
+  });
+
+  it('rejects missing summary', () => {
+    expect(() =>
+      wikiCritiqueSchema.parse({
+        passes: true,
+        severity: 'pass',
+        findings: [],
+      }),
+    ).toThrow();
   });
 });
 
