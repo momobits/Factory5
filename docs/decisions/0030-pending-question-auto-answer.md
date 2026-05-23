@@ -133,4 +133,4 @@ The auto-answer is bounded by the parent directive's existing budget. If the dir
 
 ## Amendment — 2026-05-23 (Phase 14)
 
-The auto-answer dispatcher's marker-recognition path (Phase 12.6) extends to recognize `[CRITIC]` alongside `[BUDGET]`. When a pending question's prompt begins with the `[CRITIC]` marker, the dispatcher applies a deterministic answer: `continue` (the wiki-readiness-exhausted default). No LLM call required — matches the `[BUDGET]` deterministic-bump-then-abort precedent. `answered_by = 'agent (auto)'` per the existing enum.
+The auto-answer dispatcher's marker-recognition path (Phase 12.6) extends to recognize `[CRITIC]` alongside `[BUDGET]`. When a pending question's prompt begins with the `[CRITIC]` marker, the dispatcher applies a deterministic answer: `continue` (the wiki-readiness-exhausted default). No LLM call required — matches the `[BUDGET]` deterministic-bump-then-abort precedent. `answered_by = 'agent'` per the existing enum (rendered as "agent (auto)" in the Web UI).

@@ -148,7 +148,7 @@ The `agentsConfigSchema` is `.strict()` — extending to additional agent roles 
 - New wrapper module (`architect-loop.ts`) adds an orchestration layer between `loop.ts` and `architect.ts`. The added indirection is the cost of separation-of-concerns; the tradeoff is that `runArchitect` and `runWikiCritic` stay unit-testable as sharp single-pass functions.
 - Resume skips the critic. The "pages exist on disk?" structural check at the top of the wrapper means a resume never re-evaluates an already-written wiki. This is intentional (paid the critic cost on the original run) but means a forced re-run after a wiki edit requires a new directive, not a resume.
 
-## Alternatives Considered
+## Alternatives considered
 
 ### A. Fix the regex instead of replacing it
 
