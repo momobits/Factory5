@@ -2,6 +2,16 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-23 — Drift-fix + session-end + E2E runbook handed off
+
+- Drift-fix `0e76df1` caught STATE.md up to HEAD from the prior session's session-end lag-by-1 (#44); session-end commit reintroduces lag at #46.
+- No phase work. Pure session-start drift-fix + session-end housekeeping.
+- New "End-to-end test runbook" section added to STATE.md "Notes for next session" — concrete recipe for the operator's stated intent to run a real E2E test next session: prep (install/build/daemon start/UI token) → smoke (project create → build → watch activity panel narrate triage/architect/critic/planner/workers/terminal) → spot-checks (wiki/findings/spend/persistence) → teardown.
+- Suggested forcing the `--max-wiki-readiness-attempts 1` retry-exhaustion path live since yesterday's smoke had the critic pass first try.
+- Tag `phase-14-wiki-readiness-judge-closed` still at `431c7da`.
+- Pre-existing accepted-out-of-scope dirty paths unchanged (`.agents/`, `.claude/skills/`, `AGENTS.md`, `GEMINI.md`, prettier reformatting, `pnpm-lock.yaml`).
+- No factoryd running at handoff.
+
 ## 2026-05-23 — Session-end after Phase 14 close
 
 - Pure session-end housekeeping after the `/phase-close` commit (`bce66d9`): STATE.md timestamp bump, last-commit pointer to `bce66d9`, lag counter (#44 reintroduced), this journal entry, next.md regen folded in.

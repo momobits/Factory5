@@ -3,7 +3,7 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-23 — session-start drift-fix. Catches STATE.md up to HEAD after the prior session's session-end lag-by-1 (#44): last-commit pointer flipped `bce66d9` → `7998f45`. Pure session-start reconciliation; no phase work. This drift-fix commit itself becomes the new HEAD, so STATE.md pointing at `7998f45` re-lags by 1 (#45 reintroduced on commit). Phase 14 tag `phase-14-wiki-readiness-judge-closed` still at `431c7da`. Workspace 1388 passing + 3 skipped from the Phase 14 close gate run; all four `pnpm` gates still green. Daemon stopped at handoff.
+**Last updated:** 2026-05-23 — session-end after drift-fix `0e76df1`. STATE.md timestamp bump + last-commit pointer to `0e76df1` + lag counter (lag #46 — this session-end commit edits STATE then commits, HEAD diverges from STATE pointer once more) + journal entry + next.md regen folds in. No phase work this session; pure session-start drift-fix + session-end housekeeping. Phase 14 tag `phase-14-wiki-readiness-judge-closed` still at `431c7da` (last substantive work commit). Workspace 1388 passing + 3 skipped from the Phase 14 close gate run; all four `pnpm` gates still green. Daemon stopped at handoff.
 **Current phase:** arc-complete (tenth time — no Phase 15 planned)
 **Current step:** n/a (between phases)
 **Status:** Tier 14 wiki-readiness LLM judge delivered end-to-end: regex `wikiReadiness` gate deleted, LLM critic wired, 8th budget axis (`maxWikiReadinessAttempts`) flows through CLI + Web UI + per-project + payload + resume, `[agents.*]` per-agent category override layer (architect defaults flipped to Sonnet, critic defaults Opus), auto-answer `[CRITIC]` marker support, U035 resolved. Live smoke ran cleanly — Sonnet architect ($0.110) + Opus critic ($0.172) = $0.282 wiki-phase spend; critic passed first try with full Opus verdict rendered in the activity panel. Two pre-existing bugs incidentally caught and fixed during the tier: Phase 13.6's `maxUsdPerTask` silently dropped by hardcoded axis list in `resolveDirectivePayloadBudgets`; ADR 0030's `[CRITIC]` marker handler was never implemented despite the amendment. No factoryd running at handoff.
@@ -33,7 +33,7 @@
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `7998f45` — `docs(state)`: session end for Phase 14 close. (Drift-fix this session catches STATE.md up to HEAD from the prior session-end's lag-by-1 #44; this drift-fix commit itself reintroduces lag at #45 — drift-fixes edit STATE then commit, so HEAD diverges from STATE pointer once more.)
+- **Last commit:** `0e76df1` — `docs(state)`: bump last-commit pointer to `7998f45` (drift-fix). (This session-end catches up the drift-fix-introduced lag #45; the resulting session-end commit will bump to lag #46 — same structural pattern as every other session-end.)
 - **Uncommitted changes:** pre-existing dirty paths only (`.agents/`, `.claude/skills/`, `AGENTS.md`, `GEMINI.md`, `docs/superpowers/{plans,specs}/*` prettier reformatting, `pnpm-lock.yaml` 3-line drift) — accepted out-of-scope per operator's standing directive
 - **Last phase tag:** `phase-14-wiki-readiness-judge-closed` (annotated at `431c7da`)
 
@@ -70,7 +70,7 @@
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **44 occurrences** (Phase 14 alone consumed lag-counter increments at the scaffold commit, multiple intra-tier session boundaries that were inlined into this long session, the `/phase-close` commit, and this session-end commit). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit. The Tier-14-as-Tier-15-micro-tier idea raised at the prior session-end stays a viable candidate.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **46 occurrences** (today added a drift-fix `0e76df1` and a session-end commit, each carrying the structural lag). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit. The Tier-14-as-Tier-15-micro-tier idea raised at the prior session-end stays a viable candidate.
 
 ---
 
@@ -91,7 +91,8 @@
 
 ## Recently completed (last 5 steps)
 
-- **Drift-fix** (this commit) — `docs(state)`: bump last-commit pointer to `7998f45` (drift-fix). Catches STATE.md up to HEAD after the prior session's session-end lag-by-1 (#44). Pure session-start reconciliation; no phase work. Folds in the SessionStart hook's `next.md` timestamp regen. — 2026-05-23
+- **Session-end after drift-fix `0e76df1`** (this commit) — `docs(state)`: session end after drift-fix. STATE.md timestamp bump + last-commit pointer to `0e76df1` + lag counter (#46 reintroduced) + journal entry + next.md regen folds in. No phase work; pure session-start drift-fix + session-end housekeeping. — 2026-05-23
+- **Drift-fix** — `docs(state)`: bump last-commit pointer to `7998f45` (drift-fix). Catches STATE.md up to HEAD after the prior session's session-end lag-by-1 (#44). Pure session-start reconciliation; no phase work. Folds in the SessionStart hook's `next.md` timestamp regen. — 2026-05-23 — `0e76df1`
 - **Session-end after Phase 14 close** — `docs(state)`: session end for Phase 14 close. STATE.md timestamp bump + last-commit pointer to `bce66d9` + lag counter (#44 reintroduced) + journal entry + next.md regen folds in. No phase work; pure session-end housekeeping. — 2026-05-23 — `7998f45`
 - **Phase 14 close** — `chore(phase-14)`: close phase 14, kick off arc-complete (tenth time). Tagged `phase-14-wiki-readiness-judge-closed` at `431c7da` (last substantive work commit per Phase 12/13 pattern). All 11 done-criteria green including the live browser smoke at directive `01KSAVBNVNTARM6EPFPPJFQZKT`. Workspace 1388 passing + 3 skipped (+66 across Phase 14). 25 commits total across the tier. — 2026-05-23 — `bce66d9`
 - **Phase 14.12 live smoke verification** — `chore(14.12)`: tick live-smoke done-criterion. Playwright MCP smoke against running daemon: Sonnet architect ($0.110) + Opus critic ($0.172) = $0.282 wiki-phase spend. Activity panel narrated full Tier 14 flow live (architect-loop attempt 1/3 → Sonnet architect → Opus critic → critic passed on attempt 1 with full verdict). Persistence verified via API GET. Critic passed first try (no live retry — covered by 42 unit tests). — 2026-05-23 — `df317d7`
@@ -299,9 +300,46 @@ None — Phase 14 closed. Cleared at phase close.
 
 **Recommended next options for the next session:**
 
-1. **`/session-end`** — bank the day; arc-complete state is the natural resting point.
-2. **Author a new tier** if a fresh operator-felt issue surfaces. Available carry-forwards from Tier 14 §9 (Out of scope): generic critic loops for other stages (planner critic, build critic — the `critic` agent role was made generic for this); diff-style architect output on retry; per-directive model category overrides; critic prompt context expansion; `maxWikiJudgeUsd` dollar cap; mid-task budget escalation; budget audit dashboard. Long-standing carry-forwards below.
-3. **Run a follow-up live smoke** exercising the retry/exhaustion paths (today's smoke had the critic pass first try). An `--max-wiki-readiness-attempts 1` build against a deliberately bad spec would force the askUser exhaustion path live, demonstrating the `[CRITIC]` marker + auto-answer handler in production.
+1. **Operator's stated intent — run a real end-to-end test.** Step-by-step guide handed off at the end of this session (see "End-to-end test runbook" below). The canonical loop: start factoryd → register project → mint a build directive via Web UI or CLI → observe the activity feed narrate triage → architect → critic → planner → workers → terminal status → spot-check outputs (wiki + findings + spend). Tier 14 added the architect-loop critic to this path; the smoke yesterday already exercised it once.
+2. **Author a new tier** if a fresh operator-felt issue surfaces from the E2E test above. Available carry-forwards from Tier 14 §9 (Out of scope): generic critic loops for other stages (planner critic, build critic); diff-style architect output on retry; per-directive model category overrides; critic prompt context expansion; `maxWikiJudgeUsd` dollar cap; mid-task budget escalation; budget audit dashboard. Long-standing carry-forwards below.
+3. **`/session-end`** if the E2E test goes clean and there's no follow-up work — arc-complete state is the natural resting point.
+
+## End-to-end test runbook
+
+Operator wants to run a real E2E test next session. Concrete recipe:
+
+**Prep (~30 seconds)**
+
+1. `pnpm install` if `pnpm-lock.yaml` shows the 3-line drift mentioned in carry-forwards. Otherwise skip.
+2. `pnpm build` to ensure all `packages/*/dist/` are current (the daemon hot-loads from `dist`).
+3. `pnpm factory daemon start` — spawns factoryd in the background. Confirm with `pnpm factory daemon status`.
+4. `pnpm factory ui-token` — prints the URL with the bearer token query param. Open it in the browser.
+
+**Smoke (~3-5 minutes, ~$0.30-1.50 model spend)**
+
+5. From the Web UI, click "New project" or use `pnpm factory project create <name> --path <abs-dir>`. Pick a fresh dir under `C:\Users\Momo\factory5-workspace\` (existing scratch dirs: `node-sse-smoke`, `smoke-demo`, `tier-14-smoke` — any can be reused with `--purge` first).
+6. From the Project page click "Build" (or `pnpm factory build <projectId> --spec "<one-sentence spec>"`). Optional flags via the Advanced budgets accordion: `--max-wiki-readiness-attempts 1` to force the critic-retry-exhaustion path live (yesterday's smoke had critic pass first try; this surfaces the `[CRITIC]` askUser + auto-answer handler in production for the first time).
+7. Watch the Directive Detail page's Activity panel narrate live: `triage` → `architect-loop: attempt 1/N` → `architect: calling claude-sonnet-4-6` → `architect: wrote N wiki pages` → `critic: calling claude-opus-4-7` → `critic: passed | failed (severity ...)` → on pass: `planner: calling ...` → `planner: emitted N tasks` → workers run → `directive.completed`.
+8. If `[CRITIC]` askUser fires (critic exhausted): wait for the auto-answer dispatcher's 5s throttle, then check the Pending Questions page shows `answered_by = 'agent'` and the directive recovers (or aborts cleanly per the answer).
+
+**Spot-checks**
+
+9. Wiki: `ls <project-path>/.factory/wiki/` — expect `OVERVIEW.md`, `ARCHITECTURE.md`, plus `modules/` if architect emitted any.
+10. Findings: `pnpm factory findings list <projectId>` — expect zero findings on a clean build, or worker-emitted FINDING markers if the build hit issues.
+11. Spend: directive detail page shows total USD; cross-check with `pnpm factory spend <projectId>` if the CLI surface exists.
+12. Persistence: `curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:25295/api/v1/directives/<id>` should round-trip the full directive incl. `payload.budgets.maxWikiReadinessAttempts`.
+
+**Teardown**
+
+13. `pnpm factory daemon stop` — Phase 13.4's pidfile cleanup runs synchronously, so the pidfile is gone before the stop command returns.
+14. Optional: `pnpm factory project delete <projectId> --purge` if the smoke project shouldn't linger.
+
+**Failure modes to watch for**
+
+- **Stale daemon from earlier date** (Phase 12 retro) — if behaviour looks pre-Tier-14, run `pnpm factory daemon restart` after `pnpm build`. A running daemon doesn't hot-reload `dist/`.
+- **`maxTurnsScaffolder` doesn't trigger budget askUser** — known from Phase 13.7 smoke; smoke-demo is too small to trip a 10-turn cap. Use a multi-module spec or `--max-turns-scaffolder 1` to force trip.
+- **Critic verdict not visible in Activity panel** — Tier 14 wired the full Opus verdict into the `critic: passed` / `critic: failed` log lines. If only the headline shows, check ADR 0031 emit-site coverage.
+- **Browser tabs don't share token** (Phase 11 retro) — `browser_tabs new` opens fresh contexts; pass `?t=<token>` in the new URL if multi-tab testing.
 
 **Daemon state at handoff:** stopped (post-smoke teardown). Restart with `pnpm factory daemon start` if next session needs it.
 
@@ -336,7 +374,7 @@ None — Phase 14 closed. Cleared at phase close.
 - **`factory config get / set <key>` CLI** — operator surface for `<dataDir>/config.json`.
 - **Override after auto-answer** — `factory questions answer --force <id>`. Pin via ADR if it ships.
 - **Inline-style audit on the 12 pages** — Tier 9-deferred.
-- **Structural `/session-end` lag-by-1 fix** — now at #44 occurrences after Tier 14's commit-heavy session. Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit. The Tier-14-as-Tier-15-micro-tier framing from prior session-ends is more attractive now that Tier 14 alone burned 4 lag increments.
+- **Structural `/session-end` lag-by-1 fix** — now at #46 occurrences (today added a drift-fix and a session-end, each carrying the structural lag). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit. The Tier-14-as-Tier-15-micro-tier framing from prior session-ends remains the most attractive resolution.
 - **`pnpm-lock.yaml` 3-line drift** — uncommitted on disk; probably a transitive resolution change from one of the workspace dep updates during Tier 14. Worth a `pnpm install` audit at next session.
 - **`docs/superpowers/{plans,specs}` prettier reformatting** — uncommitted on disk from format:check runs. Either commit the reformat or add the paths to `.prettierignore`.
 
