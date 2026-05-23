@@ -7,17 +7,22 @@
  * purpose) since it owns the entire git interaction. The full
  * `runArchitect` path needs a live LLM call which we don't want in
  * unit tests; the helper is the I014-fix surface area.
+ *
+ * Also covers Tier 14 modifications (ADR 0033): `priorCritique` param
+ * and `agents.architect` category resolution with default flip to
+ * `planning` (Sonnet).
  */
 
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { WikiCritique } from '@factory5/core';
 import { initLogger } from '@factory5/logger';
 import { simpleGit } from 'simple-git';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { commitArchitectWritesIfRepo } from './architect.js';
+import { commitArchitectWritesIfRepo, runArchitect } from './architect.js';
 
 beforeAll(() => {
   initLogger({ processName: 'architect-test', noFile: true, noConsole: true });
@@ -269,5 +274,154 @@ describe('commitArchitectWritesIfRepo (I014 fix — Phase 13.4)', () => {
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
     expect(filesInCommit).toEqual(['docs/knowledge/overview.md']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Helpers for Tier 14 runArchitect tests
+// ---------------------------------------------------------------------------
+
+interface FakeRegistryOpts {
+  /** Text the fake provider returns as `response.text`. */
+  response: string;
+  /** If set, the resolved category is appended here on each `resolve()` call. */
+  captureCategoryTo?: string[];
+  /** If set, `{ userPrompt }` is appended here on each `call()`. */
+  capturePromptTo?: { userPrompt: string }[];
+}
+
+/** Minimal fake ProviderRegistry — matches ProviderRegistry / CategoryResolution / ProviderResponse shapes. */
+function makeFakeRegistry(opts: FakeRegistryOpts) {
+  return {
+    resolve: async (category: string) => {
+      opts.captureCategoryTo?.push(category);
+      return {
+        provider: {
+          id: 'fake',
+          call: async (req: {
+            systemPrompt: string;
+            messages: { role: string; content: string }[];
+          }) => {
+            if (opts.capturePromptTo !== undefined) {
+              opts.capturePromptTo.push({
+                userPrompt: req.messages.map((m) => m.content).join('\n'),
+              });
+            }
+            return {
+              text: opts.response,
+              usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+              resolvedProvider: 'fake',
+              resolvedModel: 'fake-model',
+            };
+          },
+          available: async () => true,
+          stream: async function* () {
+            yield { delta: '', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
+          },
+        },
+        model: 'fake-model',
+        chainIndex: 0,
+        category,
+      };
+    },
+  };
+}
+
+/** Create a temp directory containing a minimal CLAUDE.md so readArchitect won't throw. */
+async function tmpProjectWithClaudeMd(): Promise<string> {
+  const projectPath = mkdtempSync(join(tmpdir(), 'factory5-architect-tier14-'));
+  writeFileSync(join(projectPath, 'CLAUDE.md'), '# Test Project\n\nA minimal test project.\n');
+  return projectPath;
+}
+
+// ---------------------------------------------------------------------------
+// Tier 14 modifications — runArchitect (ADR 0033)
+// ---------------------------------------------------------------------------
+
+describe('runArchitect — Tier 14 modifications (ADR 0033)', () => {
+  afterEach(() => {
+    delete process.env['FACTORY5_PROMPTS_ROOT'];
+  });
+
+  it('appends PREVIOUS ATTEMPT FAILED block when priorCritique is provided', async () => {
+    const captured: { userPrompt: string }[] = [];
+    const registry = makeFakeRegistry({
+      response: JSON.stringify({ pages: [{ slug: 'overview.md', content: '# x' }], notes: '' }),
+      capturePromptTo: captured,
+    });
+    const critique: WikiCritique = {
+      passes: false,
+      severity: 'major',
+      findings: [{ aspect: 'modules', gap: 'missing relationships', suggestion: 'add a section' }],
+      summary: 'modules missing',
+    };
+    const projectPath = await tmpProjectWithClaudeMd();
+    try {
+      await runArchitect({
+        registry: registry as Parameters<typeof runArchitect>[0]['registry'],
+        projectPath,
+        priorCritique: critique,
+      });
+      expect(captured[0]!.userPrompt).toContain('PREVIOUS ATTEMPT FAILED');
+      expect(captured[0]!.userPrompt).toContain('modules missing');
+      expect(captured[0]!.userPrompt).toContain('missing relationships');
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
+  it('does NOT include the PREVIOUS ATTEMPT block when priorCritique is absent', async () => {
+    const captured: { userPrompt: string }[] = [];
+    const registry = makeFakeRegistry({
+      response: JSON.stringify({ pages: [{ slug: 'overview.md', content: '# x' }], notes: '' }),
+      capturePromptTo: captured,
+    });
+    const projectPath = await tmpProjectWithClaudeMd();
+    try {
+      await runArchitect({
+        registry: registry as Parameters<typeof runArchitect>[0]['registry'],
+        projectPath,
+      });
+      expect(captured[0]!.userPrompt).not.toContain('PREVIOUS ATTEMPT FAILED');
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves model category from agents.architect when provided', async () => {
+    const resolved: string[] = [];
+    const registry = makeFakeRegistry({
+      response: JSON.stringify({ pages: [{ slug: 'overview.md', content: '# x' }], notes: '' }),
+      captureCategoryTo: resolved,
+    });
+    const projectPath = await tmpProjectWithClaudeMd();
+    try {
+      await runArchitect({
+        registry: registry as Parameters<typeof runArchitect>[0]['registry'],
+        projectPath,
+        config: { agents: { architect: 'deep' } },
+      });
+      expect(resolved[0]).toBe('deep');
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
+  it("defaults to 'planning' (Sonnet) when config absent — Tier 14 flip", async () => {
+    const resolved: string[] = [];
+    const registry = makeFakeRegistry({
+      response: JSON.stringify({ pages: [{ slug: 'overview.md', content: '# x' }], notes: '' }),
+      captureCategoryTo: resolved,
+    });
+    const projectPath = await tmpProjectWithClaudeMd();
+    try {
+      await runArchitect({
+        registry: registry as Parameters<typeof runArchitect>[0]['registry'],
+        projectPath,
+      });
+      expect(resolved[0]).toBe('planning');
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
   });
 });

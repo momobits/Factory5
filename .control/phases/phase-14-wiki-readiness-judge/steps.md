@@ -5,7 +5,7 @@
 - [x] 14.3 Core: `wikiCritiqueSchema`, `AGENT_ROLES` += `critic`, `BUDGET_DEFAULTS` 8th axis
 - [x] 14.4 State: `agentsConfigSchema` + `resolveAgentCategory`
 - [x] 14.5 Brain: `runWikiCritic`
-- [ ] 14.6 Brain: `runArchitect` modifications (priorCritique + agent-category resolution)
+- [x] 14.6 Brain: `runArchitect` modifications (priorCritique + agent-category resolution)
 - [ ] 14.7 Brain: `runArchitectWithCritique` wrapper
 - [ ] 14.8 Brain: loop integration + delete wikiReadiness + delete old tests
 - [ ] 14.9 Daemon: schema acceptance + persistence + resume inheritance

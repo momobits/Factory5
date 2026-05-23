@@ -1,7 +1,7 @@
 /**
  * Architect agent — read the project's `CLAUDE.md` spec, design the wiki,
  * and write markdown pages under `<project>/docs/knowledge/`. Runs on the
- * `reasoning` tier.
+ * `planning` tier by default (ADR 0033 §6; was `reasoning`).
  *
  * Output contract: the architect produces a single JSON object with a list
  * of `pages`, each `{ slug, content }`. We validate this, write each page
@@ -12,10 +12,11 @@ import { access } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 
-import type { DirectiveLimits, ModelCategory } from '@factory5/core';
+import type { DirectiveLimits, ModelCategory, WikiCritique } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import type { ProviderRegistry } from '@factory5/providers';
 import type { Database } from '@factory5/state';
+import { resolveAgentCategory } from '@factory5/state';
 import {
   projectPaths,
   wikiReadiness,
@@ -60,6 +61,7 @@ export interface ArchitectOptions {
   projectPath: string;
   db?: Database;
   directiveId?: string;
+  /** Explicit category override — takes precedence over `config.agents.architect`. */
   category?: ModelCategory;
   /** Per-directive budget ceilings (ADR 0020). See {@link TriageOptions.limits}. */
   limits?: DirectiveLimits;
@@ -69,6 +71,22 @@ export interface ArchitectOptions {
    * readiness check so directive-detail's activity panel narrates the run.
    */
   emit?: DirectiveEventEmitter;
+  /**
+   * Optional critique from a prior failed attempt — appended to the user
+   * prompt on retry so the architect can address specific gaps (ADR 0033 §4).
+   */
+  priorCritique?: WikiCritique;
+  /**
+   * Loaded daemon config — used to resolve `agents.architect` category
+   * override (ADR 0004 amendment). Absent means use
+   * `DEFAULT_AGENT_CATEGORIES.architect` (`'planning'`).
+   */
+  config?: {
+    agents?: {
+      architect?: ModelCategory | undefined;
+      critic?: ModelCategory | undefined;
+    };
+  };
 }
 
 async function readClaudeMd(projectPath: string): Promise<string> {
@@ -88,7 +106,8 @@ async function readClaudeMd(projectPath: string): Promise<string> {
  * caller to decide whether to iterate.
  */
 export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectResult> {
-  const category = opts.category ?? 'reasoning';
+  const config = opts.config ?? {};
+  const category = opts.category ?? resolveAgentCategory(config, 'architect');
   const resolution = await opts.registry.resolve(category);
   const systemPrompt = await buildAgentSystemPrompt('architect');
   const claudeMd = await readClaudeMd(opts.projectPath);
@@ -127,8 +146,13 @@ export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectRes
   ].join('\n');
 
   log.info(
-    { projectPath: opts.projectPath, provider: resolution.provider.id, model: resolution.model },
-    'architect: calling reasoning provider',
+    {
+      projectPath: opts.projectPath,
+      provider: resolution.provider.id,
+      model: resolution.model,
+      category,
+    },
+    'architect: calling provider',
   );
   if (opts.directiveId !== undefined) {
     emitLogLine(
@@ -153,11 +177,29 @@ export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectRes
     });
   }
 
+  let promptWithFeedback = userPrompt;
+  if (opts.priorCritique !== undefined) {
+    const findingsBlock = opts.priorCritique.findings
+      .map((f) => `  - [${f.aspect}] ${f.gap} — fix: ${f.suggestion}`)
+      .join('\n');
+    promptWithFeedback = [
+      userPrompt,
+      '',
+      '--- PREVIOUS ATTEMPT FAILED ---',
+      `severity: ${opts.priorCritique.severity}`,
+      `summary: ${opts.priorCritique.summary}`,
+      'findings:',
+      findingsBlock,
+      'Please re-write the wiki addressing each finding above. Preserve content that was already correct.',
+      '--- end PREVIOUS ATTEMPT FAILED ---',
+    ].join('\n');
+  }
+
   const started = Date.now();
   const response = await resolution.provider.call({
     model: resolution.model,
     systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
+    messages: [{ role: 'user', content: promptWithFeedback }],
     temperature: 0.2,
     reasoning: 'medium',
   });
