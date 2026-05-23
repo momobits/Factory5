@@ -9,6 +9,6 @@
 - [x] 14.7 Brain: `runArchitectWithCritique` wrapper
 - [x] 14.8 Brain: loop integration + delete wikiReadiness + delete old tests
 - [x] 14.9 Daemon: schema acceptance + persistence + resume inheritance
-- [ ] 14.10 CLI: `--max-wiki-readiness-attempts` flag
+- [x] 14.10 CLI: `--max-wiki-readiness-attempts` flag
 - [ ] 14.11 Web UI: 8th accordion row
 - [ ] 14.12 Phase close: live browser smoke + recordkeeping

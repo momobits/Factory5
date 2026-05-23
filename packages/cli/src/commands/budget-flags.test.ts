@@ -109,6 +109,28 @@ describe('addBudgetFlags', () => {
   });
 });
 
+describe('addBudgetFlags — Tier 14 axis (maxWikiReadinessAttempts)', () => {
+  it('exposes --max-wiki-readiness-attempts with description mentioning architect', () => {
+    const program = new Command();
+    const cmd = program.command('test');
+    addBudgetFlags(cmd);
+    const opt = cmd.options.find((o) => o.long === '--max-wiki-readiness-attempts');
+    expect(opt).toBeDefined();
+    expect(opt?.description.toLowerCase()).toContain('architect');
+  });
+
+  it('parses integer values (--max-wiki-readiness-attempts 5 → maxWikiReadinessAttempts: 5)', () => {
+    const opts = parseArgs(['--max-wiki-readiness-attempts', '5']);
+    expect(opts['maxWikiReadinessAttempts']).toBe(5);
+  });
+
+  it('rejects float values (e.g. 3.5)', () => {
+    expect(() => parseArgs(['--max-wiki-readiness-attempts', '3.5'])).toThrow(
+      /--max-wiki-readiness-attempts/,
+    );
+  });
+});
+
 describe('collectBudgetFlags', () => {
   it('returns empty limits + empty budgets for empty options', () => {
     expect(collectBudgetFlags({})).toEqual({ limits: {}, budgets: {} });
