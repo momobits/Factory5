@@ -4,8 +4,9 @@
  * `planning` tier by default (ADR 0033 §6; was `reasoning`).
  *
  * Output contract: the architect produces a single JSON object with a list
- * of `pages`, each `{ slug, content }`. We validate this, write each page
- * via `@factory5/wiki`, then run the readiness gate.
+ * of `pages`, each `{ slug, content }`. We validate this and write each page
+ * via `@factory5/wiki`. Wiki-readiness evaluation is external (see
+ * `runArchitectWithCritique` in `architect-loop.ts`, ADR 0033).
  */
 
 import { access } from 'node:fs/promises';
@@ -60,8 +61,8 @@ export interface ArchitectOptions {
   limits?: DirectiveLimits;
   /**
    * Optional SSE emitter (ADR 0029 / ADR 0031). When wired, the architect
-   * surfaces `log.line` events at stage entry, wiki-written, and the
-   * readiness check so directive-detail's activity panel narrates the run.
+   * surfaces `log.line` events at stage entry and wiki-written so
+   * directive-detail's activity panel narrates the run.
    */
   emit?: DirectiveEventEmitter;
   /**
@@ -95,8 +96,8 @@ async function readClaudeMd(projectPath: string): Promise<string> {
 
 /**
  * Run the architect: ask the configured model to produce a wiki plan,
- * write all pages, then evaluate readiness. Readiness is returned for the
- * caller to decide whether to iterate.
+ * write all pages, and return. Wiki-readiness evaluation is now external
+ * (see `runArchitectWithCritique` in `architect-loop.ts`, ADR 0033).
  */
 export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectResult> {
   const config = opts.config ?? {};

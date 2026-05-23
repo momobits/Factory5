@@ -2,7 +2,7 @@
  * Brain orchestration. `mode: 'inline'` pipeline:
  *   1. Claim the named directive in SQLite.
  *   2. Triage the intent.
- *   3. Run the architect → write wiki → readiness gate.
+ *   3. Run the architect → critic loop (ADR 0033) to write the wiki.
  *   4. Run the planner → write plan.
  *   5. Hand the plan to the parallel pool (see `./pool.ts`) which topo-sorts,
  *      dispatches independent ready-tasks concurrently up to
@@ -13,7 +13,7 @@
  * `mode: 'serve'` (long-running claim loop) lands in Phase 3.
  */
 
-import type { AutonomyMode, Budgets, Directive, DirectiveLimits, Plan } from '@factory5/core';
+import type { AutonomyMode, Budgets, Directive, DirectiveLimits, ModelCategory, Plan } from '@factory5/core';
 import { newId, resolveBudgets } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import { assess, type AssessResult, type Runtime } from '@factory5/assessor';
@@ -21,6 +21,7 @@ import type { DirectiveEventEmitter } from '@factory5/ipc';
 import type { ProviderRegistry } from '@factory5/providers';
 import {
   directives as directivesQ,
+  loadConfig,
   modelUsage,
   openDatabase,
   outbound,
@@ -295,15 +296,35 @@ async function runInline(
           options: readonly string[];
           directiveId?: string;
         }): Promise<string> => {
+          const targetDirectiveId = opts.directiveId ?? directive.id;
           const res = await askUser({
             db,
-            directiveId: directive.id,
+            directiveId: targetDirectiveId,
             question: opts.prompt,
             options: [...opts.options],
             ...(checkpointSignal !== undefined ? { signal: checkpointSignal } : {}),
           });
           // Treat timeout/abort the same as 'continue' (ADR 0030 default).
           return res.answer ?? 'continue';
+        };
+
+        const rawConfig = loadConfig();
+        // Strip explicit `undefined` values from agents so the object satisfies
+        // exactOptionalPropertyTypes (FactoryConfig uses `prop?: T | undefined`
+        // while RunArchitectWithCritiqueOptions.config uses `prop?: T`).
+        const config: { agents?: { architect?: ModelCategory; critic?: ModelCategory } } = {
+          ...(rawConfig.agents !== undefined
+            ? {
+                agents: {
+                  ...(rawConfig.agents.architect !== undefined
+                    ? { architect: rawConfig.agents.architect }
+                    : {}),
+                  ...(rawConfig.agents.critic !== undefined
+                    ? { critic: rawConfig.agents.critic }
+                    : {}),
+                },
+              }
+            : {}),
         };
 
         try {
@@ -317,6 +338,7 @@ async function runInline(
             maxAttempts,
             db,
             directiveId: directive.id,
+            config,
             ...(limits !== undefined
               ? {
                   limits: {
