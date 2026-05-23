@@ -2270,6 +2270,25 @@ describe('IPC server — POST /api/v1/builds (ADR 0027, sub-step 11.3)', () => {
     expect(body.directive.payload.budgets?.maxWikiReadinessAttempts).toBeUndefined();
     await app.close();
   });
+
+  it('Phase 13.6 regression: body.budgets.maxUsdPerTask persists to directive.payload.budgets', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {
+        project: projectDir,
+        budgets: { maxUsdPerTask: 1.5 },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { payload: { budgets?: Record<string, number> } };
+    };
+    expect(body.directive.payload.budgets).toEqual({ maxUsdPerTask: 1.5 });
+    await app.close();
+  });
 });
 
 describe('IPC server — POST /api/v1/directives/:id/resume (Tier 10 — HTTP mirror of `factory resume`)', () => {

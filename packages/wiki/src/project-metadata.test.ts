@@ -445,6 +445,24 @@ describe('resolveDirectivePayloadBudgets (Phase 13.5 — per-axis merge for dire
       maxTurnsFixer: 80, // project tier
     });
   });
+
+  it('Phase 13.6 regression: maxUsdPerTask flows through from body', () => {
+    expect(
+      resolveDirectivePayloadBudgets({ explicitBody: { maxUsdPerTask: 2.5 } }),
+    ).toEqual({ maxUsdPerTask: 2.5 });
+  });
+
+  it('Phase 14 regression: maxWikiReadinessAttempts flows through from body', () => {
+    expect(
+      resolveDirectivePayloadBudgets({ explicitBody: { maxWikiReadinessAttempts: 5 } }),
+    ).toEqual({ maxWikiReadinessAttempts: 5 });
+  });
+
+  it('Phase 13.6 regression: maxUsdPerTask flows through from project defaults', () => {
+    expect(
+      resolveDirectivePayloadBudgets({ projectDefaults: { maxUsdPerTask: 0.75 } }),
+    ).toEqual({ maxUsdPerTask: 0.75 });
+  });
 });
 
 describe('resolveDirectiveLimits (Phase 13.3 — three-tier merge for I009)', () => {
