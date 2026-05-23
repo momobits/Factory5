@@ -27,6 +27,7 @@ import type { ProviderRegistry } from '@factory5/providers';
 import { directives as directivesQ, pendingQuestions, type Database } from '@factory5/state';
 
 import { BUDGET_ESCALATION_MARKER } from './budget-escalation.js';
+import { CRITIC_MARKER } from './architect-loop.js';
 import { recordUsage } from './usage.js';
 
 const log = createLogger('brain.auto-answer');
@@ -140,6 +141,29 @@ export async function autoAnswerOne(q: PendingQuestion, deps: AutoAnswerOneDeps)
         answer,
       },
       'auto-answer: budget-escalation deterministic policy applied',
+    );
+    return;
+  }
+
+  // Tier 14 / ADR 0030 amendment — wiki-readiness exhaustion questions follow a
+  // deterministic policy: always answer `continue` (preserves the advisory contract
+  // for autonomous operation). No LLM call required — matches the [BUDGET] precedent.
+  if (q.question.startsWith(CRITIC_MARKER)) {
+    const answer = 'continue';
+    pendingQuestions.finalizeAutoAnswer(
+      deps.db,
+      q.id,
+      answer,
+      new Date(now()).toISOString(),
+      'agent',
+    );
+    log.info(
+      {
+        questionId: q.id,
+        directiveId: q.directiveId,
+        answer,
+      },
+      'auto-answer: wiki-readiness [CRITIC] deterministic policy applied (continue)',
     );
     return;
   }

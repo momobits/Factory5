@@ -42,8 +42,14 @@ const AXIS_FLAG: Record<BudgetAxis, string> = {
   maxWikiReadinessAttempts: '--max-wiki-readiness-attempts',
 };
 
-/** Per-axis CLI value type — `usd` permits fractional dollars; everything else is integer. */
-const AXIS_KIND: Record<BudgetAxis, 'usd' | 'int'> = {
+/**
+ * Per-axis CLI value type.
+ *  - `usd` — positive float (dollars)
+ *  - `int` — positive integer (≥ 1)
+ *  - `nonneg-int` — non-negative integer (≥ 0); used for axes where 0 means
+ *    "unlimited" (e.g. `maxWikiReadinessAttempts`)
+ */
+const AXIS_KIND: Record<BudgetAxis, 'usd' | 'int' | 'nonneg-int'> = {
   maxUsd: 'usd',
   maxSteps: 'int',
   askUserDeadlineMs: 'int',
@@ -51,7 +57,7 @@ const AXIS_KIND: Record<BudgetAxis, 'usd' | 'int'> = {
   maxTurnsBuilder: 'int',
   maxTurnsFixer: 'int',
   maxUsdPerTask: 'usd',
-  maxWikiReadinessAttempts: 'int',
+  maxWikiReadinessAttempts: 'nonneg-int',
 };
 
 function parsePositiveFloat(flag: string, raw: string): number {
@@ -77,6 +83,22 @@ function parsePositiveInt(flag: string, raw: string): number {
 }
 
 /**
+ * Parse a non-negative integer (≥ 0). Used for axes where 0 means "unlimited"
+ * (e.g. `maxWikiReadinessAttempts`). Rejects floats for the same reason
+ * {@link parsePositiveInt} does.
+ */
+function parseNonNegInt(flag: string, raw: string): number {
+  if (!/^\d+$/.test(raw.trim())) {
+    throw new Error(`${flag} must be a non-negative integer, got: ${raw}`);
+  }
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error(`${flag} must be a non-negative integer, got: ${raw}`);
+  }
+  return n;
+}
+
+/**
  * Add the six Tier-12 budget flags to a Commander command. Each flag's
  * description is the matching {@link BUDGET_DEFAULTS} explainer verbatim
  * — single source of truth per ADR 0032 §3.
@@ -91,7 +113,9 @@ export function addBudgetFlags(cmd: Command): Command {
     const parser =
       kind === 'usd'
         ? (v: string): number => parsePositiveFloat(flag, v)
-        : (v: string): number => parsePositiveInt(flag, v);
+        : kind === 'nonneg-int'
+          ? (v: string): number => parseNonNegInt(flag, v)
+          : (v: string): number => parsePositiveInt(flag, v);
     cmd.option(`${flag} ${placeholder}`, BUDGET_DEFAULTS[axis].explainer, parser);
   }
   return cmd;

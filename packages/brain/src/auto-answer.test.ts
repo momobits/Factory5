@@ -18,6 +18,7 @@ import {
 
 import { autoAnswerOne, buildAutoAnswerPrompt, runAutoAnswerSweep } from './auto-answer.js';
 import { BUDGET_ESCALATION_MARKER } from './budget-escalation.js';
+import { CRITIC_MARKER } from './architect-loop.js';
 
 beforeAll(() => {
   initLogger({ processName: 'auto-answer-test', noFile: true, noConsole: true });
@@ -412,6 +413,62 @@ describe('autoAnswerOne — Tier 12 / ADR 0032 §5 budget-escalation policy', ()
       retryBackoffMs: 0,
     });
     expect(pendingQuestions.getById(db, q.id)?.answer).toBe('abort');
+  });
+});
+
+describe('autoAnswerOne — Tier 14 / ADR 0030 amendment [CRITIC] deterministic policy', () => {
+  let db: Database;
+
+  beforeEach(() => {
+    db = freshDb();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  // Provider intentionally throws — the deterministic policy must NOT dispatch
+  // an LLM call for [CRITIC] questions. Tests will fail if the provider is invoked.
+  const noProviderCall = (): ProviderRegistry =>
+    ({
+      resolve(): Promise<CategoryResolution> {
+        throw new Error('LLM dispatch should be skipped for [CRITIC] questions');
+      },
+    }) as unknown as ProviderRegistry;
+
+  it("answers 'continue' deterministically — no LLM call", async () => {
+    const d = seedDirective(db);
+    const q = seedQuestion(db, d.id, {
+      question: `${CRITIC_MARKER} Wiki-readiness exhausted after 3 attempts.\n\nLast severity: major\nSummary: modules missing\nFindings:\n  - [modules] no relationships`,
+      options: ['continue', 'abort', 'extend-3'],
+    });
+    await autoAnswerOne(q, {
+      db,
+      registry: noProviderCall(),
+      now: () => Date.parse('2026-05-23T10:00:00.000Z'),
+      retryBackoffMs: 0,
+    });
+    const after = pendingQuestions.getById(db, q.id);
+    expect(after?.answer).toBe('continue');
+    expect(after?.answeredBy).toBe('agent');
+  });
+
+  it('preserves the advisory contract for the second exhaustion on the same directive', async () => {
+    const d = seedDirective(db);
+    // Second [CRITIC] exhaustion should still answer 'continue' (stateless policy,
+    // unlike [BUDGET] which counts prior bumps per-task).
+    const q1 = seedQuestion(db, d.id, {
+      question: `${CRITIC_MARKER} first exhaustion`,
+      options: ['continue', 'abort', 'extend-3'],
+    });
+    const q2 = seedQuestion(db, d.id, {
+      question: `${CRITIC_MARKER} second exhaustion`,
+      options: ['continue', 'abort', 'extend-3'],
+    });
+    await autoAnswerOne(q1, { db, registry: noProviderCall(), now: () => 1, retryBackoffMs: 0 });
+    await autoAnswerOne(q2, { db, registry: noProviderCall(), now: () => 2, retryBackoffMs: 0 });
+    expect(pendingQuestions.getById(db, q1.id)?.answer).toBe('continue');
+    expect(pendingQuestions.getById(db, q2.id)?.answer).toBe('continue');
   });
 });
 

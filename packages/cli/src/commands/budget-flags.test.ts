@@ -124,8 +124,19 @@ describe('addBudgetFlags — Tier 14 axis (maxWikiReadinessAttempts)', () => {
     expect(opts['maxWikiReadinessAttempts']).toBe(5);
   });
 
+  it('accepts 0 (unlimited sentinel — matches budgetsSchema nonnegative contract)', () => {
+    const opts = parseArgs(['--max-wiki-readiness-attempts', '0']);
+    expect(opts['maxWikiReadinessAttempts']).toBe(0);
+  });
+
   it('rejects float values (e.g. 3.5)', () => {
     expect(() => parseArgs(['--max-wiki-readiness-attempts', '3.5'])).toThrow(
+      /--max-wiki-readiness-attempts/,
+    );
+  });
+
+  it('rejects negative values', () => {
+    expect(() => parseArgs(['--max-wiki-readiness-attempts', '-1'])).toThrow(
       /--max-wiki-readiness-attempts/,
     );
   });
