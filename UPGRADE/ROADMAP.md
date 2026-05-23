@@ -206,7 +206,7 @@ The `checkModules` regex in `packages/wiki/src/readiness.ts` fires on most build
 - [x] loop integration + delete `wikiReadiness()` + delete old tests
 - [x] Daemon schema acceptance + persistence + resume inheritance
 - [x] CLI `--max-wiki-readiness-attempts` flag
-- [ ] Web UI 8th accordion row
+- [x] Web UI 8th accordion row
 - [ ] Browser smoke (Playwright MCP, thin-wiki project) — critic fires, at least one retry observed, distinct `critic` row in spend rollup
 - [ ] U035 closes
 

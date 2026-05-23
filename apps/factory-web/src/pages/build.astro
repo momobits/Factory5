@@ -23,6 +23,7 @@ const AXIS_LABEL: Record<BudgetAxis, string> = {
   maxTurnsBuilder: 'Max turns — builder',
   maxTurnsFixer: 'Max turns — fixer',
   maxUsdPerTask: 'Max USD — per task',
+  maxWikiReadinessAttempts: 'Max wiki-readiness attempts',
 };
 const AXIS_STEP: Record<BudgetAxis, string> = {
   maxUsd: '0.01',
@@ -32,6 +33,7 @@ const AXIS_STEP: Record<BudgetAxis, string> = {
   maxTurnsBuilder: '1',
   maxTurnsFixer: '1',
   maxUsdPerTask: '0.01',
+  maxWikiReadinessAttempts: '1',
 };
 /**
  * HTML `min` per axis. `0` is the unlimited-sentinel for the ceilings;
@@ -46,6 +48,7 @@ const AXIS_MIN: Record<BudgetAxis, string> = {
   maxTurnsBuilder: '1',
   maxTurnsFixer: '1',
   maxUsdPerTask: '0',
+  maxWikiReadinessAttempts: '0',
 };
 ---
 
@@ -114,7 +117,7 @@ const AXIS_MIN: Record<BudgetAxis, string> = {
         <summary>
           <span class="budgets-glyph" aria-hidden="true">+</span>
           <span class="budgets-label">Advanced budgets</span>
-          <span class="budgets-meta">seven axes · all optional · ADR 0032</span>
+          <span class="budgets-meta">eight axes · all optional · ADR 0032 + 0033</span>
         </summary>
         <p class="budgets-preamble">
           Leave any field blank to use the default. These are the operator-facing budgets
