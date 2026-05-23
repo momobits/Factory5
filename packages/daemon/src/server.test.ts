@@ -2237,6 +2237,39 @@ describe('IPC server — POST /api/v1/builds (ADR 0027, sub-step 11.3)', () => {
     });
     await app.close();
   });
+
+  it('Tier 14 / Phase 14.9: body.budgets.maxWikiReadinessAttempts persists to directive.payload.budgets', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {
+        project: projectDir,
+        budgets: { maxWikiReadinessAttempts: 5 },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { payload: { budgets?: Record<string, number> } };
+    };
+    expect(body.directive.payload.budgets).toEqual({ maxWikiReadinessAttempts: 5 });
+    await app.close();
+  });
+
+  it('Tier 14 / Phase 14.9: maxWikiReadinessAttempts absent when operator omits it', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/builds',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { project: projectDir },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { directive: { payload: { budgets?: Record<string, number> } } };
+    expect(body.directive.payload.budgets?.maxWikiReadinessAttempts).toBeUndefined();
+    await app.close();
+  });
 });
 
 describe('IPC server — POST /api/v1/directives/:id/resume (Tier 10 — HTTP mirror of `factory resume`)', () => {
@@ -2520,6 +2553,35 @@ describe('IPC server — POST /api/v1/directives/:id/resume (Tier 10 — HTTP mi
     expect(res.statusCode).toBe(200);
     const body = res.json() as { directive: { parentDirectiveId?: string } };
     expect(body.directive.parentDirectiveId).toBe(prior.id);
+    await app.close();
+  });
+
+  it('Tier 14 / Phase 14.9: resume inherits maxWikiReadinessAttempts verbatim from prior', async () => {
+    const prior = insertPriorDirective({
+      payload: {
+        project: 'sample',
+        projectPath: projectDir,
+        workspace: projectDir,
+        language: 'node',
+        budgets: { maxWikiReadinessAttempts: 7, maxTurnsScaffolder: 120 },
+      },
+    });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/directives/${prior.id}/resume`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { payload: { budgets?: Record<string, number> } };
+    };
+    // Both axes inherited verbatim from the prior — operator set neither on resume.
+    expect(body.directive.payload.budgets).toEqual({
+      maxWikiReadinessAttempts: 7,
+      maxTurnsScaffolder: 120,
+    });
     await app.close();
   });
 });

@@ -20,6 +20,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
+  BUDGET_AXES,
   newId,
   projectBudgetDefaultsSchema,
   type DirectiveLimits,
@@ -259,15 +260,7 @@ export function resolveDirectivePayloadBudgets(opts: {
   const body = opts.explicitBody ?? {};
   const project = opts.projectDefaults ?? {};
   const merged: ProjectBudgetDefaults = {};
-  const axes = [
-    'maxUsd',
-    'maxSteps',
-    'askUserDeadlineMs',
-    'maxTurnsScaffolder',
-    'maxTurnsBuilder',
-    'maxTurnsFixer',
-  ] as const;
-  for (const axis of axes) {
+  for (const axis of BUDGET_AXES) {
     const value = body[axis] ?? project[axis];
     if (value !== undefined) merged[axis] = value;
   }
