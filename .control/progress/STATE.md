@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-17 — third session-end after Phase 13 close (second consecutive no-op session). Pure session-end housekeeping with no work between bootstrap and close: STATE.md timestamp bump + last-commit pointer to `ff94ed1` (the prior no-op session-end commit) + lag counter caught up #39 then reintroduces #40 (this session-end commit edits STATE then commits; HEAD diverges from STATE pointer once more). Phase 13 tag `phase-13-budget-followups-closed` still at `aae86dc` (the 13.6 commit). Workspace 1322 + 3 skipped from last test run (Phase 13 close). All four `pnpm` gates still green from that run.
-**Current phase:** arc-complete (ninth time — no Phase 14 planned)
-**Current step:** n/a (between phases)
-**Status:** No-op session (second consecutive). Operator opened the session at arc-complete after the prior no-op session-end, accepted the canonical `/session-end` path again without a separate drift-fix commit (same rationale as the prior no-op: a drift-fix in a no-work session just bounces the count from #39 to #40 to #41 without eliminating the structural lag). Phase 13 results unchanged: U033 + U034 both Resolved; propagation path verified live; U034 cleanup verified live; `[BUDGET]` askUser trip path unit-test-covered (44 brain tests) but not live-exercised because smoke-demo's scaffolder completed under the 10-turn cap at phase-close. No factoryd running at handoff.
+**Last updated:** 2026-05-23 — Phase 14 scaffold (14.1). Tier 14 wiki-readiness LLM judge scaffolded: U035 opened in UPGRADE/ISSUES.md, Tier 14 section added to UPGRADE/ROADMAP.md, UPGRADE/plans/tier-14-wiki-readiness-judge.md authored, phase-14-wiki-readiness-judge/README.md + steps.md created, Phase 14 row added to .control/architecture/phase-plan.md, STATE.md cursor flipped to Phase 14 active at 14.1. No production code changed. Phase 13 tag `phase-13-budget-followups-closed` still at `aae86dc`. Workspace 1322 + 3 skipped from last test run (Phase 13 close). All four `pnpm` gates green from that run.
+**Current phase:** Phase 14 (wiki-readiness-judge)
+**Current step:** 14.1 — scaffold complete; ready for 14.2
+**Status:** Phase 14 active. Scaffold commit landed (14.1 checkbox flipped in steps.md). Next sub-step is 14.2 (ADR 0033 + ADR 0032/0004/0030 amendments). No factoryd running at handoff.
 
 ---
 
@@ -20,11 +20,7 @@
 
 ## Next action
 
-**Arc-complete state — no active phase.** Phase 13 closed `phase-13-budget-followups-closed` tagged at `aae86dc` (the 13.6 commit — last substantive work commit). Operator decides next move:
-
-1. **`/session-end`** to close out today. Default — banks the substantial Phase 13 work as a clean arc close.
-2. **Author a new tier** if a fresh operator-felt issue surfaces. Carry-forwards available: mid-task budget escalation; budget audit dashboard; daemon `POST /shutdown` IPC route (U034 candidate (2)); planner-honors-budgets belt-and-suspenders (U033 candidate (2)); U005 chat REPL UX (5x deferred); per-project askUserDeadlineMs override; `factory config get/set` CLI; override-after-auto-answer; inline-style audit; structural `/session-end` lag-by-1 fix.
-3. **Run a follow-up live smoke** to exercise the [BUDGET] askUser trip path on a project larger than smoke-demo (Phase 13's smoke verified propagation half but couldn't force a trip on smoke-demo's small scaffolder). Optional; the trip path is unit-test-covered.
+**Phase 14 active at 14.1 (scaffold complete).** Run `14.2` next: author ADR 0033 (new, six-part decision) and append amendment blocks to ADR 0032/0004/0030. Update `docs/decisions/INDEX.md` and bump `docs/ARCHITECTURE.md` ADR count line from 32 → 33. Commit `docs(14.2): ADR 0033 + ADR 0032/0004/0030 amendments`.
 
 **Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`; Tier 13 at `phase-13-budget-followups-closed` 2026-05-17 at `aae86dc`.
 
@@ -47,7 +43,7 @@
 
 ## In-flight work
 
-**None — Phase 13 closed, arc-complete (ninth time).** All seven sub-steps closed; both U033 + U034 closed; live smoke verified propagation half end-to-end and U034 cleanup live. No factoryd running at handoff (stopped at phase-close, exercising U034 fix live and confirming pidfile absent post-stop).
+**Phase 14 active — 14.1 complete.** Scaffold commit landed: U035 opened, ROADMAP Tier 14 section added, UPGRADE tier plan authored, phase-14 README + steps created, phase-plan.md Phase 14 row added, STATE.md cursor flipped. No production code touched. No factoryd running at handoff.
 
 **Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 

@@ -24,6 +24,19 @@ Severity:
 
 ## Open
 
+### U035 — Wiki-readiness regex over-literal; modules-documented fires on most builds
+
+- **Filed**: 2026-05-23
+- **Severity**: medium
+- **Tier**: 14
+- **Area**: brain + wiki
+
+`packages/wiki/src/readiness.ts`'s `checkModules` requires either `modules/` subdirectory pages OR a literal `\n## Modules` H2 header. The architect (Opus) frequently produces `# Modules` H1, `## Components`, scattered headings, or other shapes; the regex misses them. Phase 11 retro called this "Opus non-determinism, not a load-bearing gate bug." Operator-felt as recurring warn that creates noise — when the warn IS load-bearing (genuinely thin wiki) the noise mixes it into the chaff. Tier 14 replaces the regex with an LLM judge per `docs/superpowers/specs/2026-05-18-tier-14-wiki-readiness-llm-judge-design.md`.
+
+**Hypothesis**: regex too literal; LLM judge can evaluate against directive intent.
+
+**Resolution candidates**: see Tier 14 spec.
+
 ### U034 — `factory daemon stop` on Windows leaves a stale pidfile; SIGTERM is mapped to hard `TerminateProcess`
 
 - **Severity**: low

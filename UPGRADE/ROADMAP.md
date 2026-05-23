@@ -1,6 +1,6 @@
 # Roadmap — factory5 first-class upgrade
 
-Thirteen tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent. Tier 9 reopens the arc again for the first frontend aesthetic overhaul in the project — porting the "Editorial Control Room" aesthetic from the sibling conductor project to `apps/factory-web` as a single-session, dual-theme redesign (informal cadence — no per-step commits, no ADR). Tier 13 reopens the arc once more to close the operator-felt loop Tier 12 structurally built but couldn't demonstrate end-to-end — the propagation gap surfaced by Phase 12's deferred smoke (operator-set `maxTurns*` is silently shadowed by planner-emit), plus polish (Windows daemon-stop pidfile cleanup) and two cheap Phase 12 carry-forwards (per-project default overrides extending to all axes; per-task USD cap).
+Fourteen tiers, shippable independently. Tier order is dependency-aware: docs first because the rest reference them; channels before web UI because channel parity is the bigger felt gap; web UI rebuild is the heaviest tier; CLI completion is small. Tiers 5–7 were added post-arc as audit-driven follow-ups: Tier 5 brought the agent prompts up to factory5-native parity; Tier 6 closed the loop on the skills those prompts cite plus the runtime contract the fixer prompt documents; Tier 7 shipped the operator-side parallel to Tier 6's agent-side parser (the `factory findings mark <id> <status>` CLI verb). Tier 8 reopens the arc post-Phase-7-close with the highest-leverage carry-forward — LLM auto-answer for `ask_user` pending-questions past their deadline, so autonomous runs unblock when the human is absent. Tier 9 reopens the arc again for the first frontend aesthetic overhaul in the project — porting the "Editorial Control Room" aesthetic from the sibling conductor project to `apps/factory-web` as a single-session, dual-theme redesign (informal cadence — no per-step commits, no ADR). Tier 13 reopens the arc once more to close the operator-felt loop Tier 12 structurally built but couldn't demonstrate end-to-end — the propagation gap surfaced by Phase 12's deferred smoke (operator-set `maxTurns*` is silently shadowed by planner-emit), plus polish (Windows daemon-stop pidfile cleanup) and two cheap Phase 12 carry-forwards (per-project default overrides extending to all axes; per-task USD cap).
 
 ## Status legend
 
@@ -191,6 +191,26 @@ Phase 12 closed structurally green but the deferred live browser smoke failed th
 - [ ] U033 + U034 close
 
 Plan: [`plans/tier-13-budget-followups.md`](plans/tier-13-budget-followups.md)
+
+## Tier 14 — Wiki-readiness LLM judge
+
+The `checkModules` regex in `packages/wiki/src/readiness.ts` fires on most builds because the architect (Opus) produces `# Modules` H1, `## Components`, scattered headings, or other semantically-correct shapes where the regex expects a literal `\n## Modules` H2. Phase 11 retro called this "Opus non-determinism, not a load-bearing gate bug" and parked it. Operator-felt problem: the warn fires on most projects, training operators to ignore it; when the warn IS load-bearing (genuinely thin wiki) the noise masks the signal. Tier 14 replaces the regex with an LLM judge per `docs/superpowers/specs/2026-05-18-tier-14-wiki-readiness-llm-judge-design.md`. Estimated **2-3 sessions**.
+
+- [x] U035 opened
+- [ ] ADR 0033 (new) + ADR 0032/0004/0030 amendment blocks
+- [ ] `wikiCritiqueSchema` + `AGENT_ROLES` += `'critic'` + `BUDGET_DEFAULTS` 8th axis (`maxWikiReadinessAttempts`)
+- [ ] `agentsConfigSchema` + `resolveAgentCategory` + `DEFAULT_AGENT_CATEGORIES` in state
+- [ ] `runWikiCritic` (brain, TDD)
+- [ ] `runArchitect` modifications (priorCritique param + agent-category resolution; default flips to `planning`)
+- [ ] `runArchitectWithCritique` wrapper (brain, TDD)
+- [ ] loop integration + delete `wikiReadiness()` + delete old tests
+- [ ] Daemon schema acceptance + persistence + resume inheritance
+- [ ] CLI `--max-wiki-readiness-attempts` flag
+- [ ] Web UI 8th accordion row
+- [ ] Browser smoke (Playwright MCP, thin-wiki project) — critic fires, at least one retry observed, distinct `critic` row in spend rollup
+- [ ] U035 closes
+
+Plan: [`plans/tier-14-wiki-readiness-judge.md`](plans/tier-14-wiki-readiness-judge.md)
 
 ## Out of scope (now)
 
