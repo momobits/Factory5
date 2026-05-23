@@ -1,6 +1,6 @@
 # Next session kickoff
 
-> Auto-generated from `.control/progress/STATE.md` at 2026-05-17T20:05:25Z by
+> Auto-generated from `.control/progress/STATE.md` at 2026-05-23T16:56:28Z by
 > `.claude/hooks/regenerate-next-md.sh`. Edit STATE.md's "Next action"
 > or "Notes for next session" to influence this prompt; **do not edit
 > next.md by hand** -- it's overwritten on every session end.
@@ -16,13 +16,13 @@ see a structured `[control:state]` block instead of doing them by hand.
 
 ## Next action
 
-**Arc-complete state — no active phase.** Phase 13 closed `phase-13-budget-followups-closed` tagged at `aae86dc` (the 13.6 commit — last substantive work commit). Operator decides next move:
+**Arc-complete (tenth time — no Phase 15 planned).** Phase 14 closed and tagged. Operator decides next move:
 
-1. **`/session-end`** to close out today. Default — banks the substantial Phase 13 work as a clean arc close.
-2. **Author a new tier** if a fresh operator-felt issue surfaces. Carry-forwards available: mid-task budget escalation; budget audit dashboard; daemon `POST /shutdown` IPC route (U034 candidate (2)); planner-honors-budgets belt-and-suspenders (U033 candidate (2)); U005 chat REPL UX (5x deferred); per-project askUserDeadlineMs override; `factory config get/set` CLI; override-after-auto-answer; inline-style audit; structural `/session-end` lag-by-1 fix.
-3. **Run a follow-up live smoke** to exercise the [BUDGET] askUser trip path on a project larger than smoke-demo (Phase 13's smoke verified propagation half but couldn't force a trip on smoke-demo's small scaffolder). Optional; the trip path is unit-test-covered.
+1. **`/session-end`** to close out today (default — Tier 14 was a substantial 25-commit tier with a clean arc close).
+2. **Author a new tier** if a fresh operator-felt issue surfaces. Carry-forwards available from spec §9 (Out of scope for Tier 14): generic critic loops for other stages (planner critic, build critic); diff-style architect output on retry; per-directive model category overrides; critic prompt context expansion (task_log, findings, prior similar projects); `maxWikiJudgeUsd` dollar cap; mid-task budget escalation; budget audit dashboard. Plus standing carry-forwards: U005 chat REPL UX (5x deferred), `/session-end` lag-by-1 structural fix (~#42 now), per-project `askUserDeadlineMs` override, `factory config get/set` CLI, etc.
+3. **Run a follow-up live smoke** exercising the retry/exhaustion paths (today's smoke had the critic pass first try; an `--max-wiki-readiness-attempts 1` build against a deliberately bad spec would force the askUser exhaustion path live).
 
-**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`; Tier 13 at `phase-13-budget-followups-closed` 2026-05-17 at `aae86dc`.
+**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`; Tier 13 at `phase-13-budget-followups-closed` 2026-05-17 at `aae86dc`; Tier 14 at `phase-14-wiki-readiness-judge-closed` 2026-05-23 at `431c7da`.
 
 ## Notes for next session
 

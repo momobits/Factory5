@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-23 — Phase 14 close structural prep (14.12). All four `pnpm` gates green: build ✓, test 1388 passing + 3 skipped ✓, lint ✓, format:check warns on pre-existing dirty paths only (not gating). Done-criteria ticked in phase-14 README (10 of 11; live browser smoke deferred to controller). U035 moved to Resolved (commit `02adf0c`). ROADMAP Tier 14 U035-closes row ticked. STATE.md cursor flipped to arc-complete (tenth time). Live smoke + `/phase-close` tag left for operator.
+**Last updated:** 2026-05-23 — Phase 14 closed (tagged `phase-14-wiki-readiness-judge-closed` at `431c7da`, the last substantive work commit — Phase 12/13 tag-at-last-work pattern). All 11 done-criteria green including the live browser smoke (Playwright MCP, directive `01KSAVBNVNTARM6EPFPPJFQZKT`, project tier-14-smoke). All four `pnpm` gates clean. Workspace 1388 passing + 3 skipped (+66 from Phase 13 close's 1322). Daemon stopped at handoff.
 **Current phase:** arc-complete (tenth time — no Phase 15 planned)
 **Current step:** n/a (between phases)
-**Status:** Phase 14 structural close complete. Tier 14 wiki-readiness LLM judge delivered: regex gate deleted, LLM critic wired, 8th budget axis flows end-to-end (CLI + Web UI + payload + resume), `critic` agent role in spend rollups, auto-answer `[CRITIC]` marker support, U035 resolved. All four `pnpm` gates green. Workspace 1388 passing + 3 skipped. Awaiting operator: live browser smoke (thin-wiki project, verify critic fires + retry + distinct `critic` row in spend rollup), then `/phase-close` to tag `phase-14-wiki-readiness-judge-closed`, then `/session-end`. No factoryd running at handoff.
+**Status:** Tier 14 wiki-readiness LLM judge delivered end-to-end: regex `wikiReadiness` gate deleted, LLM critic wired, 8th budget axis (`maxWikiReadinessAttempts`) flows through CLI + Web UI + per-project + payload + resume, `[agents.*]` per-agent category override layer (architect defaults flipped to Sonnet, critic defaults Opus), auto-answer `[CRITIC]` marker support, U035 resolved. Live smoke ran cleanly — Sonnet architect ($0.110) + Opus critic ($0.172) = $0.282 wiki-phase spend; critic passed first try with full Opus verdict rendered in the activity panel. Two pre-existing bugs incidentally caught and fixed during the tier: Phase 13.6's `maxUsdPerTask` silently dropped by hardcoded axis list in `resolveDirectivePayloadBudgets`; ADR 0030's `[CRITIC]` marker handler was never implemented despite the amendment. No factoryd running at handoff.
 
 ---
 
@@ -20,22 +20,22 @@
 
 ## Next action
 
-**Arc-complete (tenth time).** Phase 14 structural prep committed. Operator next steps in order:
+**Arc-complete (tenth time — no Phase 15 planned).** Phase 14 closed and tagged. Operator decides next move:
 
-1. Run the live browser smoke (Playwright MCP, thin-wiki project, ~$1.50 cap): verify critic fires on a CLAUDE.md-thin build, at least one retry observed, distinct `critic` row appears in `/app/spend?group-by=agent`.
-2. Run `/phase-close` to tag `phase-14-wiki-readiness-judge-closed` (annotated tag at the structural prep commit or the smoke-verification commit). This flips the final browser-smoke checkbox in the phase README and ROADMAP, and writes the phase-close entry to the journal.
-3. Run `/session-end` to bank the session, update STATE.md "Last commit" pointer, and write `next.md`.
+1. **`/session-end`** to close out today (default — Tier 14 was a substantial 25-commit tier with a clean arc close).
+2. **Author a new tier** if a fresh operator-felt issue surfaces. Carry-forwards available from spec §9 (Out of scope for Tier 14): generic critic loops for other stages (planner critic, build critic); diff-style architect output on retry; per-directive model category overrides; critic prompt context expansion (task_log, findings, prior similar projects); `maxWikiJudgeUsd` dollar cap; mid-task budget escalation; budget audit dashboard. Plus standing carry-forwards: U005 chat REPL UX (5x deferred), `/session-end` lag-by-1 structural fix (~#42 now), per-project `askUserDeadlineMs` override, `factory config get/set` CLI, etc.
+3. **Run a follow-up live smoke** exercising the retry/exhaustion paths (today's smoke had the critic pass first try; an `--max-wiki-readiness-attempts 1` build against a deliberately bad spec would force the askUser exhaustion path live).
 
-**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`; Tier 13 at `phase-13-budget-followups-closed` 2026-05-17 at `aae86dc`.
+**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`; Tier 13 at `phase-13-budget-followups-closed` 2026-05-17 at `aae86dc`; Tier 14 at `phase-14-wiki-readiness-judge-closed` 2026-05-23 at `431c7da`.
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `ff94ed1` — `docs(state)`: session end (arc-complete, no-op session). (This third session-end caught up lag #39; the resulting commit will bump to lag #40 — this session-end edits STATE then commits, HEAD diverges from STATE pointer once more.)
-- **Uncommitted changes:** none at session-end
-- **Last phase tag:** `phase-13-budget-followups-closed` (annotated at `aae86dc`)
+- **Last commit:** `df317d7` — `chore(14.12)`: tick live-smoke done-criterion — Tier 14 fully verified. (Phase 14 close commit follows this STATE.md update; HEAD will diverge from STATE pointer once more — known structural lag, now #43.)
+- **Uncommitted changes:** pre-existing dirty paths only (`.control/progress/next.md` hook-regen, `.agents/`, `.claude/skills/`, `AGENTS.md`, `GEMINI.md`, `docs/superpowers/{plans,specs}/*` prettier reformatting, `pnpm-lock.yaml` 3-line drift) — accepted out-of-scope per operator's standing directive
+- **Last phase tag:** `phase-14-wiki-readiness-judge-closed` (annotated at `431c7da`)
 
 ---
 
@@ -47,7 +47,7 @@
 
 ## In-flight work
 
-**Phase 14 active — 14.1 complete.** Scaffold commit landed: U035 opened, ROADMAP Tier 14 section added, UPGRADE tier plan authored, phase-14 README + steps created, phase-plan.md Phase 14 row added, STATE.md cursor flipped. No production code touched. No factoryd running at handoff.
+**None — Phase 14 closed, arc-complete (tenth time).** All 12 sub-steps done; U035 resolved; live smoke verified end-to-end. No factoryd running at handoff (stopped post-smoke).
 
 **Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 
