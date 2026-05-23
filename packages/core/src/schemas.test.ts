@@ -5,6 +5,7 @@ import {
   eventSchema,
   findingSchema,
   planSchema,
+  projectMetadataSchema,
   taskSchema,
   wikiCritiqueSchema,
 } from './schemas.js';
@@ -282,5 +283,76 @@ describe('plan and task schemas', () => {
     const parsed = planSchema.parse(plan);
     expect(parsed.tasks).toHaveLength(1);
     expect(parsed.tasks[0]?.title).toBe('Build module A');
+  });
+});
+
+describe('projectMetadataSchema — Tier 15 scalars', () => {
+  it('accepts autoIncreaseBudgets: true', () => {
+    const result = projectMetadataSchema.safeParse({
+      id: '01KSB8C3AAAAAAAAAAAAAAAAAA',
+      name: 'pythonetl',
+      createdAt: '2026-05-23T20:28:06.332Z',
+      factoryVersion: '0.x',
+      metadata: {
+        autoIncreaseBudgets: true,
+        autoIncreaseCeilingMultiplier: 5,
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts autoIncreaseCeilingMultiplier: 1 (minimum)', () => {
+    const result = projectMetadataSchema.safeParse({
+      id: '01KSB8C3AAAAAAAAAAAAAAAAAA',
+      name: 'pythonetl',
+      createdAt: '2026-05-23T20:28:06.332Z',
+      factoryVersion: '0.x',
+      metadata: { autoIncreaseCeilingMultiplier: 1 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects autoIncreaseCeilingMultiplier: 0', () => {
+    const result = projectMetadataSchema.safeParse({
+      id: '01KSB8C3AAAAAAAAAAAAAAAAAA',
+      name: 'pythonetl',
+      createdAt: '2026-05-23T20:28:06.332Z',
+      factoryVersion: '0.x',
+      metadata: { autoIncreaseCeilingMultiplier: 0 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects negative autoIncreaseCeilingMultiplier', () => {
+    const result = projectMetadataSchema.safeParse({
+      id: '01KSB8C3AAAAAAAAAAAAAAAAAA',
+      name: 'pythonetl',
+      createdAt: '2026-05-23T20:28:06.332Z',
+      factoryVersion: '0.x',
+      metadata: { autoIncreaseCeilingMultiplier: -1 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('treats both fields as optional', () => {
+    const result = projectMetadataSchema.safeParse({
+      id: '01KSB8C3AAAAAAAAAAAAAAAAAA',
+      name: 'pythonetl',
+      createdAt: '2026-05-23T20:28:06.332Z',
+      factoryVersion: '0.x',
+      metadata: {},
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts autoIncreaseBudgets: false', () => {
+    const result = projectMetadataSchema.safeParse({
+      id: '01KSB8C3AAAAAAAAAAAAAAAAAA',
+      name: 'pythonetl',
+      createdAt: '2026-05-23T20:28:06.332Z',
+      factoryVersion: '0.x',
+      metadata: { autoIncreaseBudgets: false },
+    });
+    expect(result.success).toBe(true);
   });
 });

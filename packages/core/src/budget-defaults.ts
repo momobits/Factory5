@@ -131,6 +131,40 @@ export type Budgets = z.infer<typeof budgetsSchema>;
  */
 export type ResolvedBudgets = { [K in BudgetAxis]: number };
 
+// -----------------------------------------------------------------------------
+// Tier 15 / ADR 0034 — per-agent turn-pool axis helpers
+// -----------------------------------------------------------------------------
+
+/**
+ * The three `maxTurns*` pool axes that tool-using agents draw against
+ * (ADR 0034). Defined in `@factory5/core` so both `pool-usage.ts` (aggregation)
+ * and `pool.ts` (dispatcher) can import without a brain-internal cycle.
+ *
+ * Non-tool-using agents (critic, planner, architect) do not have a pool axis
+ * and return `undefined` from {@link axisForAgent}.
+ */
+export type MaxTurnsAxis = 'maxTurnsScaffolder' | 'maxTurnsBuilder' | 'maxTurnsFixer';
+
+/** @internal Mapping from agent role string to its pool axis. */
+const AGENT_TO_AXIS: Record<string, MaxTurnsAxis | undefined> = {
+  scaffolder: 'maxTurnsScaffolder',
+  builder: 'maxTurnsBuilder',
+  fixer: 'maxTurnsFixer',
+};
+
+/**
+ * Resolve the `maxTurns*` pool axis for a given tool-using agent class.
+ * Returns `undefined` for non-tool-using agents (critic, planner, architect)
+ * that do not draw against a turn pool (ADR 0034 §1).
+ *
+ * Co-exists with the identical helper in `packages/brain/src/budget-escalation.ts`
+ * until Tier 15.8 deletes that file. Tier 15.5+ consumers (`pool-usage.ts`,
+ * `pool.ts`) import from `@factory5/core` exclusively.
+ */
+export function axisForAgent(agent: string): MaxTurnsAxis | undefined {
+  return AGENT_TO_AXIS[agent];
+}
+
 /**
  * Collapse a partial budget input against {@link BUDGET_DEFAULTS} and return
  * a fully-populated object. The resolver is the boundary between the

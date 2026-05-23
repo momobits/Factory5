@@ -220,7 +220,7 @@ Replace the entire `[BUDGET]` askUser path with a project-level budget cockpit. 
 - [x] U037 opened
 - [x] U038 opened
 - [x] ADR 0034 (new, supersedes ADR 0032) + ADR 0032 Status update + ADR 0030 amendment + ADR 0020 amendment
-- [ ] Core: `autoIncreaseBudgets` + `autoIncreaseCeilingMultiplier` scalars in project metadata schema
+- [x] Core: `autoIncreaseBudgets` + `autoIncreaseCeilingMultiplier` scalars in project metadata schema
 - [ ] Wiki: project-metadata round-trip for new scalars; delete `resolveDirectivePayloadBudgets`
 - [ ] Brain: `computePoolUsage` helper (`pool-usage.ts`)
 - [ ] Brain: `pool-resume.ts` chokidar watcher (parked → raise → auto-resume)

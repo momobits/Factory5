@@ -27,7 +27,9 @@ import type {
   pendingQuestionSchema,
   planSchema,
   planStatusSchema,
+  projectMetadataSchema,
   projectSchema,
+  projectTier15MetadataSchema,
   severitySchema,
   taskResultSchema,
   taskSchema,
@@ -79,3 +81,16 @@ export type WikiCritiqueAspect = z.infer<typeof wikiCritiqueAspectSchema>;
 export type WikiCritiqueSeverity = z.infer<typeof wikiCritiqueSeveritySchema>;
 export type WikiCritiqueFinding = z.infer<typeof wikiCritiqueFindingSchema>;
 export type WikiCritique = z.infer<typeof wikiCritiqueSchema>;
+
+// -----------------------------------------------------------------------------
+// Project identity file — Tier 15 / ADR 0034
+// -----------------------------------------------------------------------------
+
+/** Typed `metadata` sub-object of `<project>/.factory/project.json` (Tier 15). */
+export type ProjectTier15Metadata = z.infer<typeof projectTier15MetadataSchema>;
+
+/**
+ * Validated shape of `<project>/.factory/project.json` (ADR 0021 + Tier 15
+ * typed metadata slots). Derived from {@link projectMetadataSchema}.
+ */
+export type ProjectMetadataValidated = z.infer<typeof projectMetadataSchema>;

@@ -461,3 +461,46 @@ export const projectSchema = z.object({
   lastTouchedAt: isoDateTimeSchema,
   metadata: z.record(z.unknown()).optional(),
 });
+
+// -----------------------------------------------------------------------------
+// Project identity file — `<project>/.factory/project.json` (ADR 0021)
+// Tier 15 / ADR 0034 — typed metadata slots for auto-increase policy.
+// -----------------------------------------------------------------------------
+
+/**
+ * Typed slots within `<project>/.factory/project.json`'s `metadata` object
+ * introduced in Tier 15 (ADR 0034). Uses `.passthrough()` to preserve
+ * unrelated keys (e.g. `language`, `budgetDefaults`) written by other
+ * tiers so a schema evolution here never drops in-place data.
+ *
+ * Validation semantics:
+ *   - `autoIncreaseBudgets` — when `true`, the pool dispatcher automatically
+ *     bumps the exhausted axis by one project-default increment instead of
+ *     parking the directive. Defaults to `false` (undefined treated as off).
+ *   - `autoIncreaseCeilingMultiplier` — safety ceiling multiplier; the auto-
+ *     bump loop aborts when the effective cap would exceed
+ *     `projectDefault × multiplier`. Minimum 1 (no multiplier below 1 is
+ *     meaningful). Default 5 (see ADR 0034 §5).
+ */
+export const projectTier15MetadataSchema = z
+  .object({
+    autoIncreaseBudgets: z.boolean().optional(),
+    autoIncreaseCeilingMultiplier: z.number().min(1).optional(),
+  })
+  .passthrough();
+
+/**
+ * Zod schema for `<project>/.factory/project.json` (ADR 0021).
+ *
+ * Primarily used for test fixtures and any new code paths that want
+ * boundary-validated parsing of the project identity file. Legacy readers
+ * in `@factory5/wiki` use the hand-rolled `validateMetadataOrReason`
+ * (kept for performance on the hot directive-creation path).
+ */
+export const projectMetadataSchema = z.object({
+  id: ulidSchema,
+  name: z.string().min(1),
+  createdAt: isoDateTimeSchema,
+  factoryVersion: z.string().min(1),
+  metadata: projectTier15MetadataSchema,
+});
