@@ -24,7 +24,7 @@ Build order: standalone (1 of 5 in brainstorm sequence).
 
 | ID | Title | File | Complexity | Dependencies | Closes |
 |----|-------|------|-----------|-------------|--------|
-| F2 | Budget Unified Resolution | [budget_unified_resolution.md](features/budget_unified_resolution.md) | Large | F1 | Relay #1, #3, #5, #6 |
+| F2 | Budget Unified Resolution | [budget_unified_resolution.md](implemented/budget_unified_resolution.md) | Large | F1 | Relay #1, #3, #5, #6 | DONE (`b73e5fa`) |
 
 Build order: 2 of 5 in brainstorm sequence. Requires F1's axis taxonomy.
 
