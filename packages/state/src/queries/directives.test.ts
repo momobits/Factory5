@@ -375,4 +375,162 @@ describe('directives.listPaged', () => {
   it('returns empty items + total 0 on empty db', () => {
     expect(directives.listPaged(db)).toEqual({ items: [], total: 0 });
   });
+
+  // ------------------------------------------------------------------
+  // Item A: projectId server-side filter
+  // ------------------------------------------------------------------
+
+  it('filters by projectId when provided — only matching rows returned', () => {
+    const projectA = newId();
+    const projectB = newId();
+    // Two directives for projectA, one for projectB, one with no project.
+    const dA1 = baseDirective({ projectId: projectA });
+    const dA2 = baseDirective({ projectId: projectA });
+    const dB1 = baseDirective({ projectId: projectB });
+    const dNone = baseDirective();
+    for (const d of [dA1, dA2, dB1, dNone]) directives.insert(db, d);
+
+    const res = directives.listPaged(db, { projectId: projectA });
+    expect(res.total).toBe(2);
+    expect(res.items.map((d) => d.id).sort()).toEqual([dA1.id, dA2.id].sort());
+  });
+
+  it('filters by projectId + status simultaneously', () => {
+    const pid = newId();
+    const running = baseDirective({ projectId: pid, status: 'running' });
+    const pending = baseDirective({ projectId: pid, status: 'pending' });
+    const otherProject = baseDirective({ projectId: newId(), status: 'running' });
+    for (const d of [running, pending, otherProject]) directives.insert(db, d);
+
+    const res = directives.listPaged(db, { projectId: pid, status: 'running' });
+    expect(res.total).toBe(1);
+    expect(res.items[0]?.id).toBe(running.id);
+  });
+
+  it('returns total 0 when no directives match the projectId', () => {
+    const pid = newId();
+    directives.insert(db, baseDirective({ projectId: newId() }));
+    const res = directives.listPaged(db, { projectId: pid });
+    expect(res.total).toBe(0);
+    expect(res.items).toHaveLength(0);
+  });
+
+  // ------------------------------------------------------------------
+  // Item B: includeSpend rollup
+  // ------------------------------------------------------------------
+
+  it('includeSpend: costUsd is 0 for a directive with no model_usage rows', () => {
+    const d = baseDirective();
+    directives.insert(db, d);
+
+    const res = directives.listPaged(db, { includeSpend: true });
+    expect(res.items).toHaveLength(1);
+    expect(res.items[0]?.costUsd).toBe(0);
+  });
+
+  it('includeSpend: costUsd sums all model_usage rows for the directive', () => {
+    const d = baseDirective();
+    directives.insert(db, d);
+    modelUsage.record(db, {
+      id: newId(),
+      directiveId: d.id,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      category: 'planning',
+      inputTokens: 100,
+      outputTokens: 50,
+      costUsd: 0.42,
+      durationMs: 200,
+      calledAt: new Date().toISOString(),
+    });
+    modelUsage.record(db, {
+      id: newId(),
+      directiveId: d.id,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      category: 'building',
+      inputTokens: 200,
+      outputTokens: 100,
+      costUsd: 1.01,
+      durationMs: 300,
+      calledAt: new Date().toISOString(),
+    });
+
+    const res = directives.listPaged(db, { includeSpend: true });
+    expect(res.items).toHaveLength(1);
+    // 0.42 + 1.01 — allow floating-point tolerance
+    expect(res.items[0]?.costUsd).toBeCloseTo(1.43, 5);
+  });
+
+  it('includeSpend: each directive gets its own spend (not cross-contaminated)', () => {
+    const d1 = baseDirective({ createdAt: new Date(2026, 3, 23, 12, 0, 0).toISOString() });
+    const d2 = baseDirective({ createdAt: new Date(2026, 3, 23, 12, 0, 1).toISOString() });
+    directives.insert(db, d1);
+    directives.insert(db, d2);
+    // d1 has spend; d2 has none.
+    modelUsage.record(db, {
+      id: newId(),
+      directiveId: d1.id,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      category: 'planning',
+      inputTokens: 10,
+      outputTokens: 5,
+      costUsd: 0.25,
+      durationMs: 100,
+      calledAt: new Date().toISOString(),
+    });
+
+    const res = directives.listPaged(db, { includeSpend: true });
+    // newest first → d2, d1
+    expect(res.items[0]?.id).toBe(d2.id);
+    expect(res.items[0]?.costUsd).toBe(0);
+    expect(res.items[1]?.id).toBe(d1.id);
+    expect(res.items[1]?.costUsd).toBeCloseTo(0.25, 5);
+  });
+
+  it('includeSpend: costUsd absent when includeSpend is false (default)', () => {
+    const d = baseDirective();
+    directives.insert(db, d);
+    modelUsage.record(db, {
+      id: newId(),
+      directiveId: d.id,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      category: 'planning',
+      inputTokens: 10,
+      outputTokens: 5,
+      costUsd: 0.99,
+      durationMs: 100,
+      calledAt: new Date().toISOString(),
+    });
+
+    const res = directives.listPaged(db, { includeSpend: false });
+    expect(res.items[0]?.costUsd).toBeUndefined();
+  });
+
+  it('includeSpend: works in combination with projectId filter', () => {
+    const pid = newId();
+    const d1 = baseDirective({ projectId: pid });
+    const d2 = baseDirective({ projectId: newId() }); // different project
+    directives.insert(db, d1);
+    directives.insert(db, d2);
+    modelUsage.record(db, {
+      id: newId(),
+      directiveId: d1.id,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      category: 'planning',
+      inputTokens: 10,
+      outputTokens: 5,
+      costUsd: 0.77,
+      durationMs: 100,
+      calledAt: new Date().toISOString(),
+    });
+
+    const res = directives.listPaged(db, { projectId: pid, includeSpend: true });
+    expect(res.total).toBe(1);
+    expect(res.items[0]?.id).toBe(d1.id);
+    expect(res.items[0]?.costUsd).toBeCloseTo(0.77, 5);
+  });
 });

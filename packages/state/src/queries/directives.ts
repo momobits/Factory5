@@ -139,45 +139,110 @@ export interface ListPagedFilter {
   offset?: number;
   /** Optional status filter; omit to return all statuses. */
   status?: Directive['status'];
+  /**
+   * Optional project filter. When supplied, only directives whose
+   * `project_id` column matches this ULID are returned. The column has
+   * existed since migration 006; omitting the param keeps the previous
+   * all-project behaviour.
+   */
+  projectId?: string;
+  /**
+   * When `true`, each item in the result carries a `costUsd` field
+   * (a LEFT JOIN + SUM over `model_usage`). The bare list stays cheap
+   * (single SELECT) when this is omitted or `false`; callers that need
+   * per-directive spend opt in explicitly.
+   */
+  includeSpend?: boolean;
 }
 
+/** A directive row optionally enriched with its aggregated spend. */
+export type DirectiveWithSpend = Directive & { costUsd?: number };
+
 export interface ListPagedResult {
-  items: Directive[];
+  items: DirectiveWithSpend[];
   /** Total matching rows ignoring pagination; feeds page-count UX. */
   total: number;
 }
 
 /**
- * Paged list with optional status filter, newest first. Used by the web UI's
- * `/api/v1/directives` endpoint (Phase 9); CLI and brain paths continue to
- * use {@link listRecent} / {@link listByStatus} as before.
+ * Build the WHERE clause fragments for `listPaged`. Returns both the SQL
+ * fragment (with `?` placeholders) and the corresponding parameter array.
+ * The leading `WHERE` keyword is included only when at least one condition
+ * is active; callers append it directly to the query string.
+ */
+function buildWhereClause(
+  filter: Pick<ListPagedFilter, 'status' | 'projectId'>,
+  tablePrefix = '',
+): { clause: string; params: unknown[] } {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  const col = (name: string): string => (tablePrefix ? `${tablePrefix}.${name}` : name);
+
+  if (filter.status !== undefined) {
+    conditions.push(`${col('status')} = ?`);
+    params.push(filter.status);
+  }
+  if (filter.projectId !== undefined) {
+    conditions.push(`${col('project_id')} = ?`);
+    params.push(filter.projectId);
+  }
+
+  return {
+    clause: conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '',
+    params,
+  };
+}
+
+/**
+ * Paged list with optional status / projectId filter, newest first. Used by
+ * the web UI's `/api/v1/directives` endpoint (Phase 9); CLI and brain paths
+ * continue to use {@link listRecent} / {@link listByStatus} as before.
+ *
+ * Pass `includeSpend: true` to get a `costUsd` rollup per directive (LEFT
+ * JOIN to `model_usage`). When omitted or `false`, the bare directive rows
+ * are returned without spend data — keeping the common-case query cheap.
  */
 export function listPaged(db: Database, filter: ListPagedFilter = {}): ListPagedResult {
   const limit = Math.max(1, Math.min(100, filter.limit ?? 20));
   const offset = Math.max(0, filter.offset ?? 0);
 
-  if (filter.status !== undefined) {
-    const countRow = db
-      .prepare('SELECT COUNT(*) AS count FROM directives WHERE status = ?')
-      .get(filter.status) as { count: number };
+  const { clause: where, params: whereParams } = buildWhereClause(filter);
+
+  // COUNT query (same WHERE, no pagination)
+  const countRow = db
+    .prepare(`SELECT COUNT(*) AS count FROM directives ${where}`)
+    .get(...whereParams) as { count: number };
+
+  let items: DirectiveWithSpend[];
+
+  if (filter.includeSpend) {
+    // LEFT JOIN to model_usage so directives with zero spend get costUsd = 0.
+    type SpendRow = Row & { cost_usd_sum: number | null };
+    const spendWhere = buildWhereClause(filter, 'd');
     const rows = db
       .prepare(
-        `SELECT * FROM directives
-           WHERE status = ?
-           ORDER BY created_at DESC
+        `SELECT d.*, COALESCE(SUM(m.cost_usd), 0) AS cost_usd_sum
+           FROM directives d
+           LEFT JOIN model_usage m ON m.directive_id = d.id
+           ${spendWhere.clause}
+           GROUP BY d.id
+           ORDER BY d.created_at DESC
            LIMIT ? OFFSET ?`,
       )
-      .all(filter.status, limit, offset) as Row[];
-    return { items: rows.map(rowToDirective), total: countRow.count };
+      .all(...spendWhere.params, limit, offset) as SpendRow[];
+    items = rows.map((r) => {
+      const d: DirectiveWithSpend = rowToDirective(r);
+      d.costUsd = r.cost_usd_sum ?? 0;
+      return d;
+    });
+  } else {
+    const rows = db
+      .prepare(`SELECT * FROM directives ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+      .all(...whereParams, limit, offset) as Row[];
+    items = rows.map(rowToDirective);
   }
 
-  const countRow = db.prepare('SELECT COUNT(*) AS count FROM directives').get() as {
-    count: number;
-  };
-  const rows = db
-    .prepare('SELECT * FROM directives ORDER BY created_at DESC LIMIT ? OFFSET ?')
-    .all(limit, offset) as Row[];
-  return { items: rows.map(rowToDirective), total: countRow.count };
+  return { items, total: countRow.count };
 }
 
 /**

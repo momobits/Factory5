@@ -910,6 +910,149 @@ describe('IPC server — /api/v1/directives (ADR 0025, sub-step 9.4)', () => {
     await app.close();
   });
 
+  // ------------------------------------------------------------------
+  // Item A: ?projectId server-side filter
+  // ------------------------------------------------------------------
+
+  it('GET /api/v1/directives?projectId filters server-side', async () => {
+    const projectId = newId();
+    const [matchA, matchB] = seedDirectives(2, { projectId });
+    seedDirectives(1, { projectId: newId() }); // different project — must not appear
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives?projectId=${projectId}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: Array<{ id: string }>; total: number };
+    expect(body.total).toBe(2);
+    const ids = body.items.map((d) => d.id).sort();
+    expect(ids).toEqual([matchA?.id, matchB?.id].sort());
+    await app.close();
+  });
+
+  it('GET /api/v1/directives?projectId=X&status=running narrows both filters', async () => {
+    const projectId = newId();
+    const [r] = seedDirectives(1, { projectId, status: 'running' });
+    seedDirectives(1, { projectId, status: 'pending' }); // same project, different status
+    seedDirectives(1, { projectId: newId(), status: 'running' }); // different project
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives?projectId=${projectId}&status=running`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: Array<{ id: string }>; total: number };
+    expect(body.total).toBe(1);
+    expect(body.items[0]?.id).toBe(r?.id);
+    await app.close();
+  });
+
+  // ------------------------------------------------------------------
+  // Item B: ?includeSpend rollup
+  // ------------------------------------------------------------------
+
+  it('GET /api/v1/directives?includeSpend=true returns costUsd per row', async () => {
+    const [d] = seedDirectives(1);
+    if (d === undefined) throw new Error('seed failed');
+    // Record two model_usage rows for this directive.
+    modelUsage.record(db, {
+      id: newId(),
+      directiveId: d.id,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      category: 'planning',
+      inputTokens: 100,
+      outputTokens: 50,
+      costUsd: 0.5,
+      durationMs: 200,
+      calledAt: new Date().toISOString(),
+    });
+    modelUsage.record(db, {
+      id: newId(),
+      directiveId: d.id,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      category: 'building',
+      inputTokens: 200,
+      outputTokens: 80,
+      costUsd: 0.75,
+      durationMs: 300,
+      calledAt: new Date().toISOString(),
+    });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/directives?includeSpend=true',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: Array<{ id: string; costUsd?: number }> };
+    const row = body.items.find((item) => item.id === d.id);
+    expect(row?.costUsd).toBeCloseTo(1.25, 5);
+    await app.close();
+  });
+
+  it('GET /api/v1/directives without includeSpend returns items without costUsd', async () => {
+    const [d] = seedDirectives(1);
+    if (d === undefined) throw new Error('seed failed');
+    modelUsage.record(db, {
+      id: newId(),
+      directiveId: d.id,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      category: 'planning',
+      inputTokens: 10,
+      outputTokens: 5,
+      costUsd: 0.99,
+      durationMs: 100,
+      calledAt: new Date().toISOString(),
+    });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/directives',
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: Array<{ costUsd?: unknown }> };
+    expect(body.items[0]?.costUsd).toBeUndefined();
+    await app.close();
+  });
+
+  it('GET /api/v1/directives?projectId=X&includeSpend=true combines both features', async () => {
+    const projectId = newId();
+    const [d] = seedDirectives(1, { projectId });
+    if (d === undefined) throw new Error('seed failed');
+    seedDirectives(1, { projectId: newId() }); // other project — must not appear
+    modelUsage.record(db, {
+      id: newId(),
+      directiveId: d.id,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      category: 'building',
+      inputTokens: 50,
+      outputTokens: 25,
+      costUsd: 0.33,
+      durationMs: 150,
+      calledAt: new Date().toISOString(),
+    });
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives?projectId=${projectId}&includeSpend=true`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { items: Array<{ id: string; costUsd?: number }>; total: number };
+    expect(body.total).toBe(1);
+    expect(body.items[0]?.id).toBe(d.id);
+    expect(body.items[0]?.costUsd).toBeCloseTo(0.33, 5);
+    await app.close();
+  });
+
   it('GET /api/v1/directives/:id returns 404 for unknown id', async () => {
     const app = await buildIpcServer(baseOpts());
     const res = await app.inject({

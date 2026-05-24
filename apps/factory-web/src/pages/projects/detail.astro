@@ -785,6 +785,8 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
       autonomy: string;
       projectId?: string;
       payload?: unknown;
+      /** Present when the caller passed ?includeSpend=true. */
+      costUsd?: number;
     }
     interface DirectivesListResp {
       items: DirectiveListItem[];
@@ -1545,18 +1547,16 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
     };
 
     const loadInflight = async (projectId: string): Promise<void> => {
-      // Fetch up to 100 in-flight directives (running + pending + blocked).
-      // The list endpoint doesn't support projectId filtering — client-side
-      // filter against the rows we got back.
+      // Fetch up to 100 in-flight directives (running + pending + blocked),
+      // server-side filtered by projectId so we never miss rows beyond the
+      // first page when a project has more than 100 historical directives.
       const inflight: DirectiveListItem[] = [];
       try {
         for (const status of ['running', 'pending', 'blocked'] as const) {
           const resp = await apiFetch<DirectivesListResp>(
-            `/api/v1/directives?limit=100&status=${status}`,
+            `/api/v1/directives?limit=100&status=${status}&projectId=${encodeURIComponent(projectId)}`,
           );
-          for (const d of resp.items) {
-            if (d.projectId === projectId) inflight.push(d);
-          }
+          inflight.push(...resp.items);
         }
       } catch (err) {
         if (err instanceof ApiError) {
@@ -1615,13 +1615,14 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
       setError('history-error', null);
 
       try {
-        // The list endpoint doesn't filter by projectId server-side. Fetch
-        // a wide window (up to 300) and filter client-side. This matches
-        // the projects-index page's "Last build" column approach (one
-        // bulk fetch + per-row filter).
-        const resp = await apiFetch<DirectivesListResp>(`/api/v1/directives?limit=100&offset=0`);
-        historyAll = resp.items.filter((d) => d.projectId === projectId);
-        historyTotalMatched = historyAll.length;
+        // Server-side projectId filter avoids missing rows beyond the first
+        // page (Item A fix). includeSpend=true adds a costUsd rollup per row
+        // so the Spend column shows real values without N+1 fetches (Item B).
+        const resp = await apiFetch<DirectivesListResp>(
+          `/api/v1/directives?limit=100&offset=0&projectId=${encodeURIComponent(projectId)}&includeSpend=true`,
+        );
+        historyAll = resp.items;
+        historyTotalMatched = resp.total;
       } catch (err) {
         if (loading !== null) loading.hidden = true;
         if (err instanceof ApiError) {
@@ -1681,9 +1682,8 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
 
         const spendTd = document.createElement('td');
         spendTd.className = 'num';
-        // We don't have per-row spend here without N+1 fetches; fill in
-        // on-demand via a per-row "see pool usage" link instead.
-        spendTd.textContent = '—';
+        // costUsd is present when the server was queried with includeSpend=true.
+        spendTd.textContent = d.costUsd !== undefined ? fmtUsd(d.costUsd) : '—';
         tr.appendChild(spendTd);
 
         const poolTd = document.createElement('td');

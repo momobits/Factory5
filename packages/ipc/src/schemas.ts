@@ -202,19 +202,46 @@ export type WorkerAskUserResponse = z.infer<typeof workerAskUserResponseSchema>;
 /**
  * Query string for `GET /api/v1/directives`. All fields optional.
  *
- *   ?limit=20     page size, clamped server-side to [1, 100]
- *   ?offset=0     rows to skip (>= 0)
- *   ?status=...   filter by directive status (pending | running | complete | ...)
+ *   ?limit=20            page size, clamped server-side to [1, 100]
+ *   ?offset=0            rows to skip (>= 0)
+ *   ?status=...          filter by directive status (pending | running | complete | ...)
+ *   ?projectId=<ulid>    server-side filter — only directives for this project
+ *   ?includeSpend=true   add `costUsd` to each item (LEFT JOIN to model_usage)
  */
 export const apiV1DirectivesListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   offset: z.coerce.number().int().nonnegative().optional(),
   status: directiveSchema.shape.status.optional(),
+  /** Server-side project scope — ULID of the project to filter by. */
+  projectId: ulidSchema.optional(),
+  /**
+   * Opt-in spend rollup. When `"true"`, each item in `items` carries a
+   * `costUsd` field (SUM of `model_usage.cost_usd` for that directive).
+   * Directives with no model_usage rows get `costUsd: 0`. Omit or pass
+   * any falsy value to get the bare directive rows without spend data.
+   */
+  includeSpend: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
 });
 export type ApiV1DirectivesListQuery = z.infer<typeof apiV1DirectivesListQuerySchema>;
 
+/**
+ * A directive row as returned by the list endpoint. When the caller passes
+ * `?includeSpend=true`, each item carries an optional `costUsd` rollup.
+ */
+const directiveListItemSchema = directiveSchema.extend({
+  /**
+   * Total spend in USD for this directive. Present only when the caller
+   * passed `?includeSpend=true`. Directives with no model_usage rows
+   * receive `0`.
+   */
+  costUsd: z.number().nonnegative().optional(),
+});
+
 export const apiV1DirectivesListResponseSchema = z.object({
-  items: z.array(directiveSchema),
+  items: z.array(directiveListItemSchema),
   /** Total matching rows ignoring pagination. */
   total: z.number().int().nonnegative(),
   limit: z.number().int().positive(),

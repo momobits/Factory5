@@ -552,8 +552,16 @@ function registerRoutes(
   });
 
   // ----- GET /api/v1/directives (ADR 0025, sub-step 9.4) -----
-  // Paged list with optional ?status filter. Bearer-gated; schema parse
-  // enforces the limit/offset bounds. Reuses directivesQ.listPaged verbatim.
+  // Paged list with optional ?status / ?projectId / ?includeSpend filters.
+  // Bearer-gated; schema parse enforces the limit/offset bounds.
+  //
+  //   ?projectId=<ulid>    server-side project scope (Item A — Tier 15.10
+  //                        History tab; avoids the prior client-side filter
+  //                        that silently missed rows beyond the first 100)
+  //   ?includeSpend=true   opt-in costUsd rollup per row via LEFT JOIN to
+  //                        model_usage (Item B — bare list stays cheap by
+  //                        default; only callers that render the Spend
+  //                        column pay the JOIN cost)
   app.get('/api/v1/directives', async (request, reply) => {
     requireUiAuth(request, opts.uiAuthToken);
     const query = apiV1DirectivesListQuerySchema.parse(request.query);
@@ -563,6 +571,8 @@ function registerRoutes(
       limit,
       offset,
       ...(query.status !== undefined ? { status: query.status } : {}),
+      ...(query.projectId !== undefined ? { projectId: query.projectId } : {}),
+      ...(query.includeSpend === true ? { includeSpend: true } : {}),
     });
     const resp: ApiV1DirectivesListResponse = apiV1DirectivesListResponseSchema.parse({
       items: result.items,
@@ -571,7 +581,15 @@ function registerRoutes(
       offset,
     });
     ipcLog.debug(
-      { reqId: request.id, limit, offset, status: query.status, total: result.total },
+      {
+        reqId: request.id,
+        limit,
+        offset,
+        status: query.status,
+        projectId: query.projectId,
+        includeSpend: query.includeSpend,
+        total: result.total,
+      },
       'ipc: /api/v1/directives',
     );
     reply.send(resp);

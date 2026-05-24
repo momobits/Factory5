@@ -2,6 +2,8 @@ import { newId } from '@factory5/core';
 import { describe, expect, it } from 'vitest';
 
 import {
+  apiV1DirectivesListQuerySchema,
+  apiV1DirectivesListResponseSchema,
   apiV1PoolUsageResponseSchema,
   apiV1ProjectBudgetDefaultsPutBodySchema,
   directiveBlockedReasonSchema,
@@ -295,6 +297,83 @@ describe('directiveBlockedReasonSchema (Tier 15.9)', () => {
         axis: 'maxUsd',
         usedAtPark: 1,
         capAtPark: 1,
+      }),
+    ).toThrow();
+  });
+});
+
+describe('apiV1DirectivesListQuerySchema — projectId + includeSpend (Tier 15.10)', () => {
+  it('accepts a bare query (all optional fields absent)', () => {
+    const parsed = apiV1DirectivesListQuerySchema.parse({});
+    expect(parsed.projectId).toBeUndefined();
+    expect(parsed.includeSpend).toBeUndefined();
+  });
+
+  it('coerces includeSpend="true" to boolean true', () => {
+    const parsed = apiV1DirectivesListQuerySchema.parse({ includeSpend: 'true' });
+    expect(parsed.includeSpend).toBe(true);
+  });
+
+  it('coerces includeSpend="false" to boolean false', () => {
+    const parsed = apiV1DirectivesListQuerySchema.parse({ includeSpend: 'false' });
+    expect(parsed.includeSpend).toBe(false);
+  });
+
+  it('rejects a non-boolean-string for includeSpend', () => {
+    expect(() => apiV1DirectivesListQuerySchema.parse({ includeSpend: 'yes' })).toThrow();
+  });
+
+  it('accepts a valid ULID projectId', () => {
+    const id = newId();
+    const parsed = apiV1DirectivesListQuerySchema.parse({ projectId: id });
+    expect(parsed.projectId).toBe(id);
+  });
+
+  it('rejects a malformed projectId', () => {
+    expect(() => apiV1DirectivesListQuerySchema.parse({ projectId: 'not-a-ulid' })).toThrow();
+  });
+});
+
+describe('apiV1DirectivesListResponseSchema — costUsd field (Tier 15.10)', () => {
+  const baseDirective = {
+    id: newId(),
+    source: 'cli',
+    principal: 'me',
+    channelRef: 'ref-1',
+    intent: 'build',
+    payload: {},
+    autonomy: 'assisted',
+    createdAt: new Date().toISOString(),
+    status: 'pending',
+  };
+
+  it('parses a response without costUsd (bare list, no includeSpend)', () => {
+    const parsed = apiV1DirectivesListResponseSchema.parse({
+      items: [baseDirective],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+    expect(parsed.items[0]?.costUsd).toBeUndefined();
+  });
+
+  it('parses a response with costUsd present (includeSpend=true case)', () => {
+    const parsed = apiV1DirectivesListResponseSchema.parse({
+      items: [{ ...baseDirective, costUsd: 1.43 }],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+    expect(parsed.items[0]?.costUsd).toBe(1.43);
+  });
+
+  it('rejects a negative costUsd', () => {
+    expect(() =>
+      apiV1DirectivesListResponseSchema.parse({
+        items: [{ ...baseDirective, costUsd: -0.01 }],
+        total: 1,
+        limit: 20,
+        offset: 0,
       }),
     ).toThrow();
   });
