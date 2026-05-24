@@ -24,14 +24,11 @@ import { join } from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 
 import type { BudgetAxis } from '@factory5/core/budgets';
-import { createLogger } from '@factory5/logger';
 import { loadOrCreateProjectMetadata } from '@factory5/wiki';
 import type { Database } from '@factory5/state';
 import type { Logger } from '@factory5/logger';
 
 import { computePoolUsage, type ProjectBudgetsLike } from './pool-usage.js';
-
-const log = createLogger('brain.pool-resume');
 
 /** Default debounce window — prevents a rapid-save sequence from firing N re-checks. */
 const DEFAULT_DEBOUNCE_MS = 250;
@@ -236,7 +233,7 @@ export function createPoolResume(deps: PoolResumeDeps): PoolResume {
       try {
         usage = computePoolUsage(db, row.id, projectBudgets);
       } catch (err) {
-        log.warn({ err, directiveId: row.id }, 'pool-resume: computePoolUsage failed');
+        logger.warn({ err, directiveId: row.id }, 'pool-resume: computePoolUsage failed');
         continue;
       }
 
