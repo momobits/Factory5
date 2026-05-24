@@ -12,7 +12,7 @@
 
 | ID | Title | File | Complexity | Dependencies | Closes |
 |----|-------|------|-----------|-------------|--------|
-| F1 | Budget Canonical Table (ADR 0035) | [budget_canonical_table.md](features/budget_canonical_table.md) | Medium | None | Relay #2, #8 |
+| F1 | Budget Canonical Table (ADR 0035) | [budget_canonical_table.md](implemented/budget_canonical_table.md) | Medium | None | Relay #2, #8 | DONE (`03bbe05`) |
 
 Build order: standalone (1 of 5 in brainstorm sequence).
 
