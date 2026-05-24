@@ -60,7 +60,7 @@ import {
   type WorkerOutcome,
 } from '@factory5/worker';
 
-import { computePoolUsage, type ProjectBudgetsLike } from './pool-usage.js';
+import { computePoolUsage, resolveEffectiveCap, type ProjectBudgetsLike } from './pool-usage.js';
 import { loadDaemonEndpoint } from './daemon-endpoint.js';
 import { emitLogLine } from './emit.js';
 import { buildAgentSystemPrompt } from './prompts.js';
@@ -224,6 +224,26 @@ function projectBudgetsFromMetadata(metadata: ProjectMetadata): ProjectBudgetsLi
 /** Type-guard: `value` is a non-null `Record<string, unknown>`. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Feature F2 — extract payload budgets from a directive's `payload_json`.
+ * Used by the `maxUsdPerTask` pre-launch check to feed `resolveEffectiveCap`.
+ */
+function payloadBudgets(db: Database, directiveId: string): Partial<Record<BudgetAxis, number>> {
+  const row = db.prepare(`SELECT payload_json FROM directives WHERE id = ?`).get(directiveId) as
+    | { payload_json: string }
+    | undefined;
+  if (row === undefined) return {};
+  try {
+    const parsed = JSON.parse(row.payload_json) as unknown;
+    if (isRecord(parsed) && isRecord(parsed['budgets'])) {
+      return parsed['budgets'] as Partial<Record<BudgetAxis, number>>;
+    }
+  } catch {
+    // Corrupt payload — fall through to empty.
+  }
+  return {};
 }
 
 /**
@@ -509,11 +529,56 @@ async function executeTaskWithBudgetGuard(
   // Tier 15 / ADR 0034 — pre-launch pool check for tool-using agents.
   // Read-only agents skip the check entirely (no maxTurns axis applies).
   const axis = axisForAgent(task.agent);
-  let projectBudgets: ProjectBudgetsLike = { budgetDefaults: {} };
+  const projectBudgets: ProjectBudgetsLike = await loadProjectBudgets(projectPath);
   let outcome: WorkerOutcome;
 
+  // Feature F2 / Relay issue #1 — maxUsdPerTask resurrection. Per-task safety:
+  // if the planner emitted an `estimatedUsd` for this task, check it against
+  // the unified resolution of `maxUsdPerTask`. Task FAILS immediately (not
+  // directive parks) when the estimate exceeds the cap. When `estimatedUsd` is
+  // undefined (planner didn't emit it) or cap is 0 (unlimited), the check is
+  // a no-op.
+  const maxUsdPerTaskCap = resolveEffectiveCap(
+    'maxUsdPerTask',
+    projectBudgets,
+    payloadBudgets(db, directiveId),
+  );
+  if (
+    maxUsdPerTaskCap > 0 &&
+    task.estimatedUsd !== undefined &&
+    task.estimatedUsd > maxUsdPerTaskCap
+  ) {
+    clearInterval(hb);
+    const result: TaskResult = {
+      exitCode: 1,
+      filesChanged: [],
+      findingsRaised: [],
+      signalsEmitted: [],
+      error: `Task "${task.title}" estimated $${String(task.estimatedUsd)} exceeds maxUsdPerTask cap $${String(maxUsdPerTaskCap)}`,
+      errorSubtype: 'per-task-usd-exceeded',
+      durationMs: 0,
+    };
+    tasksInflight.markFailed(db, task.id, result, now());
+    emit?.({
+      type: 'task.completed',
+      taskId: task.id,
+      directiveId,
+      status: 'failed',
+      exitCode: result.exitCode,
+      finishedAt: now(),
+      error: result.error ?? null,
+    });
+    outcome = { result };
+    const updatedTask: Task = {
+      ...task,
+      status: 'failed',
+      attempts: task.attempts + 1,
+      result,
+    };
+    return { id: task.id, outcome, task: updatedTask };
+  }
+
   if (axis !== undefined) {
-    projectBudgets = await loadProjectBudgets(projectPath);
     const preLaunchPool = computePoolUsage(db, directiveId, projectBudgets);
     const axisPre = preLaunchPool.perAxis[axis];
 

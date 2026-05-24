@@ -362,3 +362,24 @@ that lands 7a.4.
 ## Amendment — 2026-05-24 (Tier 15)
 
 Pool semantics across `maxUsd`, `maxSteps`, `maxTurnsScaffolder`, `maxTurnsBuilder`, `maxTurnsFixer` are now unified per ADR 0034. ADR 0020's `maxUsd` / `maxSteps` already pool directive-wide; the three `maxTurns*` axes were per-task pre-Tier-15. ADR 0034 is the canonical reference for the pool model going forward.
+
+## Amendment — 2026-05-25 (Feature F2: Budget Unified Resolution)
+
+**`directive.limits` retired as a runtime read path.** The creation-time
+snapshot stored in the `directives.max_usd` / `directives.max_steps`
+columns (migration 004) is no longer read at runtime by any consumer.
+The `assertBudget` pre-call checks in `triage.ts`, `architect.ts`,
+`critic.ts`, and `planner.ts` now receive ceilings derived via the
+unified three-way max rule:
+
+```
+effectiveCap[axis] = max(project.json, payload.budgets, BUDGET_DEFAULTS)
+```
+
+The `limits` field remains in the `directives` table and API response
+for audit history ("what were the ADR 0020 limits when this directive
+was created"). No consumer reads it at runtime after this change.
+
+Cross-references: ADR 0035 (canonical axis table), Feature F2 spec
+(`.relay/features/budget_unified_resolution.md`), Relay issues #1, #3,
+#5, #6.

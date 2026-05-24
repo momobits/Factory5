@@ -2,7 +2,7 @@
 
 *Created: 2026-05-24*
 *Brainstorm: [budget_axis_unification_brainstorm.md](budget_axis_unification_brainstorm.md)*
-*Status: DESIGNED*
+*Status: IMPLEMENTING*
 
 ## Summary
 
@@ -145,3 +145,15 @@ The `_limits` parameter that Tier 15.7 renamed (but kept threading from loop.ts)
 2. **`maxUsdPerTask` — task.estimatedUsd is planner-emitted**: the planner may not emit `estimatedUsd` (Relay issue #11 noted it's dead code). If the planner stops emitting it AND no task has `estimatedUsd`, the `maxUsdPerTask` cap never fires (cap > 0 but `task.estimatedUsd === undefined` → skip check). Is this acceptable? Alternative: check actual spend DURING the task (post-turn, via model_usage SUM for this task_id). More accurate but adds I/O per turn.
 
 3. **`directive.limits` backward compat**: existing directives have `limits: { maxUsd: 100, maxSteps: 500 }`. After this feature, no consumer reads it. Old directives resumed via `factory resume` — the resume path inherits `limits` from the parent. Should the resume path stop inheriting `limits` (since they're dead) or continue (for audit trail)?
+
+## Implementation Deviations
+
+1. **`resolveAxisCap` requires `projectBudgets` param**: The spec envisioned `resolveAxisCap(db, directiveId, axis)` as a self-contained wrapper. Implementation adds a `projectBudgets: ProjectBudgetsLike` parameter because reading `project.json` is async (requires `loadOrCreateProjectMetadata`) and the function is synchronous. Callers (loop.ts, ask-user.ts) load projectBudgets separately and pass it in. No semantic difference — same three-way max rule applies.
+
+2. **`ask-user.ts` unified resolution is opt-in via `projectBudgets` option**: Rather than refactoring `askUser` to always async-load project metadata, the unified resolution path activates when the caller passes `opts.projectBudgets`. The loop.ts callsite has `projectPath` available and passes it. External callers (tests, standalone scripts) continue using the config.json fallback. This preserves backward compat without breaking the existing test surface.
+
+3. **`assertBudget` interface unchanged**: Instead of modifying `assertBudget` in budget.ts or the triage/architect/critic/planner interfaces, the live resolution is done once in `loop.ts`'s `runInline` function, which constructs a `DirectiveLimits` object from `resolveAxisCap('maxUsd')` and `resolveAxisCap('maxSteps')`. This is then passed as `limits` to each agent. The agents don't need to know about the unified resolution — they just receive limits as before, but now those limits are live-resolved rather than snapshotted at directive creation.
+
+4. **`_limits` parameter in `runPlanTasks` retained**: The already-deprecated `_limits` parameter (prefixed with `_` by Tier 15) continues to exist for API stability. It is still passed from `loop.ts` but never read by the pool.
+
+5. **`projectBudgets` loaded unconditionally in `executeTaskWithBudgetGuard`**: Previously only loaded for tool-using agents (inside `if (axis !== undefined)`). Now loaded for all agents so the `maxUsdPerTask` pre-launch check works for any task type that has `estimatedUsd`.

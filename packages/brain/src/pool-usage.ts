@@ -186,9 +186,15 @@ function computeAxis(
 
 /**
  * Resolve the effective cap for an axis using the three-way max rule.
- * ADR 0034 §1: `max(project, payload.budgets, BUDGET_DEFAULTS)`.
+ * ADR 0034 §1 / Feature F2 unified resolution:
+ *   `effectiveCap = max(project, payload.budgets, BUDGET_DEFAULTS)`.
+ *
+ * Exported so consumers that already hold projectBudgets + payloadBudgets
+ * can call it directly (e.g. assertBudget live-resolve in triage/architect/
+ * critic/planner). For consumers that only know a directiveId, use the
+ * convenience wrapper {@link resolveAxisCap}.
  */
-function resolveEffectiveCap(
+export function resolveEffectiveCap(
   axis: BudgetAxis,
   projectBudgets: ProjectBudgetsLike,
   payloadBudgets: Partial<Record<BudgetAxis, number>>,
@@ -197,6 +203,39 @@ function resolveEffectiveCap(
   const payload = payloadBudgets[axis] ?? 0;
   const fallback = BUDGET_DEFAULTS[axis]?.value ?? 0;
   return Math.max(project, payload, fallback);
+}
+
+/**
+ * Convenience wrapper: resolve a single axis cap for a directive by reading
+ * its payload budgets from the DB and combining with project-level defaults.
+ *
+ * Feature F2 (Relay issues #1, #3, #5, #6) — every non-pool consumer that
+ * previously read caps from ad-hoc sources switches to this function.
+ *
+ * @param db - Open better-sqlite3 database.
+ * @param directiveId - ULID of the directive.
+ * @param axis - Which budget axis to resolve.
+ * @param projectBudgets - Project-level budget defaults from `project.json`.
+ * @returns The effective cap for the axis (never negative).
+ */
+export function resolveAxisCap(
+  db: Database,
+  directiveId: string,
+  axis: BudgetAxis,
+  projectBudgets: ProjectBudgetsLike,
+): number {
+  const directiveRow = db
+    .prepare(`SELECT payload_json FROM directives WHERE id = ?`)
+    .get(directiveId) as { payload_json: string } | undefined;
+
+  const parsedPayload =
+    directiveRow !== undefined ? safeParseJson(directiveRow.payload_json) : null;
+  const payloadBudgets: Partial<Record<BudgetAxis, number>> =
+    isRecord(parsedPayload) && isRecord(parsedPayload['budgets'])
+      ? (parsedPayload['budgets'] as Partial<Record<BudgetAxis, number>>)
+      : {};
+
+  return resolveEffectiveCap(axis, projectBudgets, payloadBudgets);
 }
 
 interface AggregateResult {

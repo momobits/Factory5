@@ -44,6 +44,8 @@ import {
   type Database,
 } from '@factory5/state';
 
+import { resolveAxisCap, type ProjectBudgetsLike } from './pool-usage.js';
+
 const log = createLogger('brain.ask-user');
 
 /** Default cadence for polling `pending_questions.answered_at`. */
@@ -76,7 +78,31 @@ export function resetDeadlineCache(): void {
   cachedDeadlineMs = undefined;
 }
 
-function resolveDeadlineMs(configDataDir?: string): number {
+/**
+ * Resolve the askUser deadline in ms.
+ *
+ * Feature F2 — when `projectBudgets` + `db` + `directiveId` are available,
+ * uses the unified three-way max rule:
+ *   `max(project.json, payload.budgets, BUDGET_DEFAULTS.askUserDeadlineMs)`
+ * so per-project + per-build deadline overrides take effect (Relay issue #3).
+ *
+ * Falls back to the config.json path when the unified inputs are not
+ * available (backward compat for callers outside the inline pipeline).
+ */
+function resolveDeadlineMs(
+  configDataDir?: string,
+  unifiedInputs?: { db: Database; directiveId: string; projectBudgets: ProjectBudgetsLike },
+): number {
+  // Feature F2 — unified resolution path (Relay issue #3).
+  if (unifiedInputs !== undefined) {
+    return resolveAxisCap(
+      unifiedInputs.db,
+      unifiedInputs.directiveId,
+      'askUserDeadlineMs',
+      unifiedInputs.projectBudgets,
+    );
+  }
+  // Legacy config.json path — process-lifetime cache.
   if (cachedDeadlineMs !== undefined) return cachedDeadlineMs;
   try {
     cachedDeadlineMs = loadConfig(configDataDir).askUserDeadlineMs;
@@ -145,6 +171,13 @@ export interface AskUserOptions {
    * `<dataDir>/config.json` is read. Affects only the auto-stamped deadline.
    */
   configDataDir?: string;
+  /**
+   * Feature F2 — project-level budget defaults from `project.json`. When
+   * provided, the deadline resolves via the unified three-way max rule
+   * (`max(project, payload, BUDGET_DEFAULTS)`) instead of the legacy
+   * config.json-only path (Relay issue #3).
+   */
+  projectBudgets?: ProjectBudgetsLike;
 }
 
 export interface AskUserRenderContext {
@@ -339,11 +372,17 @@ export async function askUser(opts: AskUserOptions): Promise<AskUserResult> {
     questionId = newId();
     const now = opts.now ?? ((): number => Date.now());
     const createdAt = new Date(now()).toISOString();
-    // Stamp deadline (ADR 0030 §2): caller-provided `deadlineAt` wins;
-    // otherwise default from `<dataDir>/config.json.askUserDeadlineMs`
-    // (5 min default). The brain reads config once per process and caches.
+    // Stamp deadline (ADR 0030 §2 + Feature F2 unified resolution):
+    // caller-provided `deadlineAt` wins; otherwise resolved via the unified
+    // three-way max rule when projectBudgets is available (Relay issue #3),
+    // falling back to config.json.askUserDeadlineMs when it is not.
+    const unifiedInputs =
+      opts.projectBudgets !== undefined
+        ? { db: opts.db, directiveId: directive.id, projectBudgets: opts.projectBudgets }
+        : undefined;
     const deadlineAt =
-      opts.deadlineAt ?? new Date(now() + resolveDeadlineMs(opts.configDataDir)).toISOString();
+      opts.deadlineAt ??
+      new Date(now() + resolveDeadlineMs(opts.configDataDir, unifiedInputs)).toISOString();
     pendingQuestions.create(opts.db, {
       id: questionId,
       directiveId: directive.id,

@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { newId } from '@factory5/core';
-import { computePoolUsage } from './pool-usage.js';
+import { computePoolUsage, resolveAxisCap, resolveEffectiveCap } from './pool-usage.js';
 import { openDatabase, runMigrations, type Database } from '@factory5/state';
 import { BUDGET_DEFAULTS } from '@factory5/core/budgets';
 
@@ -333,5 +333,104 @@ describe('computePoolUsage', () => {
     expect(() => computePoolUsage(db, 'DOESNOTEXIST00000000000000', projectBudgets)).toThrow(
       /not found/,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature F2 — resolveEffectiveCap (exported)
+// ---------------------------------------------------------------------------
+
+describe('resolveEffectiveCap', () => {
+  it('returns max(project, payload, default)', () => {
+    const cap = resolveEffectiveCap(
+      'maxTurnsBuilder',
+      { budgetDefaults: { maxTurnsBuilder: 100 } },
+      { maxTurnsBuilder: 200 },
+    );
+    // default is 80, project is 100, payload is 200 → max = 200
+    expect(cap).toBe(200);
+  });
+
+  it('returns project default when it exceeds payload and BUDGET_DEFAULTS', () => {
+    const cap = resolveEffectiveCap(
+      'maxTurnsScaffolder',
+      { budgetDefaults: { maxTurnsScaffolder: 500 } },
+      { maxTurnsScaffolder: 60 },
+    );
+    // default is 120, payload is 60, project is 500 → max = 500
+    expect(cap).toBe(500);
+  });
+
+  it('returns BUDGET_DEFAULTS.value when project and payload are absent', () => {
+    const cap = resolveEffectiveCap('askUserDeadlineMs', { budgetDefaults: {} }, {});
+    expect(cap).toBe(BUDGET_DEFAULTS.askUserDeadlineMs.value);
+  });
+
+  it('returns 0 for maxUsd when all sources are 0 (unlimited)', () => {
+    const cap = resolveEffectiveCap('maxUsd', { budgetDefaults: { maxUsd: 0 } }, { maxUsd: 0 });
+    expect(cap).toBe(0);
+  });
+
+  it('handles maxUsdPerTask correctly (default is 0 = unlimited)', () => {
+    // Project sets a cap of 5 USD per task
+    const cap = resolveEffectiveCap('maxUsdPerTask', { budgetDefaults: { maxUsdPerTask: 5 } }, {});
+    expect(cap).toBe(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature F2 — resolveAxisCap (convenience wrapper)
+// ---------------------------------------------------------------------------
+
+describe('resolveAxisCap', () => {
+  let db: Database;
+
+  beforeEach(() => {
+    db = freshDb();
+  });
+
+  it('resolves from payload budgets + project budgets + defaults', () => {
+    const directiveId = newId();
+    seedDirective(db, directiveId, { payloadBudgets: { askUserDeadlineMs: 600_000 } });
+
+    const cap = resolveAxisCap(db, directiveId, 'askUserDeadlineMs', {
+      budgetDefaults: { askUserDeadlineMs: 120_000 },
+    });
+
+    // max(project=120000, payload=600000, default=300000) = 600000
+    expect(cap).toBe(600_000);
+  });
+
+  it('falls back to BUDGET_DEFAULTS when directive has no payload budgets', () => {
+    const directiveId = newId();
+    seedDirective(db, directiveId);
+
+    const cap = resolveAxisCap(db, directiveId, 'maxWikiReadinessAttempts', {
+      budgetDefaults: {},
+    });
+
+    expect(cap).toBe(BUDGET_DEFAULTS.maxWikiReadinessAttempts.value);
+  });
+
+  it('uses project budgets when they exceed payload and defaults', () => {
+    const directiveId = newId();
+    seedDirective(db, directiveId, { payloadBudgets: { maxWikiReadinessAttempts: 2 } });
+
+    const cap = resolveAxisCap(db, directiveId, 'maxWikiReadinessAttempts', {
+      budgetDefaults: { maxWikiReadinessAttempts: 10 },
+    });
+
+    // max(project=10, payload=2, default=3) = 10
+    expect(cap).toBe(10);
+  });
+
+  it('returns default when directive does not exist in DB', () => {
+    // resolveAxisCap gracefully handles missing directives (returns fallback)
+    const cap = resolveAxisCap(db, 'NONEXISTENT000000000000000', 'maxUsdPerTask', {
+      budgetDefaults: {},
+    });
+
+    // No payload, no project → falls back to BUDGET_DEFAULTS.maxUsdPerTask.value (0)
+    expect(cap).toBe(BUDGET_DEFAULTS.maxUsdPerTask.value);
   });
 });

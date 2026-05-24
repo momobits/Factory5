@@ -13,15 +13,9 @@
  * `mode: 'serve'` (long-running claim loop) lands in Phase 3.
  */
 
-import type {
-  AutonomyMode,
-  Budgets,
-  Directive,
-  DirectiveLimits,
-  ModelCategory,
-  Plan,
-} from '@factory5/core';
-import { newId, resolveBudgets } from '@factory5/core';
+import type { AutonomyMode, Directive, DirectiveLimits, ModelCategory, Plan } from '@factory5/core';
+import { newId } from '@factory5/core';
+import type { BudgetAxis } from '@factory5/core/budgets';
 import { createLogger } from '@factory5/logger';
 import { assess, type AssessResult, type Runtime } from '@factory5/assessor';
 import type { DirectiveEventEmitter } from '@factory5/ipc';
@@ -35,7 +29,15 @@ import {
   runMigrations,
   type Database,
 } from '@factory5/state';
-import { appendBuildLog, isAdvisory, listFindings, readPlan, readWiki } from '@factory5/wiki';
+import {
+  appendBuildLog,
+  isAdvisory,
+  listFindings,
+  loadOrCreateProjectMetadata,
+  readPlan,
+  readWiki,
+} from '@factory5/wiki';
+import { resolveAxisCap, type ProjectBudgetsLike } from './pool-usage.js';
 
 import { runArchitect, type ArchitectResult } from './architect.js';
 import { runArchitectWithCritique, WikiReadinessAbortError } from './architect-loop.js';
@@ -174,7 +176,25 @@ async function runInline(
     }
     directivesQ.updateStatus(db, directive.id, 'running');
 
-    const limits = directive.limits;
+    // Feature F2 — live-resolve maxUsd/maxSteps via unified three-way max rule
+    // instead of the ADR 0020 creation-time snapshot (`directive.limits`).
+    // The `limits` object threaded to triage/architect/critic/planner now
+    // carries live-resolved ceilings so operator edits mid-build take effect
+    // on the next agent call (Relay issue #5).
+    const triageProjectPath = extractProjectPathSafely(directive);
+    const liveBudgets =
+      triageProjectPath !== undefined
+        ? await loadProjectBudgetsForDirective(triageProjectPath)
+        : ({ budgetDefaults: {} } as ProjectBudgetsLike);
+    const liveMaxUsd = resolveAxisCap(db, directive.id, 'maxUsd', liveBudgets);
+    const liveMaxSteps = resolveAxisCap(db, directive.id, 'maxSteps', liveBudgets);
+    const limits: DirectiveLimits | undefined =
+      liveMaxUsd > 0 || liveMaxSteps > 0
+        ? {
+            ...(liveMaxUsd > 0 ? { maxUsd: liveMaxUsd } : {}),
+            ...(liveMaxSteps > 0 ? { maxSteps: liveMaxSteps } : {}),
+          }
+        : undefined;
     log.info(
       {
         directiveId: directive.id,
@@ -193,7 +213,6 @@ async function runInline(
       // (post-Tier-15 fix). Build directives carry payload.projectPath;
       // chat / system directives don't — `resolveLlmCwd` falls back to
       // os.tmpdir() inside triage in that case.
-      const triageProjectPath = extractProjectPathSafely(directive);
       const triage = await triageDirective(triageText, {
         registry,
         db,
@@ -298,13 +317,17 @@ async function runInline(
           'architect: skipped (wiki already on disk; resume path)',
         );
       } else {
-        // Resolve attempt cap from directive payload budgets (ADR 0032 / Tier 14.3).
-        const directiveBudgets =
-          typeof directive.payload === 'object' && directive.payload !== null
-            ? ((directive.payload as Record<string, unknown>)['budgets'] as Budgets | undefined)
-            : undefined;
-        const resolvedBudgets = resolveBudgets(directiveBudgets);
-        const maxAttempts = resolvedBudgets.maxWikiReadinessAttempts;
+        // Feature F2 — resolve maxWikiReadinessAttempts via unified three-way
+        // max rule (Relay issue #6): max(project.json, payload.budgets, BUDGET_DEFAULTS).
+        // Previously this used payload-only resolution (ADR 0032 / Tier 14.3),
+        // meaning project-level defaults were ignored.
+        const projectBudgets = await loadProjectBudgetsForDirective(projectPath);
+        const maxAttempts = resolveAxisCap(
+          db,
+          directive.id,
+          'maxWikiReadinessAttempts',
+          projectBudgets,
+        );
 
         // Build an adapter from the real askUser (AskUserOptions → AskUserResult)
         // to the wrapper's convenience shape (prompt/options → string).
@@ -674,6 +697,45 @@ function isAbortAnswer(res: AskUserResult): boolean {
   if (res.timedOut) return true;
   const ans = (res.answer ?? '').trim().toLowerCase();
   return /^(abort|cancel|stop|no|quit|exit)\b/.test(ans);
+}
+
+/**
+ * Feature F2 — load project-level budget defaults for unified resolution.
+ * Mirrors the same pattern as `pool.ts`'s private `loadProjectBudgets` but
+ * usable from loop.ts without coupling to the pool module's internals.
+ * Falls back to empty defaults on read failure so the brain never crashes
+ * on a corrupt `project.json`.
+ */
+async function loadProjectBudgetsForDirective(projectPath: string): Promise<ProjectBudgetsLike> {
+  try {
+    const metadata = await loadOrCreateProjectMetadata(projectPath, '');
+    const rawBudgetDefaults = metadata.metadata['budgetDefaults'];
+    const budgetDefaults: Partial<Record<BudgetAxis, number>> =
+      typeof rawBudgetDefaults === 'object' &&
+      rawBudgetDefaults !== null &&
+      !Array.isArray(rawBudgetDefaults)
+        ? (rawBudgetDefaults as Partial<Record<BudgetAxis, number>>)
+        : {};
+    const autoIncreaseBudgets =
+      typeof metadata.metadata['autoIncreaseBudgets'] === 'boolean'
+        ? metadata.metadata['autoIncreaseBudgets']
+        : undefined;
+    const autoIncreaseCeilingMultiplier =
+      typeof metadata.metadata['autoIncreaseCeilingMultiplier'] === 'number'
+        ? metadata.metadata['autoIncreaseCeilingMultiplier']
+        : undefined;
+    return {
+      budgetDefaults,
+      ...(autoIncreaseBudgets !== undefined ? { autoIncreaseBudgets } : {}),
+      ...(autoIncreaseCeilingMultiplier !== undefined ? { autoIncreaseCeilingMultiplier } : {}),
+    };
+  } catch (err) {
+    log.warn(
+      { err, projectPath },
+      'loop: failed to load project.json — falling back to BUDGET_DEFAULTS',
+    );
+    return { budgetDefaults: {} };
+  }
 }
 
 function collectExpectedModules(plan: Plan): string[] {
