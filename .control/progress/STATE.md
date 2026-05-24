@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-24 — session-end after Phase 15 close (live smoke deferred to operator)
+**Last updated:** 2026-05-25 — session-end. Tier 15 (budget UX overhaul) implemented + closed + 6 post-close fixes + Relay audit (13 issues) + budget axis unification brainstorm (5 features designed).
 **Current phase:** arc-complete (eleventh time)
 **Current step:** n/a (between phases)
-**Status:** Tier 15 delivered end-to-end (structural close; live browser smoke deferred to operator). The entire `[BUDGET]` askUser path is deleted — `budget-escalation.ts` (~880 lines, commit `89b4e85`), `[BUDGET]` branch in `auto-answer.ts` (`89b4e85`). Pool model ships for the three `maxTurns*` axes: each class (scaffolder/builder/fixer) draws from a directive-wide pool; exhaustion parks the directive with a structured `blockedReason` (`931ffcd`). Live re-resolve from `project.json` via chokidar watcher (`92fac59`). Auto-increase toggle with `autoIncreaseCeilingMultiplier` safety ceiling (`dd94b1b`, `cabcc68`). New daemon HTTP surface: `PUT /budget-defaults` extended, `GET /pool-usage`, `pool.tally` SSE event (`4716ca5`). Project page tabbed cockpit Live/Defaults/History/Settings (`05d90d3`). Directive detail pool pill + build form copy update (`a72b08a`). ADR 0034 supersedes ADR 0032 (`7fc20a2`). U036 + U037 closed; U038 medium, defer-until-signal (Tier 16+ candidate). Live browser smoke (3 scenarios) deferred to operator.
+**Status:** Tier 15 (budget UX overhaul) delivered end-to-end. Pool model for `maxTurns*` axes. Project page tabbed cockpit. ADR 0034 supersedes ADR 0032. 6 post-close fixes landed: ARCHITECTURE.md budget section (`cfcd7b3`), U038 brain auto-answer timing race (`100805c`), server-side projectId + bulk spend (`fa4a044`), Discord /budget all-8-axes expansion (`01bfcbe`), Tabs.astro extraction (`7de3e66`), brain LLM cwd leak fix (`183cdb6`). Relay audit surfaced 13 cross-tier consistency issues (5 P1, 4 P2, 4 P3). Budget axis unification brainstormed: 12 decisions, 5 features designed, 5-phase ordering produced in `relay-ordering.md`.
 
 ---
 
@@ -20,12 +20,12 @@
 
 ## Next action
 
-**Arc-complete (eleventh time).** Options: (a) start a new upgrade tier per `UPGRADE/ROADMAP.md` — scan for next demand signal; (b) rest and run `/session-end`. U038 is the only open upgrade issue (medium, brain-side timing fix, Tier 16+ candidate — same defer-until-signal pattern as U005).
+**Arc-complete (eleventh time).** Phase 15 closed. No Phase 16 scaffolded yet. The Relay features (budget axis unification) are the next body of work but have not been scaffolded as a Control phase.
 
-**LIVE BROWSER SMOKE DEFERRED TO OPERATOR.** Three scenarios require running factoryd + Playwright MCP (~5-15 min each):
-1. **Parked-directive / raise-cap flow** — build a project that exhausts a pool (set `maxTurnsScaffolder=3` in Build form, trigger a multi-task build); confirm directive parks with `blockedReason.kind='pool-exhausted'`; use project page Live tab "Raise cap" CTA; confirm directive auto-resumes.
-2. **Auto-increase flow** — set `autoIncreaseBudgets=true` on a project (project Settings tab); run a build that exhausts the pool; confirm brain auto-bumps the cap and retries without operator action; confirm directive completes or hits the `ceilingMultiplier` floor and parks.
-3. **Multi-class isolation** — run a build with tasks across scaffolder/builder/fixer classes; confirm each class draws from its own pool independently; one class exhausting does not affect the others.
+Three paths for next session:
+1. **`/relay-analyze` on Feature F1** (canonical table) — start the 5-phase budget axis unification implementation from `relay-ordering.md`. This is the highest-leverage next step.
+2. **Fix standalone Relay items first** — issues #7 (validator dedup), #9 (pool extraction dedup), #10-#13 (doc hygiene) are small and independent; good warm-up before F1.
+3. **Bank more time** — the Relay brainstorm + design work is solid; implementation can wait.
 
 **Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`; Tier 13 at `phase-13-budget-followups-closed` 2026-05-17 at `aae86dc`; Tier 14 at `phase-14-wiki-readiness-judge-closed` 2026-05-23 at `431c7da`; Tier 15 at `phase-15-budget-ux-overhaul-closed` 2026-05-24 at `a72b08a`.
 
@@ -34,21 +34,23 @@
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `d6777ad` — `chore(phase-15)`: close phase 15, kick off arc-complete (eleventh time). Lag counter bumps to #48 — same structural lag-by-1 pattern; this commit itself becomes the new lag.
-- **Uncommitted changes:** pre-existing dirty paths only (`.agents/`, `.claude/skills/`, `AGENTS.md`, `GEMINI.md`, `docs/superpowers/{plans,specs}/*` prettier reformatting, `pnpm-lock.yaml` 3-line drift) — accepted out-of-scope per operator's standing directive
+- **Last commit:** `5ff5255` — `docs(phase-15)`: relay workspace — 13 issues + 5 feature designs for budget axis unification. Lag counter is at #49+ (many post-close commits; exact count TBD on next session's drift check).
+- **Uncommitted changes:** pre-existing dirty paths only (`.agents/`, `.claude/skills/`, `AGENTS.md`, `GEMINI.md`, `docs/superpowers/{plans,specs}/*` prettier reformatting, `.superpowers/` brainstorm visual companion, `pnpm-lock.yaml` drift) — accepted out-of-scope per operator's standing directive
 - **Last phase tag:** `phase-15-budget-ux-overhaul-closed` (annotated at `a72b08a`)
 
 ---
 
 ## Open blockers
 
-- None (U036 + U037 closed at `89b4e85`; U038 medium, defer-until-signal — same pattern as U005)
+- None (U036 + U037 closed at `89b4e85`; U038 closed at `100805c` post-Tier-15 fix)
 
 ---
 
 ## In-flight work
 
-None.
+None — all work committed.
+
+**pythonetl build state:** directive `01KSDMA1MQEPNDJYKE085CMQSD` — 2 passed, 9 failed. Root causes: (1) brain agents inheriting factory5's cwd (fixed at `183cdb6`); (2) per-task maxTurns still enforced despite pool model (to be fixed by Relay Feature F4). Needs daemon restart + fresh build after F4 lands.
 
 **Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 
@@ -71,11 +73,11 @@ None.
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **48 occurrences** (phase-15-close commit itself carries the structural lag). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **49+ occurrences** (exact count TBD; many post-close commits this session). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
-- **Last test run:** 2026-05-24 (Phase 15 close) — all 4 `pnpm` gates clean across all 15 packages. Workspace total **1419 passing + 3 skipped** (was 1388 + 3 at Phase 14 close; +31 across Phase 15). Per-package: worker-mcp 15, core 65, logger 20, ipc 38, providers 41, state 199, worker-sandbox 86 (+3 skip), assessor 79, events 3, wiki 80, channels 175, worker 49, brain 185, daemon 221, cli 163. Lint clean; format:check pre-existing warnings in `.agents/` + `docs/superpowers/` (accepted out-of-scope).
+- **Last test run:** 2026-05-25. All 4 `pnpm` gates green. Workspace total **1453 passing + 3 skipped** (was 1419 + 3 at Phase 15 close; +34 from post-close work). Lint clean; format:check pre-existing warnings in `.agents/` + `docs/superpowers/` (accepted out-of-scope).
 - **Eval score** (agent phases only): n/a
 - **Regression tests:** unit + integration only; no eval harness. ADR 0029 still in promoted state.
 
@@ -83,20 +85,19 @@ None.
 
 ## Recent decisions (last 3 ADRs)
 
+- **ADR 0035 — Budget axis canonical table** (Designed 2026-05-25; not yet authored as a file). Will supersede ADR 0032 + ADR 0034. Brainstorm decisions captured in `.relay/features/budget_axis_unification_brainstorm.md`. First step of Relay Feature F1.
 - **ADR 0034 — Budget pool paradigm** (Accepted 2026-05-24; landed in Phase 15 step 15.2 at `7fc20a2`; supersedes ADR 0032). Six-part decision: (1) pool model for three `maxTurns*` axes (directive-wide per agent class); (2) linear bump rule (`+default` per accept, no bucket schedule); (3) planner drops per-task `maxTurns` emit; (4) live re-resolve from `project.json` with per-build override as floor (caps only rise during a directive's lifetime); (5) pool exhaustion parks with structured `blockedReason`, no askUser; (6) `autoIncreaseBudgets` toggle with `autoIncreaseCeilingMultiplier` safety ceiling. ADR 0030 amended to remove `[BUDGET]` marker recognition (deleted alongside `budget-escalation.ts`); ADR 0020 amended with cross-ref to new pool model.
 - **ADR 0033 — Wiki-readiness critique loop** (Accepted 2026-05-23; landed in Phase 14 step 14.2 at `50d38a8`). Six-part decision: (1) LLM critic replaces regex as sole readiness arbiter; (2) critic contract = directive intent + CLAUDE.md + wiki pages; (3) rich critique schema `{passes, severity, findings[], summary}`; (4) retry feedback = critique-only re-prompt, architect rewrites; (5) exhaustion = `askUser` with `[continue/abort/extend-N]`, auto-answer defaults to `continue`; (6) architect default category flip `reasoning` → `planning` (Sonnet) and critic defaults `reasoning` (Opus), both overridable via `[agents.*]` config.
-- **ADR 0032 — Budget UX paradigm** (Accepted 2026-05-17; **superseded by ADR 0034 2026-05-24** at `7fc20a2`). Original five-part decision: closed set of six operator-facing axes, BUDGET_DEFAULTS single source of truth, askUser escalation rule, payload.budgets persistence. Amended twice (Phase 13.3 + 14.2) before supersession.
 
 ---
 
 ## Recently completed (last 5 steps)
 
-- **Phase 15 close** — `chore(phase-15)`: close phase 15, kick off arc-complete (eleventh time). Tagged `phase-15-budget-ux-overhaul-closed` at `a72b08a` (last substantive work commit). All 12 done-criteria structurally green; live browser smoke (3 scenarios) deferred to operator. U036 + U037 closed; U038 stays Open (Tier 16+ candidate). Workspace 1419 passing + 3 skipped (+31 across Phase 15). — 2026-05-24
-- **Step 15.11** — `feat(15.11)`: web UI directive detail pool pill + build form copy update. Pool tally pill on directive detail page; build form updated budget section copy to reflect pool semantics (no per-task cap advertised). — 2026-05-24 — `a72b08a`
-- **Step 15.10** — `feat(15.10)`: web UI project page tabbed cockpit (Live / Defaults / History / Settings). Four-tab layout: Live shows running directive + pool tally via `pool.tally` SSE; Defaults shows budget accordion with new scalars; History shows directive list; Settings shows project config including `autoIncreaseBudgets` + `autoIncreaseCeilingMultiplier` toggles. — 2026-05-24 — `05d90d3`
-- **Step 15.9** — `feat(15.9)`: daemon PUT /budget-defaults extended + GET /pool-usage + pool.tally SSE + retire inline fallback. Extended `PUT /budget-defaults` to accept 8 axes + 2 new scalars; new `GET /pool-usage` returns per-axis tally for a directive; `pool.tally` SSE event emitted on each task completion. — 2026-05-24 — `4716ca5`
-- **Step 15.8** — `refactor(15.8)`: delete budget-escalation.ts + [BUDGET] branch in auto-answer. Removed `packages/brain/src/budget-escalation.ts` (~880 lines including `parseBudgetEscalationAnswer`, `escalateBudgetTrip`, `axisForAgent`, `suggestedNextBucket`). Removed `[BUDGET]` marker recognition from `auto-answer.ts`. ADR 0030 amended to remove `[BUDGET]` from the marker table. U036 + U037 closed by this deletion. — 2026-05-24 — `89b4e85`
-- **Step 15.7** — `feat(15.7)`: brain pool-driven dispatcher + turnsUsed plumbing + watchdog wire-up. `pool.ts` rewritten to draw from directive-wide pool per agent class; `turnsUsed` plumbing through worker watchdog; planner prompt updated to stop emitting `task.maxTurns`; auto-bump recursion with prior-tasks cleanup fix (`5eeefbe`). — 2026-05-24 — `931ffcd`
+- **Relay workspace bootstrapped + budget axis unification** — 13 issues filed (5 P1, 4 P2, 4 P3) via cross-tier consistency audit. 5 features designed (F1 canonical table, F2 unified resolution, F3 4 new axes, F4 provider maxTurns fix, F5 observability). `relay-ordering.md` produced with 5-phase implementation plan. — 2026-05-25 — `5ff5255`
+- **Brain LLM cwd leak fix** — `183cdb6` — all 5 brain agents (architect, critic, planner, scaffolder, builder) now pass explicit cwd to claude-cli via `WorkerOptions.cwd`. pythonetl build revealed agents were inheriting factory5's cwd, silently corrupting tool-call paths. — 2026-05-25
+- **Phase 15 closed + 6 post-close fixes** — tag `phase-15-budget-ux-overhaul-closed` at `a72b08a`. Post-close: ARCHITECTURE.md budget section `cfcd7b3`, U038 brain auto-answer timing race `100805c`, server-side projectId + bulk spend `fa4a044`, Discord /budget all-8-axes `01bfcbe`, Tabs.astro extraction `7de3e66`, brain cwd leak `183cdb6`. — 2026-05-24/25
+- **Tier 15 implementation — 12 sub-steps via subagent-driven-development** — scaffold `30fc07f`, ADR 0034 `7fc20a2`, core scalars `dd94b1b`, wiki metadata `cabcc68`, pool-usage `11b6820`, pool-resume `92fac59`, pool dispatcher rewrite `931ffcd`, budget-escalation deletion `89b4e85`, daemon HTTP/SSE `4716ca5`, web cockpit `05d90d3`, directive pill `a72b08a`, phase close `d6777ad`. 25+ commits. — 2026-05-24
+- **Tier 15 brainstorm + plan** — design spec at `docs/superpowers/specs/2026-05-24-tier-15-budget-ux-overhaul-design.md` (`7281c93`); implementation plan at `UPGRADE/plans/tier-15-budget-ux-overhaul.md` + `docs/superpowers/plans/2026-05-24-tier-15-budget-ux-overhaul.md` (`85298a2`). — 2026-05-24
 - **Drift-fix #47** — `fix(15.1)`: flip steps.md checkbox + catch STATE pointer up (drift-fix #47). Flipped steps.md line 1 from `- [ ]` to `- [x]`. No production code changed. — 2026-05-24 — `a51afbc`
 - **Phase 15 scaffold** — `chore(phase-15)`: scaffold tier 15 budget UX overhaul. U036/U037/U038 opened; ROADMAP Tier 15 section; phase dir created; STATE cursor flipped arc-complete → Phase 15 active at 15.1. No production code touched. — 2026-05-24 — `30fc07f`
 - **Session-end after drift-fix `0e76df1`** (prior commit) — `docs(state)`: session end after drift-fix. STATE.md timestamp bump + last-commit pointer to `0e76df1` + lag counter (#46 reintroduced) + journal entry + next.md regen folds in. No phase work; pure session-start drift-fix + session-end housekeeping. — 2026-05-23
@@ -297,83 +298,27 @@ None — Phase 14 closed. Cleared at phase close.
 
 ## Notes for next session
 
-**Phase 14 (wiki-readiness-judge) closed; upgrade arc complete (tenth time).** Replaced the regex `wikiReadiness` gate with an LLM critic loop per ADR 0033. Architect default flipped Opus → Sonnet; critic defaults Opus; both overridable via new `[agents.*]` config table. 8th budget axis `maxWikiReadinessAttempts` (default 3) caps architect+critic retry cycles; on exhaustion the brain files an askUser with `[continue/abort/extend-N]` and the auto-answer dispatcher recognizes the `[CRITIC]` marker for deterministic `continue`.
+**Phase 15 (budget UX overhaul) closed; upgrade arc complete (eleventh time).** Pool model for `maxTurns*` axes. Project page tabbed cockpit. ADR 0034 supersedes ADR 0032. 6 post-close fixes landed. Relay workspace bootstrapped with 13 issues and 5 features designed for budget axis unification.
 
-**Live smoke verified end-to-end** (Playwright MCP, directive `01KSAVBNVNTARM6EPFPPJFQZKT`, project tier-14-smoke, 2026-05-23). Activity panel narrated the full flow: `brain.architect-loop: critic: evaluating wiki (attempt 1/3)` → `brain.architect: calling claude-sonnet-4-6` (Sonnet flip live) → `architect: wrote 3 wiki pages` → `brain.critic: calling claude-opus-4-7 (category reasoning)` → `critic: passed — <full Opus verdict>` → planner runs normally. Wiki-phase spend $0.282 (architect $0.110 + critic $0.172). Critic passed first try — retry path NOT live-exercised (covered by 42 unit tests across critic/architect-loop/auto-answer modules). Persistence verified via API GET: `directive.payload.budgets.maxWikiReadinessAttempts: 3` round-tripped.
+**Relay 5-phase ordering** (from `relay-ordering.md`):
+- **Phase 1 (Foundation):** F1 — canonical `BUDGET_AXES` table + ADR 0035 + validator dedup
+- **Phase 2 (Resolution):** F2 — unified `resolveBudget()` + replace all 7 ad-hoc resolution sites
+- **Phase 3 (New axes):** F3 — add `maxTurnsPlanner`, `maxTurnsCritic`, `maxTurnsInvestigator`, `maxTurnsFixer2`
+- **Phase 4 (Provider fix):** F4 — provider-side maxTurns enforcement removed (pool is the only gate)
+- **Phase 5 (Observability):** F5 — budget audit log, spend-per-axis metrics, cockpit charts
 
-**Two pre-existing bugs incidentally caught and fixed during Tier 14:**
+**Standalone Relay items** (independent of F1-F5, good warm-up):
+- **#7** — validator dedup (also part of F1 Phase 1)
+- **#9** — pool extraction dedup
+- **#10-#13** — doc hygiene (CONTRACTS.md, ARCHITECTURE.md, ADR cross-refs, README stale)
 
-1. Phase 13.6's `maxUsdPerTask` was silently dropped by a hardcoded 6-axis list in `packages/wiki/src/project-metadata.ts::resolveDirectivePayloadBudgets`. Fixed in Task 14.9 by replacing the hardcoded list with `BUDGET_AXES` iteration. Regression tests added.
-2. ADR 0030's promised `[CRITIC]` marker handler was written in the amendment block but never implemented in `auto-answer.ts`. Caught by the final code reviewer; fix at `431c7da`.
+**pythonetl build state:** directive `01KSDMA1MQEPNDJYKE085CMQSD` in failed state (2 passed, 9 failed). Needs daemon restart + fresh build AFTER Feature F4 (provider maxTurns fix) lands. Do NOT re-run until F4 is shipped.
 
-**Recommended next options for the next session:**
+**factoryd state at handoff:** not running. Run `pnpm factory daemon start` before any live work.
 
-1. **Operator's stated intent — run a real end-to-end test.** Step-by-step guide handed off at the end of this session (see "End-to-end test runbook" below). The canonical loop: start factoryd → register project → mint a build directive via Web UI or CLI → observe the activity feed narrate triage → architect → critic → planner → workers → terminal status → spot-check outputs (wiki + findings + spend). Tier 14 added the architect-loop critic to this path; the smoke yesterday already exercised it once.
-2. **Author a new tier** if a fresh operator-felt issue surfaces from the E2E test above. Available carry-forwards from Tier 14 §9 (Out of scope): generic critic loops for other stages (planner critic, build critic); diff-style architect output on retry; per-directive model category overrides; critic prompt context expansion; `maxWikiJudgeUsd` dollar cap; mid-task budget escalation; budget audit dashboard. Long-standing carry-forwards below.
-3. **`/session-end`** if the E2E test goes clean and there's no follow-up work — arc-complete state is the natural resting point.
+**Structural lag counter:** #49+ (many post-close commits this session; exact count from next session's drift check). Same structural options as always.
 
-## End-to-end test runbook
-
-Operator wants to run a real E2E test next session. Concrete recipe:
-
-**Prep (~30 seconds)**
-
-1. `pnpm install` if `pnpm-lock.yaml` shows the 3-line drift mentioned in carry-forwards. Otherwise skip.
-2. `pnpm build` to ensure all `packages/*/dist/` are current (the daemon hot-loads from `dist`).
-3. `pnpm factory daemon start` — spawns factoryd in the background. Confirm with `pnpm factory daemon status`.
-4. `pnpm factory ui-token` — prints the URL with the bearer token query param. Open it in the browser.
-
-**Smoke (~3-5 minutes, ~$0.30-1.50 model spend)**
-
-5. From the Web UI, click "New project" or use `pnpm factory project create <name> --path <abs-dir>`. Pick a fresh dir under `C:\Users\Momo\factory5-workspace\` (existing scratch dirs: `node-sse-smoke`, `smoke-demo`, `tier-14-smoke` — any can be reused with `--purge` first).
-6. From the Project page click "Build" (or `pnpm factory build <projectId> --spec "<one-sentence spec>"`). Optional flags via the Advanced budgets accordion: `--max-wiki-readiness-attempts 1` to force the critic-retry-exhaustion path live (yesterday's smoke had critic pass first try; this surfaces the `[CRITIC]` askUser + auto-answer handler in production for the first time).
-7. Watch the Directive Detail page's Activity panel narrate live: `triage` → `architect-loop: attempt 1/N` → `architect: calling claude-sonnet-4-6` → `architect: wrote N wiki pages` → `critic: calling claude-opus-4-7` → `critic: passed | failed (severity ...)` → on pass: `planner: calling ...` → `planner: emitted N tasks` → workers run → `directive.completed`.
-8. If `[CRITIC]` askUser fires (critic exhausted): wait for the auto-answer dispatcher's 5s throttle, then check the Pending Questions page shows `answered_by = 'agent'` and the directive recovers (or aborts cleanly per the answer).
-
-**Spot-checks**
-
-9. Wiki: `ls <project-path>/.factory/wiki/` — expect `OVERVIEW.md`, `ARCHITECTURE.md`, plus `modules/` if architect emitted any.
-10. Findings: `pnpm factory findings list <projectId>` — expect zero findings on a clean build, or worker-emitted FINDING markers if the build hit issues.
-11. Spend: directive detail page shows total USD; cross-check with `pnpm factory spend <projectId>` if the CLI surface exists.
-12. Persistence: `curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:25295/api/v1/directives/<id>` should round-trip the full directive incl. `payload.budgets.maxWikiReadinessAttempts`.
-
-**Teardown**
-
-13. `pnpm factory daemon stop` — Phase 13.4's pidfile cleanup runs synchronously, so the pidfile is gone before the stop command returns.
-14. Optional: `pnpm factory project delete <projectId> --purge` if the smoke project shouldn't linger.
-
-**Failure modes to watch for**
-
-- **Stale daemon from earlier date** (Phase 12 retro) — if behaviour looks pre-Tier-14, run `pnpm factory daemon restart` after `pnpm build`. A running daemon doesn't hot-reload `dist/`.
-- **`maxTurnsScaffolder` doesn't trigger budget askUser** — known from Phase 13.7 smoke; smoke-demo is too small to trip a 10-turn cap. Use a multi-module spec or `--max-turns-scaffolder 1` to force trip.
-- **Critic verdict not visible in Activity panel** — Tier 14 wired the full Opus verdict into the `critic: passed` / `critic: failed` log lines. If only the headline shows, check ADR 0031 emit-site coverage.
-- **Browser tabs don't share token** (Phase 11 retro) — `browser_tabs new` opens fresh contexts; pass `?t=<token>` in the new URL if multi-tab testing.
-
-**Daemon state at handoff:** stopped (post-smoke teardown). Restart with `pnpm factory daemon start` if next session needs it.
-
-**Phase 14 done-criteria status (11 of 11 green at close):**
-
-- [x] All four `pnpm` gates green (workspace 1388 + 3 skipped; +66 from Phase 13's 1322)
-- [x] ADR 0033 lands (14.2 at `50d38a8`); ADR 0032/0004/0030 amendment blocks appended
-- [x] `wikiReadiness()` and its 4 helpers deleted (14.8 at `02adf0c`); no remaining importers
-- [x] `runWikiCritic` (14.5) + `runArchitectWithCritique` (14.7) + `runArchitect priorCritique` (14.6) all tested
-- [x] `BUDGET_DEFAULTS` has 8 axes; `maxWikiReadinessAttempts` flows through CLI + Web UI + per-project + payload + resume
-- [x] `[agents.*]` config table parses; `resolveAgentCategory` defaults correctly (architect→planning, critic→reasoning)
-- [x] `AGENT_ROLES` has 10 entries including `'critic'`
-- [x] Live browser smoke verified at `01KSAVBNVNTARM6EPFPPJFQZKT` (see Notes above)
-- [x] Auto-answer dispatcher recognizes `[CRITIC]` marker; defaults to `continue`
-- [x] Workspace test count ≥ 1340 passing (actual: 1388)
-- [x] U035 closes (`02adf0c`)
-
-**Future tiers — Phase 14 Deferred section carry-forwards:**
-
-- **Generic critic loops for other stages** — planner critic, build critic. The `critic` agent role is generic for future-proofing.
-- **Diff-style architect output on retry** — architect rewrites full wiki on retry; optimize if cost becomes a problem.
-- **Per-directive model category overrides** — `[agents.*]` lives in daemon-wide config; per-build model switching deferred.
-- **Critic prompt context expansion** — task_log, findings, prior similar projects. Expand when quality data shows the lean prompt underperforms.
-- **Cost-axis enforcement** (`maxWikiJudgeUsd`) — count-only for first ship; add a dedicated dollar cap later if needed.
-- **Mid-task budget escalation** — carried forward from Phase 13; bigger surface still.
-- **Budget audit dashboard** — needs telemetry foundation first.
+**Uncommitted dirty paths** (accepted out-of-scope per standing directive): `.agents/`, `.claude/skills/`, `AGENTS.md`, `GEMINI.md`, `docs/superpowers/{plans,specs}/*` prettier reformatting, `.superpowers/` brainstorm visual companion, `pnpm-lock.yaml` drift.
 
 **Long-standing carry-forwards** (bundle opportunistically):
 
@@ -382,8 +327,7 @@ Operator wants to run a real E2E test next session. Concrete recipe:
 - **`factory config get / set <key>` CLI** — operator surface for `<dataDir>/config.json`.
 - **Override after auto-answer** — `factory questions answer --force <id>`. Pin via ADR if it ships.
 - **Inline-style audit on the 12 pages** — Tier 9-deferred.
-- **Structural `/session-end` lag-by-1 fix** — now at #46 occurrences (today added a drift-fix and a session-end, each carrying the structural lag). Two structural options remain: track "last work commit" rather than HEAD, or amend STATE.md post-commit. The Tier-14-as-Tier-15-micro-tier framing from prior session-ends remains the most attractive resolution.
-- **`pnpm-lock.yaml` 3-line drift** — uncommitted on disk; probably a transitive resolution change from one of the workspace dep updates during Tier 14. Worth a `pnpm install` audit at next session.
+- **Structural `/session-end` lag-by-1 fix** — #49+ occurrences. Two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 - **`docs/superpowers/{plans,specs}` prettier reformatting** — uncommitted on disk from format:check runs. Either commit the reformat or add the paths to `.prettierignore`.
 
 **Frontend-design judgement calls** carried from Phase 3 — not load-bearing for any active phase but worth recalling for any future web-side work: smart defaults beat empty states; native HTML beats custom widgets; theme-independent intentional colors for status semantics; error-class differentiation; visible-label vs. hover-title separation; inherit-don't-invent; root-cause CSS over global rewrites; hint-copy-teaches-consequence; in-context-affordance vs nav. **Tier 9 added** a new vocabulary on top: vermillion (`#ff4d1c`) as the singular signal color; Fraunces italic display + Bricolage Grotesque body + JetBrains Mono data; CSS custom-property tokens (`--bg / --surface / --ink / --hairline / --signal / --amber / --acid / --halt / --cool`) flipped by `prefers-color-scheme`; paper-grain SVG atmosphere via `body::before / body::after`; editorial masthead with brand mark `§` + numbered nav + monospaced status pip + pulse animation.

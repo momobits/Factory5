@@ -2,6 +2,18 @@
 
 Append-only, newest on top. One entry per session, short. Minor fixes land here as one-line entries (see Issue flow in `.control/PROJECT_PROTOCOL.md`).
 
+## 2026-05-24/25 — Tier 15 full lifecycle + Relay audit + budget axis unification brainstorm
+
+- Tier 15 (budget UX overhaul) brainstormed, planned, implemented (12 sub-steps), closed. Tag `phase-15-budget-ux-overhaul-closed` at `a72b08a`. 25+ commits across the tier. ADR 0034 supersedes ADR 0032. Pool model for maxTurns*. Project page tabbed cockpit. ~1419 tests at Phase 15 close (+31 from Phase 14's 1388).
+- 6 post-Tier-15 fixes: ARCHITECTURE.md budget section `cfcd7b3`, U038 brain auto-answer timing race `100805c`, server-side projectId + bulk spend `fa4a044`, Discord /budget all-axis expansion `01bfcbe`, Tabs.astro extraction `7de3e66`, brain LLM cwd leak fix `183cdb6`. Workspace 1453 passing (+34 from post-close work).
+- pythonetl test build `01KSDMA1MQEPNDJYKE085CMQSD` — revealed 2 real bugs: brain agents inheriting factory5's cwd (fixed), and per-task maxTurns still enforced despite pool model (to be fixed by Relay Feature F4).
+- Relay setup + `/relay-discover` — 13 issues filed (5 P1, 4 P2, 4 P3). Dominant pattern: half-finished Tier 12-15 migrations. Secondary: non-pool axis resolution inconsistency.
+- Budget axis unification brainstorm: 12 decisions, 5 features designed (canonical table, unified resolution, 4 new axes, provider maxTurns fix, observability), 5-phase ordering produced.
+- ADRs: 0034 accepted (Tier 15.2); 0035 designed but not yet authored (Relay Feature F1). 0032 + 0034 to be superseded by 0035.
+- Issues: U036 + U037 closed (Tier 15.8 at `89b4e85`). U038 closed (post-close fix `100805c`). 13 new Relay issues opened.
+- No factoryd running at handoff.
+- Next: `/relay-analyze` on Feature F1 (canonical table) or standalone cleanup tasks (#7, #9, #10-13).
+
 ## 2026-05-23 — Drift-fix + session-end + E2E runbook handed off
 
 - Drift-fix `0e76df1` caught STATE.md up to HEAD from the prior session's session-end lag-by-1 (#44); session-end commit reintroduces lag at #46.
