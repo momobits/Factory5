@@ -118,10 +118,12 @@ export const directiveLimitsSchema = z.object({
  *   `--max-usd flag` → project `metadata.budgetDefaults` → config `[budget.defaults]` → unlimited.
  *
  * For `maxUsd`/`maxSteps` the resolution lands on `directive.limits` via
- * {@link wiki.resolveDirectiveLimits}; for the other four axes it lands on
- * `directive.payload.budgets` via {@link wiki.resolveDirectivePayloadBudgets}.
- * Same source key on disk; two consumers because the legacy ADR 0020 path
- * and the new ADR 0032 path persist to different directive fields.
+ * {@link wiki.resolveDirectiveLimits}; for the other axes it lands on
+ * `directive.payload.budgets` via a per-axis merge in the daemon (Tier 15.4:
+ * `resolveDirectivePayloadBudgets` deleted; Tier 15.7 replaces with live
+ * re-resolve via `computePoolUsage`). Same source key on disk; two consumers
+ * because the legacy ADR 0020 path and the new ADR 0032 path persist to
+ * different directive fields.
  *
  * The Web UI write path is `PUT /api/v1/projects/:id/budget` with full-document
  * replacement semantics (ADR 0027 §1): the request body is the new state.

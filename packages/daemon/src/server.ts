@@ -34,8 +34,8 @@ import { isAbsolute, join } from 'node:path';
 import process from 'node:process';
 
 import fastifyStatic from '@fastify/static';
-import type { ChannelId, OutboundMessage } from '@factory5/core';
-import { directiveSchema, newId } from '@factory5/core';
+import type { ChannelId, OutboundMessage, ProjectBudgetDefaults } from '@factory5/core';
+import { BUDGET_AXES, directiveSchema, newId } from '@factory5/core';
 import {
   apiV1AnswerPendingQuestionRequestSchema,
   apiV1AnswerPendingQuestionResponseSchema,
@@ -124,7 +124,6 @@ import {
   ProjectMetadataNotFoundError,
   readProjectMetadata,
   resolveDirectiveLimits,
-  resolveDirectivePayloadBudgets,
   updateProjectMetadata,
 } from '@factory5/wiki';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
@@ -917,17 +916,21 @@ function registerRoutes(
       configDefaults: opts.configBudgetDefaults,
     });
     const hasLimits = limits !== undefined;
-    // Phase 13.5 — per-project metadata.budgetDefaults flows into
-    // directive.payload.budgets for the four Phase 12 axes too (the same
-    // helper that handles maxUsd/maxSteps for directive.limits via
-    // resolveDirectiveLimits above; same on-disk key, different consumer).
-    // Body wins per-axis; absent axes fall through to project metadata.
-    // Persists the overrides-only partial per ADR 0032 §6; brain's
-    // resolveBudgets fills defaults at consumption.
-    const payloadBudgets = resolveDirectivePayloadBudgets({
-      explicitBody: body.budgets,
-      projectDefaults: projectBudgetDefaults,
-    });
+    // TIER 15.4 — resolveDirectivePayloadBudgets deleted; inlined temporary
+    // fallback preserving Tier 13 per-axis merge behaviour until Tier 15.7
+    // swaps this call site for live re-resolve via computePoolUsage.
+    // Resolution: body wins per-axis, else project defaults. Same BUDGET_AXES
+    // iteration that was in the deleted helper.
+    const payloadBudgets = ((): ProjectBudgetDefaults | undefined => {
+      const bodyBudgets = body.budgets ?? {};
+      const projectBudgets = projectBudgetDefaults ?? {};
+      const merged: ProjectBudgetDefaults = {};
+      for (const axis of BUDGET_AXES) {
+        const value = bodyBudgets[axis] ?? projectBudgets[axis];
+        if (value !== undefined) merged[axis] = value;
+      }
+      return Object.keys(merged).length === 0 ? undefined : merged;
+    })();
     const directive = directiveSchema.parse({
       id: newId(),
       source: 'cli',

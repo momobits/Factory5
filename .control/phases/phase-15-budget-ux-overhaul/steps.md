@@ -3,7 +3,7 @@
 - [x] 15.1 Scaffold tier (committed at 30fc07f)
 - [x] 15.2 ADR 0034 (new) + ADR 0032 Status update + ADR 0030 amendment + ADR 0020 amendment
 - [x] 15.3 Core: project-level config scalars (`autoIncreaseBudgets`, `autoIncreaseCeilingMultiplier`)
-- [ ] 15.4 State (wiki): project-metadata reads/writes for new scalars; delete `resolveDirectivePayloadBudgets`
+- [x] 15.4 State (wiki): project-metadata reads/writes for new scalars; delete `resolveDirectivePayloadBudgets`
 - [ ] 15.5 Brain: `computePoolUsage` helper in `pool-usage.ts`
 - [ ] 15.6 Brain: `pool-resume.ts` chokidar watcher
 - [ ] 15.7 Brain: pool-driven dispatcher rewrite (`pool.ts` + planner emit drop + worker watchdog wire-up)

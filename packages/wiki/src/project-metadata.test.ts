@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,8 +13,8 @@ import {
   loadOrCreateProjectMetadata,
   readProjectMetadata,
   resolveDirectiveLimits,
-  resolveDirectivePayloadBudgets,
   updateProjectMetadata,
+  writeProjectMetadata,
   type ProjectMetadata,
 } from './project-metadata.js';
 
@@ -374,94 +375,86 @@ describe('budgetDefaultsFromProjectMeta (ADR 0027 §4 read helper)', () => {
   });
 });
 
-describe('resolveDirectivePayloadBudgets (Phase 13.5 — per-axis merge for directive.payload.budgets)', () => {
-  // Phase 13.5: per-project metadata.budgetDefaults flows into directive.payload.budgets
-  // for the new four Phase 12 axes (askUserDeadlineMs, maxTurnsScaffolder|Builder|Fixer).
-  // Body wins per-axis; absent axes fall through to project metadata; result is the
-  // overrides-only partial that the daemon persists on the new directive's payload
-  // (ADR 0032 §6 — overrides-only, not fully-resolved; brain fills defaults at
-  // consumption via resolveBudgets()).
-
-  it('returns undefined when both body and project are absent', () => {
-    expect(resolveDirectivePayloadBudgets({})).toBeUndefined();
-    expect(
-      resolveDirectivePayloadBudgets({ explicitBody: undefined, projectDefaults: undefined }),
-    ).toBeUndefined();
-  });
-
-  it('returns undefined when both body and project are empty objects', () => {
-    expect(
-      resolveDirectivePayloadBudgets({ explicitBody: {}, projectDefaults: {} }),
-    ).toBeUndefined();
-  });
-
-  it('returns the body value when only body is set', () => {
-    expect(resolveDirectivePayloadBudgets({ explicitBody: { maxTurnsScaffolder: 80 } })).toEqual({
-      maxTurnsScaffolder: 80,
-    });
-  });
-
-  it('falls back to projectDefaults when body unset (per-axis)', () => {
-    expect(
-      resolveDirectivePayloadBudgets({ projectDefaults: { maxTurnsScaffolder: 160 } }),
-    ).toEqual({ maxTurnsScaffolder: 160 });
-  });
-
-  it('body overrides projectDefaults per-axis', () => {
-    expect(
-      resolveDirectivePayloadBudgets({
-        explicitBody: { maxTurnsScaffolder: 80 },
-        projectDefaults: { maxTurnsScaffolder: 160 },
-      }),
-    ).toEqual({ maxTurnsScaffolder: 80 });
-  });
-
-  it('merges different axes per-axis (body sets one, project sets another)', () => {
-    expect(
-      resolveDirectivePayloadBudgets({
-        explicitBody: { maxTurnsScaffolder: 80 },
-        projectDefaults: { maxTurnsBuilder: 160, askUserDeadlineMs: 600_000 },
-      }),
-    ).toEqual({
-      maxTurnsScaffolder: 80,
-      maxTurnsBuilder: 160,
-      askUserDeadlineMs: 600_000,
-    });
-  });
-
-  it('per-axis independence — one body field does not flush the others from project', () => {
-    expect(
-      resolveDirectivePayloadBudgets({
-        explicitBody: { maxTurnsScaffolder: 80 },
-        projectDefaults: {
-          maxTurnsScaffolder: 160,
-          maxTurnsBuilder: 160,
-          maxTurnsFixer: 80,
+describe('project-metadata — Tier 15 scalars', () => {
+  it('round-trips autoIncreaseBudgets and autoIncreaseCeilingMultiplier', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'factory5-pm-t15-'));
+    try {
+      const written = await writeProjectMetadata(dir, {
+        id: '01KSB8C3AAAAAAAAAAAAAAAAAA',
+        name: 'pythonetl',
+        createdAt: '2026-05-23T20:28:06.332Z',
+        factoryVersion: '0.x',
+        metadata: {
+          language: 'python',
+          autoIncreaseBudgets: true,
+          autoIncreaseCeilingMultiplier: 5,
         },
-      }),
-    ).toEqual({
-      maxTurnsScaffolder: 80, // body wins
-      maxTurnsBuilder: 160, // project tier
-      maxTurnsFixer: 80, // project tier
-    });
+      });
+      expect(written.metadata.autoIncreaseBudgets).toBe(true);
+      expect(written.metadata.autoIncreaseCeilingMultiplier).toBe(5);
+
+      const reread = await loadOrCreateProjectMetadata(dir, 'pythonetl');
+      expect(reread.metadata.autoIncreaseBudgets).toBe(true);
+      expect(reread.metadata.autoIncreaseCeilingMultiplier).toBe(5);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
-  it('Phase 13.6 regression: maxUsdPerTask flows through from body', () => {
-    expect(
-      resolveDirectivePayloadBudgets({ explicitBody: { maxUsdPerTask: 2.5 } }),
-    ).toEqual({ maxUsdPerTask: 2.5 });
+  it('returns undefined for missing new scalars (no default coercion at read time)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'factory5-pm-t15-defaults-'));
+    try {
+      await writeProjectMetadata(dir, {
+        id: '01KSB8C3AAAAAAAAAAAAAAAAAA',
+        name: 'pythonetl',
+        createdAt: '2026-05-23T20:28:06.332Z',
+        factoryVersion: '0.x',
+        metadata: { language: 'python' },
+      });
+      const reread = await loadOrCreateProjectMetadata(dir, 'pythonetl');
+      expect(reread.metadata.autoIncreaseBudgets).toBeUndefined();
+      expect(reread.metadata.autoIncreaseCeilingMultiplier).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
-  it('Phase 14 regression: maxWikiReadinessAttempts flows through from body', () => {
-    expect(
-      resolveDirectivePayloadBudgets({ explicitBody: { maxWikiReadinessAttempts: 5 } }),
-    ).toEqual({ maxWikiReadinessAttempts: 5 });
+  it('preserves unrelated metadata keys on write', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'factory5-pm-t15-preserve-'));
+    try {
+      await writeProjectMetadata(dir, {
+        id: '01KSB8C3AAAAAAAAAAAAAAAAAA',
+        name: 'pythonetl',
+        createdAt: '2026-05-23T20:28:06.332Z',
+        factoryVersion: '0.x',
+        metadata: {
+          language: 'python',
+          customKey: 'custom-value',
+          autoIncreaseBudgets: true,
+        },
+      });
+      const reread = await loadOrCreateProjectMetadata(dir, 'pythonetl');
+      expect(reread.metadata.customKey).toBe('custom-value');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
-  it('Phase 13.6 regression: maxUsdPerTask flows through from project defaults', () => {
-    expect(
-      resolveDirectivePayloadBudgets({ projectDefaults: { maxUsdPerTask: 0.75 } }),
-    ).toEqual({ maxUsdPerTask: 0.75 });
+  it('rejects malformed autoIncreaseCeilingMultiplier (write side)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'factory5-pm-t15-reject-'));
+    try {
+      await expect(
+        writeProjectMetadata(dir, {
+          id: '01KSB8C3AAAAAAAAAAAAAAAAAA',
+          name: 'pythonetl',
+          createdAt: '2026-05-23T20:28:06.332Z',
+          factoryVersion: '0.x',
+          metadata: { autoIncreaseCeilingMultiplier: -1 },
+        }),
+      ).rejects.toThrow();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -20,9 +20,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
-  BUDGET_AXES,
   newId,
   projectBudgetDefaultsSchema,
+  projectMetadataSchema,
   type DirectiveLimits,
   type ProjectBudgetDefaults,
 } from '@factory5/core';
@@ -232,42 +232,6 @@ export function resolveDirectiveLimits(opts: {
 }
 
 /**
- * Phase 13.5 — resolve `directive.payload.budgets` from operator body +
- * per-project metadata defaults. Sibling to {@link resolveDirectiveLimits}
- * for the Phase 12 / ADR 0032 axis set (`askUserDeadlineMs`,
- * `maxTurnsScaffolder|Builder|Fixer`, plus `maxUsd`/`maxSteps` that mirror
- * the legacy `limits` path).
- *
- * Resolution per-axis: `explicitBody` wins, else `projectDefaults`. Instance
- * config tier is NOT consulted here (Tier 8's daemon-wide `config.json`
- * carries `askUserDeadlineMs` for a different purpose — stamping
- * `pending_questions.deadline_at` per ADR 0030; not a per-directive budget
- * floor). Returns the overrides-only partial that {@link
- * directive.payload.budgets} persists (ADR 0032 §6 + the Phase 12 retro note
- * in STATE.md: payload carries overrides only, brain fills defaults at
- * consumption via {@link resolveBudgets} in `@factory5/core/budgets`).
- *
- * Returns `undefined` when neither tier supplies any axis — the daemon
- * persists nothing on `payload.budgets` in that case (current pre-13.5
- * behavior preserved for the no-config case).
- */
-export function resolveDirectivePayloadBudgets(opts: {
-  /** Operator body (`body.budgets` from POST /api/v1/builds). */
-  explicitBody?: ProjectBudgetDefaults | undefined;
-  /** Per-project tier (Web UI–writable). Read with {@link budgetDefaultsFromProjectMeta}. */
-  projectDefaults?: ProjectBudgetDefaults | undefined;
-}): ProjectBudgetDefaults | undefined {
-  const body = opts.explicitBody ?? {};
-  const project = opts.projectDefaults ?? {};
-  const merged: ProjectBudgetDefaults = {};
-  for (const axis of BUDGET_AXES) {
-    const value = body[axis] ?? project[axis];
-    if (value !== undefined) merged[axis] = value;
-  }
-  return Object.keys(merged).length === 0 ? undefined : merged;
-}
-
-/**
  * Thrown by {@link updateProjectMetadata} when the project directory has
  * no `.factory/project.json` to update. The Web UI's budget route
  * (ADR 0027 §3) maps this to `404 PROJECT_PATH_UNREADABLE` — the project
@@ -351,6 +315,32 @@ export async function readProjectMetadata(
     throw new ProjectMetadataCorruptError(filePath, validated);
   }
   return validated;
+}
+
+/**
+ * Write a {@link ProjectMetadata} object to `<projectPath>/.factory/project.json`.
+ *
+ * Validates the metadata bag via {@link projectMetadataSchema} from
+ * `@factory5/core` before writing — this is the drift-safe write path for
+ * Tier 15 scalars (`autoIncreaseBudgets`, `autoIncreaseCeilingMultiplier`).
+ * The read path keeps its lenient `validateMetadataOrReason` for backward compat.
+ *
+ * Throws a Zod `ZodError` when the metadata fails schema validation (e.g.
+ * `autoIncreaseCeilingMultiplier: -1`). Creates the `.factory/` directory if
+ * absent.
+ */
+export async function writeProjectMetadata(
+  projectPath: string,
+  meta: ProjectMetadata,
+): Promise<ProjectMetadata> {
+  // Validate through the typed Zod schema — catches malformed scalars at write time.
+  projectMetadataSchema.parse(meta);
+  const factoryDir = join(projectPath, '.factory');
+  await mkdir(factoryDir, { recursive: true });
+  const filePath = join(factoryDir, 'project.json');
+  await writeFileAtomic(filePath, `${JSON.stringify(meta, null, 2)}\n`);
+  log.info({ filePath, projectId: meta.id, projectName: meta.name }, 'project.json: written');
+  return meta;
 }
 
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
