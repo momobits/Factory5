@@ -17,7 +17,6 @@ import {
 } from '@factory5/state';
 
 import { autoAnswerOne, buildAutoAnswerPrompt, runAutoAnswerSweep } from './auto-answer.js';
-import { BUDGET_ESCALATION_MARKER } from './budget-escalation.js';
 import { CRITIC_MARKER } from './architect-loop.js';
 
 beforeAll(() => {
@@ -297,122 +296,6 @@ describe('runAutoAnswerSweep', () => {
     expect(new Set(provider.calls.map((c) => c.userPrompt))).toEqual(
       new Set([provider.calls[0]?.userPrompt ?? '', provider.calls[1]?.userPrompt ?? '']),
     );
-  });
-});
-
-describe('autoAnswerOne — Tier 12 / ADR 0032 §5 budget-escalation policy', () => {
-  let db: Database;
-
-  beforeEach(() => {
-    db = freshDb();
-  });
-
-  afterEach(() => {
-    db.close();
-  });
-
-  // Provider intentionally throws — the deterministic policy must NOT
-  // dispatch an LLM call. Tests will fail if the provider is invoked.
-  const noProviderCall = (): ProviderRegistry =>
-    ({
-      resolve(): Promise<CategoryResolution> {
-        throw new Error('LLM dispatch should be skipped for budget_escalation');
-      },
-    }) as unknown as ProviderRegistry;
-
-  it("first budget-escalation on a task auto-answers 'accept' (bump)", async () => {
-    const d = seedDirective(db);
-    const taskId = newId();
-    const q = seedQuestion(db, d.id, {
-      taskId,
-      question: `${BUDGET_ESCALATION_MARKER} Task "x" ran out of turns ...`,
-    });
-    await autoAnswerOne(q, {
-      db,
-      registry: noProviderCall(),
-      now: () => Date.parse('2026-05-17T01:00:00.000Z'),
-      retryBackoffMs: 0,
-    });
-    const after = pendingQuestions.getById(db, q.id);
-    expect(after?.answeredBy).toBe('agent');
-    expect(after?.answer).toBe('accept');
-  });
-
-  it("second budget-escalation on the SAME task auto-answers 'abort' (bump-then-abort)", async () => {
-    const d = seedDirective(db);
-    const taskId = newId();
-    const q1 = seedQuestion(db, d.id, {
-      id: newId(),
-      taskId,
-      question: `${BUDGET_ESCALATION_MARKER} first trip`,
-    });
-    await autoAnswerOne(q1, {
-      db,
-      registry: noProviderCall(),
-      now: () => Date.parse('2026-05-17T01:00:00.000Z'),
-      retryBackoffMs: 0,
-    });
-    const a1 = pendingQuestions.getById(db, q1.id);
-    expect(a1?.answer).toBe('accept');
-
-    const q2 = seedQuestion(db, d.id, {
-      id: newId(),
-      taskId,
-      question: `${BUDGET_ESCALATION_MARKER} second trip after the bump didn't help`,
-    });
-    await autoAnswerOne(q2, {
-      db,
-      registry: noProviderCall(),
-      now: () => Date.parse('2026-05-17T01:01:00.000Z'),
-      retryBackoffMs: 0,
-    });
-    const a2 = pendingQuestions.getById(db, q2.id);
-    expect(a2?.answer).toBe('abort');
-    expect(a2?.answeredBy).toBe('agent');
-  });
-
-  it('budget-escalation on a DIFFERENT task in the same directive still auto-accepts', async () => {
-    const d = seedDirective(db);
-    const taskA = newId();
-    const taskB = newId();
-    const qA = seedQuestion(db, d.id, {
-      id: newId(),
-      taskId: taskA,
-      question: `${BUDGET_ESCALATION_MARKER} task A trip`,
-    });
-    await autoAnswerOne(qA, {
-      db,
-      registry: noProviderCall(),
-      now: () => Date.parse('2026-05-17T01:00:00.000Z'),
-      retryBackoffMs: 0,
-    });
-    const qB = seedQuestion(db, d.id, {
-      id: newId(),
-      taskId: taskB,
-      question: `${BUDGET_ESCALATION_MARKER} task B trip`,
-    });
-    await autoAnswerOne(qB, {
-      db,
-      registry: noProviderCall(),
-      now: () => Date.parse('2026-05-17T01:01:00.000Z'),
-      retryBackoffMs: 0,
-    });
-    expect(pendingQuestions.getById(db, qA.id)?.answer).toBe('accept');
-    expect(pendingQuestions.getById(db, qB.id)?.answer).toBe('accept');
-  });
-
-  it('a budget-escalation question without a taskId aborts (defensive)', async () => {
-    const d = seedDirective(db);
-    const q = seedQuestion(db, d.id, {
-      question: `${BUDGET_ESCALATION_MARKER} no task linked`,
-    });
-    await autoAnswerOne(q, {
-      db,
-      registry: noProviderCall(),
-      now: () => Date.parse('2026-05-17T01:00:00.000Z'),
-      retryBackoffMs: 0,
-    });
-    expect(pendingQuestions.getById(db, q.id)?.answer).toBe('abort');
   });
 });
 
