@@ -56,37 +56,11 @@ Severity:
 - **Hypothesis**: Path (a+) bumps the timeout to ~10 min AND prints the directive id when minted AND adds a periodic "still working..." heartbeat AND adds a SIGINT handler so first Ctrl-C cancels just the in-flight directive (returns to `you>`) and second Ctrl-C exits the REPL AND prompts before exiting if a directive is still in flight. Bare path (a) — bump only — would actually make UX worse (longer staring at a dead prompt). Path (b) — daemon-side streaming partial responses — is the better UX but requires daemon-side support and is a multi-step tier.
 - **Resolution**: Tier 9 candidate. Twice-deferred (Phase 2 → Phase 4 → still open). Parked at Phase 8 scaffold time per operator decision; promote when the false-timeout pain surfaces in real use.
 
-### U036 — `[BUDGET]` askUser parser rejects natural-language replies
-
-- **Filed**: 2026-05-24
-- **Severity**: high
-- **Tier**: 15
-- **Area**: brain
-
-`packages/brain/src/budget-escalation.ts::parseBudgetEscalationAnswer` recognizes only literal `'accept'`, `'abort'`, or `/^custom\s+(\d+)$/`. Natural-language replies like `"accept, bump to 160"` (operator-typed during 2026-05-23 pythonetl build `01KSB8DEZQCENQEKBKBRCKNYZK`) fall through to `{ kind: 'abort', reason: 'parse-failed' }`, aborting the task and cascading 12 dependent task failures with exit 2 "upstream failure."
-
-**Hypothesis**: parser was designed for a structured option-list UI that the Question Detail page never enforced (see U037). Operator typed a sensible natural reply that any LLM (or relaxed regex) would recognize as `custom 160`.
-
-**Resolution candidates**: see Tier 15 spec — root-cause fix is to delete the parser entirely and replace the `[BUDGET]` askUser with a project-level budget cockpit (live edit, optional auto-increase).
-
-### U037 — Question Detail page renders free-form textarea on structured-options questions
-
-- **Filed**: 2026-05-24
-- **Severity**: medium
-- **Tier**: 15
-- **Area**: web
-
-ADR 0032 §4 specified `[BUDGET]` askUser as a closed-set answer space (`accept` / `custom <n>` / `abort`). `apps/factory-web/src/pages/questions/detail.astro` renders a free-form `<textarea>` regardless of the `options[]` field, so the operator has no UI affordance signaling the answer is structured.
-
-**Hypothesis**: the Question Detail page predates the structured-options askUsers and was never updated. The `options[]` field is shown as a "suggested-answers" hint but not enforced.
-
-**Resolution candidates**: in scope for Tier 15 specifically for `[BUDGET]` (closed by deletion of the question). General fix for non-budget structured-options askUsers deferred (Tier 16+).
-
 ### U038 — Brain races auto-answer LLM dispatch on directive-level `[escalation]` askUser
 
 - **Filed**: 2026-05-24
 - **Severity**: low
-- **Tier**: (deferred — Tier 16+ candidate)
+- **Tier**: (Tier 16+ candidate; brain-side timing fix, unrelated to budget UX)
 - **Area**: brain
 
 During the 2026-05-23 pythonetl run, the brain's serve loop marked the directive `blocked` at 20:57:23 because the directive-level `[escalation]` askUser's deadline elapsed. The auto-answer dispatcher had claimed the question 1s earlier (20:57:22) and the LLM call returned a usable `"skip"` answer at 20:57:36 — 13s after the brain gave up. The directive stayed `blocked` even though the auto-answer eventually produced a sensible reply.
@@ -96,6 +70,24 @@ During the 2026-05-23 pythonetl run, the brain's serve loop marked the directive
 **Resolution candidates**: deferred — out of scope for Tier 15 (budget UX). Brain-side timing fix, separate tier.
 
 ## Resolved
+
+### U036 — `[BUDGET]` askUser parser rejects natural-language replies
+
+- **Filed**: 2026-05-24
+- **Severity**: high
+- **Tier**: 15
+- **Area**: brain
+- **Description**: `packages/brain/src/budget-escalation.ts::parseBudgetEscalationAnswer` recognized only literal `'accept'`, `'abort'`, or `/^custom\s+(\d+)$/`. Natural-language replies like `"accept, bump to 160"` (operator-typed during 2026-05-23 pythonetl build `01KSB8DEZQCENQEKBKBRCKNYZK`) fell through to `{ kind: 'abort', reason: 'parse-failed' }`, aborting the task and cascading 12 dependent task failures with exit 2 "upstream failure."
+- **Resolution**: Closed by Tier 15.8 deletion of `packages/brain/src/budget-escalation.ts` — the parser no longer exists. Pool exhaustion now parks the directive with a structured `blockedReason` and the operator unblocks via the project page Live tab (no askUser fired). Commit `89b4e85` (`refactor(15.8): delete budget-escalation.ts + [BUDGET] branch in auto-answer`). — 2026-05-24
+
+### U037 — Question Detail page renders free-form textarea on structured-options questions
+
+- **Filed**: 2026-05-24
+- **Severity**: medium
+- **Tier**: 15
+- **Area**: web
+- **Description**: ADR 0032 §4 specified `[BUDGET]` askUser as a closed-set answer space (`accept` / `custom <n>` / `abort`). `apps/factory-web/src/pages/questions/detail.astro` rendered a free-form `<textarea>` regardless of the `options[]` field, so the operator had no UI affordance signaling the answer is structured.
+- **Resolution**: Closed by Tier 15.7 + 15.8 deletion of the `[BUDGET]` askUser path. `[BUDGET]`-prefixed questions are no longer created; pool exhaustion uses the structured project-page surface instead (parked-alert banner with raise-cap CTA). General fix for other structured-options askUsers (e.g., directive-level `[escalation]`) deferred to Tier 16+. Commit `89b4e85` (`refactor(15.8): delete budget-escalation.ts + [BUDGET] branch in auto-answer`). — 2026-05-24
 
 ### U032 — Operator-invisible turn budgets; hard-fail without retry-question escalation
 

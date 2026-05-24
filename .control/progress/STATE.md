@@ -3,10 +3,10 @@
 > Single source of truth. Read this first every session. Updated at every
 > `/session-end` and by the `PreCompact` hook. Every field has a purpose -- fill each.
 
-**Last updated:** 2026-05-24 — Drift-fix #47: flip steps.md 15.1 checkbox to [x] (scaffold commit IS the completion of step 15.1 per CLAUDE.md) + bump Last commit pointer from `0e76df1` to `30fc07f`. No phase work; pure housekeeping. Daemon stopped at handoff.
-**Current phase:** Phase 15 (budget-ux-overhaul) active at 15.1
-**Current step:** 15.1
-**Status:** Phase 15 scaffolded. Tier 14 delivered end-to-end (arc-complete tenth time). Tier 15 opened in response to the 2026-05-23 pythonetl incident where `parseBudgetEscalationAnswer` rejected a natural-language reply, cascading 12 task failures (U036). Root cause: the structured-reply paradigm itself, not the parser. Tier 15 replaces `[BUDGET]` askUser with a project-level budget cockpit (pool model for `maxTurns*` axes + live re-resolve from `project.json` + optional auto-increase, ADR 0034). No factoryd running at handoff.
+**Last updated:** 2026-05-24 — session-end after Phase 15 close (live smoke deferred to operator)
+**Current phase:** arc-complete (eleventh time)
+**Current step:** n/a (between phases)
+**Status:** Tier 15 delivered end-to-end (structural close; live browser smoke deferred to operator). The entire `[BUDGET]` askUser path is deleted — `budget-escalation.ts` (~880 lines, commit `89b4e85`), `[BUDGET]` branch in `auto-answer.ts` (`89b4e85`). Pool model ships for the three `maxTurns*` axes: each class (scaffolder/builder/fixer) draws from a directive-wide pool; exhaustion parks the directive with a structured `blockedReason` (`931ffcd`). Live re-resolve from `project.json` via chokidar watcher (`92fac59`). Auto-increase toggle with `autoIncreaseCeilingMultiplier` safety ceiling (`dd94b1b`, `cabcc68`). New daemon HTTP surface: `PUT /budget-defaults` extended, `GET /pool-usage`, `pool.tally` SSE event (`4716ca5`). Project page tabbed cockpit Live/Defaults/History/Settings (`05d90d3`). Directive detail pool pill + build form copy update (`a72b08a`). ADR 0034 supersedes ADR 0032 (`7fc20a2`). U036 + U037 closed; U038 medium, defer-until-signal (Tier 16+ candidate). Live browser smoke (3 scenarios) deferred to operator.
 
 ---
 
@@ -20,32 +20,35 @@
 
 ## Next action
 
-**Phase 15 active at step 15.1 (scaffold done).** Next: **15.2 — ADR 0034 (new) + ADR 0032 Status update + ADR 0030 amendment + ADR 0020 amendment.**
+**Arc-complete (eleventh time).** Options: (a) start a new upgrade tier per `UPGRADE/ROADMAP.md` — scan for next demand signal; (b) rest and run `/session-end`. U038 is the only open upgrade issue (medium, brain-side timing fix, Tier 16+ candidate — same defer-until-signal pattern as U005).
 
-Read `docs/superpowers/plans/2026-05-24-tier-15-budget-ux-overhaul.md` Task 2 for the exact step-by-step instructions. Read `docs/decisions/0033-wiki-readiness-critique-loop.md` for the current ADR shape. ADR 0034 supersedes ADR 0032 — set Status line on 0032 to `Superseded by ADR 0034 (2026-05-24)` (only that line; no other edits per CLAUDE.md).
+**LIVE BROWSER SMOKE DEFERRED TO OPERATOR.** Three scenarios require running factoryd + Playwright MCP (~5-15 min each):
+1. **Parked-directive / raise-cap flow** — build a project that exhausts a pool (set `maxTurnsScaffolder=3` in Build form, trigger a multi-task build); confirm directive parks with `blockedReason.kind='pool-exhausted'`; use project page Live tab "Raise cap" CTA; confirm directive auto-resumes.
+2. **Auto-increase flow** — set `autoIncreaseBudgets=true` on a project (project Settings tab); run a build that exhausts the pool; confirm brain auto-bumps the cap and retries without operator action; confirm directive completes or hits the `ceilingMultiplier` floor and parks.
+3. **Multi-class isolation** — run a build with tasks across scaffolder/builder/fixer classes; confirm each class draws from its own pool independently; one class exhausting does not affect the others.
 
-**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`; Tier 13 at `phase-13-budget-followups-closed` 2026-05-17 at `aae86dc`; Tier 14 at `phase-14-wiki-readiness-judge-closed` 2026-05-23 at `431c7da`.
+**Previous arc-closes (for context):** Tiers 1–4 closed at `phase-4-cli-completion-closed` 2026-05-06; Tier 5 at `phase-5-agent-prompts-closed` 2026-05-07; Tier 6 at `phase-6-skills-rewrites-closed` 2026-05-07; Tier 7 at `phase-7-findings-mark-closed` 2026-05-08 at `40a78a8`; Tier 8 at `phase-8-question-auto-answer-closed` 2026-05-08 at `d863ea0`; Tier 9 at `phase-9-control-room-redesign-closed` 2026-05-15 at `9e8ee5c`; Tier 10 at `phase-10-resume-and-activity-feed-closed` 2026-05-16 at `fbc3c27`; Tier 11 at `phase-11-directive-log-persistence-closed` 2026-05-16 at `343f101`; Tier 12 at `phase-12-budget-ux-closed` 2026-05-17 at `8231f87`; Tier 13 at `phase-13-budget-followups-closed` 2026-05-17 at `aae86dc`; Tier 14 at `phase-14-wiki-readiness-judge-closed` 2026-05-23 at `431c7da`; Tier 15 at `phase-15-budget-ux-overhaul-closed` 2026-05-24 at `a72b08a`.
 
 ---
 
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `30fc07f` — `fix(15.1)`: flip steps.md checkbox + catch STATE pointer up (drift-fix #47). Bumps Last commit lag from #46 to #47 — same structural lag-by-1 pattern; this commit itself becomes the new lag.
+- **Last commit:** `<phase-15-close-commit>` — `chore(phase-15)`: close phase 15, kick off arc-complete (eleventh time). Lag counter bumps to #48 — same structural lag-by-1 pattern; this commit itself becomes the new lag.
 - **Uncommitted changes:** pre-existing dirty paths only (`.agents/`, `.claude/skills/`, `AGENTS.md`, `GEMINI.md`, `docs/superpowers/{plans,specs}/*` prettier reformatting, `pnpm-lock.yaml` 3-line drift) — accepted out-of-scope per operator's standing directive
-- **Last phase tag:** `phase-14-wiki-readiness-judge-closed` (annotated at `431c7da`)
+- **Last phase tag:** `phase-15-budget-ux-overhaul-closed` (annotated at `a72b08a`)
 
 ---
 
 ## Open blockers
 
-- None (U033 closed at `46198b4`; U034 closed at `31afcb9`; U005 medium, defer-until-signal)
+- None (U036 + U037 closed at `89b4e85`; U038 medium, defer-until-signal — same pattern as U005)
 
 ---
 
 ## In-flight work
 
-**Phase 15 active at step 15.1.** Scaffold commit in progress — creating phase dir, ISSUES entries, ROADMAP section, phase-plan row, STATE cursor. No production code changed. Next sub-step is 15.2 (ADR 0034 + amendments).
+None.
 
 **Carry-forward items outside any active phase scope** (none load-bearing; ordered by likelihood a demand signal surfaces):
 
@@ -68,11 +71,11 @@ Read `docs/superpowers/plans/2026-05-24-tier-15-budget-ux-overhaul.md` Task 2 fo
 - **Filter-form Apply buttons + "Clear all defaults"** still render as user-agent default `<button>` on five sites — absorbed by deferred PageShell migration.
 - **Inline `style=` attributes** scattered across web pages — same PageShell migration absorbs these.
 - **Control framework 2.2.3 publish** at `G:\Projects\Small-Projects\Control` — operator owns the go.
-- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **47 occurrences** (drift-fix #47 added at `30fc07f`; itself carries the structural lag). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit. The Tier-14-as-Tier-15-micro-tier idea raised at the prior session-end stays a viable candidate.
+- **`/session-end` skill structural fix** for the "Last commit" lag-by-1 — now **48 occurrences** (phase-15-close commit itself carries the structural lag). Same two structural options: track "last work commit" rather than HEAD, or amend STATE.md post-commit.
 
 ---
 
-- **Last test run:** 2026-05-23 (Phase 14 close) — all 4 `pnpm` gates clean across all 15 packages. Workspace total **1388+ passing + 3 skipped** (was 1322 + 3 at Phase 13 close; +66+ across Phase 14). Core gained `wikiCritiqueSchema` (5) + 8th-axis (7) + AGENT_ROLES (1); state gained `agentsConfigSchema` + `resolveAgentCategory` (8); brain gained `runWikiCritic` (10) + `runArchitectWithCritique` wrapper (16) + architect priorCritique (4) + auto-answer `[CRITIC]` (4) + 4 loop integration tests; daemon gained 3 axis-acceptance tests + 1 `maxUsdPerTask` regression; wiki gained 3 regression tests; cli gained 5 budget-flag tests. The pre-existing `wikiReadiness` test block (~3 tests) was deleted as part of 14.8.
+- **Last test run:** 2026-05-24 (Phase 15 close) — all 4 `pnpm` gates clean across all 15 packages. Workspace total **1419 passing + 3 skipped** (was 1388 + 3 at Phase 14 close; +31 across Phase 15). Per-package: worker-mcp 15, core 65, logger 20, ipc 38, providers 41, state 199, worker-sandbox 86 (+3 skip), assessor 79, events 3, wiki 80, channels 175, worker 49, brain 185, daemon 221, cli 163. Lint clean; format:check pre-existing warnings in `.agents/` + `docs/superpowers/` (accepted out-of-scope).
 - **Eval score** (agent phases only): n/a
 - **Regression tests:** unit + integration only; no eval harness. ADR 0029 still in promoted state.
 
@@ -80,17 +83,22 @@ Read `docs/superpowers/plans/2026-05-24-tier-15-budget-ux-overhaul.md` Task 2 fo
 
 ## Recent decisions (last 3 ADRs)
 
-- **ADR 0033 — Wiki-readiness critique loop** (Accepted 2026-05-23; landed in Phase 14 step 14.2 at `50d38a8`). Six-part decision: (1) LLM critic replaces regex as sole readiness arbiter; (2) critic contract = directive intent + CLAUDE.md + wiki pages; (3) rich critique schema `{passes, severity, findings[], summary}`; (4) retry feedback = critique-only re-prompt, architect rewrites; (5) exhaustion = `askUser` with `[continue/abort/extend-N]`, auto-answer defaults to `continue`; (6) architect default category flip `reasoning` → `planning` (Sonnet) and critic defaults `reasoning` (Opus), both overridable via `[agents.*]` config. Triggered the amendments below.
-- **ADR 0032 — Budget UX paradigm** (Accepted 2026-05-17; landed in Phase 12 step 12.2 at `fd67b8a`; **amended twice** — 2026-05-17 in Phase 13.3 at `46198b4` with operator-as-ceiling clarification per U033; **2026-05-23 in Phase 14.2 at `50d38a8`** extending the closed-set axis table from seven to eight with `maxWikiReadinessAttempts`, the architect+critic retry cap from ADR 0033). The 14.2 amendment retroactively acknowledges Phase 13.6 added `maxUsdPerTask` as the 7th axis without amending ADR 0032 at the time.
-- **ADR 0004 — Category-based model routing** (Accepted long ago; **amended 2026-05-23 in Phase 14.2 at `50d38a8`** to add the per-agent category override layer: new `[agents.*]` table in `<dataDir>/config.json` lets operators flip an agent's resolved category without remapping the global `[categories.*]` bindings. Resolution order: `config.agents?.[role]` → `DEFAULT_AGENT_CATEGORIES[role]` → existing routing. `DEFAULT_AGENT_CATEGORIES.architect = 'planning'`, `.critic = 'reasoning'` ship in Tier 14).
-- **ADR 0030 — pending-question-auto-answer** (Accepted 2026-05-08 at `8365b6a`; **amended 2026-05-23 in Phase 14.2 at `50d38a8`** to extend the marker-recognition path: the auto-answer dispatcher now recognizes the `[CRITIC]` marker alongside `[BUDGET]`, with deterministic `continue` policy for wiki-readiness-exhausted questions. `answered_by = 'agent'` per the existing DB enum — note: not `'agent (auto)'`, which is the UI render label).
+- **ADR 0034 — Budget pool paradigm** (Accepted 2026-05-24; landed in Phase 15 step 15.2 at `7fc20a2`; supersedes ADR 0032). Six-part decision: (1) pool model for three `maxTurns*` axes (directive-wide per agent class); (2) linear bump rule (`+default` per accept, no bucket schedule); (3) planner drops per-task `maxTurns` emit; (4) live re-resolve from `project.json` with per-build override as floor (caps only rise during a directive's lifetime); (5) pool exhaustion parks with structured `blockedReason`, no askUser; (6) `autoIncreaseBudgets` toggle with `autoIncreaseCeilingMultiplier` safety ceiling. ADR 0030 amended to remove `[BUDGET]` marker recognition (deleted alongside `budget-escalation.ts`); ADR 0020 amended with cross-ref to new pool model.
+- **ADR 0033 — Wiki-readiness critique loop** (Accepted 2026-05-23; landed in Phase 14 step 14.2 at `50d38a8`). Six-part decision: (1) LLM critic replaces regex as sole readiness arbiter; (2) critic contract = directive intent + CLAUDE.md + wiki pages; (3) rich critique schema `{passes, severity, findings[], summary}`; (4) retry feedback = critique-only re-prompt, architect rewrites; (5) exhaustion = `askUser` with `[continue/abort/extend-N]`, auto-answer defaults to `continue`; (6) architect default category flip `reasoning` → `planning` (Sonnet) and critic defaults `reasoning` (Opus), both overridable via `[agents.*]` config.
+- **ADR 0032 — Budget UX paradigm** (Accepted 2026-05-17; **superseded by ADR 0034 2026-05-24** at `7fc20a2`). Original five-part decision: closed set of six operator-facing axes, BUDGET_DEFAULTS single source of truth, askUser escalation rule, payload.budgets persistence. Amended twice (Phase 13.3 + 14.2) before supersession.
 
 ---
 
 ## Recently completed (last 5 steps)
 
-- **Drift-fix #47** — `fix(15.1)`: flip steps.md checkbox + catch STATE pointer up (drift-fix #47). Flipped steps.md line 1 from `- [ ]` to `- [x] 15.1 Scaffold tier (committed at 30fc07f)` per CLAUDE.md "same commit that closes a sub-step" rule. Updated Last commit pointer from `0e76df1` → `30fc07f`. Lag counter bumps from #46 to #47; same structural pattern. No production code changed. — 2026-05-24 — `30fc07f`
-- **Phase 15 scaffold** — `chore(phase-15)`: scaffold tier 15 budget UX overhaul. U036/U037/U038 opened in `UPGRADE/ISSUES.md`; ROADMAP Tier 15 section + intro "Fourteen → Fifteen tiers"; phase-plan.md Phase 15 row + summary + ordering-paragraph sentence; `.control/phases/phase-15-budget-ux-overhaul/{README.md,steps.md}` created; STATE.md cursor flipped arc-complete → Phase 15 active at 15.1. No production code touched. — 2026-05-24
+- **Phase 15 close** — `chore(phase-15)`: close phase 15, kick off arc-complete (eleventh time). Tagged `phase-15-budget-ux-overhaul-closed` at `a72b08a` (last substantive work commit). All 12 done-criteria structurally green; live browser smoke (3 scenarios) deferred to operator. U036 + U037 closed; U038 stays Open (Tier 16+ candidate). Workspace 1419 passing + 3 skipped (+31 across Phase 15). — 2026-05-24
+- **Step 15.11** — `feat(15.11)`: web UI directive detail pool pill + build form copy update. Pool tally pill on directive detail page; build form updated budget section copy to reflect pool semantics (no per-task cap advertised). — 2026-05-24 — `a72b08a`
+- **Step 15.10** — `feat(15.10)`: web UI project page tabbed cockpit (Live / Defaults / History / Settings). Four-tab layout: Live shows running directive + pool tally via `pool.tally` SSE; Defaults shows budget accordion with new scalars; History shows directive list; Settings shows project config including `autoIncreaseBudgets` + `autoIncreaseCeilingMultiplier` toggles. — 2026-05-24 — `05d90d3`
+- **Step 15.9** — `feat(15.9)`: daemon PUT /budget-defaults extended + GET /pool-usage + pool.tally SSE + retire inline fallback. Extended `PUT /budget-defaults` to accept 8 axes + 2 new scalars; new `GET /pool-usage` returns per-axis tally for a directive; `pool.tally` SSE event emitted on each task completion. — 2026-05-24 — `4716ca5`
+- **Step 15.8** — `refactor(15.8)`: delete budget-escalation.ts + [BUDGET] branch in auto-answer. Removed `packages/brain/src/budget-escalation.ts` (~880 lines including `parseBudgetEscalationAnswer`, `escalateBudgetTrip`, `axisForAgent`, `suggestedNextBucket`). Removed `[BUDGET]` marker recognition from `auto-answer.ts`. ADR 0030 amended to remove `[BUDGET]` from the marker table. U036 + U037 closed by this deletion. — 2026-05-24 — `89b4e85`
+- **Step 15.7** — `feat(15.7)`: brain pool-driven dispatcher + turnsUsed plumbing + watchdog wire-up. `pool.ts` rewritten to draw from directive-wide pool per agent class; `turnsUsed` plumbing through worker watchdog; planner prompt updated to stop emitting `task.maxTurns`; auto-bump recursion with prior-tasks cleanup fix (`5eeefbe`). — 2026-05-24 — `931ffcd`
+- **Drift-fix #47** — `fix(15.1)`: flip steps.md checkbox + catch STATE pointer up (drift-fix #47). Flipped steps.md line 1 from `- [ ]` to `- [x]`. No production code changed. — 2026-05-24 — `a51afbc`
+- **Phase 15 scaffold** — `chore(phase-15)`: scaffold tier 15 budget UX overhaul. U036/U037/U038 opened; ROADMAP Tier 15 section; phase dir created; STATE cursor flipped arc-complete → Phase 15 active at 15.1. No production code touched. — 2026-05-24 — `30fc07f`
 - **Session-end after drift-fix `0e76df1`** (prior commit) — `docs(state)`: session end after drift-fix. STATE.md timestamp bump + last-commit pointer to `0e76df1` + lag counter (#46 reintroduced) + journal entry + next.md regen folds in. No phase work; pure session-start drift-fix + session-end housekeeping. — 2026-05-23
 - **Drift-fix** — `docs(state)`: bump last-commit pointer to `7998f45` (drift-fix). Catches STATE.md up to HEAD after the prior session's session-end lag-by-1 (#44). Pure session-start reconciliation; no phase work. Folds in the SessionStart hook's `next.md` timestamp regen. — 2026-05-23 — `0e76df1`
 - **Session-end after Phase 14 close** — `docs(state)`: session end for Phase 14 close. STATE.md timestamp bump + last-commit pointer to `bce66d9` + lag counter (#44 reintroduced) + journal entry + next.md regen folds in. No phase work; pure session-end housekeeping. — 2026-05-23 — `7998f45`

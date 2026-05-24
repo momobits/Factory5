@@ -11,4 +11,4 @@
 - [x] 15.9 Daemon: HTTP/SSE surface (PUT /budget-defaults extended, GET /pool-usage, pool.tally SSE event)
 - [x] 15.10 Web UI: project page tabbed cockpit
 - [x] 15.11 Web UI: directive detail pool pill + build form copy update
-- [ ] 15.12 Phase close: live browser smoke + recordkeeping
+- [x] 15.12 Phase close: recordkeeping complete; live browser smoke deferred to operator

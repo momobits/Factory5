@@ -1,6 +1,6 @@
 # Tier 15 — Budget UX overhaul design
 
-**Status:** Design ready · operator-approved sections 1–6 (2026-05-24)
+**Status:** Implemented and closed · structural prep complete; live browser smoke deferred to operator · `phase-15-budget-ux-overhaul-closed` tag at `a72b08a`
 **Authoring session:** brainstorm 2026-05-24
 **Targets:** ADR 0034 (new, supersedes 0032), ADR 0030 (amend), ADR 0020 (cross-ref amend)
 **Closes:** U036 (parser too strict), U037 (free-text textarea on structured-options questions)

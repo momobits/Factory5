@@ -229,8 +229,8 @@ Replace the entire `[BUDGET]` askUser path with a project-level budget cockpit. 
 - [x] Daemon: `PUT /budget-defaults` extended (8 axes + 2 scalars); new `GET /pool-usage`; `pool.tally` SSE event
 - [x] Web UI: project page tabbed cockpit (Live / Defaults / History / Settings)
 - [x] Web UI: directive detail pool pill + build form copy update
-- [ ] Browser smoke verified live (parked → raise → auto-resume; auto-increase flow; multi-class isolation)
-- [ ] U036 + U037 close; U038 stays Open as Tier-16+ candidate
+- [~] Browser smoke verified live (parked → raise → auto-resume; auto-increase flow; multi-class isolation) — DEFERRED to operator (Playwright MCP, live daemon required)
+- [x] U036 + U037 close; U038 stays Open as Tier-16+ candidate
 
 Plan: [`plans/tier-15-budget-ux-overhaul.md`](plans/tier-15-budget-ux-overhaul.md)
 
