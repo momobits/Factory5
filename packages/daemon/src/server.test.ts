@@ -2157,12 +2157,13 @@ describe('IPC server — POST /api/v1/builds (ADR 0027, sub-step 11.3)', () => {
     await app.close();
   });
 
-  it('Phase 13.5: project metadata.budgetDefaults.maxTurnsScaffolder flows into directive.payload.budgets', async () => {
-    // The project pins maxTurnsScaffolder=160 in its on-disk metadata; the
-    // build body omits it. Phase 13.5's per-project default extension means
-    // the resolved directive carries maxTurnsScaffolder=160 in payload.budgets
-    // (which, combined with Phase 13.3's ceiling semantic in
-    // resolveTaskMaxTurns, will FLOOR any planner emit above 160 down to 160).
+  it('Tier 15.9 / ADR 0034 §1: project metadata.budgetDefaults is NOT merged into payload.budgets', async () => {
+    // Tier 15.9 retired the daemon-side per-axis merge. The brain's
+    // `computePoolUsage` does live `max(project.json, payload.budgets,
+    // BUDGET_DEFAULTS)` resolution at every consumption site, so the
+    // project's `maxTurnsScaffolder=160` no longer leaks into the
+    // directive's payload at creation time. With no body.budgets the
+    // payload.budgets field is omitted entirely.
     const factoryDir = join(projectDir, '.factory');
     await mkdir(factoryDir, { recursive: true });
     const meta = {
@@ -2184,23 +2185,24 @@ describe('IPC server — POST /api/v1/builds (ADR 0027, sub-step 11.3)', () => {
       method: 'POST',
       url: '/api/v1/builds',
       headers: { authorization: `Bearer ${UI_TOKEN}` },
-      payload: { project: projectDir }, // no body.budgets — project tier should fill
+      payload: { project: projectDir }, // no body.budgets — daemon writes nothing
     });
     expect(res.statusCode).toBe(200);
     const body = res.json() as {
       directive: { payload: { budgets?: Record<string, number> } };
     };
-    expect(body.directive.payload.budgets).toEqual({
-      maxTurnsScaffolder: 160,
-      askUserDeadlineMs: 600_000,
-    });
+    expect(body.directive.payload.budgets).toBeUndefined();
     await app.close();
   });
 
-  it('Phase 13.5: body.budgets overrides project metadata defaults per-axis', async () => {
-    // Project pins maxTurnsScaffolder=160; body asks for 80. Body wins. The
-    // project's askUserDeadlineMs=600_000 flows through because the body
-    // didn't touch it — per-axis independence.
+  it('Tier 15.9 / ADR 0034 §1: body.budgets flows through verbatim (no project-tier merge at creation)', async () => {
+    // Project pins maxTurnsScaffolder=160 and askUserDeadlineMs=600_000;
+    // body sets maxTurnsScaffolder=80. Pre-Tier-15.9 the daemon merged
+    // these per-axis; post-Tier-15.9 the body wins outright and ONLY
+    // the body's keys land in payload.budgets. The brain's pool
+    // resolution will still see askUserDeadlineMs=600_000 because
+    // `max(project.json, payload, BUDGET_DEFAULTS)` reads project.json
+    // live at consumption time.
     const factoryDir = join(projectDir, '.factory');
     await mkdir(factoryDir, { recursive: true });
     const meta = {
@@ -2231,10 +2233,8 @@ describe('IPC server — POST /api/v1/builds (ADR 0027, sub-step 11.3)', () => {
     const body = res.json() as {
       directive: { payload: { budgets?: Record<string, number> } };
     };
-    expect(body.directive.payload.budgets).toEqual({
-      maxTurnsScaffolder: 80, // body wins
-      askUserDeadlineMs: 600_000, // project tier flows through (per-axis indep)
-    });
+    // Only the body's keys persist; project-tier keys do NOT leak in.
+    expect(body.directive.payload.budgets).toEqual({ maxTurnsScaffolder: 80 });
     await app.close();
   });
 
@@ -3024,7 +3024,7 @@ describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.
     const res = await app.inject({
       method: 'PUT',
       url: `/api/v1/projects/${id}/budget`,
-      payload: { maxUsd: 5 },
+      payload: { budgetDefaults: { maxUsd: 5 } },
     });
     expect(res.statusCode).toBe(401);
     await app.close();
@@ -3037,7 +3037,7 @@ describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.
       method: 'PUT',
       url: `/api/v1/projects/${id}/budget`,
       headers: { authorization: `Bearer ${UI_TOKEN}` },
-      payload: { maxUsd: 5 },
+      payload: { budgetDefaults: { maxUsd: 5 } },
     });
     expect(res.statusCode).toBe(503);
     const body = res.json() as { error: { code: string } };
@@ -3052,7 +3052,7 @@ describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.
       method: 'PUT',
       url: `/api/v1/projects/${id}/budget`,
       headers: { authorization: `Bearer ${UI_TOKEN}` },
-      payload: { maxUsd: -1 },
+      payload: { budgetDefaults: { maxUsd: -1 } },
     });
     expect(res.statusCode).toBe(400);
     const body = res.json() as { error: { code: string } };
@@ -3066,7 +3066,7 @@ describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.
       method: 'PUT',
       url: `/api/v1/projects/${newId()}/budget`,
       headers: { authorization: `Bearer ${UI_TOKEN}` },
-      payload: { maxUsd: 5 },
+      payload: { budgetDefaults: { maxUsd: 5 } },
     });
     expect(res.statusCode).toBe(404);
     const body = res.json() as { error: { code: string } };
@@ -3090,7 +3090,7 @@ describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.
       method: 'PUT',
       url: `/api/v1/projects/${id}/budget`,
       headers: { authorization: `Bearer ${UI_TOKEN}` },
-      payload: { maxUsd: 5 },
+      payload: { budgetDefaults: { maxUsd: 5 } },
     });
     expect(res.statusCode).toBe(404);
     const body = res.json() as { error: { code: string } };
@@ -3117,7 +3117,7 @@ describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.
       method: 'PUT',
       url: `/api/v1/projects/${id}/budget`,
       headers: { authorization: `Bearer ${UI_TOKEN}` },
-      payload: { maxUsd: 5 },
+      payload: { budgetDefaults: { maxUsd: 5 } },
     });
     expect(res.statusCode).toBe(422);
     const body = res.json() as { error: { code: string } };
@@ -3132,7 +3132,7 @@ describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.
       method: 'PUT',
       url: `/api/v1/projects/${id}/budget`,
       headers: { authorization: `Bearer ${UI_TOKEN}` },
-      payload: { maxUsd: 4.5, maxSteps: 150 },
+      payload: { budgetDefaults: { maxUsd: 4.5, maxSteps: 150 } },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json() as {
@@ -3157,7 +3157,7 @@ describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.
       method: 'PUT',
       url: `/api/v1/projects/${id}/budget`,
       headers: { authorization: `Bearer ${UI_TOKEN}` },
-      payload: { maxUsd: 9 },
+      payload: { budgetDefaults: { maxUsd: 9 } },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { budgetDefaults: { maxUsd?: number; maxSteps?: number } };
@@ -3188,7 +3188,7 @@ describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.
       method: 'PUT',
       url: `/api/v1/projects/${id}/budget`,
       headers: { authorization: `Bearer ${UI_TOKEN}` },
-      payload: { maxUsd: 2 },
+      payload: { budgetDefaults: { maxUsd: 2 } },
     });
     expect(res.statusCode).toBe(200);
     const { readFile } = await import('node:fs/promises');
@@ -3197,6 +3197,457 @@ describe('IPC server — PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.
     ) as { metadata: { language?: string; budgetDefaults?: unknown } };
     expect(onDisk.metadata.language).toBe('go');
     expect(onDisk.metadata.budgetDefaults).toEqual({ maxUsd: 2 });
+    await app.close();
+  });
+
+  // ----- Tier 15.9 — new tests for the extended PUT body shape -----
+
+  it('Tier 15.9: accepts all 8 axes + autoIncreaseBudgets + autoIncreaseCeilingMultiplier', async () => {
+    const id = await seedProject();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: {
+        budgetDefaults: {
+          maxUsd: 5,
+          maxSteps: 100,
+          askUserDeadlineMs: 600_000,
+          maxTurnsScaffolder: 160,
+          maxTurnsBuilder: 120,
+          maxTurnsFixer: 80,
+          maxUsdPerTask: 1.5,
+          maxWikiReadinessAttempts: 5,
+        },
+        autoIncreaseBudgets: true,
+        autoIncreaseCeilingMultiplier: 4,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      budgetDefaults: Record<string, number>;
+      autoIncreaseBudgets?: boolean;
+      autoIncreaseCeilingMultiplier?: number;
+    };
+    expect(body.budgetDefaults).toEqual({
+      maxUsd: 5,
+      maxSteps: 100,
+      askUserDeadlineMs: 600_000,
+      maxTurnsScaffolder: 160,
+      maxTurnsBuilder: 120,
+      maxTurnsFixer: 80,
+      maxUsdPerTask: 1.5,
+      maxWikiReadinessAttempts: 5,
+    });
+    expect(body.autoIncreaseBudgets).toBe(true);
+    expect(body.autoIncreaseCeilingMultiplier).toBe(4);
+
+    const { readFile } = await import('node:fs/promises');
+    const onDisk = JSON.parse(
+      await readFile(join(projectDir, '.factory', 'project.json'), 'utf8'),
+    ) as {
+      metadata: {
+        budgetDefaults: Record<string, number>;
+        autoIncreaseBudgets?: boolean;
+        autoIncreaseCeilingMultiplier?: number;
+      };
+    };
+    expect(onDisk.metadata.autoIncreaseBudgets).toBe(true);
+    expect(onDisk.metadata.autoIncreaseCeilingMultiplier).toBe(4);
+    expect(onDisk.metadata.budgetDefaults.maxTurnsBuilder).toBe(120);
+    await app.close();
+  });
+
+  it('Tier 15.9: rejects extra unknown keys (strict mode)', async () => {
+    const id = await seedProject();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { budgetDefaults: { maxUsd: 5 }, unknownKey: 'nope' },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('Tier 15.9: rejects autoIncreaseCeilingMultiplier: 0', async () => {
+    const id = await seedProject();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { autoIncreaseCeilingMultiplier: 0 },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('SCHEMA_VALIDATION_FAILED');
+    await app.close();
+  });
+
+  it('Tier 15.9: PUT replaces all three managed keys (omitted scalars cleared)', async () => {
+    // Seed a project that has all three managed keys set.
+    const id = await seedProject({
+      budgetDefaults: { maxUsd: 5, maxTurnsScaffolder: 100 },
+      autoIncreaseBudgets: true,
+      autoIncreaseCeilingMultiplier: 8,
+      language: 'go',
+    });
+    const app = await buildIpcServer(baseOpts());
+    // PUT with only budgetDefaults set; the two scalars must be cleared.
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/projects/${id}/budget`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+      payload: { budgetDefaults: { maxUsd: 7 } },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      budgetDefaults: Record<string, number>;
+      autoIncreaseBudgets?: boolean;
+      autoIncreaseCeilingMultiplier?: number;
+    };
+    expect(body.budgetDefaults).toEqual({ maxUsd: 7 });
+    expect(body.autoIncreaseBudgets).toBeUndefined();
+    expect(body.autoIncreaseCeilingMultiplier).toBeUndefined();
+
+    const { readFile } = await import('node:fs/promises');
+    const onDisk = JSON.parse(
+      await readFile(join(projectDir, '.factory', 'project.json'), 'utf8'),
+    ) as {
+      metadata: {
+        budgetDefaults?: Record<string, number>;
+        autoIncreaseBudgets?: boolean;
+        autoIncreaseCeilingMultiplier?: number;
+        language?: string;
+      };
+    };
+    expect(onDisk.metadata.autoIncreaseBudgets).toBeUndefined();
+    expect(onDisk.metadata.autoIncreaseCeilingMultiplier).toBeUndefined();
+    // Unrelated metadata (language) must still survive the write.
+    expect(onDisk.metadata.language).toBe('go');
+    await app.close();
+  });
+});
+
+describe('IPC server — GET /api/v1/directives/:id/pool-usage (Tier 15.9 / ADR 0034 §6)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+  let projectDir: string;
+
+  beforeEach(async () => {
+    db = freshDb();
+    doorbell = new Doorbell();
+    projectDir = await mkdtemp(join(tmpdir(), 'factory5-pool-usage-'));
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  const UI_TOKEN = 'ui-secret-pool';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  /**
+   * Seed a directive with an on-disk project.json so `computePoolUsage`
+   * has a real project root + budget defaults to read from. Returns the
+   * inserted directive for the caller to reference via `:id`.
+   */
+  async function seedDirective(
+    overrides: Partial<Directive> = {},
+    projectMetadata: Record<string, unknown> = {},
+  ): Promise<Directive> {
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    const projectId = newId();
+    await writeFile(
+      join(factoryDir, 'project.json'),
+      JSON.stringify(
+        {
+          id: projectId,
+          name: 'sample',
+          createdAt: '2026-04-25T00:00:00.000Z',
+          factoryVersion: '0.x',
+          metadata: projectMetadata,
+        },
+        null,
+        2,
+      ),
+    );
+    const directive: Directive = {
+      id: newId(),
+      source: 'cli',
+      principal: 'web-ui',
+      channelRef: 'pool-usage-test',
+      intent: 'build',
+      payload: { projectPath: projectDir, project: 'sample' },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'running',
+      projectId,
+      ...overrides,
+    };
+    directivesQ.insert(db, directive);
+    return directive;
+  }
+
+  it('returns 401 without bearer', async () => {
+    const directive = await seedDirective();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}/pool-usage`,
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns 503 UI_DISABLED when uiAuthToken is not configured', async () => {
+    const directive = await seedDirective();
+    const app = await buildIpcServer({ ...baseOpts(), uiAuthToken: undefined });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}/pool-usage`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(503);
+    await app.close();
+  });
+
+  it('returns 404 DIRECTIVE_NOT_FOUND on a missing directive', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${newId()}/pool-usage`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('DIRECTIVE_NOT_FOUND');
+    await app.close();
+  });
+
+  it('returns the live pool tally shape with all five pool axes', async () => {
+    const directive = await seedDirective(
+      {},
+      { budgetDefaults: { maxTurnsBuilder: 120, maxUsd: 5 } },
+    );
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}/pool-usage`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directiveId: string;
+      computedAt: string;
+      perAxis: Record<
+        string,
+        { used: number; cap: number; pct: number; status: string; tasks: unknown[] }
+      >;
+      parkedReason?: unknown;
+    };
+    expect(body.directiveId).toBe(directive.id);
+    expect(typeof body.computedAt).toBe('string');
+    // The five operator-facing pool axes must all be present.
+    expect(body.perAxis['maxUsd']).toBeDefined();
+    expect(body.perAxis['maxSteps']).toBeDefined();
+    expect(body.perAxis['maxTurnsScaffolder']).toBeDefined();
+    expect(body.perAxis['maxTurnsBuilder']).toBeDefined();
+    expect(body.perAxis['maxTurnsFixer']).toBeDefined();
+    // Cap on maxUsd reflects the max(project, payload, BUDGET_DEFAULTS) rule;
+    // project.json pinned 5 and the framework default is 0, so cap=5.
+    expect(body.perAxis['maxUsd']?.cap).toBe(5);
+    // Used is zero — no model_usage rows seeded.
+    expect(body.perAxis['maxUsd']?.used).toBe(0);
+    expect(body.perAxis['maxUsd']?.status).toBe('ok');
+    // Not parked.
+    expect(body.parkedReason).toBeUndefined();
+    await app.close();
+  });
+
+  it('includes parkedReason when the directive is blocked with a pool-exhausted reason', async () => {
+    const directive = await seedDirective(
+      { status: 'blocked' },
+      { budgetDefaults: { maxTurnsBuilder: 120 } },
+    );
+    // Stamp the structured pool-exhausted JSON on blocked_reason — same shape
+    // the brain's pool dispatcher writes when it parks a directive.
+    db.prepare(`UPDATE directives SET blocked_reason = ? WHERE id = ?`).run(
+      JSON.stringify({
+        kind: 'pool-exhausted',
+        axis: 'maxTurnsBuilder',
+        usedAtPark: 240,
+        capAtPark: 240,
+      }),
+      directive.id,
+    );
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}/pool-usage`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      parkedReason?: { axis: string; usedAtPark: number; capAtPark: number; nextBumpTo: number };
+    };
+    expect(body.parkedReason).toBeDefined();
+    expect(body.parkedReason?.axis).toBe('maxTurnsBuilder');
+    expect(body.parkedReason?.usedAtPark).toBe(240);
+    expect(body.parkedReason?.capAtPark).toBe(240);
+    // nextBumpTo = capAtPark + projectDefault[axis] = 240 + 120 = 360.
+    expect(body.parkedReason?.nextBumpTo).toBe(360);
+    await app.close();
+  });
+
+  it('falls back to framework defaults when project.json is unreadable', async () => {
+    // Seed a directive whose payload.projectPath points to a directory with
+    // no .factory/project.json — readProjectMetadata returns undefined, the
+    // pool computes against BUDGET_DEFAULTS only.
+    const directive: Directive = {
+      id: newId(),
+      source: 'cli',
+      principal: 'web-ui',
+      channelRef: 'pool-usage-no-meta',
+      intent: 'build',
+      payload: { projectPath: projectDir }, // empty directory — no project.json
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'running',
+    };
+    directivesQ.insert(db, directive);
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}/pool-usage`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      perAxis: Record<string, { cap: number }>;
+    };
+    // Framework default for maxTurnsBuilder is 80; no project override.
+    expect(body.perAxis['maxTurnsBuilder']?.cap).toBe(80);
+    await app.close();
+  });
+});
+
+describe('IPC server — GET /api/v1/directives/:id — Tier 15.9 blockedReason union', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+
+  beforeEach(() => {
+    db = freshDb();
+    doorbell = new Doorbell();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  const UI_TOKEN = 'ui-secret-blocked';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  it('returns structured blockedReason for a pool-exhausted directive', async () => {
+    const directive: Directive = {
+      ...testDirective(),
+      status: 'blocked',
+      blockedReason: JSON.stringify({
+        kind: 'pool-exhausted',
+        axis: 'maxTurnsBuilder',
+        usedAtPark: 240,
+        capAtPark: 240,
+      }),
+    };
+    directivesQ.insert(db, directive);
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      directive: { blockedReason?: string };
+      blockedReason?: { kind?: string; axis?: string; capAtPark?: number } | string;
+    };
+    // The top-level structured field is what the SPA reads.
+    expect(typeof body.blockedReason).toBe('object');
+    if (typeof body.blockedReason === 'object' && body.blockedReason !== null) {
+      expect(body.blockedReason.kind).toBe('pool-exhausted');
+      expect(body.blockedReason.axis).toBe('maxTurnsBuilder');
+      expect(body.blockedReason.capAtPark).toBe(240);
+    }
+    // The raw DB string still rides on the directive for back-compat.
+    expect(typeof body.directive.blockedReason).toBe('string');
+    await app.close();
+  });
+
+  it('returns a string blockedReason for a legacy free-text reason', async () => {
+    const directive: Directive = {
+      ...testDirective(),
+      status: 'failed',
+      blockedReason: 'cancelled-from-web-ui',
+    };
+    directivesQ.insert(db, directive);
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      blockedReason?: string | { kind?: string };
+    };
+    expect(body.blockedReason).toBe('cancelled-from-web-ui');
+    await app.close();
+  });
+
+  it('omits the top-level blockedReason field when the directive has none', async () => {
+    const directive: Directive = { ...testDirective(), status: 'complete' };
+    directivesQ.insert(db, directive);
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/directives/${directive.id}`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { blockedReason?: unknown };
+    expect(body.blockedReason).toBeUndefined();
     await app.close();
   });
 });

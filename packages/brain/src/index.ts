@@ -22,4 +22,5 @@ export * from './provider-config.js';
 export * from './serve.js';
 export * from './config.js';
 export * from './daemon-endpoint.js';
+export * from './pool-usage.js';
 export * from './usage.js';

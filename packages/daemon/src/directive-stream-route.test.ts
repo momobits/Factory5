@@ -547,6 +547,96 @@ describe('GET /api/v1/directives/:id/stream — live emission', () => {
 
     ctrl.abort();
   });
+
+  it('Tier 15.9: forwards a pool.tally hub emit verbatim to the connected client', async () => {
+    server = await startServer({ db, uiAuthToken: UI_TOKEN });
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    const ctrl = new AbortController();
+    const { events } = await openStream(server, directive.id, { signal: ctrl.signal });
+
+    // Drain backfill (only spend, since no tasks).
+    const backfill = await nextEvent(events);
+    expect(isEvent(backfill, 'spend.updated')).toBe(true);
+
+    // Simulate the brain pool dispatcher's emit. Tier 15.7 wired
+    // `pool.tally` into `directiveStreamEventSchema`'s discriminated
+    // union; the daemon-side hub forwards it identically to every
+    // other event type via the per-request SSE writer.
+    server.hub.emit({
+      type: 'pool.tally',
+      directiveId: directive.id,
+      perAxis: {
+        maxTurnsBuilder: {
+          used: 120,
+          cap: 240,
+          pct: 50,
+          tasks: [
+            {
+              taskId: newId(),
+              title: 'wire pool tally',
+              agent: 'builder',
+              contribution: 120,
+            },
+          ],
+          status: 'ok',
+        },
+      },
+    });
+
+    const live = await nextEvent(events);
+    expect(isEvent(live, 'pool.tally')).toBe(true);
+    const data = (live as ParsedEvent).data as {
+      directiveId: string;
+      perAxis: { maxTurnsBuilder: { used: number; cap: number; status: string } };
+    };
+    expect(data.directiveId).toBe(directive.id);
+    expect(data.perAxis.maxTurnsBuilder.used).toBe(120);
+    expect(data.perAxis.maxTurnsBuilder.cap).toBe(240);
+    expect(data.perAxis.maxTurnsBuilder.status).toBe('ok');
+
+    ctrl.abort();
+  });
+
+  it('Tier 15.9: forwards a pool.tally with parkedReason when the directive is parked', async () => {
+    server = await startServer({ db, uiAuthToken: UI_TOKEN });
+    const directive = testDirective();
+    directivesQ.insert(db, directive);
+    const ctrl = new AbortController();
+    const { events } = await openStream(server, directive.id, { signal: ctrl.signal });
+
+    await nextEvent(events); // drain backfill
+
+    server.hub.emit({
+      type: 'pool.tally',
+      directiveId: directive.id,
+      perAxis: {
+        maxTurnsBuilder: {
+          used: 240,
+          cap: 240,
+          pct: 100,
+          tasks: [],
+          status: 'exhausted',
+        },
+      },
+      parkedReason: {
+        axis: 'maxTurnsBuilder',
+        usedAtPark: 240,
+        capAtPark: 240,
+        nextBumpTo: 360,
+      },
+    });
+
+    const live = await nextEvent(events);
+    expect(isEvent(live, 'pool.tally')).toBe(true);
+    const data = (live as ParsedEvent).data as {
+      parkedReason?: { axis: string; nextBumpTo: number };
+    };
+    expect(data.parkedReason?.axis).toBe('maxTurnsBuilder');
+    expect(data.parkedReason?.nextBumpTo).toBe(360);
+
+    ctrl.abort();
+  });
 });
 
 describe('GET /api/v1/directives/:id/stream — heartbeat + cleanup', () => {

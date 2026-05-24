@@ -34,8 +34,8 @@ import { isAbsolute, join } from 'node:path';
 import process from 'node:process';
 
 import fastifyStatic from '@fastify/static';
-import type { ChannelId, OutboundMessage, ProjectBudgetDefaults } from '@factory5/core';
-import { BUDGET_AXES, directiveSchema, newId } from '@factory5/core';
+import type { ChannelId, OutboundMessage } from '@factory5/core';
+import { directiveSchema, newId } from '@factory5/core';
 import {
   apiV1AnswerPendingQuestionRequestSchema,
   apiV1AnswerPendingQuestionResponseSchema,
@@ -57,14 +57,16 @@ import {
   apiV1PendingQuestionDetailResponseSchema,
   apiV1PendingQuestionsListQuerySchema,
   apiV1PendingQuestionsListResponseSchema,
+  apiV1PoolUsageResponseSchema,
+  apiV1ProjectBudgetDefaultsPutBodySchema,
   apiV1ProjectDetailResponseSchema,
   apiV1ProjectsListResponseSchema,
   apiV1SpendQuerySchema,
   apiV1SpendResponseSchema,
-  apiV1UpdateProjectBudgetRequestSchema,
   apiV1UpdateProjectBudgetResponseSchema,
   cancelDirectiveRequestSchema,
   cancelDirectiveResponseSchema,
+  directiveBlockedReasonSchema,
   directiveNotifyRequestSchema,
   IpcRequestError,
   ipcErrorSchema,
@@ -86,17 +88,19 @@ import {
   type ApiV1FindingsListResponse,
   type ApiV1PendingQuestionDetailResponse,
   type ApiV1PendingQuestionsListResponse,
+  type ApiV1PoolUsageResponse,
   type ApiV1ProjectDetailResponse,
   type ApiV1ProjectsListResponse,
   type ApiV1SpendResponse,
   type ApiV1UpdateProjectBudgetResponse,
   type CancelDirectiveResponse,
+  type DirectiveBlockedReason,
   type StatusResponse,
   type UiTokenResponse,
   type WorkerAskUserRequest,
   type WorkerAskUserResponse,
 } from '@factory5/ipc';
-import { cancelDirective as brainCancelDirective } from '@factory5/brain';
+import { cancelDirective as brainCancelDirective, computePoolUsage } from '@factory5/brain';
 import type { Logger } from '@factory5/logger';
 import { createLogger } from '@factory5/logger';
 import {
@@ -588,6 +592,7 @@ function registerRoutes(
     const openQuestions = pendingQuestions.openForDirective(opts.db, id);
     const totalCostUsd = modelUsage.totalCostForDirective(opts.db, id);
     const callCount = modelUsage.countForDirective(opts.db, id);
+    const blockedReason = parseStoredBlockedReason(directive.blockedReason);
     const resp: ApiV1DirectiveDetailResponse = apiV1DirectiveDetailResponseSchema.parse({
       directive,
       timeline: {
@@ -595,6 +600,7 @@ function registerRoutes(
         openQuestions,
         modelUsage: { totalCostUsd, callCount },
       },
+      ...(blockedReason !== undefined ? { blockedReason } : {}),
     });
     ipcLog.debug(
       {
@@ -604,6 +610,12 @@ function registerRoutes(
         openQuestions: openQuestions.length,
         totalCostUsd,
         callCount,
+        blockedReasonKind:
+          typeof blockedReason === 'object' && blockedReason !== null
+            ? blockedReason.kind
+            : blockedReason !== undefined
+              ? 'legacy-string'
+              : undefined,
       },
       'ipc: /api/v1/directives/:id',
     );
@@ -641,6 +653,53 @@ function registerRoutes(
     );
     reply.send(resp);
   });
+
+  // ----- GET /api/v1/directives/:id/pool-usage (Tier 15 / ADR 0034 §6) -----
+  // Live budget-pool tally for the SPA's Live tab. Brain's
+  // `computePoolUsage` derives the snapshot on every call from
+  // `tasks_inflight` + `model_usage` + the project's on-disk
+  // `metadata.budgetDefaults`. The daemon is a thin pass-through — no
+  // caching, no per-directive memoization. Cheap enough for the FE's
+  // initial-render fetch (the live-update path is the `pool.tally` SSE
+  // event piggybacking the per-directive stream).
+  //
+  // 404s when the directive itself doesn't exist. Project metadata read
+  // failures degrade gracefully — `computePoolUsage` accepts an empty
+  // `budgetDefaults` and falls through to BUDGET_DEFAULTS for each axis,
+  // so a missing / corrupt project.json still yields a valid tally (with
+  // the framework defaults as caps). Same best-effort posture as
+  // GET /api/v1/projects/:id.
+  app.get<{ Params: { id: string } }>(
+    '/api/v1/directives/:id/pool-usage',
+    async (request, reply) => {
+      requireUiAuth(request, opts.uiAuthToken);
+      const { id } = request.params;
+      const directive = directivesQ.getById(opts.db, id);
+      if (directive === undefined) {
+        throw new IpcRequestError(404, 'DIRECTIVE_NOT_FOUND', `directive ${id} not found`);
+      }
+
+      // Resolve project-level budgets via the directive's payload.projectPath
+      // (mirrors POST /api/v1/builds' resolution path). When the payload
+      // is opaque or the project.json is unreadable we fall through to an
+      // empty defaults object — `computePoolUsage` handles that and emits
+      // caps from BUDGET_DEFAULTS without throwing.
+      const projectBudgets = await readProjectBudgetsForDirective(directive.payload, ipcLog, id);
+      const pool = computePoolUsage(opts.db, id, projectBudgets);
+
+      const resp: ApiV1PoolUsageResponse = apiV1PoolUsageResponseSchema.parse(pool);
+      ipcLog.debug(
+        {
+          reqId: request.id,
+          directiveId: id,
+          axes: Object.keys(pool.perAxis).length,
+          parked: pool.parkedReason !== undefined,
+        },
+        'ipc: /api/v1/directives/:id/pool-usage',
+      );
+      reply.send(resp);
+    },
+  );
 
   // ----- GET /api/v1/pending-questions (ADR 0025, sub-step 9.5) -----
   // Surfaces the Phase 8 pending-questions table for the web UI. Default
@@ -916,21 +975,16 @@ function registerRoutes(
       configDefaults: opts.configBudgetDefaults,
     });
     const hasLimits = limits !== undefined;
-    // TIER 15.4 — resolveDirectivePayloadBudgets deleted; inlined temporary
-    // fallback preserving Tier 13 per-axis merge behaviour until Tier 15.9
-    // swaps this call site for live re-resolve via computePoolUsage.
-    // Resolution: body wins per-axis, else project defaults. Same BUDGET_AXES
-    // iteration that was in the deleted helper.
-    const payloadBudgets = ((): ProjectBudgetDefaults | undefined => {
-      const bodyBudgets = body.budgets ?? {};
-      const projectBudgets = projectBudgetDefaults ?? {};
-      const merged: ProjectBudgetDefaults = {};
-      for (const axis of BUDGET_AXES) {
-        const value = bodyBudgets[axis] ?? projectBudgets[axis];
-        if (value !== undefined) merged[axis] = value;
-      }
-      return Object.keys(merged).length === 0 ? undefined : merged;
-    })();
+    // Tier 15.9 / ADR 0034 §1 — per-axis budget resolution at directive-
+    // creation time was retired here. The daemon now writes `payload.budgets`
+    // verbatim from the operator's body (per-build overrides flow through as
+    // JSON). The brain's `computePoolUsage` does the live three-way max
+    // resolution `max(project.json, payload.budgets, BUDGET_DEFAULTS)` at
+    // every consumption site, so changes to `project.json` (e.g. an operator
+    // raising a cap via the web cockpit) take effect on the next pool tick
+    // without requiring a directive restart.
+    const payloadBudgets =
+      body.budgets !== undefined && Object.keys(body.budgets).length > 0 ? body.budgets : undefined;
     const directive = directiveSchema.parse({
       id: newId(),
       source: 'cli',
@@ -1220,27 +1274,50 @@ function registerRoutes(
     reply.send(resp);
   });
 
-  // ----- PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.4) -----
-  // Mutation surface — sets per-project `metadata.budgetDefaults` (mirrors
-  // ADR 0020's `directiveLimitsSchema`). Full RFC-9110 PUT semantics: body
-  // is the new state of the budgetDefaults document; absent fields are
-  // removed. Bearer-gated like the other UI routes.
+  // ----- PUT /api/v1/projects/:id/budget (ADR 0027, sub-step 11.4 + Tier 15.9) -----
+  // Mutation surface — sets per-project `metadata.budgetDefaults` plus the
+  // Tier-15 auto-increase scalars under `<project>/.factory/project.json`.
+  // Full RFC-9110 PUT semantics: body replaces the entire budgetDefaults
+  // document AND the two scalar keys; absent / empty fields are removed.
+  // Bearer-gated like the other UI routes.
+  //
+  // Tier 15.9 widened the body shape from a flat ProjectBudgetDefaults to a
+  // structured wrapper `{ budgetDefaults?, autoIncreaseBudgets?,
+  // autoIncreaseCeilingMultiplier? }` with `.strict()` so extra keys are
+  // rejected. Unrelated metadata.* fields (e.g. `language`) survive the
+  // write because the mutator preserves them explicitly.
   app.put<{ Params: { id: string } }>('/api/v1/projects/:id/budget', async (request, reply) => {
     requireUiAuth(request, opts.uiAuthToken);
     const { id } = request.params;
-    const body = apiV1UpdateProjectBudgetRequestSchema.parse(request.body);
+    const body = apiV1ProjectBudgetDefaultsPutBodySchema.parse(request.body);
 
     const project = projectsQ.getById(opts.db, id);
     if (project === undefined) {
       throw new IpcRequestError(404, 'PROJECT_NOT_FOUND', `project ${id} not found`);
     }
 
+    // PUT semantics: build the new metadata document by stripping the three
+    // managed keys and re-attaching the values supplied in the body. An
+    // absent / empty budgetDefaults clears the on-disk document entirely;
+    // absent scalars drop the key (no "set to null" ambiguity per ADR 0027 §1).
+    const hasBudgetDefaults =
+      body.budgetDefaults !== undefined && Object.keys(body.budgetDefaults).length > 0;
     let updated;
     try {
-      updated = await updateProjectMetadata(project.workspacePath, (meta) => ({
-        ...meta,
-        metadata: { ...meta.metadata, budgetDefaults: body },
-      }));
+      updated = await updateProjectMetadata(project.workspacePath, (meta) => {
+        const next: Record<string, unknown> = { ...meta.metadata };
+        delete next['budgetDefaults'];
+        delete next['autoIncreaseBudgets'];
+        delete next['autoIncreaseCeilingMultiplier'];
+        if (hasBudgetDefaults) next['budgetDefaults'] = body.budgetDefaults;
+        if (body.autoIncreaseBudgets !== undefined) {
+          next['autoIncreaseBudgets'] = body.autoIncreaseBudgets;
+        }
+        if (body.autoIncreaseCeilingMultiplier !== undefined) {
+          next['autoIncreaseCeilingMultiplier'] = body.autoIncreaseCeilingMultiplier;
+        }
+        return { ...meta, metadata: next };
+      });
     } catch (err) {
       if (err instanceof ProjectMetadataNotFoundError) {
         throw new IpcRequestError(404, 'PROJECT_PATH_UNREADABLE', err.message);
@@ -1252,9 +1329,18 @@ function registerRoutes(
     }
 
     const persistedDefaults = budgetDefaultsFromProjectMeta(updated) ?? {};
+    const autoIncreaseRaw = updated.metadata['autoIncreaseBudgets'];
+    const ceilingRaw = updated.metadata['autoIncreaseCeilingMultiplier'];
+    const persistedAuto = typeof autoIncreaseRaw === 'boolean' ? autoIncreaseRaw : undefined;
+    const persistedCeiling =
+      typeof ceilingRaw === 'number' && ceilingRaw >= 1 ? ceilingRaw : undefined;
     const resp: ApiV1UpdateProjectBudgetResponse = apiV1UpdateProjectBudgetResponseSchema.parse({
       projectId: project.id,
       budgetDefaults: persistedDefaults,
+      ...(persistedAuto !== undefined ? { autoIncreaseBudgets: persistedAuto } : {}),
+      ...(persistedCeiling !== undefined
+        ? { autoIncreaseCeilingMultiplier: persistedCeiling }
+        : {}),
     });
     ipcLog.info(
       {
@@ -1262,6 +1348,8 @@ function registerRoutes(
         projectId: project.id,
         maxUsd: persistedDefaults.maxUsd,
         maxSteps: persistedDefaults.maxSteps,
+        autoIncreaseBudgets: persistedAuto,
+        autoIncreaseCeilingMultiplier: persistedCeiling,
       },
       'ipc: /api/v1/projects/:id/budget — defaults updated',
     );
@@ -1365,6 +1453,88 @@ function registerRoutes(
     );
     reply.send(resp);
   });
+}
+
+/**
+ * Parse `directives.blocked_reason` into the structured
+ * {@link DirectiveBlockedReason} union the Web UI consumes (ADR 0034 §6).
+ *
+ * Tier 15's pool dispatcher stamps a JSON-encoded `{kind: 'pool-exhausted', ...}`
+ * value when it parks a directive on pool exhaustion. Every other writer
+ * (the cancel route, the CLI `factory directive mark-blocked` verb, the
+ * daemon startup reconcile pass) stamps free-text. This helper hands the
+ * SPA a typed shape either way:
+ *
+ *   - null / undefined raw value → `undefined` (no blockedReason field set)
+ *   - JSON-parseable string matching the pool-exhausted shape → structured
+ *   - any other string → returned verbatim as the union's string branch
+ *
+ * Never throws — a malformed JSON value or a field-mismatched object simply
+ * round-trips as the raw string so legacy reasons survive intact.
+ */
+function parseStoredBlockedReason(raw: string | undefined): DirectiveBlockedReason | undefined {
+  if (raw === undefined || raw.length === 0) return undefined;
+  // Cheap shortcut: free-text reasons never start with `{`, so skip the
+  // JSON.parse for every non-Tier-15 writer.
+  if (!raw.startsWith('{')) return raw;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+  const validated = directiveBlockedReasonSchema.safeParse(parsed);
+  return validated.success ? validated.data : raw;
+}
+
+/**
+ * Assemble the `ProjectBudgetsLike` argument `computePoolUsage` needs from
+ * a directive's `payload` JSON column. Reads `payload.projectPath` (the
+ * canonical on-disk root), loads `project.json` best-effort, and surfaces
+ * the three budget knobs (`budgetDefaults`, `autoIncreaseBudgets`,
+ * `autoIncreaseCeilingMultiplier`).
+ *
+ * Errors degrade to an empty `budgetDefaults: {}` rather than throwing —
+ * the pool calculation then falls through to BUDGET_DEFAULTS for every
+ * axis, which is the correct behaviour for a directive whose project root
+ * was moved / deleted out-of-band. Logs the failure so an operator chasing
+ * an unexpected tally can find a trail.
+ */
+async function readProjectBudgetsForDirective(
+  payload: unknown,
+  ipcLog: Logger,
+  directiveId: string,
+): Promise<{
+  budgetDefaults: Record<string, number>;
+  autoIncreaseBudgets?: boolean;
+  autoIncreaseCeilingMultiplier?: number;
+}> {
+  const empty = { budgetDefaults: {} as Record<string, number> };
+  if (typeof payload !== 'object' || payload === null) return empty;
+  const obj = payload as Record<string, unknown>;
+  const rawPath = obj['projectPath'];
+  const projectPath = typeof rawPath === 'string' ? rawPath : undefined;
+  if (projectPath === undefined) return empty;
+  try {
+    const meta = await readProjectMetadata(projectPath);
+    if (meta === undefined) return empty;
+    const budgetDefaults = (budgetDefaultsFromProjectMeta(meta) ?? {}) as Record<string, number>;
+    const autoIncreaseRaw = meta.metadata['autoIncreaseBudgets'];
+    const ceilingRaw = meta.metadata['autoIncreaseCeilingMultiplier'];
+    return {
+      budgetDefaults,
+      ...(typeof autoIncreaseRaw === 'boolean' ? { autoIncreaseBudgets: autoIncreaseRaw } : {}),
+      ...(typeof ceilingRaw === 'number' && ceilingRaw >= 1
+        ? { autoIncreaseCeilingMultiplier: ceilingRaw }
+        : {}),
+    };
+  } catch (err) {
+    ipcLog.warn(
+      { err, directiveId, projectPath },
+      'ipc: pool-usage — project.json read failed; falling back to framework defaults',
+    );
+    return empty;
+  }
 }
 
 /**

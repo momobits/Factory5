@@ -252,6 +252,34 @@ export const apiV1InflightTaskSchema = z.object({
 });
 export type ApiV1InflightTask = z.infer<typeof apiV1InflightTaskSchema>;
 
+// -----------------------------------------------------------------------------
+// Structured blocked-reason union (Tier 15 / ADR 0034 §6)
+// -----------------------------------------------------------------------------
+
+/**
+ * Structured `directive.blockedReason` carried on `GET /api/v1/directives/:id`
+ * responses. The DB column is a free-form TEXT; Tier 15 added a JSON-encoded
+ * structured value for `kind: 'pool-exhausted'`. Legacy free-text values
+ * (e.g. `'cancelled-from-web-ui'`) round-trip as the union's string branch
+ * so the SPA can render either shape without a schema migration.
+ *
+ * The pool dispatcher (`packages/brain/src/pool.ts`) stamps the structured
+ * shape when it parks a directive on pool exhaustion. Other writers — the
+ * cancel route, the CLI `factory directive mark-blocked` verb, the daemon
+ * startup reconcile pass — continue to stamp free-text and arrive at the
+ * string branch automatically.
+ */
+export const directiveBlockedReasonSchema = z.union([
+  z.object({
+    kind: z.literal('pool-exhausted'),
+    axis: z.string(),
+    usedAtPark: z.number(),
+    capAtPark: z.number(),
+  }),
+  z.string(),
+]);
+export type DirectiveBlockedReason = z.infer<typeof directiveBlockedReasonSchema>;
+
 export const apiV1DirectiveDetailResponseSchema = z.object({
   directive: directiveSchema,
   timeline: z.object({
@@ -266,6 +294,17 @@ export const apiV1DirectiveDetailResponseSchema = z.object({
       callCount: z.number().int().nonnegative(),
     }),
   }),
+  /**
+   * Tier 15.9 / ADR 0034 §6 — parsed structured form of
+   * `directives.blocked_reason`. Present whenever the raw DB column is set
+   * (regardless of directive status — `failed` directives stamped by
+   * `factory cancel` carry a string `'cancelled'` too). The parsed shape
+   * is either a structured `pool-exhausted` object the pool dispatcher
+   * writes, or the raw string for every legacy free-text reason. Distinct
+   * from `directive.blockedReason` (which keeps the raw DB string for
+   * back-compat); the SPA reads this field to render the parked banner.
+   */
+  blockedReason: directiveBlockedReasonSchema.optional(),
 });
 export type ApiV1DirectiveDetailResponse = z.infer<typeof apiV1DirectiveDetailResponseSchema>;
 
@@ -545,31 +584,127 @@ export const apiV1ProjectDetailResponseSchema = z.object({
 export type ApiV1ProjectDetailResponse = z.infer<typeof apiV1ProjectDetailResponseSchema>;
 
 // -----------------------------------------------------------------------------
-// PUT /api/v1/projects/:id/budget  (web UI, ADR 0027 sub-step 11.4)
+// PUT /api/v1/projects/:id/budget  (web UI, ADR 0027 sub-step 11.4 + Tier 15.9)
 // -----------------------------------------------------------------------------
 
 /**
  * Request body for setting per-project budget defaults via the web UI
- * mutation surface (ADR 0027 §1, §4). Body is the new state of the
- * `metadata.budgetDefaults` document under
- * `<project>/.factory/project.json` — full RFC-9110 PUT semantics.
+ * mutation surface (ADR 0027 §1, §4 + ADR 0034 §1). Body is the new state of
+ * the `metadata.budgetDefaults` document under
+ * `<project>/.factory/project.json` plus the two Tier 15 auto-increase scalars —
+ * full RFC-9110 PUT semantics. Strict mode: unknown keys are rejected so a
+ * schema drift surfaces loudly at the boundary.
  *
- *   - Both fields present → set both.
- *   - Only one field present → set that field, remove the other.
- *   - Empty body `{}` → clear both fields entirely.
+ * Tier 15.9 expanded the legacy {maxUsd?, maxSteps?} body to a structured
+ * wrapper so the auto-increase policy travels alongside the per-axis defaults.
+ *
+ *   - `budgetDefaults` — Phase 13.5's full 8-axis partial. Absent or empty
+ *     `{}` clears the on-disk `metadata.budgetDefaults` document entirely.
+ *   - `autoIncreaseBudgets` — when `true`, the pool dispatcher auto-bumps
+ *     exhausted axes instead of parking the directive. ADR 0034 §5.
+ *   - `autoIncreaseCeilingMultiplier` — safety ceiling for the auto-bump
+ *     loop. The bump aborts when the effective cap would exceed
+ *     `projectDefault × multiplier`. Minimum 1.
  *
  * No PATCH-style partial-merge — see ADR 0027 §1's rejection of `{maxUsd: null}`.
+ * Each PUT replaces the entire `budgetDefaults` document (and the two scalars).
  */
-export const apiV1UpdateProjectBudgetRequestSchema = projectBudgetDefaultsSchema;
+export const apiV1ProjectBudgetDefaultsPutBodySchema = z
+  .object({
+    budgetDefaults: budgetsSchema.optional(),
+    autoIncreaseBudgets: z.boolean().optional(),
+    autoIncreaseCeilingMultiplier: z.number().min(1).optional(),
+  })
+  .strict();
+export type ApiV1ProjectBudgetDefaultsPutBody = z.infer<
+  typeof apiV1ProjectBudgetDefaultsPutBodySchema
+>;
+
+/**
+ * Pre-Tier-15 alias for the PUT body schema. Kept as a re-export so any
+ * downstream consumer that still imports the old name compiles; the schema
+ * now accepts the wrapped shape so callers must update their request bodies.
+ *
+ * @deprecated Use {@link apiV1ProjectBudgetDefaultsPutBodySchema} directly.
+ */
+export const apiV1UpdateProjectBudgetRequestSchema = apiV1ProjectBudgetDefaultsPutBodySchema;
 export type ApiV1UpdateProjectBudgetRequest = z.infer<typeof apiV1UpdateProjectBudgetRequestSchema>;
 
+/**
+ * Response shape for `PUT /api/v1/projects/:id/budget`. Echoes the persisted
+ * `metadata.budgetDefaults` document plus the two Tier-15 scalars so the SPA
+ * can confirm its form state matches disk. The `budgetDefaults` field is
+ * always present (possibly `{}`); the two scalars are omitted when the
+ * project has no auto-increase policy set.
+ */
 export const apiV1UpdateProjectBudgetResponseSchema = z.object({
   projectId: ulidSchema,
   budgetDefaults: projectBudgetDefaultsSchema,
+  autoIncreaseBudgets: z.boolean().optional(),
+  autoIncreaseCeilingMultiplier: z.number().min(1).optional(),
 });
 export type ApiV1UpdateProjectBudgetResponse = z.infer<
   typeof apiV1UpdateProjectBudgetResponseSchema
 >;
+
+// -----------------------------------------------------------------------------
+// GET /api/v1/directives/:id/pool-usage  (web UI, Tier 15 / ADR 0034 §6)
+// -----------------------------------------------------------------------------
+
+/**
+ * Per-task contribution toward a turn-pool axis. Mirrors `PoolTaskContribution`
+ * from `@factory5/brain/pool-usage` — the brain owns the runtime type; this
+ * is the wire shape both producer and consumer pin to.
+ */
+const apiV1PoolTaskContributionSchema = z.object({
+  taskId: z.string(),
+  title: z.string(),
+  agent: z.string(),
+  contribution: z.number(),
+});
+
+/**
+ * Usage snapshot for a single budget axis on `GET /pool-usage`. Mirrors
+ * `PoolAxisUsage` from `@factory5/brain/pool-usage`. The `tasks` array is
+ * empty for axes that aren't per-agent-class (`maxUsd`, `maxSteps`).
+ */
+const apiV1PoolAxisUsageSchema = z.object({
+  used: z.number(),
+  cap: z.number(),
+  pct: z.number(),
+  tasks: z.array(apiV1PoolTaskContributionSchema),
+  status: z.enum(['ok', 'warn', 'exhausted']),
+});
+
+/**
+ * Response shape for `GET /api/v1/directives/:id/pool-usage` — the live tally
+ * the Web UI's Live tab renders. Per ADR 0034 §6: brain derives the tally on
+ * every call from `tasks_inflight` + `model_usage` + `project.json` via
+ * `computePoolUsage`. The daemon is a thin pass-through.
+ *
+ *   - `directiveId` — echoes the path param for self-describing rendering.
+ *   - `computedAt` — ISO8601 timestamp set at compute-time (not request-time);
+ *     useful for client-side staleness checks against the `pool.tally` SSE.
+ *   - `perAxis` — keyed by `BudgetAxis` (open record because the closed-set
+ *     lives in `@factory5/core`; the consumer iterates whatever keys appear).
+ *   - `parkedReason` — present only when the directive is `blocked` with a
+ *     structured `pool-exhausted` reason. Carries the bump target the
+ *     "Raise cap to {N}" button computes against.
+ */
+export const apiV1PoolUsageResponseSchema = z.object({
+  directiveId: z.string(),
+  computedAt: z.string(),
+  perAxis: z.record(apiV1PoolAxisUsageSchema),
+  parkedReason: z
+    .object({
+      axis: z.string(),
+      usedAtPark: z.number(),
+      capAtPark: z.number(),
+      nextBumpTo: z.number(),
+    })
+    .optional(),
+});
+export type ApiV1PoolUsageResponse = z.infer<typeof apiV1PoolUsageResponseSchema>;
 
 // -----------------------------------------------------------------------------
 // GET /api/v1/spend  (web UI, ADR 0025 sub-step 9.6)
