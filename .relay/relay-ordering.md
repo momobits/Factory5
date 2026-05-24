@@ -36,7 +36,7 @@ Build order: 2 of 5 in brainstorm sequence. Requires F1's axis taxonomy.
 
 | ID | Title | File | Complexity | Dependencies | Closes |
 |----|-------|------|-----------|-------------|--------|
-| F3 | Budget New Axes (4) | [budget_new_axes.md](features/budget_new_axes.md) | Large | F1, F2 | (no standalone issues — new surface) |
+| F3 | Budget New Axes (4) | [budget_new_axes.md](implemented/budget_new_axes.md) | Large | F1, F2 | (no standalone issues — new surface) | DONE (`fbe3b26`) |
 | F4 | Provider maxTurns Fix | [budget_provider_maxturns_fix.md](features/budget_provider_maxturns_fix.md) | Small | F2 | Relay #4 + seed maxTurns dual-cap |
 
 Build order: F3 is 3 of 5; F4 is 4 of 5 in brainstorm sequence. F4 can proceed in parallel with F3 since they touch different files (worker/provider vs CLI/Web/channels).
