@@ -70,6 +70,7 @@ import Dashboard from '../../layouts/Dashboard.astro';
       status: string;
       createdAt: string;
       blockedReason?: string;
+      projectId?: string;
     }
     interface Detail {
       directive: Directive;
@@ -141,6 +142,10 @@ import Dashboard from '../../layouts/Dashboard.astro';
       // detail; on error, flips back to false with `resumeError` set.
       resumeInflight: boolean;
       resumeError: string | null;
+      // Tier 15.11 — pool-usage pill state. Populated once on mount via
+      // GET /pool-usage and updated on each `pool.tally` SSE event.
+      // `null` means "not yet fetched or no axes available — skip pill".
+      poolPill: { label: string; projectId: string } | null;
     }
 
     const state: PageState = {
@@ -156,6 +161,7 @@ import Dashboard from '../../layouts/Dashboard.astro';
       cancelError: null,
       resumeInflight: false,
       resumeError: null,
+      poolPill: null,
     };
 
     // Auto-scroll-pin tracking for log tail.
@@ -272,14 +278,30 @@ import Dashboard from '../../layouts/Dashboard.astro';
         heading.appendChild(el('p', { class: 'err' }, `Blocked: ${blocked}`));
       }
 
-      heading.appendChild(
-        el(
-          'p',
-          {},
-          el('strong', {}, 'Spend: '),
+      // Tier 15.11 — spend line + pool-usage pill. The pill is
+      // breadcrumb-style nav: pick the most-loaded axis from the last
+      // tally and link back to the project page (single source of truth
+      // per ADR 0034). Only render when we have a tally + a projectId.
+      const spendPara = el('p', {});
+      spendPara.appendChild(el('strong', {}, 'Spend: '));
+      spendPara.appendChild(
+        document.createTextNode(
           `${fmtUsd(state.modelUsage.totalCostUsd)} across ${String(state.modelUsage.callCount)} calls`,
         ),
       );
+      if (state.poolPill !== null) {
+        spendPara.appendChild(el('span', { class: 'pool-pill-sep' }, ' · '));
+        const pillLink = el(
+          'a',
+          {
+            class: 'pool-pill',
+            href: `/app/projects/detail?id=${encodeURIComponent(state.poolPill.projectId)}`,
+          },
+          `pool: ${state.poolPill.label} → Manage on project page`,
+        );
+        spendPara.appendChild(pillLink);
+      }
+      heading.appendChild(spendPara);
 
       return heading;
     }
@@ -566,6 +588,49 @@ import Dashboard from '../../layouts/Dashboard.astro';
       return wrap;
     }
 
+    // ----- pool-usage pill helpers (Tier 15.11) --------------------------------
+
+    // Wire shape subset — only the fields the pill needs. The full schema
+    // lives in `@factory5/ipc/schemas` (`apiV1PoolUsageResponseSchema`);
+    // keeping this inline avoids a browser import of Zod on this page.
+    interface PoolAxisUsage {
+      used: number;
+      cap: number;
+      pct: number;
+      status: 'ok' | 'warn' | 'exhausted';
+    }
+    interface PoolUsageResponse {
+      perAxis: Record<string, PoolAxisUsage>;
+      parkedReason?: { axis: string };
+    }
+
+    /**
+     * Derive the single label string shown in the pool pill.
+     * Priority: parked axis first (operator action is needed), then
+     * the axis with the highest `pct`. Returns `null` when `perAxis`
+     * is empty (nothing to show).
+     */
+    function pillLabelFromTally(
+      perAxis: Record<string, PoolAxisUsage>,
+      parkedAxis?: string,
+    ): string | null {
+      const entries = Object.entries(perAxis);
+      if (entries.length === 0) return null;
+      // Prefer the parked axis if the directive was blocked on pool-exhaustion.
+      let chosen: [string, PoolAxisUsage] | undefined;
+      if (parkedAxis !== undefined) {
+        const parkedEntry = entries.find(([k]) => k === parkedAxis);
+        if (parkedEntry !== undefined) chosen = parkedEntry;
+      }
+      if (chosen === undefined) {
+        // Pick highest pct — most-loaded axis wins.
+        chosen = entries.reduce((best, cur) => (cur[1].pct > best[1].pct ? cur : best));
+      }
+      const [axis, data] = chosen;
+      const exhaustedSuffix = data.status === 'exhausted' ? ' EXHAUSTED' : '';
+      return `${axis} ${String(data.used)}/${String(data.cap)}${exhaustedSuffix}`;
+    }
+
     function render(): void {
       mount.innerHTML = '';
       mount.appendChild(buildHeader());
@@ -687,6 +752,22 @@ import Dashboard from '../../layouts/Dashboard.astro';
           }
           break;
         }
+        case 'pool.tally': {
+          // Tier 15.11 — update the pool pill from the live SSE tally.
+          // Only reachable when `state.directive?.projectId` is set;
+          // if not, skip (non-build directives have no project link).
+          const projectId = state.directive?.projectId;
+          if (projectId !== undefined) {
+            const label = pillLabelFromTally(
+              ev.perAxis as Record<string, PoolAxisUsage>,
+              ev.parkedReason?.axis,
+            );
+            if (label !== null) {
+              state.poolPill = { label, projectId };
+            }
+          }
+          break;
+        }
         case 'directive.completed': {
           state.finalStatus = ev.status;
           state.finalBlockedReason = ev.blockedReason;
@@ -782,7 +863,29 @@ import Dashboard from '../../layouts/Dashboard.astro';
         console.warn('[logs replay] fetch failed; falling back to live-only', err);
       }
 
-      // 3. Subscribe to the live stream. apiStream handles token-auth,
+      // 3. Tier 15.11 — fetch pool-usage for the initial pill. Non-fatal:
+      //    omit the pill rather than breaking the page. Only attempted when
+      //    the directive is tied to a project (build directives); chat
+      //    directives don't carry a `projectId` and have no meaningful
+      //    pool state to show.
+      const projId = state.directive?.projectId;
+      if (projId !== undefined) {
+        try {
+          const poolResp = await apiFetch<PoolUsageResponse>(
+            `/api/v1/directives/${encodeURIComponent(directiveId)}/pool-usage`,
+          );
+          const label = pillLabelFromTally(poolResp.perAxis, poolResp.parkedReason?.axis);
+          if (label !== null) {
+            state.poolPill = { label, projectId: projId };
+            render();
+          }
+        } catch {
+          // Non-fatal — pill stays absent; live SSE will populate it on
+          // the first `pool.tally` event if the build is still running.
+        }
+      }
+
+      // 4. Subscribe to the live stream. apiStream handles token-auth,
       //    Zod validation, reconnect, and degrades to pollOnce() every
       //    5 s if the EventSource gives up retrying.
       apiStream(`/api/v1/directives/${encodeURIComponent(directiveId)}/stream`, {
@@ -955,6 +1058,27 @@ import Dashboard from '../../layouts/Dashboard.astro';
       50% {
         opacity: 1;
       }
+    }
+
+    /* Tier 15.11 — pool pill. Lives in the spend paragraph, after the
+       spend figure and a separator dot. Renders as a muted inline link
+       — breadcrumb nav to the project page (the single source of truth
+       for pool management per ADR 0034). Created at runtime via `el()`,
+       so these rules MUST NOT use Astro-scoped selectors. */
+    .pool-pill-sep {
+      opacity: 0.55;
+      margin: 0 0.1rem;
+    }
+    .pool-pill {
+      font-size: 0.8rem;
+      color: color-mix(in srgb, currentColor 65%, transparent);
+      text-decoration: none;
+      border-bottom: 1px dashed color-mix(in srgb, currentColor 30%, transparent);
+      transition: color 0.15s ease, border-color 0.15s ease;
+    }
+    .pool-pill:hover {
+      color: currentColor;
+      border-bottom-color: currentColor;
     }
 
     /* Log-tail panel + log-line + level-badge + "Resume tailing" sticky

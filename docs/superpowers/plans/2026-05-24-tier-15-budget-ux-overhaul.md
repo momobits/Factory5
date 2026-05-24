@@ -1918,7 +1918,7 @@ git commit -m "feat(15.10): web UI project page tabbed cockpit (Live/Defaults/Hi
 
 ---
 
-- [ ] **Step 1: Add pool-usage pill to directive detail page**
+- [x] **Step 1: Add pool-usage pill to directive detail page**
 
 In `apps/factory-web/src/pages/directives/detail.astro`, find the spend display (existing `spend $X.XX` element). Append:
 
@@ -1949,7 +1949,7 @@ sse.on('pool.tally', (event) => {
 });
 ```
 
-- [ ] **Step 2: Update build form Advanced budgets accordion copy**
+- [x] **Step 2: Update build form Advanced budgets accordion copy**
 
 In `apps/factory-web/src/pages/build.astro`, find the accordion summary text (currently "Advanced budgets" + meta). Update the meta line to include the new operator-floor framing:
 
@@ -1959,17 +1959,17 @@ Override budgets for this build (operator floor). Live edits during the build ha
 
 No functional change to the accordion fields.
 
-- [ ] **Step 3: Smoke test**
+- [x] **Step 3: Smoke test**
 
 Run dev server; navigate to `/app/directives/{id}` and verify pool pill renders. Click pill, verify navigation to project page. On `/app/build`, expand accordion, verify new copy.
 
-- [ ] **Step 4: TypeScript compile check + lint + format**
+- [x] **Step 4: TypeScript compile check + lint + format**
 
 ```bash
 pnpm --filter factory-web build && pnpm lint && pnpm format:check
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/factory-web/src/pages/directives/detail.astro \

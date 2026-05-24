@@ -10,5 +10,5 @@
 - [x] 15.8 Brain: delete `budget-escalation.ts` + `[BUDGET]` branch in `auto-answer.ts`
 - [x] 15.9 Daemon: HTTP/SSE surface (PUT /budget-defaults extended, GET /pool-usage, pool.tally SSE event)
 - [x] 15.10 Web UI: project page tabbed cockpit
-- [ ] 15.11 Web UI: directive detail pool pill + build form copy update
+- [x] 15.11 Web UI: directive detail pool pill + build form copy update
 - [ ] 15.12 Phase close: live browser smoke + recordkeeping
