@@ -170,6 +170,7 @@ const STREAM_EVENT_TYPES = [
   'finding.created',
   'spend.updated',
   'log.line',
+  'pool.tally',
   'directive.completed',
 ] as const satisfies readonly DirectiveStreamEventType[];
 

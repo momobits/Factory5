@@ -227,7 +227,7 @@ Replace the entire `[BUDGET]` askUser path with a project-level budget cockpit. 
 - [x] Brain: pool-driven dispatcher rewrite (`pool.ts`) + planner stops emitting `task.maxTurns` + worker watchdog
 - [x] Brain: delete `budget-escalation.ts` + `[BUDGET]` branch in `auto-answer.ts`
 - [x] Daemon: `PUT /budget-defaults` extended (8 axes + 2 scalars); new `GET /pool-usage`; `pool.tally` SSE event
-- [ ] Web UI: project page tabbed cockpit (Live / Defaults / History / Settings)
+- [x] Web UI: project page tabbed cockpit (Live / Defaults / History / Settings)
 - [ ] Web UI: directive detail pool pill + build form copy update
 - [ ] Browser smoke verified live (parked → raise → auto-resume; auto-increase flow; multi-class isolation)
 - [ ] U036 + U037 close; U038 stays Open as Tier-16+ candidate

@@ -1,9 +1,67 @@
 ---
-import Dashboard from '../../layouts/Dashboard.astro';
-import Form from '../../components/Form.astro';
-import Field from '../../components/Field.astro';
-import Submit from '../../components/Submit.astro';
+// Tier 15.10 — project page tabbed cockpit (Live / Defaults / History / Settings).
+// Spec: docs/superpowers/specs/2026-05-24-tier-15-budget-ux-overhaul-design.md §4
+// Plan: docs/superpowers/plans/2026-05-24-tier-15-budget-ux-overhaul.md Task 10
+//
+// Route: `/api/v1/projects/:id/budget` (NOT `/budget-defaults` — Tier 15.9
+// kept the legacy URL). PUT body shape: { budgetDefaults?, autoIncreaseBudgets?,
+// autoIncreaseCeilingMultiplier? } per `apiV1ProjectBudgetDefaultsPutBodySchema`.
+//
+// Per CLAUDE.md memory feedback: use the `@factory5/core/budgets` sub-path
+// export rather than the root `@factory5/core` — root pulls ulid which fails
+// the Astro SSR bundle's crypto init.
+import { BUDGET_AXES, BUDGET_DEFAULTS, type BudgetAxis } from '@factory5/core/budgets';
 import Alert from '../../components/Alert.astro';
+import Field from '../../components/Field.astro';
+import Form from '../../components/Form.astro';
+import Submit from '../../components/Submit.astro';
+import Dashboard from '../../layouts/Dashboard.astro';
+
+const AXIS_LABEL: Record<BudgetAxis, string> = {
+  maxUsd: 'Max USD',
+  maxSteps: 'Max steps',
+  askUserDeadlineMs: 'Ask-user deadline (ms)',
+  maxTurnsScaffolder: 'Max turns — scaffolder',
+  maxTurnsBuilder: 'Max turns — builder',
+  maxTurnsFixer: 'Max turns — fixer',
+  maxUsdPerTask: 'Max USD — per task',
+  maxWikiReadinessAttempts: 'Max wiki-readiness attempts',
+};
+const AXIS_STEP: Record<BudgetAxis, string> = {
+  maxUsd: '0.01',
+  maxSteps: '1',
+  askUserDeadlineMs: '1000',
+  maxTurnsScaffolder: '1',
+  maxTurnsBuilder: '1',
+  maxTurnsFixer: '1',
+  maxUsdPerTask: '0.01',
+  maxWikiReadinessAttempts: '1',
+};
+const AXIS_MIN: Record<BudgetAxis, string> = {
+  maxUsd: '0',
+  maxSteps: '0',
+  askUserDeadlineMs: '1',
+  maxTurnsScaffolder: '1',
+  maxTurnsBuilder: '1',
+  maxTurnsFixer: '1',
+  maxUsdPerTask: '0',
+  maxWikiReadinessAttempts: '0',
+};
+
+// Live tab layout — three groups per spec §4. The Live tab iterates these
+// groups (in order) and renders an axis row per entry. Axes that aren't in
+// the pool-usage response are skipped silently.
+const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis> }> = [
+  { title: 'Directive-wide pools', axes: ['maxUsd', 'maxSteps'] },
+  {
+    title: 'Turn pools (per agent class)',
+    axes: ['maxTurnsScaffolder', 'maxTurnsBuilder', 'maxTurnsFixer'],
+  },
+  {
+    title: 'Other caps',
+    axes: ['maxUsdPerTask', 'askUserDeadlineMs', 'maxWikiReadinessAttempts'],
+  },
+];
 ---
 
 <Dashboard title="Project detail">
@@ -11,60 +69,646 @@ import Alert from '../../components/Alert.astro';
     <Alert kind="conflict" title="" body="" />
   </div>
 
-  <p id="loading" style="color: color-mix(in srgb, currentColor 65%, transparent);">Loading…</p>
+  <p id="loading" class="page-loading">Loading…</p>
 
   <div id="content" hidden>
-    <h3 id="project-name" style="margin: 0 0 0.25rem 0;"></h3>
-    <p
-      id="meta-line"
-      style="color: color-mix(in srgb, currentColor 65%, transparent); font-size: 0.85rem; margin: 0 0 0.25rem 0;"
-    >
-    </p>
-    <p
-      id="workspace-path"
-      style="font-family: ui-monospace, SFMono-Regular, Consolas, Menlo, monospace; font-size: 0.85rem; color: color-mix(in srgb, currentColor 75%, transparent); margin: 0 0 1.5rem 0;"
-    >
-    </p>
-    <p id="language-line" style="font-size: 0.9rem; margin: 0 0 1.5rem 0;" hidden>
-      <strong>Language: </strong><span id="language-value"></span><span
-        style="color: color-mix(in srgb, currentColor 60%, transparent);"
-      >
-        (from project.json metadata.language)</span
-      >
-    </p>
-
-    <h3 style="margin: 0 0 0.25rem 0;">Budget defaults</h3>
-    <p
-      style="color: color-mix(in srgb, currentColor 65%, transparent); font-size: 0.9rem; margin: 0 0 1rem 0; max-width: 36rem;"
-    >
-      Resolution order per ADR 0027 §4: <code>--max-*</code> flag → project (here) → <code
-        >~/.factory5/config.toml</code
-      > → unlimited.
-    </p>
-
-    <div id="form-success-slot" style="margin-bottom: 1rem;" hidden>
-      <Alert kind="success" title="Saved" body="" />
-    </div>
-    <div id="form-error-slot" style="margin-bottom: 1rem;" hidden>
-      <Alert kind="conflict" title="" body="" />
-    </div>
-
-    <Form id="budget-form">
-      <div class="form-row">
-        <Field name="maxUsd" label="Max USD" type="number" step="0.01" min="0" />
-        <Field name="maxSteps" label="Max steps" type="number" step="1" min="1" />
-      </div>
-      <p
-        style="font-size: 0.8rem; color: color-mix(in srgb, currentColor 60%, transparent); margin: 0;"
-      >
-        Empty fields are removed. PUT semantics: the body replaces the entire defaults document.
+    <!-- Header -->
+    <header class="project-header">
+      <h3 id="project-name"></h3>
+      <p id="meta-line" class="project-meta"></p>
+      <p id="workspace-path" class="project-workspace"></p>
+      <p id="language-line" class="project-language" hidden>
+        <strong>Language: </strong><span id="language-value"></span>
+        <span class="project-language-aux">(from project.json metadata.language)</span>
       </p>
-      <div class="form-actions">
-        <Submit label="Save defaults" id="save-btn" />
-        <button type="button" class="btn btn-danger" id="clear-btn">Clear all defaults</button>
+    </header>
+
+    <!-- Parked alert banner (Tier 15 / ADR 0034 §6) -->
+    <div id="parked-alert" class="parked-alert" hidden>
+      <div class="parked-alert-body">
+        <div class="parked-alert-title">
+          <span class="parked-alert-glyph" aria-hidden="true">⚠</span>
+          <span>Parked: pool <span id="parked-axis"></span> exhausted at <span id="parked-cap"></span></span>
+        </div>
+        <p class="parked-alert-detail">
+          Directive <code id="parked-directive-id"></code>
+          · <span id="parked-bump-summary"></span>
+        </p>
+        <div class="parked-alert-actions">
+          <button type="button" class="btn btn-primary" id="parked-raise-btn">
+            Raise cap to <span id="parked-raise-value"></span>
+          </button>
+          <button type="button" class="btn btn-danger" id="parked-abort-btn">
+            Abort directive
+          </button>
+        </div>
       </div>
-    </Form>
+    </div>
+
+    <!-- Tab strip -->
+    <div class="tab-strip" role="tablist" aria-label="Project sections">
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="live">
+        <span class="tab-num">01</span>Live
+      </button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="defaults">
+        <span class="tab-num">02</span>Defaults
+      </button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="history">
+        <span class="tab-num">03</span>History
+      </button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="settings">
+        <span class="tab-num">04</span>Settings
+      </button>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- Live tab -->
+    <!-- ============================================================== -->
+    <section
+      class="tab-panel"
+      id="tab-live"
+      role="tabpanel"
+      aria-labelledby="tab-live-trigger"
+      hidden
+    >
+      <div id="live-error" class="err" hidden></div>
+
+      <!-- Empty state when no in-flight directive -->
+      <div id="live-empty" hidden>
+        <p class="empty">— No active build. Caps will apply to your next build. —</p>
+      </div>
+
+      <!-- Multi-directive selector (only renders when 2+ in-flight) -->
+      <div id="live-selector-wrap" class="live-selector" hidden>
+        <label for="live-selector">In-flight directive:</label>
+        <select id="live-selector"></select>
+      </div>
+
+      <div id="live-tally" hidden>
+        <div class="live-header">
+          <p class="live-header-label">In-flight</p>
+          <code class="live-header-id" id="live-header-id"></code>
+          <span class="live-header-stream" id="live-header-stream" data-state="connecting">
+            connecting…
+          </span>
+        </div>
+
+        {
+          LIVE_GROUPS.map((group) => (
+            <div class="live-group" data-group={group.title}>
+              <h4 class="live-group-title">{group.title}</h4>
+              <div class="live-rows" data-rows-for={group.title} />
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- Defaults tab -->
+    <!-- ============================================================== -->
+    <section
+      class="tab-panel"
+      id="tab-defaults"
+      role="tabpanel"
+      aria-labelledby="tab-defaults-trigger"
+      hidden
+    >
+      <h3 class="tab-section-title">Budget defaults</h3>
+      <p class="tab-section-prose">
+        Resolution order per ADR 0027 §4 + ADR 0034 §1:
+        <code>--max-*</code> flag → project (here) → <code>~/.factory5/config.toml</code> → unlimited.
+        On in-flight builds, pool caps are the max of project / per-build / built-in defaults and
+        can only rise (not fall) for the lifetime of the directive.
+      </p>
+
+      <div id="form-success-slot" class="form-slot" hidden>
+        <Alert kind="success" title="Saved" body="" />
+      </div>
+      <div id="form-error-slot" class="form-slot" hidden>
+        <Alert kind="conflict" title="" body="" />
+      </div>
+
+      <Form id="budget-form">
+        {
+          BUDGET_AXES.map((axis) => (
+            <Field
+              name={axis}
+              label={AXIS_LABEL[axis]}
+              type="number"
+              step={AXIS_STEP[axis]}
+              min={AXIS_MIN[axis]}
+              hint={BUDGET_DEFAULTS[axis].explainer}
+            />
+          ))
+        }
+        <p class="form-footnote">
+          Empty fields are removed. PUT semantics: the body replaces the entire defaults document.
+        </p>
+        <div class="form-actions">
+          <Submit label="Save defaults" id="save-btn" />
+          <button type="button" class="btn btn-danger" id="clear-btn">Clear all defaults</button>
+        </div>
+      </Form>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- History tab -->
+    <!-- ============================================================== -->
+    <section
+      class="tab-panel"
+      id="tab-history"
+      role="tabpanel"
+      aria-labelledby="tab-history-trigger"
+      hidden
+    >
+      <h3 class="tab-section-title">Build history</h3>
+      <p class="tab-section-prose">
+        Past directives on this project, newest first. Defaults to 50 per page.
+      </p>
+
+      <div id="history-error" class="err" hidden></div>
+      <p id="history-loading" class="page-loading">Loading directives…</p>
+      <p id="history-empty" class="empty" hidden>— No directives on this project yet. —</p>
+
+      <div id="history-table-wrap" class="table-wrap" hidden>
+        <table id="history-table">
+          <thead>
+            <tr>
+              <th>Created</th>
+              <th>Directive</th>
+              <th>Intent</th>
+              <th>Status</th>
+              <th class="num">Spend</th>
+              <th>Pool</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div id="history-pagination" class="history-pagination" hidden>
+        <button type="button" class="btn" id="history-prev" disabled>← Prev</button>
+        <span id="history-page-info" class="history-page-info"></span>
+        <button type="button" class="btn" id="history-next">Next →</button>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- Settings tab -->
+    <!-- ============================================================== -->
+    <section
+      class="tab-panel"
+      id="tab-settings"
+      role="tabpanel"
+      aria-labelledby="tab-settings-trigger"
+      hidden
+    >
+      <h3 class="tab-section-title">Auto-increase budgets</h3>
+      <p class="tab-section-prose">
+        When ON, the brain bumps an exhausted pool cap by the project default and retries
+        — up to <code>default × ceilingMultiplier</code>, after which the directive parks
+        for manual unblock.
+      </p>
+
+      <div id="settings-success-slot" class="form-slot" hidden>
+        <Alert kind="success" title="Saved" body="" />
+      </div>
+      <div id="settings-error-slot" class="form-slot" hidden>
+        <Alert kind="conflict" title="" body="" />
+      </div>
+
+      <Form id="settings-form">
+        <div class="form-field">
+          <label class="settings-toggle">
+            <input type="checkbox" id="auto-increase-toggle" />
+            <span>Automatically raise caps on exhaustion (no manual unblock needed)</span>
+          </label>
+        </div>
+        <Field
+          name="autoIncreaseCeilingMultiplier"
+          label="Safety ceiling multiplier"
+          type="number"
+          step="1"
+          min="1"
+          hint="When the auto-bumped cap would exceed projectDefault × this multiplier, the directive parks instead."
+        />
+        <div class="form-actions">
+          <Submit label="Save settings" id="settings-save-btn" />
+        </div>
+      </Form>
+    </section>
   </div>
+
+  <style>
+    /* ----- Header --------------------------------------------------- */
+    .page-loading {
+      color: color-mix(in srgb, currentColor 65%, transparent);
+      font-family: var(--f-mono);
+      font-size: 12px;
+    }
+    .project-header {
+      margin-bottom: 1.5rem;
+    }
+    .project-header h3 {
+      margin: 0 0 0.4rem 0;
+      font-family: var(--f-display);
+      font-style: italic;
+      font-weight: 700;
+      font-size: 1.6rem;
+    }
+    .project-meta {
+      color: color-mix(in srgb, currentColor 65%, transparent);
+      font-size: 0.85rem;
+      margin: 0 0 0.3rem 0;
+    }
+    .project-workspace {
+      font-family: var(--f-mono);
+      font-size: 0.85rem;
+      color: color-mix(in srgb, currentColor 75%, transparent);
+      margin: 0 0 0.5rem 0;
+      word-break: break-all;
+    }
+    .project-language {
+      font-size: 0.9rem;
+      margin: 0;
+    }
+    .project-language-aux {
+      color: color-mix(in srgb, currentColor 60%, transparent);
+    }
+
+    /* ----- Parked alert banner ------------------------------------- */
+    .parked-alert {
+      margin: 0 0 1.5rem 0;
+      padding: 0;
+      border: 1px solid color-mix(in srgb, var(--signal) 60%, var(--hairline));
+      border-left-width: 4px;
+      border-left-color: var(--signal);
+      border-radius: 2px;
+      background: color-mix(in srgb, var(--signal) 6%, var(--surface));
+    }
+    .parked-alert-body {
+      padding: 14px 18px;
+    }
+    .parked-alert-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--f-display);
+      font-style: italic;
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--signal);
+      margin-bottom: 0.35rem;
+    }
+    .parked-alert-glyph {
+      font-size: 1.1rem;
+    }
+    .parked-alert-detail {
+      margin: 0 0 0.7rem 0;
+      font-size: 0.85rem;
+      font-family: var(--f-body);
+      color: var(--ink-2);
+    }
+    .parked-alert-detail code {
+      font-size: 0.85em;
+    }
+    .parked-alert-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    /* ----- Tab strip ------------------------------------------------ */
+    .tab-strip {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--hairline);
+      margin: 0 0 1.5rem 0;
+      flex-wrap: wrap;
+    }
+    .tab {
+      font: inherit;
+      font-family: var(--f-body);
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-cap);
+      color: var(--ink-2);
+      background: transparent;
+      border: 0;
+      padding: 12px 18px 10px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 180ms ease, border-color 180ms ease;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0.5rem;
+    }
+    .tab-num {
+      font-family: var(--f-mono);
+      font-size: 9px;
+      color: var(--signal);
+      opacity: 0.9;
+    }
+    .tab:hover {
+      color: var(--ink);
+    }
+    .tab[aria-selected='true'] {
+      color: var(--ink);
+      border-bottom-color: var(--signal);
+    }
+    .tab:focus-visible {
+      outline: 2px solid var(--signal);
+      outline-offset: -2px;
+    }
+
+    /* ----- Tab panels ----------------------------------------------- */
+    .tab-panel {
+      display: block;
+    }
+    .tab-section-title {
+      margin: 0 0 0.5rem 0;
+    }
+    .tab-section-prose {
+      color: color-mix(in srgb, currentColor 65%, transparent);
+      font-size: 0.9rem;
+      margin: 0 0 1rem 0;
+      max-width: 42rem;
+    }
+
+    /* ----- Live tab ------------------------------------------------- */
+    .live-selector {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      font-family: var(--f-mono);
+      font-size: 11px;
+      color: var(--mute);
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-cap);
+    }
+    .live-selector select {
+      font: inherit;
+      font-family: var(--f-mono);
+      font-size: 12px;
+      padding: 4px 8px;
+      background: var(--bg-2);
+      color: var(--ink);
+      border: 1px solid var(--hairline);
+      border-radius: 2px;
+    }
+    .live-header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.6rem;
+      margin: 0 0 1rem 0;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--hairline);
+    }
+    .live-header-label {
+      font-family: var(--f-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-cap);
+      color: var(--mute);
+      margin: 0;
+    }
+    .live-header-id {
+      font-size: 0.85em;
+    }
+    .live-header-stream {
+      margin-left: auto;
+      font-family: var(--f-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-cap);
+      padding: 2px 8px;
+      border-radius: 2px;
+      border: 1px solid var(--hairline);
+      color: var(--mute);
+    }
+    .live-header-stream[data-state='live'] {
+      color: var(--acid);
+      border-color: color-mix(in srgb, var(--acid) 40%, var(--hairline));
+    }
+    .live-header-stream[data-state='reconnecting'],
+    .live-header-stream[data-state='polling'] {
+      color: var(--amber);
+      border-color: color-mix(in srgb, var(--amber) 40%, var(--hairline));
+    }
+    .live-header-stream[data-state='disconnected'] {
+      color: var(--halt);
+      border-color: color-mix(in srgb, var(--halt) 40%, var(--hairline));
+    }
+    .live-header-stream[data-state='completed'] {
+      color: var(--cool);
+      border-color: color-mix(in srgb, var(--cool) 40%, var(--hairline));
+    }
+
+    .live-group {
+      margin: 0 0 1.4rem 0;
+    }
+    .live-group-title {
+      font-family: var(--f-body);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-cap);
+      color: var(--mute);
+      margin: 0 0 0.5rem 0;
+    }
+    .live-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .axis-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding: 0.55rem 0.75rem;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-left-width: 3px;
+      border-left-color: var(--hairline-2);
+      border-radius: 2px;
+      cursor: default;
+      transition: border-color 180ms ease;
+    }
+    .axis-row[data-expandable='true'] {
+      cursor: pointer;
+    }
+    .axis-row[data-expandable='true']:hover {
+      border-color: var(--ink-2);
+    }
+    .axis-row[data-status='warn'] {
+      border-left-color: var(--amber);
+    }
+    .axis-row[data-status='exhausted'] {
+      border-left-color: var(--signal);
+      background: color-mix(in srgb, var(--signal) 5%, var(--surface));
+    }
+    .axis-row-line {
+      display: grid;
+      grid-template-columns: minmax(11rem, 1fr) minmax(8rem, auto) minmax(10rem, 1.4fr) auto;
+      gap: 0.8rem;
+      align-items: center;
+      font-family: var(--f-mono);
+      font-size: 12px;
+    }
+    .axis-row-label {
+      font-weight: 500;
+      color: var(--ink-2);
+    }
+    .axis-row-usage {
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+    .axis-row-bar {
+      position: relative;
+      height: 10px;
+      background: var(--bg-2);
+      border: 1px solid var(--hairline);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .axis-row-bar-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      background: var(--acid);
+      transition: width 240ms ease, background-color 180ms ease;
+    }
+    .axis-row[data-status='warn'] .axis-row-bar-fill {
+      background: var(--amber);
+    }
+    .axis-row[data-status='exhausted'] .axis-row-bar-fill {
+      background: var(--signal);
+    }
+    .axis-row-meta {
+      color: var(--mute);
+      font-size: 11px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .axis-row-meta-exhausted {
+      color: var(--signal);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .axis-tasks {
+      margin: 0.4rem 0 0 0.6rem;
+      padding: 0.4rem 0 0 0.6rem;
+      border-top: 1px dashed var(--hairline);
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .axis-task-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 0.6rem;
+      align-items: center;
+      font-family: var(--f-mono);
+      font-size: 11px;
+      color: var(--ink-2);
+    }
+    .axis-task-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .axis-task-contribution {
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+    .axis-task-bar {
+      width: 8rem;
+      height: 6px;
+      background: var(--bg-2);
+      border: 1px solid var(--hairline);
+      border-radius: 2px;
+      position: relative;
+      overflow: hidden;
+    }
+    .axis-task-bar-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      background: color-mix(in srgb, var(--signal) 60%, var(--hairline));
+    }
+
+    /* ----- Defaults / Settings tabs -------------------------------- */
+    .form-slot {
+      margin-bottom: 1rem;
+    }
+    .form-footnote {
+      font-size: 0.8rem;
+      color: color-mix(in srgb, currentColor 60%, transparent);
+      margin: 0;
+    }
+    .settings-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      font-family: var(--f-body);
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--ink);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .settings-toggle input[type='checkbox'] {
+      accent-color: var(--signal);
+      width: 16px;
+      height: 16px;
+    }
+
+    /* ----- History tab --------------------------------------------- */
+    .history-pagination {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+    .history-page-info {
+      font-family: var(--f-mono);
+      font-size: 11px;
+      color: var(--mute);
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-cap);
+    }
+    .history-status {
+      font-family: var(--f-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-cap);
+      padding: 1px 6px;
+      border: 1px solid var(--hairline);
+      border-radius: 2px;
+      color: var(--mute);
+      background: color-mix(in srgb, var(--mute) 5%, transparent);
+    }
+    .history-status-running {
+      color: var(--acid);
+      border-color: color-mix(in srgb, var(--acid) 35%, var(--hairline));
+    }
+    .history-status-blocked,
+    .history-status-failed {
+      color: var(--signal);
+      border-color: color-mix(in srgb, var(--signal) 40%, var(--hairline));
+    }
+    .history-status-complete {
+      color: var(--cool);
+      border-color: color-mix(in srgb, var(--cool) 35%, var(--hairline));
+    }
+  </style>
 
   <script>
     import {
@@ -72,10 +716,19 @@ import Alert from '../../components/Alert.astro';
       NoTokenError,
       apiFetch,
       apiPut,
+      apiStream,
+      apiPost,
       captureTokenFromUrl,
+      fmtUsd,
       getToken,
+      type StreamConnectionState,
     } from '../../lib/api';
+    import type { DirectiveStreamEvent } from '@factory5/ipc/sse';
+    import { BUDGET_AXES, type BudgetAxis } from '@factory5/core/budgets';
 
+    // ------------------------------------------------------------------
+    // Types
+    // ------------------------------------------------------------------
     interface Project {
       id: string;
       name: string;
@@ -84,20 +737,69 @@ import Alert from '../../components/Alert.astro';
       createdAt: string;
       lastTouchedAt: string;
     }
-    interface BudgetDefaults {
-      maxUsd?: number;
-      maxSteps?: number;
-    }
+    type BudgetDefaults = Partial<Record<BudgetAxis, number>>;
     interface DetailResp {
       project: Project;
       budgetDefaults?: BudgetDefaults;
       language?: string;
     }
-    interface BudgetResp {
+    interface BudgetPutResp {
       projectId: string;
       budgetDefaults: BudgetDefaults;
+      autoIncreaseBudgets?: boolean;
+      autoIncreaseCeilingMultiplier?: number;
     }
 
+    interface PoolTaskContribution {
+      taskId: string;
+      title: string;
+      agent: string;
+      contribution: number;
+    }
+    interface PoolAxisUsage {
+      used: number;
+      cap: number;
+      pct: number;
+      tasks: PoolTaskContribution[];
+      status: 'ok' | 'warn' | 'exhausted';
+    }
+    interface PoolParkedReason {
+      axis: string;
+      usedAtPark: number;
+      capAtPark: number;
+      nextBumpTo: number;
+    }
+    interface PoolUsageResp {
+      directiveId: string;
+      computedAt: string;
+      perAxis: Record<string, PoolAxisUsage>;
+      parkedReason?: PoolParkedReason;
+    }
+
+    interface DirectiveListItem {
+      id: string;
+      source: string;
+      intent: string;
+      status: string;
+      createdAt: string;
+      autonomy: string;
+      projectId?: string;
+      payload?: unknown;
+    }
+    interface DirectivesListResp {
+      items: DirectiveListItem[];
+      total: number;
+      limit: number;
+      offset: number;
+    }
+    type TabName = 'live' | 'defaults' | 'history' | 'settings';
+    const TAB_NAMES = ['live', 'defaults', 'history', 'settings'] as const;
+    const TAB_STORAGE_KEY = 'factory5.projectDetail.activeTab';
+    const HISTORY_PAGE_SIZE = 50;
+
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
     const setAlertText = (slotId: string, title: string, body: string): void => {
       const slot = document.getElementById(slotId);
       if (slot === null) return;
@@ -123,6 +825,8 @@ import Alert from '../../components/Alert.astro';
           return 'project.json is unparseable — fix it on disk before saving here.';
         case 'SCHEMA_VALIDATION_FAILED':
           return 'Validation failed — values must be positive numbers.';
+        case 'DIRECTIVE_NOT_FOUND':
+          return 'Directive not found.';
         case 'UI_AUTH_REQUIRED':
           return 'Auth token missing or invalid.';
         case 'UI_DISABLED':
@@ -148,14 +852,91 @@ import Alert from '../../components/Alert.astro';
       }
     };
 
-    const populate = (d: DetailResp): void => {
+    const setError = (id: string, message: string | null): void => {
+      const el = document.getElementById(id);
+      if (el === null) return;
+      if (message === null) {
+        el.hidden = true;
+        el.textContent = '';
+      } else {
+        el.hidden = false;
+        el.textContent = message;
+      }
+    };
+
+    const isBudgetAxis = (s: string): s is BudgetAxis =>
+      (BUDGET_AXES as ReadonlyArray<string>).includes(s);
+
+    // Pretty axis formatter — USD axes get a dollar prefix; everything else stays integer.
+    const formatUsage = (axis: string, n: number): string => {
+      if (axis === 'maxUsd' || axis === 'maxUsdPerTask') return fmtUsd(n);
+      // Truncate to integer for turn/step counts. Round for safety against fractional sums.
+      return String(Math.round(n));
+    };
+    const formatCap = (axis: string, n: number): string => {
+      if (n === 0) return '∞';
+      return formatUsage(axis, n);
+    };
+
+    // ------------------------------------------------------------------
+    // Tab strip — DOM wiring + localStorage persistence
+    // ------------------------------------------------------------------
+    const isTabName = (s: string | null): s is TabName =>
+      s !== null && (TAB_NAMES as ReadonlyArray<string>).includes(s);
+
+    const readStoredTab = (): TabName => {
+      try {
+        const stored = window.localStorage.getItem(TAB_STORAGE_KEY);
+        return isTabName(stored) ? stored : 'live';
+      } catch {
+        return 'live';
+      }
+    };
+
+    const storeTab = (tab: TabName): void => {
+      try {
+        window.localStorage.setItem(TAB_STORAGE_KEY, tab);
+      } catch {
+        // localStorage may be disabled (private mode); swallow silently.
+      }
+    };
+
+    const setActiveTab = (tab: TabName): void => {
+      for (const name of TAB_NAMES) {
+        const btn = document.querySelector<HTMLButtonElement>(`.tab[data-tab="${name}"]`);
+        const panel = document.getElementById(`tab-${name}`);
+        if (btn !== null) btn.setAttribute('aria-selected', String(name === tab));
+        if (panel !== null) panel.hidden = name !== tab;
+      }
+    };
+
+    const wireTabStrip = (onActivate: (tab: TabName) => void): void => {
+      const initial = readStoredTab();
+      setActiveTab(initial);
+      onActivate(initial);
+
+      for (const btn of document.querySelectorAll<HTMLButtonElement>('.tab')) {
+        btn.addEventListener('click', () => {
+          const tab = btn.dataset.tab;
+          if (!isTabName(tab ?? null)) return;
+          const named = tab as TabName;
+          setActiveTab(named);
+          storeTab(named);
+          onActivate(named);
+        });
+      }
+    };
+
+    // ------------------------------------------------------------------
+    // Header + project fetch
+    // ------------------------------------------------------------------
+    const populateHeader = (d: DetailResp): void => {
       const loading = document.getElementById('loading');
       if (loading !== null) loading.hidden = true;
       const content = document.getElementById('content');
       if (content !== null) content.hidden = false;
 
       const p = d.project;
-
       const nameEl = document.getElementById('project-name');
       if (nameEl !== null) nameEl.textContent = p.name;
 
@@ -182,65 +963,97 @@ import Alert from '../../components/Alert.astro';
         if (langVal !== null) langVal.textContent = d.language;
         if (langLine !== null) langLine.hidden = false;
       }
+    };
 
-      const usd = document.getElementById('maxUsd') as HTMLInputElement | null;
-      const steps = document.getElementById('maxSteps') as HTMLInputElement | null;
-      if (usd !== null && d.budgetDefaults?.maxUsd !== undefined) {
-        usd.value = String(d.budgetDefaults.maxUsd);
-      }
-      if (steps !== null && d.budgetDefaults?.maxSteps !== undefined) {
-        steps.value = String(d.budgetDefaults.maxSteps);
+    const populateDefaultsForm = (d: DetailResp): void => {
+      const defs = d.budgetDefaults ?? {};
+      for (const axis of BUDGET_AXES) {
+        const input = document.getElementById(axis) as HTMLInputElement | null;
+        if (input !== null && defs[axis] !== undefined) {
+          input.value = String(defs[axis]);
+        }
       }
     };
 
-    const describeBudget = (b: BudgetDefaults): string => {
+    // ------------------------------------------------------------------
+    // Defaults form — PUT to /api/v1/projects/:id/budget
+    // ------------------------------------------------------------------
+    const describeBudget = (
+      b: BudgetDefaults,
+      auto?: boolean,
+      ceiling?: number,
+    ): string => {
       const parts: string[] = [];
-      if (b.maxUsd !== undefined) parts.push(`maxUsd=${String(b.maxUsd)}`);
-      if (b.maxSteps !== undefined) parts.push(`maxSteps=${String(b.maxSteps)}`);
+      for (const axis of BUDGET_AXES) {
+        if (b[axis] !== undefined) parts.push(`${axis}=${String(b[axis])}`);
+      }
+      if (auto !== undefined) parts.push(`autoIncreaseBudgets=${String(auto)}`);
+      if (ceiling !== undefined) parts.push(`autoIncreaseCeilingMultiplier=${String(ceiling)}`);
       return parts.length === 0 ? 'All defaults cleared.' : `Saved: ${parts.join(', ')}.`;
     };
 
     const submitBudget = (
       projectId: string,
-      body: Record<string, number>,
+      body: {
+        budgetDefaults?: BudgetDefaults;
+        autoIncreaseBudgets?: boolean;
+        autoIncreaseCeilingMultiplier?: number;
+      },
       btn: HTMLButtonElement,
       restoreLabel: string,
+      successSlotId: string,
+      errorSlotId: string,
+      onSuccess?: (resp: BudgetPutResp) => void,
     ): void => {
       btn.disabled = true;
       btn.textContent = 'Saving…';
-      hideAlert('form-success-slot');
-      hideAlert('form-error-slot');
+      hideAlert(successSlotId);
+      hideAlert(errorSlotId);
 
-      apiPut<typeof body, BudgetResp>(
+      apiPut<typeof body, BudgetPutResp>(
         `/api/v1/projects/${encodeURIComponent(projectId)}/budget`,
         body,
       )
         .then((resp) => {
           btn.disabled = false;
           btn.textContent = restoreLabel;
-
-          const usd = document.getElementById('maxUsd') as HTMLInputElement | null;
-          const steps = document.getElementById('maxSteps') as HTMLInputElement | null;
-          if (usd !== null) {
-            usd.value =
-              resp.budgetDefaults.maxUsd !== undefined ? String(resp.budgetDefaults.maxUsd) : '';
-          }
-          if (steps !== null) {
-            steps.value =
-              resp.budgetDefaults.maxSteps !== undefined
-                ? String(resp.budgetDefaults.maxSteps)
-                : '';
-          }
-          setAlertText('form-success-slot', 'Saved', describeBudget(resp.budgetDefaults));
+          setAlertText(
+            successSlotId,
+            'Saved',
+            describeBudget(
+              resp.budgetDefaults,
+              resp.autoIncreaseBudgets,
+              resp.autoIncreaseCeilingMultiplier,
+            ),
+          );
+          onSuccess?.(resp);
         })
         .catch((err: unknown) => {
           btn.disabled = false;
           btn.textContent = restoreLabel;
-          renderError(err, 'form-error-slot', 'Save failed');
+          renderError(err, errorSlotId, 'Save failed');
         });
     };
 
-    const wireForm = (projectId: string): void => {
+    const collectBudgetForm = (): BudgetDefaults => {
+      const body: BudgetDefaults = {};
+      for (const axis of BUDGET_AXES) {
+        const input = document.getElementById(axis) as HTMLInputElement | null;
+        if (input === null) continue;
+        const raw = input.value.trim();
+        if (raw === '') continue;
+        const v = axis === 'maxUsd' || axis === 'maxUsdPerTask'
+          ? Number.parseFloat(raw)
+          : Number.parseInt(raw, 10);
+        if (Number.isFinite(v)) body[axis] = v;
+      }
+      return body;
+    };
+
+    const wireDefaultsForm = (
+      projectId: string,
+      settingsRef: { autoIncreaseBudgets?: boolean; autoIncreaseCeilingMultiplier?: number },
+    ): void => {
       const form = document.getElementById('budget-form') as HTMLFormElement | null;
       const saveBtn = document.getElementById('save-btn') as HTMLButtonElement | null;
       const clearBtn = document.getElementById('clear-btn') as HTMLButtonElement | null;
@@ -248,31 +1061,673 @@ import Alert from '../../components/Alert.astro';
 
       form.addEventListener('submit', (e) => {
         e.preventDefault();
-        const usd = document.getElementById('maxUsd') as HTMLInputElement;
-        const steps = document.getElementById('maxSteps') as HTMLInputElement;
-        const body: Record<string, number> = {};
-        if (usd.value.trim() !== '') {
-          const v = Number.parseFloat(usd.value);
-          if (Number.isFinite(v)) body.maxUsd = v;
-        }
-        if (steps.value.trim() !== '') {
-          const v = Number.parseInt(steps.value, 10);
-          if (Number.isFinite(v)) body.maxSteps = v;
-        }
-        submitBudget(projectId, body, saveBtn, 'Save defaults');
+        const budgetDefaults = collectBudgetForm();
+        submitBudget(
+          projectId,
+          {
+            ...(Object.keys(budgetDefaults).length > 0 ? { budgetDefaults } : {}),
+            ...(settingsRef.autoIncreaseBudgets !== undefined
+              ? { autoIncreaseBudgets: settingsRef.autoIncreaseBudgets }
+              : {}),
+            ...(settingsRef.autoIncreaseCeilingMultiplier !== undefined
+              ? { autoIncreaseCeilingMultiplier: settingsRef.autoIncreaseCeilingMultiplier }
+              : {}),
+          },
+          saveBtn,
+          'Save defaults',
+          'form-success-slot',
+          'form-error-slot',
+        );
       });
 
       clearBtn.addEventListener('click', () => {
         const ok = window.confirm(
-          'Clear all per-project budget defaults? Future builds fall back to instance config or unlimited.',
+          'Clear all per-project budget defaults? Auto-increase settings (if any) are preserved.',
         );
         if (!ok) return;
-        submitBudget(projectId, {}, clearBtn, 'Clear all defaults');
+        submitBudget(
+          projectId,
+          {
+            ...(settingsRef.autoIncreaseBudgets !== undefined
+              ? { autoIncreaseBudgets: settingsRef.autoIncreaseBudgets }
+              : {}),
+            ...(settingsRef.autoIncreaseCeilingMultiplier !== undefined
+              ? { autoIncreaseCeilingMultiplier: settingsRef.autoIncreaseCeilingMultiplier }
+              : {}),
+          },
+          clearBtn,
+          'Clear all defaults',
+          'form-success-slot',
+          'form-error-slot',
+          () => {
+            for (const axis of BUDGET_AXES) {
+              const input = document.getElementById(axis) as HTMLInputElement | null;
+              if (input !== null) input.value = '';
+            }
+          },
+        );
       });
     };
 
-    captureTokenFromUrl();
+    // ------------------------------------------------------------------
+    // Settings form
+    // ------------------------------------------------------------------
+    const populateSettingsForm = (): {
+      autoIncreaseBudgets?: boolean;
+      autoIncreaseCeilingMultiplier?: number;
+    } => {
+      // The project detail response doesn't carry the auto-increase scalars
+      // directly — read them off the budgetDefaults block IF the daemon
+      // surfaces them, otherwise default to unset. (The PUT response IS
+      // authoritative; we round-trip through there to keep state in sync.)
+      const ceilingInput = document.getElementById(
+        'autoIncreaseCeilingMultiplier',
+      ) as HTMLInputElement | null;
+      const toggleInput = document.getElementById('auto-increase-toggle') as
+        | HTMLInputElement
+        | null;
+      // Initial defaults — daemon defaults to false / 5 when unset.
+      if (ceilingInput !== null && ceilingInput.value === '') {
+        ceilingInput.placeholder = '5';
+      }
+      if (toggleInput !== null) toggleInput.checked = false;
+      return {};
+    };
 
+    const wireSettingsForm = (
+      projectId: string,
+      settingsRef: { autoIncreaseBudgets?: boolean; autoIncreaseCeilingMultiplier?: number },
+    ): void => {
+      const form = document.getElementById('settings-form') as HTMLFormElement | null;
+      const saveBtn = document.getElementById('settings-save-btn') as HTMLButtonElement | null;
+      const toggle = document.getElementById('auto-increase-toggle') as HTMLInputElement | null;
+      const ceiling = document.getElementById(
+        'autoIncreaseCeilingMultiplier',
+      ) as HTMLInputElement | null;
+      if (form === null || saveBtn === null || toggle === null || ceiling === null) return;
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const ceilingRaw = ceiling.value.trim();
+        let ceilingVal: number | undefined;
+        if (ceilingRaw !== '') {
+          const n = Number.parseInt(ceilingRaw, 10);
+          if (Number.isFinite(n) && n >= 1) ceilingVal = n;
+        }
+        const auto = toggle.checked;
+        // Always send the current budgetDefaults snapshot too — PUT semantics
+        // replace the entire document, so we'd otherwise clobber the axes
+        // the operator already set on the Defaults tab.
+        const budgetDefaults = collectBudgetForm();
+        submitBudget(
+          projectId,
+          {
+            ...(Object.keys(budgetDefaults).length > 0 ? { budgetDefaults } : {}),
+            autoIncreaseBudgets: auto,
+            ...(ceilingVal !== undefined ? { autoIncreaseCeilingMultiplier: ceilingVal } : {}),
+          },
+          saveBtn,
+          'Save settings',
+          'settings-success-slot',
+          'settings-error-slot',
+          (resp) => {
+            settingsRef.autoIncreaseBudgets = resp.autoIncreaseBudgets;
+            settingsRef.autoIncreaseCeilingMultiplier = resp.autoIncreaseCeilingMultiplier;
+            if (resp.autoIncreaseBudgets !== undefined) toggle.checked = resp.autoIncreaseBudgets;
+            if (resp.autoIncreaseCeilingMultiplier !== undefined) {
+              ceiling.value = String(resp.autoIncreaseCeilingMultiplier);
+            }
+          },
+        );
+      });
+    };
+
+    // ------------------------------------------------------------------
+    // Live tab — fetch pool-usage, render bars, subscribe to SSE
+    // ------------------------------------------------------------------
+    interface LiveState {
+      projectId: string;
+      inflight: DirectiveListItem[];
+      selectedId: string | null;
+      stream: { close: () => void } | null;
+      expanded: Set<string>;
+    }
+
+    const liveState: LiveState = {
+      projectId: '',
+      inflight: [],
+      selectedId: null,
+      stream: null,
+      expanded: new Set(),
+    };
+
+    const renderBar = (
+      axis: string,
+      usage: PoolAxisUsage,
+      expanded: boolean,
+    ): HTMLElement => {
+      const row = document.createElement('div');
+      row.className = 'axis-row';
+      row.dataset.axis = axis;
+      row.dataset.status = usage.status;
+      const expandable = usage.tasks.length > 0;
+      row.dataset.expandable = String(expandable);
+
+      const line = document.createElement('div');
+      line.className = 'axis-row-line';
+
+      const label = document.createElement('span');
+      label.className = 'axis-row-label';
+      label.textContent = axis;
+      line.appendChild(label);
+
+      const usageEl = document.createElement('span');
+      usageEl.className = 'axis-row-usage';
+      usageEl.textContent = `${formatUsage(axis, usage.used)} / ${formatCap(axis, usage.cap)}`;
+      line.appendChild(usageEl);
+
+      const barWrap = document.createElement('div');
+      barWrap.className = 'axis-row-bar';
+      const barFill = document.createElement('div');
+      barFill.className = 'axis-row-bar-fill';
+      barFill.style.width = `${String(Math.min(100, Math.max(0, usage.pct)))}%`;
+      barWrap.appendChild(barFill);
+      line.appendChild(barWrap);
+
+      const meta = document.createElement('span');
+      meta.className = 'axis-row-meta';
+      if (usage.status === 'exhausted') {
+        meta.classList.add('axis-row-meta-exhausted');
+        meta.textContent = 'EXHAUSTED';
+      } else {
+        meta.textContent = `${usage.pct.toFixed(1)}%`;
+      }
+      if (expandable) {
+        const taskWord = usage.tasks.length === 1 ? 'task' : 'tasks';
+        const drill = expanded ? ' ▾' : ' ▸';
+        meta.textContent = `${meta.textContent} · ${String(usage.tasks.length)} ${taskWord}${drill}`;
+      }
+      line.appendChild(meta);
+
+      row.appendChild(line);
+
+      if (expandable && expanded) {
+        const tasks = document.createElement('div');
+        tasks.className = 'axis-tasks';
+        const maxContribution = usage.tasks.reduce(
+          (acc, t) => (t.contribution > acc ? t.contribution : acc),
+          0,
+        );
+        for (const t of usage.tasks) {
+          const taskRow = document.createElement('div');
+          taskRow.className = 'axis-task-row';
+
+          const title = document.createElement('span');
+          title.className = 'axis-task-title';
+          title.textContent = `${t.title} (${t.agent})`;
+          title.title = t.title;
+          taskRow.appendChild(title);
+
+          const bar = document.createElement('div');
+          bar.className = 'axis-task-bar';
+          const fill = document.createElement('div');
+          fill.className = 'axis-task-bar-fill';
+          fill.style.width =
+            maxContribution > 0
+              ? `${String((t.contribution / maxContribution) * 100)}%`
+              : '0%';
+          bar.appendChild(fill);
+          taskRow.appendChild(bar);
+
+          const contrib = document.createElement('span');
+          contrib.className = 'axis-task-contribution';
+          contrib.textContent = formatUsage(axis, t.contribution);
+          taskRow.appendChild(contrib);
+
+          tasks.appendChild(taskRow);
+        }
+        row.appendChild(tasks);
+      }
+
+      if (expandable) {
+        row.addEventListener('click', () => {
+          if (liveState.expanded.has(axis)) {
+            liveState.expanded.delete(axis);
+          } else {
+            liveState.expanded.add(axis);
+          }
+          const tally = lastTally;
+          if (tally !== null) renderLiveTally(tally);
+        });
+      }
+
+      return row;
+    };
+
+    let lastTally: PoolUsageResp | null = null;
+
+    const renderLiveTally = (resp: PoolUsageResp): void => {
+      lastTally = resp;
+      const idEl = document.getElementById('live-header-id');
+      if (idEl !== null) idEl.textContent = resp.directiveId;
+
+      // Group axes into the three subsections; skip any axis the daemon
+      // didn't surface (defensive — daemon should emit all 8 today).
+      const groupOrder: Array<{ title: string; axes: BudgetAxis[] }> = [
+        { title: 'Directive-wide pools', axes: ['maxUsd', 'maxSteps'] },
+        {
+          title: 'Turn pools (per agent class)',
+          axes: ['maxTurnsScaffolder', 'maxTurnsBuilder', 'maxTurnsFixer'],
+        },
+        {
+          title: 'Other caps',
+          axes: ['maxUsdPerTask', 'askUserDeadlineMs', 'maxWikiReadinessAttempts'],
+        },
+      ];
+
+      for (const group of groupOrder) {
+        const slot = document.querySelector<HTMLElement>(`[data-rows-for="${group.title}"]`);
+        if (slot === null) continue;
+        slot.innerHTML = '';
+        for (const axis of group.axes) {
+          const usage = resp.perAxis[axis];
+          if (usage === undefined) continue;
+          slot.appendChild(renderBar(axis, usage, liveState.expanded.has(axis)));
+        }
+      }
+
+      // Parked-alert banner — rendered above the tabs (always visible
+      // regardless of active tab) when the in-flight directive is parked.
+      renderParkedAlert(resp);
+    };
+
+    const setStreamState = (state: StreamConnectionState): void => {
+      const el = document.getElementById('live-header-stream');
+      if (el === null) return;
+      el.dataset.state = state;
+      const labels: Record<StreamConnectionState, string> = {
+        connecting: 'connecting…',
+        live: 'live',
+        reconnecting: 'reconnecting…',
+        polling: 'polling',
+        disconnected: 'disconnected',
+        completed: 'stream ended',
+      };
+      el.textContent = labels[state];
+    };
+
+    const closeLiveStream = (): void => {
+      if (liveState.stream !== null) {
+        liveState.stream.close();
+        liveState.stream = null;
+      }
+    };
+
+    const subscribeLive = (directiveId: string): void => {
+      closeLiveStream();
+      setStreamState('connecting');
+      try {
+        liveState.stream = apiStream(`/api/v1/directives/${encodeURIComponent(directiveId)}/stream`, {
+          onConnectionState: (s) => setStreamState(s),
+          onEvent: (ev: DirectiveStreamEvent) => {
+            if (ev.type !== 'pool.tally') return;
+            if (ev.directiveId !== directiveId) return;
+            const tally: PoolUsageResp = {
+              directiveId: ev.directiveId,
+              computedAt: new Date().toISOString(),
+              perAxis: ev.perAxis as Record<string, PoolAxisUsage>,
+              ...(ev.parkedReason !== undefined ? { parkedReason: ev.parkedReason } : {}),
+            };
+            renderLiveTally(tally);
+          },
+          pollingFallback: async () => {
+            try {
+              const resp = await apiFetch<PoolUsageResp>(
+                `/api/v1/directives/${encodeURIComponent(directiveId)}/pool-usage`,
+              );
+              renderLiveTally(resp);
+            } catch {
+              // swallow — polling loop continues
+            }
+          },
+        });
+      } catch (err) {
+        if (err instanceof NoTokenError) {
+          setError('live-error', err.message);
+        }
+      }
+    };
+
+    const renderLiveSelector = (): void => {
+      const wrap = document.getElementById('live-selector-wrap');
+      const select = document.getElementById('live-selector') as HTMLSelectElement | null;
+      if (wrap === null || select === null) return;
+
+      if (liveState.inflight.length < 2) {
+        wrap.hidden = true;
+        return;
+      }
+      wrap.hidden = false;
+      select.innerHTML = '';
+      for (const d of liveState.inflight) {
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = `${d.id} · ${d.intent} · ${d.status}`;
+        if (d.id === liveState.selectedId) opt.selected = true;
+        select.appendChild(opt);
+      }
+    };
+
+    const switchToDirective = (directiveId: string): void => {
+      liveState.selectedId = directiveId;
+      const tally = document.getElementById('live-tally');
+      if (tally !== null) tally.hidden = false;
+      const empty = document.getElementById('live-empty');
+      if (empty !== null) empty.hidden = true;
+      setError('live-error', null);
+
+      // Initial render via GET, then attach SSE for updates.
+      apiFetch<PoolUsageResp>(
+        `/api/v1/directives/${encodeURIComponent(directiveId)}/pool-usage`,
+      )
+        .then((resp) => {
+          renderLiveTally(resp);
+          subscribeLive(directiveId);
+        })
+        .catch((err: unknown) => {
+          if (err instanceof ApiError) {
+            setError('live-error', `${codeHeading(err.code, err.status)} (${err.message})`);
+          } else if (err instanceof Error) {
+            setError('live-error', err.message);
+          } else {
+            setError('live-error', 'Failed to load pool usage.');
+          }
+        });
+    };
+
+    const renderParkedAlert = (tally: PoolUsageResp): void => {
+      const banner = document.getElementById('parked-alert');
+      if (banner === null) return;
+      const pr = tally.parkedReason;
+      if (pr === undefined) {
+        banner.hidden = true;
+        return;
+      }
+      banner.hidden = false;
+      const axisEl = document.getElementById('parked-axis');
+      const capEl = document.getElementById('parked-cap');
+      const dirEl = document.getElementById('parked-directive-id');
+      const bumpSummary = document.getElementById('parked-bump-summary');
+      const bumpVal = document.getElementById('parked-raise-value');
+      if (axisEl !== null) axisEl.textContent = pr.axis;
+      if (capEl !== null) capEl.textContent = formatCap(pr.axis, pr.capAtPark);
+      if (dirEl !== null) dirEl.textContent = tally.directiveId;
+      if (bumpSummary !== null) {
+        bumpSummary.textContent = `used ${formatUsage(pr.axis, pr.usedAtPark)} of ${formatCap(pr.axis, pr.capAtPark)} when parked`;
+      }
+      if (bumpVal !== null) bumpVal.textContent = formatCap(pr.axis, pr.nextBumpTo);
+    };
+
+    const wireParkedAlertActions = (
+      projectId: string,
+      getDefaults: () => BudgetDefaults,
+      settingsRef: { autoIncreaseBudgets?: boolean; autoIncreaseCeilingMultiplier?: number },
+    ): void => {
+      const raise = document.getElementById('parked-raise-btn') as HTMLButtonElement | null;
+      const abort = document.getElementById('parked-abort-btn') as HTMLButtonElement | null;
+      if (raise !== null) {
+        raise.addEventListener('click', () => {
+          if (lastTally === null || lastTally.parkedReason === undefined) return;
+          const pr = lastTally.parkedReason;
+          if (!isBudgetAxis(pr.axis)) return;
+          const newDefaults = { ...getDefaults(), [pr.axis]: pr.nextBumpTo };
+          raise.disabled = true;
+          raise.textContent = 'Raising…';
+          apiPut<
+            {
+              budgetDefaults: BudgetDefaults;
+              autoIncreaseBudgets?: boolean;
+              autoIncreaseCeilingMultiplier?: number;
+            },
+            BudgetPutResp
+          >(`/api/v1/projects/${encodeURIComponent(projectId)}/budget`, {
+            budgetDefaults: newDefaults,
+            ...(settingsRef.autoIncreaseBudgets !== undefined
+              ? { autoIncreaseBudgets: settingsRef.autoIncreaseBudgets }
+              : {}),
+            ...(settingsRef.autoIncreaseCeilingMultiplier !== undefined
+              ? { autoIncreaseCeilingMultiplier: settingsRef.autoIncreaseCeilingMultiplier }
+              : {}),
+          })
+            .then(() => {
+              raise.disabled = false;
+              raise.innerHTML =
+                'Raise cap to <span id="parked-raise-value"></span>';
+              const input = document.getElementById(pr.axis) as HTMLInputElement | null;
+              if (input !== null) input.value = String(pr.nextBumpTo);
+              // pool-resume watcher (Tier 15.6) re-checks the directive on
+              // project.json write; subsequent `pool.tally` events flip the
+              // banner to hidden once status leaves 'blocked'.
+            })
+            .catch((err: unknown) => {
+              raise.disabled = false;
+              raise.innerHTML =
+                'Raise cap to <span id="parked-raise-value"></span>';
+              renderError(err, 'topErrorSlot', 'Failed to raise cap');
+            });
+        });
+      }
+      if (abort !== null) {
+        abort.addEventListener('click', () => {
+          if (lastTally === null) return;
+          const directiveId = lastTally.directiveId;
+          const ok = window.confirm(
+            `Abort parked directive ${directiveId}? This stamps it as failed and cannot be undone.`,
+          );
+          if (!ok) return;
+          abort.disabled = true;
+          abort.textContent = 'Aborting…';
+          apiPost<Record<string, never>, unknown>(
+            `/api/v1/directives/${encodeURIComponent(directiveId)}/cancel`,
+            {},
+          )
+            .then(() => {
+              abort.disabled = false;
+              abort.textContent = 'Abort directive';
+            })
+            .catch((err: unknown) => {
+              abort.disabled = false;
+              abort.textContent = 'Abort directive';
+              renderError(err, 'topErrorSlot', 'Failed to abort directive');
+            });
+        });
+      }
+    };
+
+    const loadInflight = async (projectId: string): Promise<void> => {
+      // Fetch up to 100 in-flight directives (running + pending + blocked).
+      // The list endpoint doesn't support projectId filtering — client-side
+      // filter against the rows we got back.
+      const inflight: DirectiveListItem[] = [];
+      try {
+        for (const status of ['running', 'pending', 'blocked'] as const) {
+          const resp = await apiFetch<DirectivesListResp>(
+            `/api/v1/directives?limit=100&status=${status}`,
+          );
+          for (const d of resp.items) {
+            if (d.projectId === projectId) inflight.push(d);
+          }
+        }
+      } catch (err) {
+        if (err instanceof ApiError) {
+          setError('live-error', `${codeHeading(err.code, err.status)} (${err.message})`);
+        }
+      }
+      liveState.inflight = inflight;
+
+      const tally = document.getElementById('live-tally');
+      const empty = document.getElementById('live-empty');
+
+      if (inflight.length === 0) {
+        if (tally !== null) tally.hidden = true;
+        if (empty !== null) empty.hidden = false;
+        renderLiveSelector();
+        // Hide parked banner — no in-flight directive to be parked on.
+        const banner = document.getElementById('parked-alert');
+        if (banner !== null) banner.hidden = true;
+        return;
+      }
+
+      if (empty !== null) empty.hidden = true;
+      renderLiveSelector();
+      const initial = inflight[0];
+      if (initial !== undefined) {
+        switchToDirective(initial.id);
+      }
+    };
+
+    const wireLiveSelector = (): void => {
+      const select = document.getElementById('live-selector') as HTMLSelectElement | null;
+      if (select === null) return;
+      select.addEventListener('change', () => {
+        const next = select.value;
+        if (next.length === 0 || next === liveState.selectedId) return;
+        switchToDirective(next);
+      });
+    };
+
+    // ------------------------------------------------------------------
+    // History tab — paginated table
+    // ------------------------------------------------------------------
+    let historyOffset = 0;
+    let historyAll: DirectiveListItem[] = [];
+    let historyTotalMatched = 0;
+
+    const loadHistory = async (projectId: string): Promise<void> => {
+      const loading = document.getElementById('history-loading');
+      const empty = document.getElementById('history-empty');
+      const wrap = document.getElementById('history-table-wrap');
+      const pager = document.getElementById('history-pagination');
+      if (loading !== null) loading.hidden = false;
+      if (empty !== null) empty.hidden = true;
+      if (wrap !== null) wrap.hidden = true;
+      if (pager !== null) pager.hidden = true;
+      setError('history-error', null);
+
+      try {
+        // The list endpoint doesn't filter by projectId server-side. Fetch
+        // a wide window (up to 300) and filter client-side. This matches
+        // the projects-index page's "Last build" column approach (one
+        // bulk fetch + per-row filter).
+        const resp = await apiFetch<DirectivesListResp>(`/api/v1/directives?limit=100&offset=0`);
+        historyAll = resp.items.filter((d) => d.projectId === projectId);
+        historyTotalMatched = historyAll.length;
+      } catch (err) {
+        if (loading !== null) loading.hidden = true;
+        if (err instanceof ApiError) {
+          setError('history-error', `${codeHeading(err.code, err.status)} (${err.message})`);
+        } else if (err instanceof Error) {
+          setError('history-error', err.message);
+        } else {
+          setError('history-error', 'Failed to load directives.');
+        }
+        return;
+      }
+
+      if (loading !== null) loading.hidden = true;
+      if (historyAll.length === 0) {
+        if (empty !== null) empty.hidden = false;
+        return;
+      }
+      if (wrap !== null) wrap.hidden = false;
+      if (pager !== null) pager.hidden = false;
+      historyOffset = 0;
+      renderHistoryPage();
+    };
+
+    const renderHistoryPage = (): void => {
+      const tbody = document.querySelector('#history-table tbody');
+      const pageInfo = document.getElementById('history-page-info');
+      const prev = document.getElementById('history-prev') as HTMLButtonElement | null;
+      const next = document.getElementById('history-next') as HTMLButtonElement | null;
+      if (tbody === null) return;
+      tbody.innerHTML = '';
+
+      const slice = historyAll.slice(historyOffset, historyOffset + HISTORY_PAGE_SIZE);
+      for (const d of slice) {
+        const tr = document.createElement('tr');
+
+        const createdTd = document.createElement('td');
+        createdTd.textContent = d.createdAt.replace('T', ' ').slice(0, 19);
+        tr.appendChild(createdTd);
+
+        const idTd = document.createElement('td');
+        const link = document.createElement('a');
+        link.href = `/app/directives/detail?id=${encodeURIComponent(d.id)}`;
+        link.textContent = d.id;
+        idTd.appendChild(link);
+        tr.appendChild(idTd);
+
+        const intentTd = document.createElement('td');
+        intentTd.textContent = d.intent;
+        tr.appendChild(intentTd);
+
+        const statusTd = document.createElement('td');
+        const pill = document.createElement('span');
+        pill.className = `history-status history-status-${d.status}`;
+        pill.textContent = d.status;
+        statusTd.appendChild(pill);
+        tr.appendChild(statusTd);
+
+        const spendTd = document.createElement('td');
+        spendTd.className = 'num';
+        // We don't have per-row spend here without N+1 fetches; fill in
+        // on-demand via a per-row "see pool usage" link instead.
+        spendTd.textContent = '—';
+        tr.appendChild(spendTd);
+
+        const poolTd = document.createElement('td');
+        const poolLink = document.createElement('a');
+        poolLink.href = `/app/directives/detail?id=${encodeURIComponent(d.id)}`;
+        poolLink.textContent = 'see pool usage';
+        poolTd.appendChild(poolLink);
+        tr.appendChild(poolTd);
+
+        tbody.appendChild(tr);
+      }
+
+      if (pageInfo !== null) {
+        const start = historyAll.length === 0 ? 0 : historyOffset + 1;
+        const end = Math.min(historyOffset + HISTORY_PAGE_SIZE, historyAll.length);
+        pageInfo.textContent = `${String(start)}–${String(end)} of ${String(historyTotalMatched)}`;
+      }
+      if (prev !== null) prev.disabled = historyOffset === 0;
+      if (next !== null) next.disabled = historyOffset + HISTORY_PAGE_SIZE >= historyAll.length;
+    };
+
+    const wireHistoryPager = (): void => {
+      const prev = document.getElementById('history-prev') as HTMLButtonElement | null;
+      const next = document.getElementById('history-next') as HTMLButtonElement | null;
+      if (prev !== null) {
+        prev.addEventListener('click', () => {
+          historyOffset = Math.max(0, historyOffset - HISTORY_PAGE_SIZE);
+          renderHistoryPage();
+        });
+      }
+      if (next !== null) {
+        next.addEventListener('click', () => {
+          if (historyOffset + HISTORY_PAGE_SIZE < historyAll.length) {
+            historyOffset += HISTORY_PAGE_SIZE;
+            renderHistoryPage();
+          }
+        });
+      }
+    };
+
+    // ------------------------------------------------------------------
+    // Bootstrap
+    // ------------------------------------------------------------------
+    captureTokenFromUrl();
     const projectId = new URLSearchParams(window.location.search).get('id');
 
     if (projectId === null || projectId.length === 0) {
@@ -285,10 +1740,43 @@ import Alert from '../../components/Alert.astro';
       }
     } else {
       const id = projectId;
+      liveState.projectId = id;
+
+      // Per-session settings reference — populated by the settings-form
+      // PUT response; consumed by the defaults-form PUT so subsequent
+      // saves don't clobber the operator's auto-increase choice.
+      const settingsRef: {
+        autoIncreaseBudgets?: boolean;
+        autoIncreaseCeilingMultiplier?: number;
+      } = {};
+
       apiFetch<DetailResp>(`/api/v1/projects/${encodeURIComponent(id)}`)
         .then((resp) => {
-          populate(resp);
-          wireForm(id);
+          populateHeader(resp);
+          populateDefaultsForm(resp);
+          populateSettingsForm();
+          wireDefaultsForm(id, settingsRef);
+          wireSettingsForm(id, settingsRef);
+          wireHistoryPager();
+          wireLiveSelector();
+          wireParkedAlertActions(id, collectBudgetForm, settingsRef);
+
+          // Tab strip: activate the persisted tab and lazily load tab data.
+          const historyLoaded = { value: false };
+          const liveLoaded = { value: false };
+          wireTabStrip((tab) => {
+            if (tab === 'live' && !liveLoaded.value) {
+              liveLoaded.value = true;
+              void loadInflight(id);
+            }
+            if (tab === 'history' && !historyLoaded.value) {
+              historyLoaded.value = true;
+              void loadHistory(id);
+            }
+          });
+
+          // Tear down SSE stream on page unload (avoid leaking EventSources).
+          window.addEventListener('beforeunload', () => closeLiveStream());
         })
         .catch((err: unknown) => {
           const loading = document.getElementById('loading');
@@ -302,3 +1790,5 @@ import Alert from '../../components/Alert.astro';
     }
   </script>
 </Dashboard>
+</content>
+</invoke>
