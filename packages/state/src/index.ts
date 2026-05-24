@@ -27,6 +27,7 @@ export * as events from './queries/events.js';
 export * as outbound from './queries/outbound.js';
 export * as sessions from './queries/sessions.js';
 export * as pendingQuestions from './queries/pending-questions.js';
+export { AUTO_ANSWER_IN_FLIGHT } from './queries/pending-questions.js';
 export * as directiveLogLines from './queries/directive-log-lines.js';
 export {
   DEFAULT_LOG_LINE_LIMIT,

@@ -178,6 +178,148 @@ describe('askUser', () => {
     db.close();
   });
 
+  describe('U038 — auto-answer in-flight grace window', () => {
+    it("keeps polling past the deadline when the auto-answer claim sentinel ('[in flight]') is present", async () => {
+      // Repro of the 2026-05-23 pythonetl race: deadline elapses while
+      // the Tier 8 auto-answer dispatcher has claimed the row and is
+      // mid-LLM-call. Pre-fix, askUser returned `timedOut: true` the
+      // instant `Date.now() >= deadline` and the brain flipped the
+      // directive to `blocked` 13 s before the auto-answer finalized.
+      const db = freshDb();
+      const directiveId = seedDirective(db);
+
+      const qId = newId();
+      const createdAt = new Date().toISOString();
+      // Deadline 30 ms out — short enough the poll loop hits it quickly.
+      const deadlineAt = new Date(Date.now() + 30).toISOString();
+      pendingQuestions.create(db, {
+        id: qId,
+        directiveId,
+        question: 'Will be auto-answered',
+        channel: 'cli',
+        channelRef: 'session-test',
+        createdAt,
+        deadlineAt,
+      });
+
+      // Simulate the auto-answer dispatcher claim BEFORE the poll loop
+      // starts so the first peek at deadline sees the sentinel.
+      const claimedAt = new Date(Date.now() + 5).toISOString();
+      const won = pendingQuestions.claimForAutoAnswer(db, qId, claimedAt);
+      expect(won).toBe(true);
+
+      const pending = askUser({
+        db,
+        directiveId,
+        question: 'Will be auto-answered',
+        deadlineAt,
+        pollIntervalMs: 5,
+        // Generous grace window — the test resolves it by writing the
+        // finalize within ~50 ms.
+        gracePeriodMs: 500,
+      });
+
+      // Wait until well past the nominal deadline, then finalize.
+      await new Promise((r) => setTimeout(r, 80));
+      // Sanity: the row still carries the sentinel until we finalize.
+      const mid = pendingQuestions.getById(db, qId);
+      expect(mid?.answer).toBe('[in flight]');
+
+      pendingQuestions.finalizeAutoAnswer(db, qId, 'skip', new Date().toISOString(), 'agent');
+
+      const res = await pending;
+      expect(res.timedOut).toBe(false);
+      expect(res.aborted).toBe(false);
+      expect(res.answer).toBe('skip');
+      expect(res.questionId).toBe(qId);
+
+      db.close();
+    });
+
+    it('still times out if the auto-answer never finalizes within the grace window', async () => {
+      const db = freshDb();
+      const directiveId = seedDirective(db);
+
+      const qId = newId();
+      const createdAt = new Date().toISOString();
+      const deadlineAt = new Date(Date.now() + 30).toISOString();
+      pendingQuestions.create(db, {
+        id: qId,
+        directiveId,
+        question: 'Will hang forever',
+        channel: 'cli',
+        channelRef: 'session-test',
+        createdAt,
+        deadlineAt,
+      });
+      // Claim but never finalize.
+      pendingQuestions.claimForAutoAnswer(db, qId, new Date(Date.now() + 5).toISOString());
+
+      const t0 = Date.now();
+      const res = await askUser({
+        db,
+        directiveId,
+        question: 'Will hang forever',
+        deadlineAt,
+        pollIntervalMs: 5,
+        // Short grace window — we expect timeout after ~80 ms total.
+        gracePeriodMs: 50,
+      });
+      const elapsed = Date.now() - t0;
+
+      expect(res.timedOut).toBe(true);
+      expect(res.answer).toBeUndefined();
+      // Grace window honored — must have run past the nominal 30 ms
+      // deadline by at least the grace period before giving up.
+      expect(elapsed).toBeGreaterThanOrEqual(60);
+
+      db.close();
+    });
+
+    it('never surfaces the [in flight] sentinel as the answer', async () => {
+      // Defense-in-depth: even before the deadline elapses, a poll tick
+      // that happens to land between claim and finalize must NOT return
+      // the placeholder as the real answer.
+      const db = freshDb();
+      const directiveId = seedDirective(db);
+
+      const qId = newId();
+      const createdAt = new Date().toISOString();
+      // Plenty of headroom — no deadline pressure in this scenario.
+      const deadlineAt = new Date(Date.now() + 60_000).toISOString();
+      pendingQuestions.create(db, {
+        id: qId,
+        directiveId,
+        question: 'Mid-claim peek',
+        channel: 'cli',
+        channelRef: 'session-test',
+        createdAt,
+        deadlineAt,
+      });
+      pendingQuestions.claimForAutoAnswer(db, qId, new Date().toISOString());
+
+      const pending = askUser({
+        db,
+        directiveId,
+        question: 'Mid-claim peek',
+        deadlineAt,
+        pollIntervalMs: 5,
+      });
+
+      // Wait several poll ticks so the loop has definitely seen the
+      // sentinel-bearing row at least once.
+      await new Promise((r) => setTimeout(r, 40));
+
+      // Finalize with the real answer.
+      pendingQuestions.finalizeAutoAnswer(db, qId, 'continue', new Date().toISOString(), 'agent');
+
+      const res = await pending;
+      expect(res.answer).toBe('continue');
+      expect(res.answer).not.toBe('[in flight]');
+      db.close();
+    });
+  });
+
   it('honours an AbortSignal', async () => {
     const db = freshDb();
     const directiveId = seedDirective(db);

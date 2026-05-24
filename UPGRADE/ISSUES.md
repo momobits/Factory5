@@ -56,20 +56,16 @@ Severity:
 - **Hypothesis**: Path (a+) bumps the timeout to ~10 min AND prints the directive id when minted AND adds a periodic "still working..." heartbeat AND adds a SIGINT handler so first Ctrl-C cancels just the in-flight directive (returns to `you>`) and second Ctrl-C exits the REPL AND prompts before exiting if a directive is still in flight. Bare path (a) — bump only — would actually make UX worse (longer staring at a dead prompt). Path (b) — daemon-side streaming partial responses — is the better UX but requires daemon-side support and is a multi-step tier.
 - **Resolution**: Tier 9 candidate. Twice-deferred (Phase 2 → Phase 4 → still open). Parked at Phase 8 scaffold time per operator decision; promote when the false-timeout pain surfaces in real use.
 
+## Resolved
+
 ### U038 — Brain races auto-answer LLM dispatch on directive-level `[escalation]` askUser
 
 - **Filed**: 2026-05-24
 - **Severity**: low
-- **Tier**: (Tier 16+ candidate; brain-side timing fix, unrelated to budget UX)
+- **Tier**: 15.8 (close-out)
 - **Area**: brain
-
-During the 2026-05-23 pythonetl run, the brain's serve loop marked the directive `blocked` at 20:57:23 because the directive-level `[escalation]` askUser's deadline elapsed. The auto-answer dispatcher had claimed the question 1s earlier (20:57:22) and the LLM call returned a usable `"skip"` answer at 20:57:36 — 13s after the brain gave up. The directive stayed `blocked` even though the auto-answer eventually produced a sensible reply.
-
-**Hypothesis**: brain's terminal-flip races the auto-answer LLM dispatch. Either the askUser deadline should budget for LLM latency, OR the brain should wait for in-flight auto-answer claims to settle before declaring blocked.
-
-**Resolution candidates**: deferred — out of scope for Tier 15 (budget UX). Brain-side timing fix, separate tier.
-
-## Resolved
+- **Description**: During the 2026-05-23 pythonetl run, the brain's serve loop marked the directive `blocked` at 20:57:23 because the directive-level `[escalation]` askUser's deadline elapsed. The auto-answer dispatcher had claimed the question 1s earlier (20:57:22) and the LLM call returned a usable `"skip"` answer at 20:57:36 — 13s after the brain gave up. Two contributing defects in `packages/brain/src/ask-user.ts`: (1) `pollForAnswer`'s timeout branch fired the instant `Date.now() >= deadline` without checking for the auto-answer claim sentinel (`answered_by = 'agent'`, `answer = '[in flight]'`); (2) `findAnsweredMatch` would return the `'[in flight]'` placeholder as if it were a real answer on the brain-resume path, since `answered_at IS NOT NULL` matches the sentinel write. Either path could surface `"[in flight]"` to the brain as a finalized answer.
+- **Resolution**: Resolved 2026-05-24 — Option A (askUser becomes auto-answer-aware). State queries now export the `AUTO_ANSWER_IN_FLIGHT = '[in flight]'` literal as a single source of truth so brain and state share one constant (`packages/state/src/queries/pending-questions.ts`, `packages/state/src/index.ts`). `askUser.pollForAnswer` (a) skips the sentinel when checking for finalization, (b) extends the deadline by `gracePeriodMs` (default 30s, configurable via new `AskUserOptions.gracePeriodMs` / `EscalateBlockedOptions.gracePeriodMs`) on the first deadline-tick where the in-flight sentinel is observed; the answer-check runs before the deadline-check so a finalize landing on the exact deadline tick still wins. `findAnsweredMatch` excludes sentinel rows, and a new `findInFlightAutoAnswerMatch` slots between open-match and new-create so resumed askUser calls poll on an in-flight claim within the grace window rather than re-asking. 30s default aligns with the ~14s auto-answer latency observed in the pythonetl repro while still bounding the wait so a wedged dispatcher can't park the directive indefinitely. Three new tests in `ask-user.test.ts` lock the contract: in-flight + finalize-in-grace returns the real answer; in-flight + no-finalize times out after the grace elapses; the `[in flight]` sentinel is never surfaced as the answer. Brain tests 185 → 188 (+3); state tests 199 unchanged.
 
 ### U036 — `[BUDGET]` askUser parser rejects natural-language replies
 

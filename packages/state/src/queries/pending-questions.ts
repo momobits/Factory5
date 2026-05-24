@@ -267,11 +267,26 @@ export function findOpenPastDeadline(db: Database, now: string, limit = 10): Pen
 }
 
 /**
+ * Placeholder text stamped into `pending_questions.answer` by
+ * {@link claimForAutoAnswer} while the auto-answer LLM call is in
+ * flight. Callers polling the row treat this literal as "the auto-
+ * answer dispatcher has claimed this question; a real answer is
+ * coming" rather than as a usable reply.
+ *
+ * Exported so consumers (notably `@factory5/brain`'s `askUser` poll
+ * loop, which honors the in-flight contract via a bounded grace
+ * window — see U038 / ADR 0030) share the same literal instead of
+ * hard-coding their own copy that could drift.
+ */
+export const AUTO_ANSWER_IN_FLIGHT = '[in flight]';
+
+/**
  * Race-mitigation sentinel for the Tier 8 auto-answer dispatcher.
- * Atomically writes `answered_by = 'agent'` + a `[in flight]`
- * placeholder answer, but only when the row is still unclaimed.
- * Returns `true` if this caller won the claim; `false` if a concurrent
- * human reply (or another auto-answer attempt) got there first.
+ * Atomically writes `answered_by = 'agent'` + the
+ * {@link AUTO_ANSWER_IN_FLIGHT} placeholder, but only when the row is
+ * still unclaimed. Returns `true` if this caller won the claim;
+ * `false` if a concurrent human reply (or another auto-answer
+ * attempt) got there first.
  *
  * On a successful claim, the dispatcher proceeds to the LLM call and
  * later calls {@link finalizeAutoAnswer} to overwrite the placeholder
@@ -285,18 +300,19 @@ export function claimForAutoAnswer(db: Database, id: string, when: string): bool
   const result = db
     .prepare(
       `UPDATE pending_questions
-          SET answered_by = 'agent', answer = '[in flight]', answered_at = ?
+          SET answered_by = 'agent', answer = ?, answered_at = ?
         WHERE id = ? AND answered_by IS NULL`,
     )
-    .run(when, id);
+    .run(AUTO_ANSWER_IN_FLIGHT, when, id);
   return result.changes > 0;
 }
 
 /**
- * Finalize a successful auto-answer: replace the `[in flight]`
- * placeholder with the real LLM-produced reply text, and set the
- * canonical `answered_at` timestamp. Caller must have already won
- * the claim via {@link claimForAutoAnswer}.
+ * Finalize a successful auto-answer: replace the
+ * {@link AUTO_ANSWER_IN_FLIGHT} placeholder with the real
+ * LLM-produced reply text, and set the canonical `answered_at`
+ * timestamp. Caller must have already won the claim via
+ * {@link claimForAutoAnswer}.
  *
  * On the failure path (LLM call failed twice), pass the synthetic
  * `[auto-answer failed: <reason>]` text and `answeredBy = 'agent-failed'`.
