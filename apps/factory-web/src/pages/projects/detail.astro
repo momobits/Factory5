@@ -15,6 +15,7 @@ import Alert from '../../components/Alert.astro';
 import Field from '../../components/Field.astro';
 import Form from '../../components/Form.astro';
 import Submit from '../../components/Submit.astro';
+import Tabs from '../../components/Tabs.astro';
 import Dashboard from '../../layouts/Dashboard.astro';
 
 const AXIS_LABEL: Record<BudgetAxis, string> = {
@@ -106,20 +107,15 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
     </div>
 
     <!-- Tab strip -->
-    <div class="tab-strip" role="tablist" aria-label="Project sections">
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="live">
-        <span class="tab-num">01</span>Live
-      </button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="defaults">
-        <span class="tab-num">02</span>Defaults
-      </button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="history">
-        <span class="tab-num">03</span>History
-      </button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="settings">
-        <span class="tab-num">04</span>Settings
-      </button>
-    </div>
+    <Tabs
+      label="Project sections"
+      tabs={[
+        { id: 'live', num: '01', label: 'Live' },
+        { id: 'defaults', num: '02', label: 'Defaults' },
+        { id: 'history', num: '03', label: 'History' },
+        { id: 'settings', num: '04', label: 'Settings' },
+      ]}
+    />
 
     <!-- ============================================================== -->
     <!-- Live tab -->
@@ -377,50 +373,6 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
       display: flex;
       gap: 0.5rem;
       flex-wrap: wrap;
-    }
-
-    /* ----- Tab strip ------------------------------------------------ */
-    .tab-strip {
-      display: flex;
-      gap: 0;
-      border-bottom: 1px solid var(--hairline);
-      margin: 0 0 1.5rem 0;
-      flex-wrap: wrap;
-    }
-    .tab {
-      font: inherit;
-      font-family: var(--f-body);
-      font-size: 12px;
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: var(--tracking-cap);
-      color: var(--ink-2);
-      background: transparent;
-      border: 0;
-      padding: 12px 18px 10px;
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      transition: color 180ms ease, border-color 180ms ease;
-      display: inline-flex;
-      align-items: baseline;
-      gap: 0.5rem;
-    }
-    .tab-num {
-      font-family: var(--f-mono);
-      font-size: 9px;
-      color: var(--signal);
-      opacity: 0.9;
-    }
-    .tab:hover {
-      color: var(--ink);
-    }
-    .tab[aria-selected='true'] {
-      color: var(--ink);
-      border-bottom-color: var(--signal);
-    }
-    .tab:focus-visible {
-      outline: 2px solid var(--signal);
-      outline-offset: -2px;
     }
 
     /* ----- Tab panels ----------------------------------------------- */

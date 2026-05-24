@@ -1,0 +1,99 @@
+---
+/**
+ * Reusable tab strip for the dashboard. Renders a `role="tablist"` bar
+ * with one `role="tab"` button per entry. The corresponding content panels
+ * must be `<section id="tab-{id}" class="tab-panel" hidden>` elements placed
+ * immediately after this component in the page.
+ *
+ * Client-side state (activation, localStorage persistence, panel toggling) is
+ * the page script's responsibility — see `wireTabStrip()` in `projects/detail.astro`
+ * for the reference implementation. The DOM contract is:
+ *   - Buttons:  `.tab[data-tab="${id}"]` with `aria-selected` attribute
+ *   - Panels:   `#tab-${id}` with the `hidden` attribute
+ *
+ * Deliberately no client `<script>` in this component — tab state is shared
+ * across tab panels and the surrounding page (parked banner, SSE stream),
+ * so it lives in the page's own script block.
+ */
+
+export interface TabEntry {
+  /** Unique slug; matched by `data-tab` on the button and `id="tab-{id}"` on the panel. */
+  id: string;
+  /** Display label shown to the user (e.g. "Live"). */
+  label: string;
+  /**
+   * Two-digit ordinal prefix shown in the `var(--signal)` mono accent
+   * (e.g. "01"). Use zero-padded numbers for visual consistency.
+   */
+  num: string;
+}
+
+interface Props {
+  tabs: TabEntry[];
+  /** Accessible label for the `role="tablist"` container. */
+  label?: string;
+}
+
+const { tabs, label = 'Page sections' } = Astro.props;
+---
+
+<div class="tab-strip" role="tablist" aria-label={label}>
+  {
+    tabs.map((tab) => (
+      <button
+        type="button"
+        class="tab"
+        role="tab"
+        aria-selected="false"
+        data-tab={tab.id}
+      >
+        <span class="tab-num">{tab.num}</span>{tab.label}
+      </button>
+    ))
+  }
+</div>
+
+<style>
+  .tab-strip {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--hairline);
+    margin: 0 0 1.5rem 0;
+    flex-wrap: wrap;
+  }
+  .tab {
+    font: inherit;
+    font-family: var(--f-body);
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-cap);
+    color: var(--ink-2);
+    background: transparent;
+    border: 0;
+    padding: 12px 18px 10px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 180ms ease, border-color 180ms ease;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+  .tab-num {
+    font-family: var(--f-mono);
+    font-size: 9px;
+    color: var(--signal);
+    opacity: 0.9;
+  }
+  .tab:hover {
+    color: var(--ink);
+  }
+  .tab[aria-selected='true'] {
+    color: var(--ink);
+    border-bottom-color: var(--signal);
+  }
+  .tab:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: -2px;
+  }
+</style>
