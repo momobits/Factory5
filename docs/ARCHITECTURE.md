@@ -193,7 +193,7 @@ Mid-flight engagement primitives (ADR 0015): `askUser` (pauses, posts to channel
 
 Pre-call (ADR 0020): rolling-average estimator per category; each call is gated against the directive's `max_usd` / `max_steps` ceiling before execution.
 
-**Pool model for `maxTurns*` axes (ADR 0034, supersedes ADR 0032).** The three `maxTurnsScaffolder`, `maxTurnsBuilder`, and `maxTurnsFixer` axes operate as directive-wide pools — one pool per agent class. Each task draws turns from its class pool; pool exhaustion is the trigger event, not per-task exhaustion. `maxUsd` and `maxSteps` already pooled directive-wide (no semantic change). The planner no longer emits per-task `maxTurns`; the pool dispatcher is the sole turn-limit authority.
+**Canonical 12-axis budget model (ADR 0035, supersedes ADRs 0032 + 0034).** All 12 operator-facing axes are defined in `BUDGET_DEFAULTS` (`@factory5/core`) with type classification (`pool` / `per-task` / `per-question` / `per-directive`) and auto-increase eligibility. Pool axes (`maxUsd`, `maxSteps`, `maxTurnsScaffolder|Builder|Fixer`, `maxTotalTurns`) are enforced at the directive level; all tasks share one pool. Per-task axes (`maxUsdPerTask`, `maxRetriesPerTask`) are enforced independently per task. Per-question (`askUserDeadlineMs`) and per-directive (`maxWikiReadinessAttempts`, `maxWallClockMinutes`, `maxConcurrentTasks`) complete the model.
 
 Cap resolution per axis (live re-resolved on every budget check, ≤ 250 ms poll tick):
 
@@ -216,4 +216,4 @@ Three-tier merge (`resolveDirectiveLimits` in `@factory5/wiki`): per-flag → pe
 | [`SKILLS.md`](SKILLS.md)             | Skill catalog — methodology files injected into agent prompts                                                                   |
 | [`AGENTS.md`](AGENTS.md)             | Agent role catalog — `triage`, `architect`, `planner`, `builder`, `reviewer`, `fixer`, `investigator`, `verifier`, `scaffolder` |
 | [`ONBOARDING.md`](ONBOARDING.md)     | Clone-to-first-build walkthrough                                                                                                |
-| [`decisions/`](decisions)            | 34 ADRs + INDEX                                                                                                                 |
+| [`decisions/`](decisions)            | 35 ADRs + INDEX                                                                                                                 |

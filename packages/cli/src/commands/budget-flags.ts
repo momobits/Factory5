@@ -34,12 +34,16 @@ import type { Command } from 'commander';
 const AXIS_FLAG: Record<BudgetAxis, string> = {
   maxUsd: '--max-usd',
   maxSteps: '--max-steps',
-  askUserDeadlineMs: '--ask-user-deadline-ms',
   maxTurnsScaffolder: '--max-turns-scaffolder',
   maxTurnsBuilder: '--max-turns-builder',
   maxTurnsFixer: '--max-turns-fixer',
+  maxTotalTurns: '--max-total-turns',
   maxUsdPerTask: '--max-usd-per-task',
+  maxRetriesPerTask: '--max-retries-per-task',
+  askUserDeadlineMs: '--ask-user-deadline-ms',
   maxWikiReadinessAttempts: '--max-wiki-readiness-attempts',
+  maxWallClockMinutes: '--max-wall-clock-minutes',
+  maxConcurrentTasks: '--max-concurrent-tasks',
 };
 
 /**
@@ -51,13 +55,17 @@ const AXIS_FLAG: Record<BudgetAxis, string> = {
  */
 const AXIS_KIND: Record<BudgetAxis, 'usd' | 'int' | 'nonneg-int'> = {
   maxUsd: 'usd',
-  maxSteps: 'int',
-  askUserDeadlineMs: 'int',
+  maxSteps: 'nonneg-int',
   maxTurnsScaffolder: 'int',
   maxTurnsBuilder: 'int',
   maxTurnsFixer: 'int',
+  maxTotalTurns: 'nonneg-int',
   maxUsdPerTask: 'usd',
+  maxRetriesPerTask: 'nonneg-int',
+  askUserDeadlineMs: 'int',
   maxWikiReadinessAttempts: 'nonneg-int',
+  maxWallClockMinutes: 'nonneg-int',
+  maxConcurrentTasks: 'int',
 };
 
 function parsePositiveFloat(flag: string, raw: string): number {
@@ -150,15 +158,22 @@ export function collectBudgetFlags(options: BudgetOptions): CollectedBudgets {
   if (options.maxSteps !== undefined) limits.maxSteps = options.maxSteps;
 
   const budgets: CollectedBudgets['budgets'] = {};
-  if (options.askUserDeadlineMs !== undefined)
-    budgets.askUserDeadlineMs = options.askUserDeadlineMs;
   if (options.maxTurnsScaffolder !== undefined)
     budgets.maxTurnsScaffolder = options.maxTurnsScaffolder;
   if (options.maxTurnsBuilder !== undefined) budgets.maxTurnsBuilder = options.maxTurnsBuilder;
   if (options.maxTurnsFixer !== undefined) budgets.maxTurnsFixer = options.maxTurnsFixer;
+  if (options.maxTotalTurns !== undefined) budgets.maxTotalTurns = options.maxTotalTurns;
   if (options.maxUsdPerTask !== undefined) budgets.maxUsdPerTask = options.maxUsdPerTask;
+  if (options.maxRetriesPerTask !== undefined)
+    budgets.maxRetriesPerTask = options.maxRetriesPerTask;
+  if (options.askUserDeadlineMs !== undefined)
+    budgets.askUserDeadlineMs = options.askUserDeadlineMs;
   if (options.maxWikiReadinessAttempts !== undefined)
     budgets.maxWikiReadinessAttempts = options.maxWikiReadinessAttempts;
+  if (options.maxWallClockMinutes !== undefined)
+    budgets.maxWallClockMinutes = options.maxWallClockMinutes;
+  if (options.maxConcurrentTasks !== undefined)
+    budgets.maxConcurrentTasks = options.maxConcurrentTasks;
 
   return { limits, budgets };
 }

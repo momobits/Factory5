@@ -1,6 +1,6 @@
 # ADR 0034 — Budget Pool Paradigm
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR 0035 (2026-05-25)
 - **Date:** 2026-05-24
 - **Supersedes:** [ADR 0032](0032-budget-ux-paradigm.md)
 - **Builds on:** [ADR 0020](0020-pre-call-budget-enforcement.md) — `maxUsd` / `maxSteps` directive-wide pool semantics this ADR extends to the three `maxTurns*` axes. [ADR 0030](0030-pending-question-auto-answer.md) — auto-answer dispatcher this ADR simplifies by removing the `[BUDGET]` branch entirely. [ADR 0032](0032-budget-ux-paradigm.md) — budget UX paradigm superseded by this ADR; the closed-set contract, `BUDGET_DEFAULTS`, and persistence contract all carry forward under the new pool model.

@@ -5,6 +5,7 @@ import {
   BUDGET_DEFAULTS,
   budgetsSchema,
   resolveBudgets,
+  type AxisType,
   type Budgets,
 } from './budget-defaults.js';
 
@@ -15,36 +16,78 @@ describe('BUDGET_DEFAULTS', () => {
       expect(typeof BUDGET_DEFAULTS[axis].value).toBe('number');
       expect(typeof BUDGET_DEFAULTS[axis].explainer).toBe('string');
       expect(BUDGET_DEFAULTS[axis].explainer.length).toBeGreaterThan(0);
+      expect(typeof BUDGET_DEFAULTS[axis].type).toBe('string');
+      expect(typeof BUDGET_DEFAULTS[axis].autoIncreaseEligible).toBe('boolean');
     }
   });
 
-  it('declares the eight operator-facing axes (ADR 0032 §1 + Phase 13.6 maxUsdPerTask + Phase 14.3 maxWikiReadinessAttempts)', () => {
+  it('declares the twelve operator-facing axes (ADR 0035 canonical table)', () => {
     expect([...BUDGET_AXES]).toEqual([
       'maxUsd',
       'maxSteps',
-      'askUserDeadlineMs',
       'maxTurnsScaffolder',
       'maxTurnsBuilder',
       'maxTurnsFixer',
+      'maxTotalTurns',
       'maxUsdPerTask',
+      'maxRetriesPerTask',
+      'askUserDeadlineMs',
       'maxWikiReadinessAttempts',
+      'maxWallClockMinutes',
+      'maxConcurrentTasks',
     ]);
+    expect(BUDGET_AXES.length).toBe(12);
   });
 
-  it('uses 0 as the "unlimited" sentinel for maxUsd, maxSteps, and maxUsdPerTask', () => {
+  it('uses 0 as the "unlimited" sentinel for pool/per-directive axes with unlimited semantics', () => {
     expect(BUDGET_DEFAULTS.maxUsd.value).toBe(0);
     expect(BUDGET_DEFAULTS.maxSteps.value).toBe(0);
+    expect(BUDGET_DEFAULTS.maxTotalTurns.value).toBe(0);
     expect(BUDGET_DEFAULTS.maxUsdPerTask.value).toBe(0);
+    expect(BUDGET_DEFAULTS.maxWallClockMinutes.value).toBe(0);
   });
 
   it('seeds askUserDeadlineMs to 5 minutes matching ADR 0030 §2', () => {
     expect(BUDGET_DEFAULTS.askUserDeadlineMs.value).toBe(300_000);
   });
 
-  it('seeds per-task turn caps from the post-fa2f800 + Tier-12 baselines', () => {
+  it('seeds per-agent-class turn pool caps from the established baselines', () => {
     expect(BUDGET_DEFAULTS.maxTurnsScaffolder.value).toBe(120);
     expect(BUDGET_DEFAULTS.maxTurnsBuilder.value).toBe(80);
     expect(BUDGET_DEFAULTS.maxTurnsFixer.value).toBe(80);
+  });
+
+  it('seeds new axes with expected defaults', () => {
+    expect(BUDGET_DEFAULTS.maxRetriesPerTask.value).toBe(3);
+    expect(BUDGET_DEFAULTS.maxConcurrentTasks.value).toBe(4);
+  });
+
+  it('classifies every axis with a valid AxisType', () => {
+    const validTypes: AxisType[] = ['pool', 'per-task', 'per-question', 'per-directive'];
+    for (const axis of BUDGET_AXES) {
+      expect(validTypes).toContain(BUDGET_DEFAULTS[axis].type);
+    }
+  });
+
+  it('marks pool axes as auto-increase eligible', () => {
+    expect(BUDGET_DEFAULTS.maxUsd.autoIncreaseEligible).toBe(true);
+    expect(BUDGET_DEFAULTS.maxSteps.autoIncreaseEligible).toBe(true);
+    expect(BUDGET_DEFAULTS.maxTurnsScaffolder.autoIncreaseEligible).toBe(true);
+    expect(BUDGET_DEFAULTS.maxTurnsBuilder.autoIncreaseEligible).toBe(true);
+    expect(BUDGET_DEFAULTS.maxTurnsFixer.autoIncreaseEligible).toBe(true);
+    expect(BUDGET_DEFAULTS.maxTotalTurns.autoIncreaseEligible).toBe(true);
+  });
+
+  it('marks per-task and per-question axes as NOT auto-increase eligible', () => {
+    expect(BUDGET_DEFAULTS.maxUsdPerTask.autoIncreaseEligible).toBe(false);
+    expect(BUDGET_DEFAULTS.maxRetriesPerTask.autoIncreaseEligible).toBe(false);
+    expect(BUDGET_DEFAULTS.askUserDeadlineMs.autoIncreaseEligible).toBe(false);
+    expect(BUDGET_DEFAULTS.maxConcurrentTasks.autoIncreaseEligible).toBe(false);
+  });
+
+  it('marks maxWikiReadinessAttempts and maxWallClockMinutes as auto-increase eligible', () => {
+    expect(BUDGET_DEFAULTS.maxWikiReadinessAttempts.autoIncreaseEligible).toBe(true);
+    expect(BUDGET_DEFAULTS.maxWallClockMinutes.autoIncreaseEligible).toBe(true);
   });
 });
 
@@ -59,25 +102,43 @@ describe('budgetsSchema', () => {
     });
   });
 
-  it('accepts the full set populated', () => {
+  it('accepts the full 12-axis set populated', () => {
     const all: Budgets = {
       maxUsd: 5.5,
       maxSteps: 100,
-      askUserDeadlineMs: 600_000,
       maxTurnsScaffolder: 160,
       maxTurnsBuilder: 100,
       maxTurnsFixer: 100,
+      maxTotalTurns: 500,
       maxUsdPerTask: 1.5,
+      maxRetriesPerTask: 5,
+      askUserDeadlineMs: 600_000,
       maxWikiReadinessAttempts: 3,
+      maxWallClockMinutes: 60,
+      maxConcurrentTasks: 8,
     };
     expect(budgetsSchema.parse(all)).toEqual(all);
   });
 
-  it('accepts 0 for maxUsd, maxSteps, and maxUsdPerTask (unlimited sentinel)', () => {
-    expect(budgetsSchema.parse({ maxUsd: 0, maxSteps: 0, maxUsdPerTask: 0 })).toEqual({
+  it('accepts 0 for axes with unlimited sentinel semantics', () => {
+    expect(
+      budgetsSchema.parse({
+        maxUsd: 0,
+        maxSteps: 0,
+        maxUsdPerTask: 0,
+        maxTotalTurns: 0,
+        maxRetriesPerTask: 0,
+        maxWikiReadinessAttempts: 0,
+        maxWallClockMinutes: 0,
+      }),
+    ).toEqual({
       maxUsd: 0,
       maxSteps: 0,
       maxUsdPerTask: 0,
+      maxTotalTurns: 0,
+      maxRetriesPerTask: 0,
+      maxWikiReadinessAttempts: 0,
+      maxWallClockMinutes: 0,
     });
   });
 
@@ -113,41 +174,36 @@ describe('budgetsSchema', () => {
     expect(() => budgetsSchema.parse({ maxTurnsBuilder: 0 })).toThrow();
   });
 
+  it('rejects zero maxConcurrentTasks (positive-only — need at least 1 slot)', () => {
+    expect(() => budgetsSchema.parse({ maxConcurrentTasks: 0 })).toThrow();
+  });
+
   it('accepts a fractional maxUsd (USD with decimals)', () => {
     expect(budgetsSchema.parse({ maxUsd: 0.5 })).toEqual({ maxUsd: 0.5 });
   });
-});
 
-describe('BUDGET_AXES — 8th axis maxWikiReadinessAttempts', () => {
-  it('includes maxWikiReadinessAttempts at length 8', () => {
-    expect(BUDGET_AXES).toContain('maxWikiReadinessAttempts');
-    expect(BUDGET_AXES.length).toBe(8);
+  it('accepts the new per-directive axes', () => {
+    expect(budgetsSchema.parse({ maxWallClockMinutes: 120 })).toEqual({
+      maxWallClockMinutes: 120,
+    });
+    expect(budgetsSchema.parse({ maxConcurrentTasks: 2 })).toEqual({
+      maxConcurrentTasks: 2,
+    });
   });
 
-  it('default value is 3 with explainer mentioning architect+critic cycles', () => {
-    expect(BUDGET_DEFAULTS.maxWikiReadinessAttempts.value).toBe(3);
-    expect(BUDGET_DEFAULTS.maxWikiReadinessAttempts.explainer.toLowerCase()).toContain('architect');
-    expect(BUDGET_DEFAULTS.maxWikiReadinessAttempts.explainer.toLowerCase()).toContain('critic');
+  it('accepts the new per-task axis maxRetriesPerTask', () => {
+    expect(budgetsSchema.parse({ maxRetriesPerTask: 5 })).toEqual({
+      maxRetriesPerTask: 5,
+    });
   });
 
-  it('budgetsSchema accepts an integer value', () => {
-    expect(() => budgetsSchema.parse({ maxWikiReadinessAttempts: 5 })).not.toThrow();
+  it('accepts maxTotalTurns as a nonnegative integer', () => {
+    expect(budgetsSchema.parse({ maxTotalTurns: 0 })).toEqual({ maxTotalTurns: 0 });
+    expect(budgetsSchema.parse({ maxTotalTurns: 1000 })).toEqual({ maxTotalTurns: 1000 });
   });
 
-  it('budgetsSchema rejects negative', () => {
-    expect(() => budgetsSchema.parse({ maxWikiReadinessAttempts: -1 })).toThrow();
-  });
-
-  it('budgetsSchema accepts 0 (unlimited sentinel)', () => {
-    expect(() => budgetsSchema.parse({ maxWikiReadinessAttempts: 0 })).not.toThrow();
-  });
-
-  it('resolveBudgets fills the default when absent', () => {
-    expect(resolveBudgets({}).maxWikiReadinessAttempts).toBe(3);
-  });
-
-  it('resolveBudgets keeps the operator value when present', () => {
-    expect(resolveBudgets({ maxWikiReadinessAttempts: 5 }).maxWikiReadinessAttempts).toBe(5);
+  it('rejects negative maxTotalTurns', () => {
+    expect(() => budgetsSchema.parse({ maxTotalTurns: -1 })).toThrow();
   });
 });
 
@@ -156,12 +212,16 @@ describe('resolveBudgets', () => {
     expect(resolveBudgets()).toEqual({
       maxUsd: 0,
       maxSteps: 0,
-      askUserDeadlineMs: 300_000,
       maxTurnsScaffolder: 120,
       maxTurnsBuilder: 80,
       maxTurnsFixer: 80,
+      maxTotalTurns: 0,
       maxUsdPerTask: 0,
+      maxRetriesPerTask: 3,
+      askUserDeadlineMs: 300_000,
       maxWikiReadinessAttempts: 3,
+      maxWallClockMinutes: 0,
+      maxConcurrentTasks: 4,
     });
   });
 
@@ -169,12 +229,16 @@ describe('resolveBudgets', () => {
     expect(resolveBudgets({})).toEqual({
       maxUsd: 0,
       maxSteps: 0,
-      askUserDeadlineMs: 300_000,
       maxTurnsScaffolder: 120,
       maxTurnsBuilder: 80,
       maxTurnsFixer: 80,
+      maxTotalTurns: 0,
       maxUsdPerTask: 0,
+      maxRetriesPerTask: 3,
+      askUserDeadlineMs: 300_000,
       maxWikiReadinessAttempts: 3,
+      maxWallClockMinutes: 0,
+      maxConcurrentTasks: 4,
     });
   });
 
@@ -182,12 +246,16 @@ describe('resolveBudgets', () => {
     expect(resolveBudgets({ maxTurnsScaffolder: 160 })).toEqual({
       maxUsd: 0,
       maxSteps: 0,
-      askUserDeadlineMs: 300_000,
       maxTurnsScaffolder: 160,
       maxTurnsBuilder: 80,
       maxTurnsFixer: 80,
+      maxTotalTurns: 0,
       maxUsdPerTask: 0,
+      maxRetriesPerTask: 3,
+      askUserDeadlineMs: 300_000,
       maxWikiReadinessAttempts: 3,
+      maxWallClockMinutes: 0,
+      maxConcurrentTasks: 4,
     });
   });
 
@@ -209,13 +277,38 @@ describe('resolveBudgets', () => {
     const full: Budgets = {
       maxUsd: 10,
       maxSteps: 500,
-      askUserDeadlineMs: 600_000,
       maxTurnsScaffolder: 160,
       maxTurnsBuilder: 160,
       maxTurnsFixer: 160,
+      maxTotalTurns: 1000,
       maxUsdPerTask: 2.5,
+      maxRetriesPerTask: 5,
+      askUserDeadlineMs: 600_000,
       maxWikiReadinessAttempts: 5,
+      maxWallClockMinutes: 120,
+      maxConcurrentTasks: 8,
     };
     expect(resolveBudgets(full)).toEqual(full);
+  });
+
+  it('resolves new axes from BUDGET_DEFAULTS when absent', () => {
+    const resolved = resolveBudgets({});
+    expect(resolved.maxTotalTurns).toBe(0);
+    expect(resolved.maxRetriesPerTask).toBe(3);
+    expect(resolved.maxWallClockMinutes).toBe(0);
+    expect(resolved.maxConcurrentTasks).toBe(4);
+  });
+
+  it('keeps operator values for new axes when present', () => {
+    const resolved = resolveBudgets({
+      maxTotalTurns: 500,
+      maxRetriesPerTask: 10,
+      maxWallClockMinutes: 60,
+      maxConcurrentTasks: 2,
+    });
+    expect(resolved.maxTotalTurns).toBe(500);
+    expect(resolved.maxRetriesPerTask).toBe(10);
+    expect(resolved.maxWallClockMinutes).toBe(60);
+    expect(resolved.maxConcurrentTasks).toBe(2);
   });
 });

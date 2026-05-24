@@ -17,7 +17,7 @@ function parseArgs(argv: readonly string[]): Record<string, unknown> {
 }
 
 describe('addBudgetFlags', () => {
-  it('registers all eight axes as long flags (Phase 14.3 adds maxWikiReadinessAttempts)', () => {
+  it('registers all twelve axes as long flags (ADR 0035 canonical table)', () => {
     const program = new Command();
     const cmd = program.command('test');
     addBudgetFlags(cmd);
@@ -25,24 +25,28 @@ describe('addBudgetFlags', () => {
     expect(flagNames).toEqual([
       '--max-usd',
       '--max-steps',
-      '--ask-user-deadline-ms',
       '--max-turns-scaffolder',
       '--max-turns-builder',
       '--max-turns-fixer',
+      '--max-total-turns',
       '--max-usd-per-task',
+      '--max-retries-per-task',
+      '--ask-user-deadline-ms',
       '--max-wiki-readiness-attempts',
+      '--max-wall-clock-minutes',
+      '--max-concurrent-tasks',
     ]);
   });
 
-  it('uses BUDGET_DEFAULTS explainers verbatim as descriptions (ADR 0032 §3)', () => {
+  it('uses BUDGET_DEFAULTS explainers verbatim as descriptions (ADR 0035)', () => {
     const program = new Command();
     const cmd = program.command('test');
     addBudgetFlags(cmd);
     const usd = cmd.options.find((o) => o.long === '--max-usd');
-    expect(usd?.description).toContain('0 = unlimited');
+    expect(usd?.description).toContain('unlimited');
     const scaffolder = cmd.options.find((o) => o.long === '--max-turns-scaffolder');
     expect(scaffolder?.description).toContain('scaffolder');
-    expect(scaffolder?.description).toContain('Higher for projects with >10 modules');
+    expect(scaffolder?.description).toContain('tool-use turns');
   });
 
   it('parses --max-usd as a positive float', () => {
@@ -83,8 +87,9 @@ describe('addBudgetFlags', () => {
     expect(() => parseArgs(['--max-usd', '-1'])).toThrow(/--max-usd/);
   });
 
-  it('rejects --max-steps of 0', () => {
-    expect(() => parseArgs(['--max-steps', '0'])).toThrow(/--max-steps/);
+  it('accepts --max-steps of 0 (unlimited sentinel, ADR 0035)', () => {
+    const opts = parseArgs(['--max-steps', '0']);
+    expect(opts['maxSteps']).toBe(0);
   });
 
   it('rejects non-integer --max-turns-scaffolder', () => {
@@ -100,12 +105,16 @@ describe('addBudgetFlags', () => {
     const opts = parseArgs([]);
     expect(opts['maxUsd']).toBeUndefined();
     expect(opts['maxSteps']).toBeUndefined();
-    expect(opts['askUserDeadlineMs']).toBeUndefined();
     expect(opts['maxTurnsScaffolder']).toBeUndefined();
     expect(opts['maxTurnsBuilder']).toBeUndefined();
     expect(opts['maxTurnsFixer']).toBeUndefined();
+    expect(opts['maxTotalTurns']).toBeUndefined();
     expect(opts['maxUsdPerTask']).toBeUndefined();
+    expect(opts['maxRetriesPerTask']).toBeUndefined();
+    expect(opts['askUserDeadlineMs']).toBeUndefined();
     expect(opts['maxWikiReadinessAttempts']).toBeUndefined();
+    expect(opts['maxWallClockMinutes']).toBeUndefined();
+    expect(opts['maxConcurrentTasks']).toBeUndefined();
   });
 });
 
