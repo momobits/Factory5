@@ -34,7 +34,7 @@
 ## Git state
 
 - **Branch:** main
-- **Last commit:** `<phase-15-close-commit>` — `chore(phase-15)`: close phase 15, kick off arc-complete (eleventh time). Lag counter bumps to #48 — same structural lag-by-1 pattern; this commit itself becomes the new lag.
+- **Last commit:** `d6777ad` — `chore(phase-15)`: close phase 15, kick off arc-complete (eleventh time). Lag counter bumps to #48 — same structural lag-by-1 pattern; this commit itself becomes the new lag.
 - **Uncommitted changes:** pre-existing dirty paths only (`.agents/`, `.claude/skills/`, `AGENTS.md`, `GEMINI.md`, `docs/superpowers/{plans,specs}/*` prettier reformatting, `pnpm-lock.yaml` 3-line drift) — accepted out-of-scope per operator's standing directive
 - **Last phase tag:** `phase-15-budget-ux-overhaul-closed` (annotated at `a72b08a`)
 
