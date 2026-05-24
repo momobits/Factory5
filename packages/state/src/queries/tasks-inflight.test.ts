@@ -152,6 +152,44 @@ describe('tasks-inflight — markAborted', () => {
   });
 });
 
+describe('tasks-inflight — deleteById', () => {
+  it('removes the row so a subsequent register with the same id succeeds', () => {
+    const db = freshDb();
+    const dId = seedDirective(db);
+    const tId = seedRunningTask(db, dId);
+
+    // Row is present initially.
+    expect(tasksInflight.getById(db, tId)).toBeDefined();
+
+    // Delete it.
+    tasksInflight.deleteById(db, tId);
+    expect(tasksInflight.getById(db, tId)).toBeUndefined();
+
+    // Re-inserting the same id must not throw.
+    const now = new Date().toISOString();
+    expect(() =>
+      tasksInflight.register(db, {
+        id: tId,
+        directiveId: dId,
+        planId: 'plan-1',
+        title: 'task-1',
+        agent: 'builder',
+        category: 'deep',
+        status: 'running',
+        attempts: 1,
+        startedAt: now,
+        lastHeartbeat: now,
+      }),
+    ).not.toThrow();
+    expect(tasksInflight.getById(db, tId)?.attempts).toBe(1);
+  });
+
+  it('is a no-op when the row is absent (idempotent)', () => {
+    const db = freshDb();
+    expect(() => tasksInflight.deleteById(db, newId())).not.toThrow();
+  });
+});
+
 describe('tasks-inflight — findOrphanedHumanWaits', () => {
   it('returns only tasks currently in waiting_for_human', () => {
     const db = freshDb();

@@ -201,6 +201,16 @@ export function markAborted(db: Database, id: string, reason: string, when: stri
 }
 
 /**
+ * Delete a task row entirely so a subsequent {@link register} with the same
+ * id succeeds. Used by the auto-bump recursion path in `pool.ts` to clear
+ * the prior `failed` row before re-registering the task at a higher cap.
+ * No-op when the row is absent (idempotent).
+ */
+export function deleteById(db: Database, id: string): void {
+  db.prepare('DELETE FROM tasks_inflight WHERE id = ?').run(id);
+}
+
+/**
  * Brain-startup orphan-cleanup query (ADR 0024 §4). Returns every task
  * still flagged `waiting_for_human` — by definition orphaned, since the
  * worker subprocess that owned the wait was a child of the previous

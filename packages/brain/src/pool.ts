@@ -532,15 +532,17 @@ async function executeTaskWithBudgetGuard(
       });
       if (decision.kind === 'bumped' && autoBumpDepth < MAX_AUTO_BUMP_DEPTH) {
         // Re-enter: with the new cap, the pool may now have headroom.
-        // Heartbeat row is left in 'running' from the prior register call;
-        // we mark it failed and re-register on the recursive call since
-        // `tasksInflight.register` would INSERT, which would conflict.
+        // The prior `register` call left a row in tasks_inflight (status
+        // 'running'). We mark it failed first so the audit trail is clean,
+        // then delete the row so the next `register` (plain INSERT) does not
+        // hit a UNIQUE constraint on task.id.
         tasksInflight.markFailed(
           db,
           task.id,
           synthesizePoolExhaustedResult(axis, decision.oldCap),
           now(),
         );
+        tasksInflight.deleteById(db, task.id);
         // Recurse — fresh register on the new attempt.
         return executeTaskWithBudgetGuard(
           task,

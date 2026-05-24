@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { Finding, Task } from '@factory5/core';
 import { newId } from '@factory5/core';
 import type { DirectiveStreamEvent } from '@factory5/ipc';
-import { openDatabase, runMigrations, type Database } from '@factory5/state';
+import { openDatabase, runMigrations, tasksInflight, type Database } from '@factory5/state';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -402,5 +402,123 @@ describe('parkOrAutoIncrease', () => {
     const reason = JSON.parse(row.blocked_reason);
     expect(reason.usedAtPark).toBe(95);
     expect(reason.capAtPark).toBe(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression test — auto-bump recursion UNIQUE constraint fix (Tier 15.7)
+// ---------------------------------------------------------------------------
+
+describe('auto-bump recursion: deleteById prevents UNIQUE constraint on re-register', () => {
+  /**
+   * Reproduces the exact SQLite sequence that `executeTaskWithBudgetGuard`
+   * performs when `parkOrAutoIncrease` returns `'bumped'`:
+   *
+   *   1. register(task)          — first attempt, row inserted
+   *   2. markFailed(task)        — pool was exhausted; mark failed (UPDATE)
+   *   3. deleteById(task)        — NEW: clear the row so re-register works
+   *   4. register(task, +1)      — second attempt; must not throw UNIQUE error
+   *
+   * Without step 3, step 4 throws `SqliteError: UNIQUE constraint failed:
+   * tasks_inflight.id` and the auto-bump feature ships silently broken.
+   */
+  it('allows re-register of the same task id after markFailed + deleteById', () => {
+    const db = freshDb();
+    const directiveId = newId();
+    seedDirective(db, directiveId);
+
+    const taskId = newId();
+    const baseTask = {
+      id: taskId,
+      directiveId,
+      planId: 'plan-1',
+      title: 'builder-task',
+      agent: 'builder' as const,
+      category: 'deep' as const,
+      status: 'running' as const,
+      attempts: 0,
+      startedAt: '2026-05-24T00:00:00.000Z',
+      lastHeartbeat: '2026-05-24T00:00:00.000Z',
+    };
+
+    // Step 1: first attempt — register the task.
+    tasksInflight.register(db, baseTask);
+    expect(tasksInflight.getById(db, taskId)?.attempts).toBe(0);
+    expect(tasksInflight.getById(db, taskId)?.status).toBe('running');
+
+    // Step 2: pool exhausted — mark the row failed (mirrors pool.ts behaviour).
+    const failResult = {
+      exitCode: 1,
+      filesChanged: [],
+      findingsRaised: [],
+      signalsEmitted: [],
+      error: 'pool exhausted on maxTurnsBuilder at cap 80 — directive parked',
+      errorSubtype: 'pool-exhausted' as const,
+      durationMs: 0,
+    };
+    tasksInflight.markFailed(db, taskId, failResult, '2026-05-24T00:00:01.000Z');
+    expect(tasksInflight.getById(db, taskId)?.status).toBe('failed');
+
+    // Step 3: deleteById — remove the stale failed row (the fix).
+    tasksInflight.deleteById(db, taskId);
+    expect(tasksInflight.getById(db, taskId)).toBeUndefined();
+
+    // Step 4: second attempt — re-register with incremented attempts; must
+    // not throw a UNIQUE constraint error.
+    expect(() =>
+      tasksInflight.register(db, {
+        ...baseTask,
+        status: 'running',
+        attempts: 1,
+        startedAt: '2026-05-24T00:00:02.000Z',
+        lastHeartbeat: '2026-05-24T00:00:02.000Z',
+      }),
+    ).not.toThrow();
+
+    // The row now reflects the second attempt.
+    const row = tasksInflight.getById(db, taskId);
+    expect(row).toBeDefined();
+    expect(row?.status).toBe('running');
+    expect(row?.attempts).toBe(1);
+  });
+
+  it('without deleteById the re-register throws UNIQUE constraint (documents the bug)', () => {
+    const db = freshDb();
+    const directiveId = newId();
+    seedDirective(db, directiveId);
+
+    const taskId = newId();
+    const base = {
+      id: taskId,
+      directiveId,
+      planId: 'plan-1',
+      title: 'builder-task',
+      agent: 'builder' as const,
+      category: 'deep' as const,
+      status: 'running' as const,
+      attempts: 0,
+      startedAt: '2026-05-24T00:00:00.000Z',
+      lastHeartbeat: '2026-05-24T00:00:00.000Z',
+    };
+
+    // Simulate first attempt.
+    tasksInflight.register(db, base);
+    tasksInflight.markFailed(
+      db,
+      taskId,
+      {
+        exitCode: 1,
+        filesChanged: [],
+        findingsRaised: [],
+        signalsEmitted: [],
+        durationMs: 0,
+      },
+      '2026-05-24T00:00:01.000Z',
+    );
+
+    // Without deleteById, re-registering the same id fails with UNIQUE error.
+    expect(() => tasksInflight.register(db, { ...base, attempts: 1 })).toThrow(
+      /UNIQUE constraint failed/i,
+    );
   });
 });

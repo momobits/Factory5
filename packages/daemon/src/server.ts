@@ -917,7 +917,7 @@ function registerRoutes(
     });
     const hasLimits = limits !== undefined;
     // TIER 15.4 — resolveDirectivePayloadBudgets deleted; inlined temporary
-    // fallback preserving Tier 13 per-axis merge behaviour until Tier 15.7
+    // fallback preserving Tier 13 per-axis merge behaviour until Tier 15.9
     // swaps this call site for live re-resolve via computePoolUsage.
     // Resolution: body wins per-axis, else project defaults. Same BUDGET_AXES
     // iteration that was in the deleted helper.
