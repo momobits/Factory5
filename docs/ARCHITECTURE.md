@@ -81,23 +81,23 @@ The daemon is required for chat, Discord, Telegram, fs-driven, and web-UI work. 
 
 ### Packages (15)
 
-| Package                    | Process            | Responsibility                                                                                                                                                            |
-| -------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@factory5/core`           | shared             | Types + Zod schemas — `Directive`, `Event`, `Finding`, `Plan`, `Task`, `AgentRole`, `ModelCategory`, `AutonomyMode`                                                       |
-| `@factory5/logger`         | shared             | Pino logger factory; correlation-ID propagation; file-sink with daily rotation                                                                                            |
-| `@factory5/state`          | shared             | SQLite (better-sqlite3) wrapper; 8 migrations; typed CRUD; spend / findings / pending-questions queries                                                                   |
-| `@factory5/ipc`            | shared             | HTTP contracts (Zod) + typed `DaemonClient` for daemon ↔ brain                                                                                                            |
-| `@factory5/channels`       | daemon             | `ChannelPlugin` interface + registry + `cli-rpc` (ADR 0014) + `discord` + `telegram` (ADR 0022)                                                                           |
-| `@factory5/events`         | daemon             | `EventSource` interface + `fs-watcher` (chokidar, debounced)                                                                                                              |
-| `@factory5/daemon`         | daemon             | Pidfile (ADR 0011); Fastify IPC server; web UI mount; channel + event lifecycle; brain supervisor (ADRs 0012, 0013); outbound delivery worker                             |
-| `@factory5/providers`      | brain              | `ClaudeCliProvider` (stream-json NDJSON parsing, ADR 0009) + `StubProvider` (via `FACTORY5_TEST_PROVIDER=stub`)                                                           |
-| `@factory5/wiki`           | brain              | Pages, findings, BUILD.md, plan, readiness gate; project metadata (`project.json`); `resolveDirectiveLimits` budget merge                                                 |
-| `@factory5/assessor`       | brain              | Pluggable runtimes (Python / Node / Go / Rust, ADR 0026) + artifact + git checks. **No LLM.**                                                                             |
-| `@factory5/brain`          | brain              | Triage → architect → planner → delegate → verify loop; agent registry; category routing; `askUser` / `escalateBlocked` (ADR 0015); pre-call budget enforcement (ADR 0020) |
-| `@factory5/worker`         | brain (subprocess) | Per-task git worktrees (ADR 0008); tool-using `claude -p` subprocess (ADR 0007); parallel pool with heartbeats (ADR 0010)                                                 |
-| `@factory5/worker-mcp`     | brain (subprocess) | MCP server exposing `mcp__factory5-ask-user__ask_user` to the worker subprocess (ADR 0024)                                                                                |
-| `@factory5/worker-sandbox` | brain (subprocess) | Per-spawn fs scoping: `permissions.deny` rules + `PreToolUse` hook with path-prefix algebra (ADR 0028)                                                                    |
-| `@factory5/cli`            | brain              | Commander-based CLI: `build` / `daemon` / `chat` / `doctor` / `init` / `resume` / `findings` / `spend` / `ui-token` / `questions cleanup` / `answer` / …                  |
+| Package                    | Process            | Responsibility                                                                                                                                                                                                    |
+| -------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@factory5/core`           | shared             | Types + Zod schemas — `Directive`, `Event`, `Finding`, `Plan`, `Task`, `AgentRole`, `ModelCategory`, `AutonomyMode`                                                                                               |
+| `@factory5/logger`         | shared             | Pino logger factory; correlation-ID propagation; file-sink with daily rotation                                                                                                                                    |
+| `@factory5/state`          | shared             | SQLite (better-sqlite3) wrapper; 8 migrations; typed CRUD; spend / findings / pending-questions queries                                                                                                           |
+| `@factory5/ipc`            | shared             | HTTP contracts (Zod) + typed `DaemonClient` for daemon ↔ brain                                                                                                                                                    |
+| `@factory5/channels`       | daemon             | `ChannelPlugin` interface + registry + `cli-rpc` (ADR 0014) + `discord` + `telegram` (ADR 0022)                                                                                                                   |
+| `@factory5/events`         | daemon             | `EventSource` interface + `fs-watcher` (chokidar, debounced)                                                                                                                                                      |
+| `@factory5/daemon`         | daemon             | Pidfile (ADR 0011); Fastify IPC server; web UI mount; channel + event lifecycle; brain supervisor (ADRs 0012, 0013); outbound delivery worker                                                                     |
+| `@factory5/providers`      | brain              | `ClaudeCliProvider` (stream-json NDJSON parsing, ADR 0009) + `StubProvider` (via `FACTORY5_TEST_PROVIDER=stub`)                                                                                                   |
+| `@factory5/wiki`           | brain              | Pages, findings, BUILD.md, plan, readiness gate; project metadata (`project.json`); `resolveDirectiveLimits` budget merge                                                                                         |
+| `@factory5/assessor`       | brain              | Pluggable runtimes (Python / Node / Go / Rust, ADR 0026) + artifact + git checks. **No LLM.**                                                                                                                     |
+| `@factory5/brain`          | brain              | Triage → architect → planner → delegate → verify loop; agent registry; category routing; `askUser` / `escalateBlocked` (ADR 0015); pre-call budget enforcement (ADR 0020); `maxTurns*` pool dispatcher (ADR 0034) |
+| `@factory5/worker`         | brain (subprocess) | Per-task git worktrees (ADR 0008); tool-using `claude -p` subprocess (ADR 0007); parallel pool with heartbeats (ADR 0010)                                                                                         |
+| `@factory5/worker-mcp`     | brain (subprocess) | MCP server exposing `mcp__factory5-ask-user__ask_user` to the worker subprocess (ADR 0024)                                                                                                                        |
+| `@factory5/worker-sandbox` | brain (subprocess) | Per-spawn fs scoping: `permissions.deny` rules + `PreToolUse` hook with path-prefix algebra (ADR 0028)                                                                                                            |
+| `@factory5/cli`            | brain              | Commander-based CLI: `build` / `daemon` / `chat` / `doctor` / `init` / `resume` / `findings` / `spend` / `ui-token` / `questions cleanup` / `answer` / …                                                          |
 
 ### Apps
 
@@ -191,7 +191,19 @@ Mid-flight engagement primitives (ADR 0015): `askUser` (pauses, posts to channel
 
 ## Budget enforcement
 
-Pre-call (ADR 0020): rolling-average estimator per category; each call is gated against the directive's `max_usd` / `max_steps` ceiling before execution. Clean-escalation shape so the brain can ask the operator to extend the budget.
+Pre-call (ADR 0020): rolling-average estimator per category; each call is gated against the directive's `max_usd` / `max_steps` ceiling before execution.
+
+**Pool model for `maxTurns*` axes (ADR 0034, supersedes ADR 0032).** The three `maxTurnsScaffolder`, `maxTurnsBuilder`, and `maxTurnsFixer` axes operate as directive-wide pools — one pool per agent class. Each task draws turns from its class pool; pool exhaustion is the trigger event, not per-task exhaustion. `maxUsd` and `maxSteps` already pooled directive-wide (no semantic change). The planner no longer emits per-task `maxTurns`; the pool dispatcher is the sole turn-limit authority.
+
+Cap resolution per axis (live re-resolved on every budget check, ≤ 250 ms poll tick):
+
+```
+effectiveCap[axis] = max(project.json.budgetDefaults[axis], payload.budgets[axis], BUDGET_DEFAULTS[axis].value)
+```
+
+`payload.budgets` is a per-directive floor (set at build-mint time); `project.json` is the live editable source. Caps can only rise during a directive's lifetime (monotonic-up guarantee).
+
+On pool exhaustion the brain marks the directive `blocked` with a structured `blockedReason` (`kind: 'pool-exhausted'`, `axis`, `usedAtPark`, `capAtPark`). The project page Live tab surfaces a **"Raise cap to {nextBumpValue}"** CTA. No `[BUDGET]` `askUser` is created; no auto-answer parser. Each raise adds the project's per-axis default (linear bump: 120 → 240 → 360 → …). Per-project `autoIncreaseBudgets` toggle (default `false`) with `autoIncreaseCeilingMultiplier` safety ceiling (default `5×`) enables hands-off behavior for batch pipelines.
 
 Three-tier merge (`resolveDirectiveLimits` in `@factory5/wiki`): per-flag → per-project (`metadata.budgetDefaults` in `project.json`) → per-config (`[budget.defaults]` in `<repo>/.factory/config.toml`) → unlimited. Per-field independent — `--max-usd 5` does not flush a project's stored `maxSteps`.
 
