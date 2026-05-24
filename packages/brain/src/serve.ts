@@ -30,6 +30,7 @@ import { directives as directivesQ, type Database } from '@factory5/state';
 import { runAutoAnswerSweep } from './auto-answer.js';
 import { registerCancellation } from './cancellation.js';
 import { emitLogLine } from './emit.js';
+import { createPoolResume, type PoolResume } from './pool-resume.js';
 
 const log = createLogger('brain.serve');
 
@@ -104,6 +105,13 @@ export async function runServe(opts: ServeOptions): Promise<void> {
   const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const runOne = opts.runOne ?? defaultRunOne;
 
+  // Tier 15 / ADR 0034 — pool-resume watcher. Lazy-registers per project
+  // when we claim a directive on that project. When the operator raises a
+  // cap in `<project>/.factory/project.json`, the watcher re-checks parked
+  // directives on that project and flips those with headroom back to
+  // `running`. Our next poll tick claims them.
+  const poolResume: PoolResume = createPoolResume({ db: opts.db, log });
+
   const inflight = new Map<string, Promise<void>>();
 
   // Doorbell bridge: a simple "fired once since last reset" flag so a ring
@@ -151,6 +159,21 @@ export async function runServe(opts: ServeOptions): Promise<void> {
           { directiveId: directive.id, intent: directive.intent, inflight: inflight.size + 1 },
           'serve: claimed directive',
         );
+
+        // Tier 15 / ADR 0034 — register a pool-resume watcher on the
+        // directive's project. Idempotent — `registerProject` is a no-op
+        // when the project is already watched. The watcher persists for
+        // the life of the serve loop (one chokidar watcher per project),
+        // covering subsequent directives on the same project too.
+        const projectPath = extractProjectPathSafely(directive);
+        if (projectPath !== undefined) {
+          poolResume.registerProject(projectPath).catch((err: unknown) => {
+            log.warn(
+              { err, directiveId: directive.id, projectPath },
+              'serve: poolResume.registerProject failed — auto-resume on cap-raise will not fire',
+            );
+          });
+        }
         // Phase 2.4 — register a per-directive cancellation controller.
         // The combined signal fires on either parent-shutdown or a
         // `factory cancel <id>` over IPC. Released in the finally clause
@@ -264,7 +287,28 @@ export async function runServe(opts: ServeOptions): Promise<void> {
   } finally {
     opts.signal.removeEventListener('abort', abortWake);
     unsubscribe?.();
+    // Tier 15 / ADR 0034 — close all chokidar watchers so the serve loop
+    // releases its file-watcher handles on shutdown.
+    try {
+      await poolResume.shutdown();
+    } catch (err) {
+      log.warn({ err }, 'serve: poolResume.shutdown failed (non-fatal)');
+    }
   }
+}
+
+/**
+ * Extract the directive's `payload.projectPath` (or `payload.project` as
+ * an older alias) for the pool-resume watcher registration. Returns
+ * `undefined` for directives without a project path (e.g. chat / system
+ * directives) — the caller skips watcher registration in that case.
+ */
+function extractProjectPathSafely(directive: Directive): string | undefined {
+  if (typeof directive.payload !== 'object' || directive.payload === null) return undefined;
+  const p = directive.payload as Record<string, unknown>;
+  const candidate = p['projectPath'] ?? p['project'];
+  if (typeof candidate === 'string' && candidate.length > 0) return candidate;
+  return undefined;
 }
 
 /**

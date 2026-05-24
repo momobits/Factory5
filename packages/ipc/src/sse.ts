@@ -135,6 +135,58 @@ export const logLineEventSchema = z.object({
 export type LogLineEvent = z.infer<typeof logLineEventSchema>;
 
 // -----------------------------------------------------------------------------
+// pool.tally (Tier 15 / ADR 0034)
+// -----------------------------------------------------------------------------
+
+/**
+ * Per-axis snapshot included in `pool.tally`. Matches `PoolAxisUsage` from
+ * `@factory5/brain/pool-usage` (kept independently typed here so the IPC
+ * surface doesn't take a brain dependency — the wire shape is the
+ * canonical contract; both sides validate via this schema).
+ */
+export const poolAxisUsageWireSchema = z.object({
+  used: z.number().nonnegative(),
+  cap: z.number().nonnegative(),
+  pct: z.number().min(0).max(100),
+  tasks: z.array(
+    z.object({
+      taskId: ulidSchema,
+      title: z.string(),
+      agent: z.string(),
+      contribution: z.number().nonnegative(),
+    }),
+  ),
+  status: z.enum(['ok', 'warn', 'exhausted']),
+});
+
+/**
+ * Structured parking reason emitted on `pool.tally` when the directive is
+ * blocked with a `pool-exhausted` reason. Mirrors `ParkedReason` from
+ * `@factory5/brain/pool-usage`.
+ */
+export const poolParkedReasonWireSchema = z.object({
+  axis: z.string(),
+  usedAtPark: z.number().nonnegative(),
+  capAtPark: z.number().nonnegative(),
+  nextBumpTo: z.number().nonnegative(),
+});
+
+/**
+ * Emitted after every task settles. Carries the post-task per-axis usage
+ * snapshot so the FE Live tab can update without an HTTP round-trip. ADR
+ * 0034 §6 — the canonical mechanism by which the FE learns that a
+ * directive parked (the structured `parkedReason` field fires when the
+ * pool dispatcher flips the directive to blocked).
+ */
+export const poolTallyEventSchema = z.object({
+  type: z.literal('pool.tally'),
+  directiveId: ulidSchema,
+  perAxis: z.record(poolAxisUsageWireSchema),
+  parkedReason: poolParkedReasonWireSchema.optional(),
+});
+export type PoolTallyEvent = z.infer<typeof poolTallyEventSchema>;
+
+// -----------------------------------------------------------------------------
 // directive.completed
 // -----------------------------------------------------------------------------
 
@@ -174,6 +226,7 @@ export const directiveStreamEventSchema = z.discriminatedUnion('type', [
   findingCreatedEventSchema,
   spendUpdatedEventSchema,
   logLineEventSchema,
+  poolTallyEventSchema,
   directiveCompletedEventSchema,
 ]);
 export type DirectiveStreamEvent = z.infer<typeof directiveStreamEventSchema>;

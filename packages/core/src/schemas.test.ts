@@ -6,6 +6,7 @@ import {
   findingSchema,
   planSchema,
   projectMetadataSchema,
+  taskResultSchema,
   taskSchema,
   wikiCritiqueSchema,
 } from './schemas.js';
@@ -283,6 +284,67 @@ describe('plan and task schemas', () => {
     const parsed = planSchema.parse(plan);
     expect(parsed.tasks).toHaveLength(1);
     expect(parsed.tasks[0]?.title).toBe('Build module A');
+  });
+});
+
+describe('taskResultSchema — Tier 15 turnsUsed', () => {
+  it('accepts a result with turnsUsed', () => {
+    const parsed = taskResultSchema.parse({
+      exitCode: 0,
+      filesChanged: ['src/a.ts'],
+      findingsRaised: [],
+      signalsEmitted: [],
+      durationMs: 1234,
+      turnsUsed: 17,
+    });
+    expect(parsed.turnsUsed).toBe(17);
+  });
+
+  it('accepts a result without turnsUsed (optional, pre-Tier-15 / read-only path)', () => {
+    const parsed = taskResultSchema.parse({
+      exitCode: 0,
+      filesChanged: [],
+      findingsRaised: [],
+      signalsEmitted: [],
+      durationMs: 0,
+    });
+    expect(parsed.turnsUsed).toBeUndefined();
+  });
+
+  it('accepts turnsUsed: 0', () => {
+    const parsed = taskResultSchema.parse({
+      exitCode: 0,
+      filesChanged: [],
+      findingsRaised: [],
+      signalsEmitted: [],
+      durationMs: 0,
+      turnsUsed: 0,
+    });
+    expect(parsed.turnsUsed).toBe(0);
+  });
+
+  it('rejects negative turnsUsed', () => {
+    const result = taskResultSchema.safeParse({
+      exitCode: 0,
+      filesChanged: [],
+      findingsRaised: [],
+      signalsEmitted: [],
+      durationMs: 0,
+      turnsUsed: -1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects non-integer turnsUsed', () => {
+    const result = taskResultSchema.safeParse({
+      exitCode: 0,
+      filesChanged: [],
+      findingsRaised: [],
+      signalsEmitted: [],
+      durationMs: 0,
+      turnsUsed: 3.14,
+    });
+    expect(result.success).toBe(false);
   });
 });
 

@@ -102,6 +102,16 @@ export interface WorkerOptions {
   askUserConfig?: WorkerAskUserConfig;
   /** Optional cancellation signal — propagates into the provider call. */
   signal?: AbortSignal;
+  /**
+   * Tier 15 / ADR 0034 — pool watchdog callback. Invoked after each
+   * stream chunk on the tool-using path. When the callback returns
+   * `{ interrupt: true }`, the worker aborts the in-flight provider
+   * stream via its internal AbortController and the resulting outcome
+   * carries `errorSubtype: 'pool-exhausted-midstream'` so the pool
+   * dispatcher recognises it as a parking signal rather than a generic
+   * failure. Ignored on the read-only path (no stream).
+   */
+  onTurnComplete?: () => { interrupt: boolean };
 }
 
 export interface WorkerAskUserConfig {
@@ -418,6 +428,13 @@ async function runReadOnly(opts: WorkerOptions, fullUserPrompt: string): Promise
   );
 
   const durationMs = Date.now() - started;
+  // Tier 15 / ADR 0034 — capture `numTurns` from the provider response when
+  // present. Read-only agents (no tool use) typically report 1 turn from
+  // claude-cli; the pool's `axisForAgent` returns undefined for these agents
+  // so they don't contribute to a `maxTurns*` pool anyway, but threading the
+  // field through keeps the TaskResult shape symmetrical with the tool-using
+  // path and surfaces the value for diagnostics.
+  const numTurns = response?.numTurns;
   const result: TaskResult = {
     exitCode: error === undefined ? 0 : 1,
     filesChanged: [],
@@ -425,6 +442,7 @@ async function runReadOnly(opts: WorkerOptions, fullUserPrompt: string): Promise
     signalsEmitted: [],
     ...(error !== undefined ? { error } : {}),
     durationMs,
+    ...(numTurns !== undefined ? { turnsUsed: numTurns } : {}),
   };
 
   log.info(
@@ -433,6 +451,7 @@ async function runReadOnly(opts: WorkerOptions, fullUserPrompt: string): Promise
       exitCode: result.exitCode,
       findings: findingIds.length,
       durationMs,
+      ...(numTurns !== undefined ? { turnsUsed: numTurns } : {}),
     },
     'worker: complete (read-only)',
   );
@@ -526,8 +545,24 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
   const started = Date.now();
   let responseText = '';
   let finalUsage: ProviderUsage | undefined;
+  let finalNumTurns: number | undefined;
   let error: string | undefined;
   let errorSubtype: string | undefined;
+
+  // Tier 15 / ADR 0034 — internal AbortController that fires when either
+  // the caller's signal aborts OR the pool watchdog callback signals
+  // mid-stream pool exhaustion. The watchdog is checked after each
+  // stream chunk; on interrupt we abort the provider stream and tag
+  // the outcome with `errorSubtype: 'pool-exhausted-midstream'`.
+  const internalAbort = new AbortController();
+  let interruptedByWatchdog = false;
+  const onExternalAbort = (): void => {
+    internalAbort.abort();
+  };
+  if (opts.signal !== undefined) {
+    if (opts.signal.aborted) internalAbort.abort();
+    else opts.signal.addEventListener('abort', onExternalAbort, { once: true });
+  }
 
   try {
     const iter = resolution.provider.stream({
@@ -546,11 +581,33 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
       permissionMode: sandbox !== undefined ? 'acceptEdits' : 'bypassPermissions',
       ...(mcpConfigPath !== undefined ? { mcpConfigPath } : {}),
       ...(opts.task.maxTurns !== undefined ? { maxTurns: opts.task.maxTurns } : {}),
-      ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
+      signal: internalAbort.signal,
     });
     for await (const chunk of iter) {
       if (chunk.delta.length > 0) responseText += chunk.delta;
       if (chunk.usage !== undefined) finalUsage = chunk.usage;
+      // Tier 15 / ADR 0034 — capture num_turns from the terminal chunk.
+      // The provider populates this only on the terminal `result` event;
+      // intermediate delta chunks leave it undefined. The pool's
+      // `computePoolUsage` reads `result.turnsUsed` from `tasks_inflight`
+      // so the watchdog and `pool.tally` SSE event see live consumption.
+      if (chunk.numTurns !== undefined) finalNumTurns = chunk.numTurns;
+
+      // Tier 15 / ADR 0034 — pool watchdog poll. The brain hands us a
+      // callback that returns `{ interrupt: true }` when live pool usage
+      // crosses an axis cap; on interrupt we abort the provider stream so
+      // the directive can park without burning more turns than the pool
+      // permits. Checked AFTER each chunk so an in-flight assistant turn
+      // completes cleanly before we tear down — preserves any partial
+      // state the agent already produced.
+      if (opts.onTurnComplete !== undefined) {
+        const decision = opts.onTurnComplete();
+        if (decision.interrupt) {
+          interruptedByWatchdog = true;
+          internalAbort.abort();
+          break;
+        }
+      }
     }
   } catch (err) {
     error = (err as Error).message;
@@ -561,12 +618,21 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
     if (err instanceof ClaudeCliStreamError) {
       errorSubtype = err.subtype;
     }
+    // Tier 15 / ADR 0034 — when the watchdog signalled mid-stream pool
+    // exhaustion, tag the outcome so the pool dispatcher treats this as a
+    // parking signal (not a generic abort or AbortError from the operator).
+    if (interruptedByWatchdog) {
+      errorSubtype = 'pool-exhausted-midstream';
+    }
     if ((err as Error).name === 'AbortError') {
-      log.warn({ taskId: opts.task.id }, 'worker: aborted by caller');
+      log.warn({ taskId: opts.task.id, interruptedByWatchdog }, 'worker: aborted by caller');
     } else {
       log.error({ err, taskId: opts.task.id }, 'worker: provider stream failed');
     }
   } finally {
+    if (opts.signal !== undefined) {
+      opts.signal.removeEventListener('abort', onExternalAbort);
+    }
     if (mcpConfigPath !== undefined) {
       try {
         await unlink(mcpConfigPath);
@@ -603,10 +669,13 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
     opts.findingRegistry,
   );
 
-  // Phase 2.4 — cancellation cleans the worktree (operator abandoned the
-  // work, no diff to triage). Other failures preserve the worktree so a
-  // human can inspect what the agent did before it failed.
-  const wasAborted = opts.signal?.aborted === true;
+  // Phase 2.4 — operator-driven cancellation cleans the worktree (operator
+  // abandoned the work, no diff to triage). Tier 15 — pool-watchdog-driven
+  // interrupts are NOT operator-aborts; the directive is being parked with
+  // partial state preserved so the operator can raise the cap and resume,
+  // so the worktree stays in place. Other failures preserve the worktree
+  // for post-mortem inspection.
+  const wasAborted = opts.signal?.aborted === true && !interruptedByWatchdog;
   const desiredOutcome: 'success' | 'failure' | 'cancelled' =
     error === undefined ? 'success' : wasAborted ? 'cancelled' : 'failure';
   try {
@@ -632,6 +701,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
     ...(error !== undefined ? { error } : {}),
     ...(errorSubtype !== undefined ? { errorSubtype } : {}),
     durationMs,
+    ...(finalNumTurns !== undefined ? { turnsUsed: finalNumTurns } : {}),
   };
 
   log.info(
@@ -642,6 +712,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
       filesChanged: filesChanged.length,
       durationMs,
       ...(errorSubtype !== undefined ? { errorSubtype } : {}),
+      ...(finalNumTurns !== undefined ? { turnsUsed: finalNumTurns } : {}),
     },
     'worker: complete (tool-using)',
   );
@@ -654,6 +725,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
       usage: finalUsage,
       resolvedProvider: resolution.provider.id,
       resolvedModel: resolution.model,
+      ...(finalNumTurns !== undefined ? { numTurns: finalNumTurns } : {}),
     };
     outcome.usage = { resolution, response, durationMs };
   }

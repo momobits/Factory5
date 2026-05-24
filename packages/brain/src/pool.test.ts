@@ -1,8 +1,21 @@
-import type { Finding, Task } from '@factory5/core';
-import type { DirectiveStreamEvent } from '@factory5/ipc';
-import { describe, expect, it, vi } from 'vitest';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { defaultConcurrency, emitFindingCreated, topoSortTasks } from './pool.js';
+import type { Finding, Task } from '@factory5/core';
+import { newId } from '@factory5/core';
+import type { DirectiveStreamEvent } from '@factory5/ipc';
+import { openDatabase, runMigrations, type Database } from '@factory5/state';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import {
+  bumpProjectCap,
+  defaultConcurrency,
+  emitFindingCreated,
+  parkOrAutoIncrease,
+  topoSortTasks,
+} from './pool.js';
+import type { ProjectBudgetsLike } from './pool-usage.js';
 
 const BASE_ULID = '01HXABCDEFGHJKMNPQRSTVWXY0';
 const SAMPLE_DIRECTIVE_ID = '01HZZZZZZZZZZZZZZZZZZZZZZA';
@@ -138,5 +151,256 @@ describe('emitFindingCreated', () => {
     expect(events).toHaveLength(3);
     const ids = events.flatMap((e) => (e.type === 'finding.created' ? [e.findingId] : []));
     expect(ids).toEqual(['F001', 'F002', 'F003']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tier 15 / ADR 0034 — pool-driven dispatcher helpers
+// ---------------------------------------------------------------------------
+
+function freshDb(): Database {
+  const db = openDatabase(':memory:');
+  runMigrations(db);
+  return db;
+}
+
+function seedDirective(
+  db: Database,
+  id: string,
+  opts: { status?: string; blockedReason?: string | null } = {},
+): void {
+  db.prepare(
+    `INSERT INTO directives
+       (id, source, principal, channel_ref, intent, payload_json, autonomy,
+        created_at, status, blocked_reason)
+     VALUES (?, 'cli', 'test', 'test-ref', 'build', '{}', 'autonomous', ?, ?, ?)`,
+  ).run(id, new Date().toISOString(), opts.status ?? 'running', opts.blockedReason ?? null);
+}
+
+async function writeProjectJson(
+  projectPath: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  const dir = join(projectPath, '.factory');
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, 'project.json'),
+    JSON.stringify(
+      {
+        id: '01KSBR000000000000000000PR',
+        name: 'pool-test',
+        createdAt: '2026-05-24T00:00:00.000Z',
+        factoryVersion: '0.x',
+        metadata,
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+}
+
+describe('bumpProjectCap', () => {
+  let projectPath: string;
+  beforeEach(async () => {
+    projectPath = await mkdtemp(join(tmpdir(), 'factory5-pool-bump-'));
+  });
+  afterEach(async () => {
+    await rm(projectPath, { recursive: true, force: true });
+  });
+
+  it('writes the new cap into project.json metadata.budgetDefaults', async () => {
+    await writeProjectJson(projectPath, { budgetDefaults: { maxTurnsBuilder: 80 } });
+    await bumpProjectCap(projectPath, 'maxTurnsBuilder', 160);
+    const raw = await readFile(join(projectPath, '.factory', 'project.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    expect(parsed.metadata.budgetDefaults.maxTurnsBuilder).toBe(160);
+  });
+
+  it('preserves other budgetDefaults axes on write', async () => {
+    await writeProjectJson(projectPath, {
+      budgetDefaults: { maxTurnsBuilder: 80, maxTurnsScaffolder: 120, maxUsd: 50 },
+    });
+    await bumpProjectCap(projectPath, 'maxTurnsBuilder', 160);
+    const raw = await readFile(join(projectPath, '.factory', 'project.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    expect(parsed.metadata.budgetDefaults.maxTurnsBuilder).toBe(160);
+    expect(parsed.metadata.budgetDefaults.maxTurnsScaffolder).toBe(120);
+    expect(parsed.metadata.budgetDefaults.maxUsd).toBe(50);
+  });
+
+  it('preserves unrelated metadata keys on write', async () => {
+    await writeProjectJson(projectPath, {
+      budgetDefaults: { maxTurnsBuilder: 80 },
+      language: 'python',
+      customKey: 'custom-value',
+    });
+    await bumpProjectCap(projectPath, 'maxTurnsBuilder', 160);
+    const raw = await readFile(join(projectPath, '.factory', 'project.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    expect(parsed.metadata.language).toBe('python');
+    expect(parsed.metadata.customKey).toBe('custom-value');
+  });
+});
+
+describe('parkOrAutoIncrease', () => {
+  let projectPath: string;
+  let db: Database;
+
+  beforeEach(async () => {
+    db = freshDb();
+    projectPath = await mkdtemp(join(tmpdir(), 'factory5-pool-park-'));
+    await writeProjectJson(projectPath, {
+      budgetDefaults: { maxTurnsBuilder: 80 },
+    });
+  });
+
+  afterEach(async () => {
+    await rm(projectPath, { recursive: true, force: true });
+  });
+
+  it('parks the directive with structured blocked_reason when auto-increase is off (default)', async () => {
+    const directiveId = newId();
+    seedDirective(db, directiveId);
+    const projectBudgets: ProjectBudgetsLike = { budgetDefaults: { maxTurnsBuilder: 80 } };
+    const events: DirectiveStreamEvent[] = [];
+
+    const result = await parkOrAutoIncrease({
+      db,
+      directiveId,
+      projectPath,
+      axis: 'maxTurnsBuilder',
+      pool: { perAxis: { maxTurnsBuilder: { used: 80, cap: 80 } } as never },
+      projectBudgets,
+      emit: (e) => events.push(e),
+    });
+
+    expect(result.kind).toBe('parked');
+    const row = db
+      .prepare(`SELECT status, blocked_reason FROM directives WHERE id = ?`)
+      .get(directiveId) as { status: string; blocked_reason: string };
+    expect(row.status).toBe('blocked');
+    const reason = JSON.parse(row.blocked_reason);
+    expect(reason.kind).toBe('pool-exhausted');
+    expect(reason.axis).toBe('maxTurnsBuilder');
+    expect(reason.usedAtPark).toBe(80);
+    expect(reason.capAtPark).toBe(80);
+    // Park log line emitted.
+    const warn = events.find((e) => e.type === 'log.line' && e.level === 'warn');
+    expect(warn).toBeDefined();
+  });
+
+  it('auto-bumps the project cap when autoIncreaseBudgets=true and below ceiling', async () => {
+    const directiveId = newId();
+    seedDirective(db, directiveId);
+    const projectBudgets: ProjectBudgetsLike = {
+      budgetDefaults: { maxTurnsBuilder: 80 },
+      autoIncreaseBudgets: true,
+      autoIncreaseCeilingMultiplier: 5,
+    };
+    const events: DirectiveStreamEvent[] = [];
+
+    const result = await parkOrAutoIncrease({
+      db,
+      directiveId,
+      projectPath,
+      axis: 'maxTurnsBuilder',
+      pool: { perAxis: { maxTurnsBuilder: { used: 80, cap: 80 } } as never },
+      projectBudgets,
+      emit: (e) => events.push(e),
+    });
+
+    expect(result.kind).toBe('bumped');
+    if (result.kind === 'bumped') {
+      expect(result.oldCap).toBe(80);
+      // +BUDGET_DEFAULTS.maxTurnsBuilder.value = 80 → 160
+      expect(result.newCap).toBe(160);
+    }
+    // Directive is NOT parked when we auto-bumped.
+    const row = db.prepare(`SELECT status FROM directives WHERE id = ?`).get(directiveId) as {
+      status: string;
+    };
+    expect(row.status).toBe('running');
+    // project.json was updated.
+    const raw = await readFile(join(projectPath, '.factory', 'project.json'), 'utf8');
+    expect(JSON.parse(raw).metadata.budgetDefaults.maxTurnsBuilder).toBe(160);
+  });
+
+  it('parks instead of bumping when current cap is at or above the safety ceiling', async () => {
+    const directiveId = newId();
+    seedDirective(db, directiveId);
+    // ceiling = projectCap * multiplier = 80 * 5 = 400
+    // Already-bumped to 400 — next bump would cross ceiling, so park.
+    await writeProjectJson(projectPath, {
+      budgetDefaults: { maxTurnsBuilder: 80 },
+    });
+    const projectBudgets: ProjectBudgetsLike = {
+      budgetDefaults: { maxTurnsBuilder: 80 },
+      autoIncreaseBudgets: true,
+      autoIncreaseCeilingMultiplier: 5,
+    };
+
+    const result = await parkOrAutoIncrease({
+      db,
+      directiveId,
+      projectPath,
+      axis: 'maxTurnsBuilder',
+      pool: { perAxis: { maxTurnsBuilder: { used: 400, cap: 400 } } as never },
+      projectBudgets,
+    });
+
+    expect(result.kind).toBe('parked');
+    const row = db.prepare(`SELECT status FROM directives WHERE id = ?`).get(directiveId) as {
+      status: string;
+    };
+    expect(row.status).toBe('blocked');
+  });
+
+  it('uses default multiplier of 5 when autoIncreaseCeilingMultiplier is unset', async () => {
+    const directiveId = newId();
+    seedDirective(db, directiveId);
+    const projectBudgets: ProjectBudgetsLike = {
+      budgetDefaults: { maxTurnsBuilder: 80 },
+      autoIncreaseBudgets: true,
+      // autoIncreaseCeilingMultiplier intentionally omitted
+    };
+
+    // ceiling = 80 * 5 = 400. Currently at 320 — bump would land 400 (== ceiling).
+    // Since `currentCap < ceiling` strict, 320 < 400 → bump.
+    const result = await parkOrAutoIncrease({
+      db,
+      directiveId,
+      projectPath,
+      axis: 'maxTurnsBuilder',
+      pool: { perAxis: { maxTurnsBuilder: { used: 320, cap: 320 } } as never },
+      projectBudgets,
+    });
+
+    expect(result.kind).toBe('bumped');
+    if (result.kind === 'bumped') {
+      expect(result.newCap).toBe(400);
+    }
+  });
+
+  it('writes parkedReason with correct usedAtPark and capAtPark for non-trivial values', async () => {
+    const directiveId = newId();
+    seedDirective(db, directiveId);
+    const projectBudgets: ProjectBudgetsLike = { budgetDefaults: { maxTurnsBuilder: 80 } };
+
+    await parkOrAutoIncrease({
+      db,
+      directiveId,
+      projectPath,
+      axis: 'maxTurnsBuilder',
+      pool: { perAxis: { maxTurnsBuilder: { used: 95, cap: 100 } } as never },
+      projectBudgets,
+    });
+
+    const row = db
+      .prepare(`SELECT blocked_reason FROM directives WHERE id = ?`)
+      .get(directiveId) as { blocked_reason: string };
+    const reason = JSON.parse(row.blocked_reason);
+    expect(reason.usedAtPark).toBe(95);
+    expect(reason.capAtPark).toBe(100);
   });
 });

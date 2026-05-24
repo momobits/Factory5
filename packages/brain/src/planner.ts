@@ -244,9 +244,11 @@ export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
     '  - `expectedOutputs.files` — relative paths the task writes (BE COMPLETE — see rule below)',
     '  - `expectedOutputs.signals` — tokens like "pytest-green" / "build-ok" / "lint-clean"',
     '  - `dependsOn` — 0-based INDEXES into this tasks array for prerequisites',
-    '  - `maxTurns` (optional) — integer 10-160. Only for builder/scaffolder/fixer.',
-    '       Use >40 when the task is a large multi-module implementation or a broad fixer',
-    '       pass over many files. Use <=20 for narrow single-file changes.',
+    // Tier 15 / ADR 0034 — planner no longer emits `task.maxTurns`. Turn
+    // budgets are pool-managed per-agent-class at the directive level; per-
+    // task caps no longer apply. The field stays optional in `taskSchema`
+    // for backward read-back of resumed pre-Tier-15 plans but the planner
+    // prompt explicitly does NOT instruct the LLM to emit it.
     '  - `estimatedUsd` (optional) — your best-guess model spend in USD for this task.',
     '       Emit when the directive carries a `maxUsdPerTask` cap so the brain can',
     '       escalate via askUser BEFORE launching an expensive task. Reasonable',
@@ -289,7 +291,7 @@ export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
     '    { "title": "...", "agent": "builder", "category": "deep",',
     '      "inputs": {"files": [], "context": "..."},',
     '      "expectedOutputs": {"files": ["..."], "signals": ["pytest-green"]},',
-    '      "dependsOn": [0], "maxTurns": 60 }',
+    '      "dependsOn": [0] }',
     '  ]',
     '}',
     '',

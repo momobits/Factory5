@@ -105,6 +105,36 @@ describe('eventToChunks', () => {
     expect(chunks[0]?.usage?.outputTokens).toBe(20);
   });
 
+  it('propagates num_turns from result event to terminal chunk (Tier 15 / ADR 0034)', () => {
+    const evt = parseStreamJsonLine(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        result: 'done',
+        num_turns: 42,
+        total_cost_usd: 0.05,
+        usage: { input_tokens: 100, output_tokens: 20 },
+      }),
+    );
+    const chunks = eventToChunks(evt!);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.numTurns).toBe(42);
+  });
+
+  it('omits numTurns when num_turns is absent from result event', () => {
+    const evt = parseStreamJsonLine(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        result: 'done',
+        total_cost_usd: 0.05,
+      }),
+    );
+    const chunks = eventToChunks(evt!);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.numTurns).toBeUndefined();
+  });
+
   it('emits no chunks for system and user events', () => {
     const sys = parseStreamJsonLine('{"type":"system","subtype":"init"}');
     const user = parseStreamJsonLine(

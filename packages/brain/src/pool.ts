@@ -12,13 +12,30 @@
  * spawn a subprocess inside a per-task worktree and stream. Both paths go
  * through `@factory5/worker/runWorker`; the pool is agnostic to which
  * variant the worker picks.
+ *
+ * Tier 15 / ADR 0034 — the per-task `error_max_turns` retry loop is GONE.
+ * The dispatcher now derives live pool usage via `computePoolUsage` before
+ * each launch and on every stream chunk via the worker's `onTurnComplete`
+ * watchdog. When a tool-using agent's axis pool is exhausted, the directive
+ * parks with a structured `blockedReason` (no askUser) and the `pool-resume`
+ * watcher flips it back to running when the operator raises the cap on the
+ * project page. When `autoIncreaseBudgets` is enabled, the dispatcher
+ * auto-bumps the project default by one increment up to a safety ceiling
+ * (`autoIncreaseCeilingMultiplier × projectDefault`) before parking.
+ *
+ * @packageDocumentation
  */
 
 import { cpus } from 'node:os';
 import { env } from 'node:process';
 
-import type { DirectiveLimits, Finding, Plan, Task, TaskResult } from '@factory5/core';
-import { BUDGET_DEFAULTS } from '@factory5/core/budgets';
+import type { Finding, Plan, Task, TaskResult } from '@factory5/core';
+import {
+  BUDGET_DEFAULTS,
+  axisForAgent,
+  type BudgetAxis,
+  type MaxTurnsAxis,
+} from '@factory5/core/budgets';
 import { createLogger } from '@factory5/logger';
 import type { DirectiveEventEmitter } from '@factory5/ipc';
 import type { ProviderRegistry } from '@factory5/providers';
@@ -29,7 +46,13 @@ import {
   type Database,
   type UsageMode,
 } from '@factory5/state';
-import { listFindings, writePlan } from '@factory5/wiki';
+import {
+  listFindings,
+  loadOrCreateProjectMetadata,
+  updateProjectMetadata,
+  writePlan,
+  type ProjectMetadata,
+} from '@factory5/wiki';
 import {
   isToolUsingAgent,
   runWorker,
@@ -37,14 +60,7 @@ import {
   type WorkerOutcome,
 } from '@factory5/worker';
 
-import { assertBudget, BudgetExceededError } from './budget.js';
-import {
-  axisForAgent,
-  budgetsFromDirective,
-  escalateBudgetTrip,
-  escalateMaxUsdPerTaskTrip,
-  resolveTaskMaxTurns,
-} from './budget-escalation.js';
+import { computePoolUsage, type ProjectBudgetsLike } from './pool-usage.js';
 import { loadDaemonEndpoint } from './daemon-endpoint.js';
 import { emitLogLine } from './emit.js';
 import { buildAgentSystemPrompt } from './prompts.js';
@@ -54,17 +70,6 @@ const log = createLogger('brain.pool');
 
 /** How often to refresh `tasks_inflight.last_heartbeat` while a task is running. */
 const HEARTBEAT_INTERVAL_MS = 10_000;
-
-/**
- * Tier 12 / ADR 0032 §4 — safety cap on consecutive budget escalations
- * within a single `executeTask` invocation. The first trip raises an
- * askUser; on accept, the task retries with the bumped budget. If the
- * retry trips again, a second askUser fires. Beyond that, the loop bails
- * to the failed-task path so a buggy task can't escalate forever. The
- * Tier-8 auto-answer's policy is bump-once-then-abort, which naturally
- * keeps autonomous runs within this cap.
- */
-const MAX_BUDGET_ESCALATIONS_PER_TASK = 2;
 
 export interface TaskOutcome {
   taskId: string;
@@ -83,17 +88,8 @@ export interface PoolOptions {
   concurrency?: number;
   signal?: AbortSignal;
   /**
-   * Per-directive budget ceilings (ADR 0020). When set, the pool calls
-   * {@link assertBudget} before dispatching each task. A throwing check
-   * stops new dispatches, lets in-flight tasks drain, marks remaining
-   * pending tasks as blocked with a budget-specific reason, and
-   * re-raises the {@link BudgetExceededError} from `runPlanPool` so
-   * `loop.runInline` can flip the directive to `blocked`.
-   */
-  limits?: DirectiveLimits;
-  /**
-   * Per-directive SSE event emitter (Phase 3 / step 3.1). When set, the
-   * pool emits `task.started`, `task.completed`, and `spend.updated`
+   * Per-directive SSE event emitter. When set, the pool emits
+   * `task.started`, `task.completed`, `spend.updated`, and `pool.tally`
    * events at task lifecycle / usage transitions. Inline-only runs
    * (no daemon) leave it unset and the calls are silent no-op.
    */
@@ -116,20 +112,15 @@ export function defaultConcurrency(): number {
 }
 
 /**
- * Emit a `finding.created` event for SSE subscribers (Phase 3 — the
- * deferred-from-3.1 counterpart to `task.*` / `spend.updated` /
- * `log.line` / `directive.completed`). One call per finding raised by
- * a task; the canonical source of truth is the per-project
+ * Emit a `finding.created` event for SSE subscribers. One call per finding
+ * raised by a task; the canonical source of truth is the per-project
  * `findings.json`, so the caller passes a fully-loaded {@link Finding}
  * rather than a bare id (separates I/O from emission and lets a single
  * `listFindings(projectPath)` per task feed every emit).
  *
  * Same fire-and-forget shape as `emitLogLine` / `emitDirectiveCompleted`
  * in `loop.ts`: silent when no emitter is wired, never throws, never
- * awaits the SSE consumer. Subscribers reconnect on transient drops
- * and the FE's existing refresh-on-`task.completed` path remains a
- * safety net for any event the brain failed to emit (advisory: the
- * runtime contract is "best-effort delivery", not "exactly-once").
+ * awaits the SSE consumer.
  *
  * Exported for direct unit testing (see `pool.test.ts`); the integration
  * call site is in {@link executeTask} after the `task.completed` emit.
@@ -186,10 +177,236 @@ interface RunningEntry {
   promise: Promise<{ id: string; outcome: WorkerOutcome; task: Task }>;
 }
 
+// ---------------------------------------------------------------------------
+// Pool dispatcher helpers (Tier 15 / ADR 0034)
+// ---------------------------------------------------------------------------
+
+/**
+ * Load the project's budget configuration (defaults + auto-increase policy)
+ * from `<projectPath>/.factory/project.json`. Failure to read the file
+ * (corrupt or absent) falls back to an empty config — the dispatcher's
+ * cap resolution then drops through to {@link BUDGET_DEFAULTS}.
+ */
+async function loadProjectBudgets(projectPath: string): Promise<ProjectBudgetsLike> {
+  try {
+    const metadata = await loadOrCreateProjectMetadata(projectPath, '');
+    return projectBudgetsFromMetadata(metadata);
+  } catch (err) {
+    log.warn(
+      { err, projectPath },
+      'pool: failed to load project.json — falling back to BUDGET_DEFAULTS',
+    );
+    return { budgetDefaults: {} };
+  }
+}
+
+/** Pure transform — extract a {@link ProjectBudgetsLike} from raw metadata. */
+function projectBudgetsFromMetadata(metadata: ProjectMetadata): ProjectBudgetsLike {
+  const rawBudgetDefaults = metadata.metadata['budgetDefaults'];
+  const budgetDefaults: Partial<Record<BudgetAxis, number>> = isRecord(rawBudgetDefaults)
+    ? (rawBudgetDefaults as Partial<Record<BudgetAxis, number>>)
+    : {};
+  const autoIncreaseBudgets =
+    typeof metadata.metadata['autoIncreaseBudgets'] === 'boolean'
+      ? metadata.metadata['autoIncreaseBudgets']
+      : undefined;
+  const autoIncreaseCeilingMultiplier =
+    typeof metadata.metadata['autoIncreaseCeilingMultiplier'] === 'number'
+      ? metadata.metadata['autoIncreaseCeilingMultiplier']
+      : undefined;
+  return {
+    budgetDefaults,
+    ...(autoIncreaseBudgets !== undefined ? { autoIncreaseBudgets } : {}),
+    ...(autoIncreaseCeilingMultiplier !== undefined ? { autoIncreaseCeilingMultiplier } : {}),
+  };
+}
+
+/** Type-guard: `value` is a non-null `Record<string, unknown>`. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Write a new cap value to `<projectPath>/.factory/project.json`'s
+ * `metadata.budgetDefaults[axis]` slot. Read-modify-write via
+ * {@link updateProjectMetadata}; preserves every other key in `metadata`.
+ *
+ * Exported for the auto-increase path in {@link parkOrAutoIncrease}; the
+ * `pool-resume` watcher will see the write and re-claim the directive.
+ */
+export async function bumpProjectCap(
+  projectPath: string,
+  axis: MaxTurnsAxis,
+  newCap: number,
+): Promise<void> {
+  await updateProjectMetadata(projectPath, (meta) => {
+    const existingBudgets = isRecord(meta.metadata['budgetDefaults'])
+      ? { ...(meta.metadata['budgetDefaults'] as Record<string, unknown>) }
+      : {};
+    existingBudgets[axis] = newCap;
+    return {
+      ...meta,
+      metadata: {
+        ...meta.metadata,
+        budgetDefaults: existingBudgets,
+      },
+    };
+  });
+}
+
+export interface ParkOrAutoIncreaseOptions {
+  db: Database;
+  directiveId: string;
+  projectPath: string;
+  axis: MaxTurnsAxis;
+  /** Current pool snapshot computed by the caller (avoids a duplicate query). */
+  pool: { perAxis: Record<BudgetAxis, { used: number; cap: number }> };
+  projectBudgets: ProjectBudgetsLike;
+  emit?: DirectiveEventEmitter;
+}
+
+/**
+ * The outcome of one {@link parkOrAutoIncrease} call:
+ *   - `bumped` — the project default was raised; caller should re-attempt
+ *     the executeTask invocation (the project now has more headroom).
+ *   - `parked` — the directive was flipped to `blocked` with a structured
+ *     `pool-exhausted` reason; caller returns a failed TaskResult and lets
+ *     the pool-resume watcher re-enqueue the directive when the operator
+ *     raises the cap.
+ */
+export type ParkOrAutoIncreaseResult =
+  | { kind: 'bumped'; newCap: number; oldCap: number }
+  | { kind: 'parked'; capAtPark: number; usedAtPark: number };
+
+/** Default ceiling multiplier when `autoIncreaseCeilingMultiplier` is unset (ADR 0034 §5). */
+const DEFAULT_CEILING_MULTIPLIER = 5;
+
+/**
+ * Tier 15 / ADR 0034 — when a tool-using task can't dispatch because its
+ * `maxTurns*` axis pool is exhausted, either:
+ *
+ *   1. Auto-increase: raise the project default by one `BUDGET_DEFAULTS`
+ *      increment if `autoIncreaseBudgets === true` AND the current cap is
+ *      still under the safety ceiling
+ *      (`projectCap × autoIncreaseCeilingMultiplier`). Returns `'bumped'`.
+ *   2. Park: flip the directive to `'blocked'` with a structured
+ *      `pool-exhausted` reason. The `pool-resume` watcher (in serve mode)
+ *      re-claims it when the operator raises the cap on the project page.
+ *      Returns `'parked'`.
+ */
+export async function parkOrAutoIncrease(
+  opts: ParkOrAutoIncreaseOptions,
+): Promise<ParkOrAutoIncreaseResult> {
+  const { db, directiveId, projectPath, axis, pool, projectBudgets, emit } = opts;
+  const defaultDelta = BUDGET_DEFAULTS[axis].value;
+  const projectCap = projectBudgets.budgetDefaults[axis] ?? defaultDelta;
+  const ceilingMultiplier =
+    projectBudgets.autoIncreaseCeilingMultiplier ?? DEFAULT_CEILING_MULTIPLIER;
+  const ceiling = projectCap * ceilingMultiplier;
+  const currentCap = pool.perAxis[axis].cap;
+  const usedAtPark = pool.perAxis[axis].used;
+
+  if (projectBudgets.autoIncreaseBudgets === true && currentCap < ceiling) {
+    const newCap = currentCap + defaultDelta;
+    try {
+      await bumpProjectCap(projectPath, axis, newCap);
+    } catch (err) {
+      log.warn(
+        { err, projectPath, axis, newCap, currentCap },
+        'pool: bumpProjectCap failed — parking directive instead',
+      );
+      // Fall through to the park path below.
+    }
+    if (newCap > currentCap) {
+      emitLogLine(
+        emit,
+        directiveId,
+        'info',
+        'brain.pool',
+        `pool: auto-bumped ${axis} to ${String(newCap)} (was ${String(currentCap)})`,
+        { axis, oldCap: currentCap, newCap },
+      );
+      return { kind: 'bumped', newCap, oldCap: currentCap };
+    }
+  }
+
+  const blockedReason = JSON.stringify({
+    kind: 'pool-exhausted',
+    axis,
+    usedAtPark,
+    capAtPark: currentCap,
+  });
+  db.prepare(`UPDATE directives SET status = 'blocked', blocked_reason = ? WHERE id = ?`).run(
+    blockedReason,
+    directiveId,
+  );
+  emitLogLine(
+    emit,
+    directiveId,
+    'warn',
+    'brain.pool',
+    `pool: ${axis} exhausted at ${String(currentCap)} — directive parked; raise cap on project page to resume`,
+    { axis, capAtPark: currentCap, usedAtPark, nextBumpTo: currentCap + defaultDelta },
+  );
+  return { kind: 'parked', capAtPark: currentCap, usedAtPark };
+}
+
+/**
+ * Emit the `pool.tally` SSE event after each task settles. Carries the
+ * post-task per-axis usage snapshot so the FE Live tab can update without
+ * an HTTP round-trip.
+ */
+function emitPoolTally(
+  emit: DirectiveEventEmitter | undefined,
+  directiveId: string,
+  pool: ReturnType<typeof computePoolUsage>,
+): void {
+  if (emit === undefined) return;
+  emit({
+    type: 'pool.tally',
+    directiveId,
+    perAxis: pool.perAxis,
+    ...(pool.parkedReason !== undefined ? { parkedReason: pool.parkedReason } : {}),
+  });
+}
+
+/**
+ * Synthesize a failed-TaskResult for a task that never launched because
+ * the pool was exhausted. The `pool-exhausted` errorSubtype lets the
+ * downstream pool loop tell "blocked because we parked" from "blocked
+ * because of upstream failure".
+ */
+function synthesizePoolExhaustedResult(axis: MaxTurnsAxis, capAtPark: number): TaskResult {
+  return {
+    exitCode: 1,
+    filesChanged: [],
+    findingsRaised: [],
+    signalsEmitted: [],
+    error: `pool exhausted on ${axis} at cap ${String(capAtPark)} — directive parked`,
+    errorSubtype: 'pool-exhausted',
+    durationMs: 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// executeTask — the per-task entry point
+// ---------------------------------------------------------------------------
+
 /**
  * Execute one task end-to-end: register it as inflight, run the worker with
- * heartbeats, then mark it complete or failed. Returns the `WorkerOutcome`
- * along with the (updated) task so the pool can persist plan.json.
+ * heartbeats + pool watchdog, then mark it complete or failed. Returns the
+ * {@link WorkerOutcome} along with the (updated) task so the pool can
+ * persist plan.json.
+ *
+ * Tier 15 / ADR 0034 dispatcher:
+ *   1. Load project budgets + payload budgets via {@link computePoolUsage}.
+ *   2. Pre-launch check: if the task's `maxTurns*` axis pool is exhausted,
+ *      call {@link parkOrAutoIncrease}. On `'bumped'`, re-enter via
+ *      recursion to re-compute pool. On `'parked'`, return synthesized
+ *      failed TaskResult.
+ *   3. Run the worker with `onTurnComplete` watchdog that re-checks pool
+ *      after each stream chunk and aborts mid-stream on cap-cross.
+ *   4. Emit `pool.tally` post-task so the FE Live tab updates.
  */
 async function executeTask(
   task: Task,
@@ -199,6 +416,39 @@ async function executeTask(
   directiveId: string,
   signal?: AbortSignal,
   emit?: DirectiveEventEmitter,
+): Promise<{ id: string; outcome: WorkerOutcome; task: Task }> {
+  return executeTaskWithBudgetGuard(
+    task,
+    plan,
+    registry,
+    db,
+    directiveId,
+    signal,
+    emit,
+    /* autoBumpDepth */ 0,
+  );
+}
+
+/**
+ * Safety cap on consecutive auto-bump recursions inside a single
+ * `executeTask` invocation. Each auto-bump raises `project.json` by one
+ * default increment; the next call's cap-resolution rule sees the new
+ * value and tries again. The ceiling-multiplier check in
+ * {@link parkOrAutoIncrease} bounds the bump series naturally, but this
+ * cap is the belt-and-suspenders against a degenerate case (e.g. ceiling
+ * never reachable due to a write failure).
+ */
+const MAX_AUTO_BUMP_DEPTH = 16;
+
+async function executeTaskWithBudgetGuard(
+  task: Task,
+  plan: Plan,
+  registry: ProviderRegistry,
+  db: Database,
+  directiveId: string,
+  signal: AbortSignal | undefined,
+  emit: DirectiveEventEmitter | undefined,
+  autoBumpDepth: number,
 ): Promise<{ id: string; outcome: WorkerOutcome; task: Task }> {
   const systemPrompt = await buildAgentSystemPrompt(task.agent);
   const userPrompt = [
@@ -234,7 +484,7 @@ async function executeTask(
     startedAt,
   });
 
-  let hb = setInterval(() => {
+  const hb = setInterval(() => {
     try {
       tasksInflight.heartbeat(db, task.id, now());
     } catch (err) {
@@ -244,200 +494,180 @@ async function executeTask(
 
   log.info({ taskId: task.id, agent: task.agent, category: task.category }, 'pool: task started');
 
-  // Resolve the directive's projectId once per task to attach to the
-  // findings-registry binding. One small SELECT per task is cheaper than
-  // threading the value through every PoolOptions invocation, and keeps
-  // the pool's call signature stable.
+  // Resolve the directive + projectId for downstream wiring.
   const directive = directivesQ.getById(db, directiveId);
   const projectId = directive?.projectId;
+  const projectPath = plan.projectPath;
 
-  // Per ADR 0024 sub-step 8.3: when the daemon is running with a worker
-  // auth token (set by factoryd's main.ts at startup), build an
-  // askUserConfig so the in-stream agent gets `mcp__factory5-ask-user__ask_user`.
-  // Skipped silently when the token is absent — covers tests and
-  // standalone scripts that drive the brain without the daemon shell.
+  // Per ADR 0024 sub-step 8.3: build askUserConfig when the daemon is
+  // running with a worker auth token; skipped silently for tests / standalone
+  // scripts.
   const askUserConfig = isToolUsingAgent(task.agent)
     ? await buildAskUserConfig(directiveId)
     : undefined;
 
-  // Tier 12 / ADR 0032 §4 — when a tool-using task trips `error_max_turns`,
-  // raise a typed askUser instead of hard-failing; on `accept`/`custom`,
-  // retry the worker with the bumped maxTurns; on `abort` or timeout, fall
-  // through to the failed-task path (existing behaviour). The MCP-side
-  // sandbox in-worker askUser flow keeps working — this is brain-side
-  // escalation for the post-stream `error_max_turns` outcome.
-  // Tier 12 / ADR 0032 §6 — resolve the effective maxTurns from
-  // directive.payload.budgets[axisForAgent] when the planner didn't emit a
-  // per-task override. directive may be undefined for legacy / synthetic
-  // pool invocations (no directive row); fall through to planner value or
-  // provider default in that case.
-  const initialMaxTurns =
-    directive !== undefined ? resolveTaskMaxTurns(task, directive) : task.maxTurns;
+  // Tier 15 / ADR 0034 — pre-launch pool check for tool-using agents.
+  // Read-only agents skip the check entirely (no maxTurns axis applies).
+  const axis = axisForAgent(task.agent);
+  let projectBudgets: ProjectBudgetsLike = { budgetDefaults: {} };
   let outcome: WorkerOutcome;
-  let escalations = 0;
-  let currentTask: Task =
-    initialMaxTurns !== undefined && initialMaxTurns !== task.maxTurns
-      ? { ...task, maxTurns: initialMaxTurns }
-      : task;
 
-  // Phase 13.6 — pre-launch USD check (ADR 0032 §1 + maxUsdPerTask).
-  // When the planner emits an `estimatedUsd` AND the operator-set
-  // `maxUsdPerTask` cap is > 0 AND the estimate exceeds the cap, raise a
-  // typed [BUDGET] askUser BEFORE the worker spawns. On 'accept': launch
-  // the worker (operator has acknowledged the over-cap spend, effectively
-  // raising the cap to the estimate for this task only). On 'abort':
-  // synthesize a failed TaskResult so the post-loop tasksInflight + emit
-  // logic flips this task to failed without spending any model budget.
-  let preLaunchAbortResult: TaskResult | undefined;
-  if (directive !== undefined && task.estimatedUsd !== undefined && task.estimatedUsd > 0) {
-    const cap =
-      budgetsFromDirective(directive)['maxUsdPerTask'] ?? BUDGET_DEFAULTS.maxUsdPerTask.value;
-    if (cap > 0 && task.estimatedUsd > cap) {
-      emitLogLine(
-        emit,
-        directiveId,
-        'warn',
-        'brain.pool',
-        `pool: task "${task.title}" pre-launch USD estimate $${task.estimatedUsd.toFixed(2)} exceeds cap $${cap.toFixed(2)} — escalating via askUser (ADR 0032 §4 + Phase 13.6)`,
-        {
-          taskId: task.id,
-          axis: 'maxUsdPerTask',
-          estimatedUsd: task.estimatedUsd,
-          capUsd: cap,
-        },
-      );
-      const escalation = await escalateMaxUsdPerTaskTrip({
+  if (axis !== undefined) {
+    projectBudgets = await loadProjectBudgets(projectPath);
+    const preLaunchPool = computePoolUsage(db, directiveId, projectBudgets);
+    const axisPre = preLaunchPool.perAxis[axis];
+
+    if (axisPre.used >= axisPre.cap) {
+      // Pool exhausted before we even launch. Park-or-bump and either
+      // re-enter (on bump) or return synthesized failure (on park).
+      clearInterval(hb);
+      const decision = await parkOrAutoIncrease({
         db,
         directiveId,
-        taskId: task.id,
-        taskTitle: task.title,
-        estimatedUsd: task.estimatedUsd,
-        capUsd: cap,
-        ...(signal !== undefined ? { signal } : {}),
+        projectPath,
+        axis,
+        pool: { perAxis: preLaunchPool.perAxis },
+        projectBudgets,
+        ...(emit !== undefined ? { emit } : {}),
       });
-      if (escalation.kind === 'abort') {
-        emitLogLine(
-          emit,
-          directiveId,
-          'warn',
-          'brain.pool',
-          `pool: task "${task.title}" pre-launch USD escalation aborted (${escalation.reason}) — skipping worker`,
-          { taskId: task.id, axis: 'maxUsdPerTask' },
+      if (decision.kind === 'bumped' && autoBumpDepth < MAX_AUTO_BUMP_DEPTH) {
+        // Re-enter: with the new cap, the pool may now have headroom.
+        // Heartbeat row is left in 'running' from the prior register call;
+        // we mark it failed and re-register on the recursive call since
+        // `tasksInflight.register` would INSERT, which would conflict.
+        tasksInflight.markFailed(
+          db,
+          task.id,
+          synthesizePoolExhaustedResult(axis, decision.oldCap),
+          now(),
         );
-        preLaunchAbortResult = {
-          exitCode: 1,
-          filesChanged: [],
-          findingsRaised: [],
-          signalsEmitted: [],
-          error: `budget pre-launch abort: maxUsdPerTask cap $${cap.toFixed(2)} < estimated $${task.estimatedUsd.toFixed(2)} (${escalation.reason})`,
-          durationMs: 0,
-        };
-      } else {
-        emitLogLine(
-          emit,
+        // Recurse — fresh register on the new attempt.
+        return executeTaskWithBudgetGuard(
+          task,
+          plan,
+          registry,
+          db,
           directiveId,
-          'info',
-          'brain.pool',
-          `pool: task "${task.title}" pre-launch USD escalation accepted — launching at estimated $${task.estimatedUsd.toFixed(2)}`,
-          { taskId: task.id, axis: 'maxUsdPerTask' },
+          signal,
+          emit,
+          autoBumpDepth + 1,
         );
       }
+      // Parked (or hit recursion safety cap). Synthesize failed result.
+      const capAtPark = decision.kind === 'parked' ? decision.capAtPark : axisPre.cap;
+      const result = synthesizePoolExhaustedResult(axis, capAtPark);
+      tasksInflight.markFailed(db, task.id, result, now());
+      emit?.({
+        type: 'task.completed',
+        taskId: task.id,
+        directiveId,
+        status: 'failed',
+        exitCode: result.exitCode,
+        finishedAt: now(),
+        error: result.error ?? null,
+      });
+      // Emit final tally so the FE reflects the parked state.
+      try {
+        const postPool = computePoolUsage(db, directiveId, projectBudgets);
+        emitPoolTally(emit, directiveId, postPool);
+      } catch (err) {
+        log.warn(
+          { err, directiveId },
+          'pool: post-park computePoolUsage failed — tally emit skipped',
+        );
+      }
+      outcome = { result };
+      const updatedTask: Task = {
+        ...task,
+        status: 'failed',
+        attempts: task.attempts + 1,
+        result,
+      };
+      return { id: task.id, outcome, task: updatedTask };
     }
   }
 
-  if (preLaunchAbortResult !== undefined) {
-    clearInterval(hb);
-    outcome = { result: preLaunchAbortResult };
-  } else
-    while (true) {
-      try {
-        outcome = await runWorker({
-          task: currentTask,
-          projectPath: plan.projectPath,
-          registry,
-          systemPrompt,
-          userPrompt,
-          findingRegistry: {
-            db,
-            // Project identity (ADR 0021). Pulled from the directive — populated
-            // either at directive creation (CLI build) or by migration 006's
-            // backfill. Undefined only for legacy directives that predate the
-            // backfill running (which would be a deployment in an unmigrated
-            // state). Wiki's `mirrorToRegistry` skips the registry write
-            // when projectId is undefined rather than falling back to basename
-            // (which was the I008 collision trap).
-            ...(projectId !== undefined ? { projectId } : {}),
-            originDirectiveId: directiveId,
-          },
-          ...(askUserConfig !== undefined ? { askUserConfig } : {}),
-          ...(signal !== undefined ? { signal } : {}),
-        });
-      } finally {
-        // Stop the heartbeat while we wait on the operator (or timeout/abort).
-        // A fresh heartbeat starts on the retry path below.
-        clearInterval(hb);
-      }
+  // Build the watchdog callback for tool-using agents. Pure no-op for
+  // read-only agents — they don't stream, so `runWorker` never calls it.
+  const onTurnComplete =
+    axis !== undefined
+      ? (): { interrupt: boolean } => {
+          try {
+            const live = computePoolUsage(db, directiveId, projectBudgets);
+            const axisLive = live.perAxis[axis];
+            return { interrupt: axisLive.used >= axisLive.cap };
+          } catch (err) {
+            log.warn(
+              { err, taskId: task.id, axis },
+              'pool: watchdog computePoolUsage threw — letting stream continue',
+            );
+            return { interrupt: false };
+          }
+        }
+      : undefined;
 
-      if (
-        outcome.result.errorSubtype !== 'error_max_turns' ||
-        escalations >= MAX_BUDGET_ESCALATIONS_PER_TASK ||
-        signal?.aborted === true
-      ) {
-        break;
-      }
-      const axis = axisForAgent(currentTask.agent);
-      if (axis === undefined) break;
-      const currentValue = currentTask.maxTurns ?? 0;
+  try {
+    outcome = await runWorker({
+      task,
+      projectPath,
+      registry,
+      systemPrompt,
+      userPrompt,
+      findingRegistry: {
+        db,
+        ...(projectId !== undefined ? { projectId } : {}),
+        originDirectiveId: directiveId,
+      },
+      ...(askUserConfig !== undefined ? { askUserConfig } : {}),
+      ...(signal !== undefined ? { signal } : {}),
+      ...(onTurnComplete !== undefined ? { onTurnComplete } : {}),
+    });
+  } finally {
+    clearInterval(hb);
+  }
+
+  // Tier 15 / ADR 0034 — when the watchdog interrupted mid-stream, the
+  // worker tagged the outcome with `errorSubtype: 'pool-exhausted-midstream'`.
+  // Park the directive (auto-bump path is intentionally not taken here —
+  // mid-stream interrupts mean the agent burned through the entire
+  // already-bumped cap inside one task; a further bump-and-retry would just
+  // burn the same budget again. Park, let the operator triage).
+  if (
+    outcome.result.errorSubtype === 'pool-exhausted-midstream' &&
+    axis !== undefined &&
+    signal?.aborted !== true
+  ) {
+    try {
+      const postPool = computePoolUsage(db, directiveId, projectBudgets);
+      const blockedReason = JSON.stringify({
+        kind: 'pool-exhausted',
+        axis,
+        usedAtPark: postPool.perAxis[axis].used,
+        capAtPark: postPool.perAxis[axis].cap,
+      });
+      db.prepare(`UPDATE directives SET status = 'blocked', blocked_reason = ? WHERE id = ?`).run(
+        blockedReason,
+        directiveId,
+      );
       emitLogLine(
         emit,
         directiveId,
         'warn',
         'brain.pool',
-        `pool: task "${currentTask.title}" tripped error_max_turns at ${String(currentValue)} — escalating via askUser (ADR 0032 §4)`,
-        { taskId: currentTask.id, axis, currentValue, attempt: escalations + 1 },
+        `pool: ${axis} exhausted mid-stream at ${String(postPool.perAxis[axis].cap)} — directive parked`,
+        {
+          axis,
+          capAtPark: postPool.perAxis[axis].cap,
+          usedAtPark: postPool.perAxis[axis].used,
+        },
       );
-      escalations += 1;
-      const decision = await escalateBudgetTrip({
-        db,
-        directiveId,
-        taskId: currentTask.id,
-        taskTitle: currentTask.title,
-        axis,
-        currentValue,
-        ...(signal !== undefined ? { signal } : {}),
-      });
-      if (decision.kind === 'abort') {
-        emitLogLine(
-          emit,
-          directiveId,
-          'warn',
-          'brain.pool',
-          `pool: task "${currentTask.title}" budget-escalation aborted (${decision.reason}) — keeping failed outcome`,
-          { taskId: currentTask.id, axis },
-        );
-        break;
-      }
-      emitLogLine(
-        emit,
-        directiveId,
-        'info',
-        'brain.pool',
-        `pool: task "${currentTask.title}" retrying with ${axis}=${String(decision.newValue)} (was ${String(currentValue)})`,
-        { taskId: currentTask.id, axis, newValue: decision.newValue, kind: decision.kind },
+    } catch (err) {
+      log.warn(
+        { err, directiveId, taskId: task.id },
+        'pool: failed to park directive on mid-stream watchdog interrupt',
       );
-      currentTask = { ...currentTask, maxTurns: decision.newValue };
-      // Restart the heartbeat for the retry attempt; refresh tasks_inflight's
-      // last-heartbeat so a supervisor doesn't mark this row stale during the
-      // re-run.
-      hb = setInterval(() => {
-        try {
-          tasksInflight.heartbeat(db, task.id, now());
-        } catch (err) {
-          log.warn({ err, taskId: task.id }, 'pool: heartbeat write failed');
-        }
-      }, HEARTBEAT_INTERVAL_MS);
-      tasksInflight.heartbeat(db, task.id, now());
     }
+  }
 
   if (outcome.usage !== undefined) {
     recordUsage({
@@ -477,12 +707,21 @@ async function executeTask(
     error: outcome.result.error ?? null,
   });
 
-  // Emit `finding.created` per finding raised by this task. One
-  // `listFindings` read per task feeds every emit so we don't N+1 the
-  // findings.json file on tasks that raise many findings. Wrapped in
-  // try/catch because a corrupt or transient findings.json must not
-  // fail the task — the FE's refresh-on-`task.completed` is the
-  // safety net while the SSE wire is best-effort.
+  // Tier 15 / ADR 0034 — emit `pool.tally` after each task settles so the
+  // FE Live tab reflects the new per-axis usage without an HTTP round-trip.
+  // For read-only tasks this is a useful USD/steps update; for tool-using
+  // tasks it's the authoritative source of the `maxTurns*` delta.
+  try {
+    const postPool = computePoolUsage(db, directiveId, projectBudgets);
+    emitPoolTally(emit, directiveId, postPool);
+  } catch (err) {
+    log.warn(
+      { err, directiveId, taskId: task.id },
+      'pool: post-task computePoolUsage failed — tally emit skipped',
+    );
+  }
+
+  // Emit `finding.created` per finding raised by this task.
   if (emit !== undefined && outcome.result.findingsRaised.length > 0) {
     try {
       const all = await listFindings(plan.projectPath);
@@ -514,6 +753,12 @@ async function executeTask(
  * Run a plan's tasks in parallel subject to dependency ordering and an
  * optional concurrency ceiling. Persists an updated plan.json at the end.
  * Returns one {@link TaskOutcome} per task (including skipped/blocked ones).
+ *
+ * Tier 15 / ADR 0034 — dependent tasks see a `blocked` directive (when a
+ * sibling parked the pool) and skip their own launch; the pool drains and
+ * `runPlanPool` returns. The `pool-resume` watcher (wired in
+ * `serve.ts`) re-enqueues the directive when the operator raises the cap,
+ * and a fresh `runBrain` invocation picks up the resume path.
  */
 export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
   const order = topoSortTasks(opts.plan.tasks);
@@ -525,13 +770,6 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
   const pending = new Set<string>(order.map((t) => t.id));
   const running = new Map<string, RunningEntry>();
   const concurrency = Math.max(1, opts.concurrency ?? defaultConcurrency());
-  /**
-   * Set when a {@link BudgetExceededError} trips during dispatch. Stops
-   * further launches; in-flight tasks finish; remaining pending tasks
-   * are marked blocked with a budget-specific reason; the error is
-   * re-raised from `runPlanPool` after the pool drains.
-   */
-  let budgetError: BudgetExceededError | undefined;
 
   // Resume path: treat already-complete tasks as no-ops.
   for (const t of order) {
@@ -582,11 +820,19 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
     });
     const t = byId.get(taskId);
     if (t !== undefined) {
-      // The task never ran — keep `attempts` as-is so retry budgets aren't
-      // consumed by upstream failures the task can't do anything about.
       updatedTasks.set(taskId, { ...t, status: 'failed' });
     }
     pending.delete(taskId);
+  };
+
+  // Tier 15 / ADR 0034 — observe the directive's status between dispatches.
+  // If `executeTask` parked the directive on pool exhaustion, the directive
+  // row flips to `blocked`. Refuse to launch new tasks against a blocked
+  // directive — they'd just park again — and let the running set drain so
+  // the pool resolves cleanly.
+  const directiveIsParked = (): boolean => {
+    const d = directivesQ.getById(opts.db, opts.directiveId);
+    return d !== undefined && d.status === 'blocked';
   };
 
   while (pending.size > 0 || running.size > 0) {
@@ -605,17 +851,16 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
       }
     }
 
-    // If a prior dispatch tripped the budget, do not launch anything else;
-    // drain the in-flight set and mark the remainder blocked when we fall
-    // out of this outer while loop.
-    if (budgetError !== undefined) {
+    // Tier 15 — directive parked: don't launch anything new. Drain in-flight.
+    const parked = directiveIsParked();
+    if (parked) {
       for (const id of [...pending]) {
-        markBlocked(id, `budget_exceeded: ${budgetError.detail.kind} — aborted before start`);
+        markBlocked(id, 'directive parked (pool exhausted)');
       }
     }
 
     // Launch up to concurrency.
-    while (running.size < concurrency && budgetError === undefined) {
+    while (running.size < concurrency && !parked) {
       if (opts.signal?.aborted === true) break;
       const id = [...pending].find((tid) => {
         const t = byId.get(tid);
@@ -623,30 +868,6 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
       });
       if (id === undefined) break;
       const task = byId.get(id) as Task;
-
-      if (opts.limits !== undefined) {
-        try {
-          assertBudget({
-            db: opts.db,
-            directiveId: opts.directiveId,
-            ...(opts.limits.maxUsd !== undefined ? { maxUsd: opts.limits.maxUsd } : {}),
-            ...(opts.limits.maxSteps !== undefined ? { maxSteps: opts.limits.maxSteps } : {}),
-            category: task.category,
-            mode: agentMode(task.agent),
-            agent: task.agent,
-          });
-        } catch (err) {
-          if (err instanceof BudgetExceededError) {
-            log.warn(
-              { taskId: id, detail: err.detail },
-              'pool: budget ceiling reached — halting further dispatch',
-            );
-            budgetError = err;
-            break;
-          }
-          throw err;
-        }
-      }
 
       pending.delete(id);
       const promise = executeTask(
@@ -694,22 +915,17 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
     }
 
     if (running.size === 0) {
-      // Budget-halted: label the pending rows with the budget reason
-      // rather than the deadlock reason (which is meant for cycles /
-      // unsatisfiable dependencies, not a deliberate stop).
-      if (budgetError !== undefined) {
-        for (const id of [...pending]) {
-          markBlocked(id, `budget_exceeded: ${budgetError.detail.kind} — aborted before start`);
-        }
-        break;
-      }
-      // Otherwise: nothing running, nothing ready — cycle or bug; bail.
+      // Nothing running, nothing ready — cycle, parked directive, or bug; bail.
       if (pending.size > 0) {
-        log.error(
-          { pending: [...pending] },
-          'pool: deadlock — pending tasks with no ready dependencies',
-        );
-        for (const id of [...pending]) markBlocked(id, 'deadlock (unsatisfiable dependencies)');
+        if (!parked) {
+          log.error(
+            { pending: [...pending] },
+            'pool: deadlock — pending tasks with no ready dependencies',
+          );
+          for (const id of [...pending]) {
+            markBlocked(id, 'deadlock (unsatisfiable dependencies)');
+          }
+        }
       }
       break;
     }
@@ -740,21 +956,13 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
     );
   }
 
-  // If dispatch tripped the budget, make sure every task that never
-  // ran is marked blocked before we persist plan.json.
-  if (budgetError !== undefined) {
-    for (const id of [...pending]) {
-      markBlocked(id, `budget_exceeded: ${budgetError.detail.kind} — aborted before start`);
-    }
-  }
-
   // Persist the plan with updated task statuses + results.
   const mergedTasks: Task[] = opts.plan.tasks.map((t) => updatedTasks.get(t.id) ?? t);
   const anyFailed = [...results.values()].some((r) => r.exitCode !== 0);
   const final: Plan = {
     ...opts.plan,
     tasks: mergedTasks,
-    status: anyFailed || budgetError !== undefined ? 'abandoned' : 'complete',
+    status: anyFailed ? 'abandoned' : 'complete',
   };
   await writePlan(final);
 
@@ -765,7 +973,6 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
       total: order.length,
       succeeded: succeededCount,
       failed: failedCount,
-      budgetHalted: budgetError !== undefined,
     },
     'pool: complete',
   );
@@ -774,10 +981,8 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
     opts.directiveId,
     failedCount > 0 ? 'warn' : 'info',
     'brain.pool',
-    `pool: complete — ${String(succeededCount)} passed, ${String(failedCount)} failed${budgetError !== undefined ? ' (budget halted)' : ''}`,
+    `pool: complete — ${String(succeededCount)} passed, ${String(failedCount)} failed`,
   );
-
-  if (budgetError !== undefined) throw budgetError;
 
   // Return in the original plan order for stable output.
   return opts.plan.tasks.map(
@@ -797,8 +1002,7 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
  * runtime state. Returns `undefined` when the bearer token isn't present in
  * env — that's the signal that we're running standalone (tests, ad-hoc
  * scripts) rather than inside `factoryd`'s shell, so the worker should run
- * without the `ask_user` MCP tool. Endpoint resolution mirrors how the CLI
- * resolves it; values stay in sync with the daemon's bind address.
+ * without the `ask_user` MCP tool.
  */
 async function buildAskUserConfig(directiveId: string): Promise<WorkerAskUserConfig | undefined> {
   const token = env['FACTORY5_WORKER_AUTH_TOKEN'];

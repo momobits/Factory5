@@ -714,12 +714,14 @@ export class ClaudeCliProvider implements ModelProvider {
       'claude-cli call complete',
     );
 
-    return {
+    const response: ProviderResponse = {
       text,
       usage,
       resolvedProvider: this.id,
       resolvedModel: req.model,
     };
+    if (parsed.num_turns !== undefined) response.numTurns = parsed.num_turns;
+    return response;
   }
 
   /**

@@ -6,7 +6,7 @@
 - [x] 15.4 State (wiki): project-metadata reads/writes for new scalars; delete `resolveDirectivePayloadBudgets`
 - [x] 15.5 Brain: `computePoolUsage` helper in `pool-usage.ts`
 - [x] 15.6 Brain: `pool-resume.ts` chokidar watcher
-- [ ] 15.7 Brain: pool-driven dispatcher rewrite (`pool.ts` + planner emit drop + worker watchdog wire-up)
+- [x] 15.7 Brain: pool-driven dispatcher rewrite (`pool.ts` + planner emit drop + worker watchdog wire-up)
 - [ ] 15.8 Brain: delete `budget-escalation.ts` + `[BUDGET]` branch in `auto-answer.ts`
 - [ ] 15.9 Daemon: HTTP/SSE surface (PUT /budget-defaults extended, GET /pool-usage, pool.tally SSE event)
 - [ ] 15.10 Web UI: project page tabbed cockpit

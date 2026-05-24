@@ -245,6 +245,19 @@ export const taskResultSchema = z.object({
    */
   errorSubtype: z.string().optional(),
   durationMs: z.number().int().nonnegative(),
+  /**
+   * Tier 15 / ADR 0034 — number of agentic tool-use turns the worker
+   * consumed. Sourced from claude-cli's terminal `result` event's
+   * `num_turns` field for tool-using agents; read by `computePoolUsage`
+   * to derive `maxTurns*` pool usage per directive.
+   *
+   * Optional because read-only agents (triage / architect / planner /
+   * critic / reviewer / investigator / verifier) don't have turn budgets,
+   * pre-Tier-15 result rows lack the field, and providers other than
+   * claude-cli may not surface turn counts. Treat absent as 0 in
+   * aggregation paths.
+   */
+  turnsUsed: z.number().int().nonnegative().optional(),
 });
 
 export const taskSchema = z.object({

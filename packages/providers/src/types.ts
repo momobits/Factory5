@@ -88,6 +88,13 @@ export interface ProviderResponse {
   /** Provider/model that actually responded (may differ from requested due to fallback). */
   resolvedProvider: string;
   resolvedModel: string;
+  /**
+   * Tier 15 / ADR 0034 — number of agentic tool-use turns the provider
+   * reported (sourced from claude-cli's terminal `result` event's
+   * `num_turns`). Optional because providers that don't track turn counts
+   * leave it absent; absent is treated as 0 in pool aggregation paths.
+   */
+  numTurns?: number;
 }
 
 export interface ProviderStreamChunk {
@@ -95,6 +102,15 @@ export interface ProviderStreamChunk {
   delta: string;
   /** Final usage; only present in the terminal chunk. */
   usage?: ProviderUsage;
+  /**
+   * Tier 15 / ADR 0034 — number of agentic tool-use turns the provider
+   * reported on its terminal `result` event. Only present on the
+   * terminal chunk (the same chunk that carries `usage`); absent on
+   * every intermediate delta chunk and on providers that don't track
+   * turn counts. The worker reads this to populate
+   * {@link TaskResult.turnsUsed}.
+   */
+  numTurns?: number;
 }
 
 export interface ModelProvider {

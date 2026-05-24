@@ -139,7 +139,7 @@ export function usageFromResult(r: ResultEvent): ProviderUsage {
 /**
  * Map a parsed stream event to zero or more chunks to yield downstream.
  * - `assistant` with text blocks → one chunk per text block (delta = text).
- * - `result` → terminal chunk (delta = '', usage populated).
+ * - `result` → terminal chunk (delta = '', usage populated; numTurns when present).
  * - everything else → no chunks (system/init, tool_use blocks, user turns).
  */
 export function eventToChunks(evt: StreamEvent): ProviderStreamChunk[] {
@@ -154,7 +154,9 @@ export function eventToChunks(evt: StreamEvent): ProviderStreamChunk[] {
     return chunks;
   }
   if (evt.type === 'result') {
-    return [{ delta: '', usage: usageFromResult(evt) }];
+    const chunk: ProviderStreamChunk = { delta: '', usage: usageFromResult(evt) };
+    if (evt.num_turns !== undefined) chunk.numTurns = evt.num_turns;
+    return [chunk];
   }
   return [];
 }

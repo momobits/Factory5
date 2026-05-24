@@ -13,7 +13,14 @@
  * `mode: 'serve'` (long-running claim loop) lands in Phase 3.
  */
 
-import type { AutonomyMode, Budgets, Directive, DirectiveLimits, ModelCategory, Plan } from '@factory5/core';
+import type {
+  AutonomyMode,
+  Budgets,
+  Directive,
+  DirectiveLimits,
+  ModelCategory,
+  Plan,
+} from '@factory5/core';
 import { newId, resolveBudgets } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import { assess, type AssessResult, type Runtime } from '@factory5/assessor';
@@ -125,7 +132,12 @@ async function runPlanTasks(
   directiveId: string,
   signal: AbortSignal | undefined,
   concurrency: number | undefined,
-  limits: DirectiveLimits | undefined,
+  // Tier 15 / ADR 0034 — `limits` no longer threads into the pool. The pool's
+  // `computePoolUsage` reads ceilings live from `project.json` + `payload.budgets`,
+  // and pool exhaustion parks the directive (no pre-dispatch `BudgetExceededError`
+  // from the pool side). Directive-level ADR 0020 ceilings still apply via
+  // `assertBudget` in `triage`/`planner`/`architect`/`critic` entry points.
+  _limits: DirectiveLimits | undefined,
   emitDirectiveEvent: DirectiveEventEmitter | undefined,
 ): Promise<TaskOutcome[]> {
   return runPlanPool({
@@ -135,7 +147,6 @@ async function runPlanTasks(
     directiveId,
     ...(signal !== undefined ? { signal } : {}),
     ...(concurrency !== undefined ? { concurrency } : {}),
-    ...(limits !== undefined ? { limits } : {}),
     ...(emitDirectiveEvent !== undefined ? { emitDirectiveEvent } : {}),
   });
 }
