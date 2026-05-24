@@ -112,6 +112,14 @@ export interface WorkerOptions {
    * failure. Ignored on the read-only path (no stream).
    */
   onTurnComplete?: () => { interrupt: boolean };
+  /**
+   * F4 / ADR 0034 §6 — remaining pool headroom for the task's axis.
+   * Passed as `maxTurns` to the provider so `--max-turns` acts as a
+   * safety ceiling aligned with the pool cap. When undefined (read-only
+   * agents, or no axis mapped), no `--max-turns` is forwarded — the
+   * pool watchdog is the sole authority.
+   */
+  poolRemainingTurns?: number;
 }
 
 export interface WorkerAskUserConfig {
@@ -580,7 +588,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
       // path-prefix algebra. ADR 0028 §1.
       permissionMode: sandbox !== undefined ? 'acceptEdits' : 'bypassPermissions',
       ...(mcpConfigPath !== undefined ? { mcpConfigPath } : {}),
-      ...(opts.task.maxTurns !== undefined ? { maxTurns: opts.task.maxTurns } : {}),
+      ...(opts.poolRemainingTurns !== undefined ? { maxTurns: opts.poolRemainingTurns } : {}),
       signal: internalAbort.signal,
     });
     for await (const chunk of iter) {

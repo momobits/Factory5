@@ -118,6 +118,16 @@ describe('buildClaudeArgs', () => {
     expect(args[args.indexOf('--max-turns') + 1]).toBe('55');
   });
 
+  it('omits --max-turns when maxTurns opt is undefined (F4 — pool is sole authority)', () => {
+    const args = buildClaudeArgs(baseReq(), [], 'stream-json');
+    expect(args).not.toContain('--max-turns');
+  });
+
+  it('omits --max-turns when maxTurns opt is explicitly passed as undefined via empty object', () => {
+    const args = buildClaudeArgs(baseReq(), [], 'stream-json', {});
+    expect(args).not.toContain('--max-turns');
+  });
+
   it('does not add tool/permission flags when they are absent', () => {
     const args = buildClaudeArgs(baseReq(), [], 'json');
     expect(args).not.toContain('--allowedTools');

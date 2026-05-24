@@ -706,6 +706,24 @@ async function executeTaskWithBudgetGuard(
         }
       : undefined;
 
+  // F4 / ADR 0034 §6 — compute remaining pool headroom for the task's axis.
+  // Passed to the worker as `poolRemainingTurns` so `--max-turns` acts as a
+  // safety ceiling aligned with the pool cap. When axis is undefined (read-only
+  // agents), no per-call cap is imposed — claude-cli uses its internal default.
+  let poolRemainingTurns: number | undefined;
+  if (axis !== undefined) {
+    try {
+      const headroomPool = computePoolUsage(db, directiveId, projectBudgets);
+      const axisHeadroom = headroomPool.perAxis[axis];
+      poolRemainingTurns = Math.max(0, axisHeadroom.cap - axisHeadroom.used);
+    } catch (err) {
+      log.warn(
+        { err, taskId: task.id, axis },
+        'pool: headroom computePoolUsage threw — omitting poolRemainingTurns',
+      );
+    }
+  }
+
   try {
     outcome = await runWorker({
       task,
@@ -721,6 +739,7 @@ async function executeTaskWithBudgetGuard(
       ...(askUserConfig !== undefined ? { askUserConfig } : {}),
       ...(signal !== undefined ? { signal } : {}),
       ...(onTurnComplete !== undefined ? { onTurnComplete } : {}),
+      ...(poolRemainingTurns !== undefined ? { poolRemainingTurns } : {}),
     });
   } finally {
     clearInterval(hb);

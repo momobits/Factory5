@@ -62,6 +62,8 @@ interface FakeProviderOpts {
   numTurns?: number;
   /** When set, `stream()` yields these chunks in order. */
   streamChunks?: ProviderStreamChunk[];
+  /** When set, stream requests are captured here for assertion. */
+  capturedStreamReqs?: ProviderRequest[];
 }
 
 function makeFakeRegistry(opts: FakeProviderOpts = {}): ProviderRegistry {
@@ -78,7 +80,8 @@ function makeFakeRegistry(opts: FakeProviderOpts = {}): ProviderRegistry {
       if (opts.numTurns !== undefined) response.numTurns = opts.numTurns;
       return response;
     },
-    stream: async function* (_req: ProviderRequest): AsyncIterable<ProviderStreamChunk> {
+    stream: async function* (req: ProviderRequest): AsyncIterable<ProviderStreamChunk> {
+      if (opts.capturedStreamReqs !== undefined) opts.capturedStreamReqs.push(req);
       for (const chunk of opts.streamChunks ?? []) yield chunk;
     },
   };
@@ -132,5 +135,73 @@ describe('runWorker — turnsUsed plumbing (Tier 15 / ADR 0034)', () => {
     });
     expect(outcome.result.exitCode).toBe(0);
     expect(outcome.result.turnsUsed).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F4 / ADR 0034 §6 — poolRemainingTurns replaces task.maxTurns
+// ---------------------------------------------------------------------------
+
+describe('runWorker — poolRemainingTurns (F4 / ADR 0034 §6)', () => {
+  let projectPath: string;
+
+  beforeEach(async () => {
+    projectPath = await mkdtemp(join(tmpdir(), 'factory5-runworker-f4-'));
+  });
+
+  afterEach(async () => {
+    await rm(projectPath, { recursive: true, force: true }).catch(() => undefined);
+  });
+
+  it('passes poolRemainingTurns as maxTurns to the provider on the stream path', async () => {
+    const capturedStreamReqs: ProviderRequest[] = [];
+    const registry = makeFakeRegistry({
+      streamChunks: [{ delta: 'done', usage: { inputTokens: 1, outputTokens: 1, costUsd: 0.001 } }],
+      capturedStreamReqs,
+    });
+    await runWorker({
+      task: mkTask({ agent: 'builder' }),
+      projectPath,
+      registry,
+      systemPrompt: 'system',
+      userPrompt: 'user',
+      poolRemainingTurns: 142,
+    });
+    expect(capturedStreamReqs).toHaveLength(1);
+    expect(capturedStreamReqs[0]?.maxTurns).toBe(142);
+  });
+
+  it('ignores task.maxTurns — does NOT pass it to the provider', async () => {
+    const capturedStreamReqs: ProviderRequest[] = [];
+    const registry = makeFakeRegistry({
+      streamChunks: [{ delta: 'done', usage: { inputTokens: 1, outputTokens: 1, costUsd: 0.001 } }],
+      capturedStreamReqs,
+    });
+    await runWorker({
+      task: mkTask({ agent: 'builder', maxTurns: 60 }),
+      projectPath,
+      registry,
+      systemPrompt: 'system',
+      userPrompt: 'user',
+    });
+    expect(capturedStreamReqs).toHaveLength(1);
+    expect(capturedStreamReqs[0]?.maxTurns).toBeUndefined();
+  });
+
+  it('omits maxTurns from provider request when poolRemainingTurns is undefined', async () => {
+    const capturedStreamReqs: ProviderRequest[] = [];
+    const registry = makeFakeRegistry({
+      streamChunks: [{ delta: 'done', usage: { inputTokens: 1, outputTokens: 1, costUsd: 0.001 } }],
+      capturedStreamReqs,
+    });
+    await runWorker({
+      task: mkTask({ agent: 'builder' }),
+      projectPath,
+      registry,
+      systemPrompt: 'system',
+      userPrompt: 'user',
+    });
+    expect(capturedStreamReqs).toHaveLength(1);
+    expect(capturedStreamReqs[0]?.maxTurns).toBeUndefined();
   });
 });

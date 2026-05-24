@@ -262,4 +262,35 @@ describe('planner emit sites (ADR 0031)', () => {
     expect(captured[0]?.cwd).toBe(fix.projectPath);
     expect(captured[0]?.cwd).toBeDefined();
   });
+
+  // -------------------------------------------------------------------------
+  // F4 / ADR 0034 §6 — materializer strips maxTurns from LLM output
+  // -------------------------------------------------------------------------
+  it('strips maxTurns from emitted plan tasks even when LLM includes it (F4)', async () => {
+    const fix = makeFixture();
+    const planWithMaxTurns = JSON.stringify({
+      tasks: [
+        {
+          title: 'build-module',
+          agent: 'builder',
+          category: 'deep',
+          maxTurns: 60,
+          inputs: { files: [], context: 'build it' },
+          expectedOutputs: { files: ['mod.ts'], signals: [] },
+          dependsOn: [],
+        },
+      ],
+    });
+    const registry = makeRegistry(planWithMaxTurns);
+
+    const result = await runPlanner({
+      registry,
+      projectPath: fix.projectPath,
+      directiveId: newId(),
+      emit: fix.emit,
+    });
+
+    expect(result.plan.tasks).toHaveLength(1);
+    expect(result.plan.tasks[0]?.maxTurns).toBeUndefined();
+  });
 });

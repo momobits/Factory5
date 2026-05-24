@@ -122,12 +122,11 @@ export interface ClaudeCliProviderOptions {
   streamTimeoutMs?: number;
   /**
    * Default max agentic turns for `stream()` when tools are in play and the
-   * {@link ProviderRequest.maxTurns} per-request override is unset. Raised
-   * to 40 in ADR 0016 after the Phase 2 live run showed builder tasks
-   * frequently hitting the prior 20-turn ceiling mid-TDD loop. Raised to
-   * 80 in Tier 12 after operator-felt scaffolder failures on a 13-module
-   * automl build — see U030 / U032 + `prompts/agents/planner.md`'s
-   * "Turn budgets" table for the updated guidance.
+   * {@link ProviderRequest.maxTurns} per-request override is unset. When
+   * undefined (the default since F4 / ADR 0034 §6), no `--max-turns` flag
+   * is passed to claude-cli — the pool watchdog is the sole turn authority.
+   * The worker passes `poolRemainingTurns` as a per-request maxTurns so
+   * tool-using agents always have a safety ceiling aligned with the pool.
    */
   maxTurns?: number;
   /**
@@ -607,7 +606,7 @@ export class ClaudeCliProvider implements ModelProvider {
   private readonly defaultCwd: string | undefined;
   private readonly timeoutMs: number;
   private readonly streamTimeoutMs: number;
-  private readonly maxTurns: number;
+  private readonly maxTurns: number | undefined;
   private readonly noAvailabilityCache: boolean;
 
   private availabilityCache: boolean | undefined;
@@ -619,7 +618,7 @@ export class ClaudeCliProvider implements ModelProvider {
     this.defaultCwd = opts.cwd;
     this.timeoutMs = opts.timeoutMs ?? 10 * 60 * 1000;
     this.streamTimeoutMs = opts.streamTimeoutMs ?? this.timeoutMs * 2;
-    this.maxTurns = opts.maxTurns ?? 80;
+    this.maxTurns = opts.maxTurns;
     this.noAvailabilityCache = opts.noAvailabilityCache ?? false;
   }
 
@@ -742,7 +741,7 @@ export class ClaudeCliProvider implements ModelProvider {
     const effectiveMaxTurns =
       req.maxTurns !== undefined && req.maxTurns > 0 ? req.maxTurns : this.maxTurns;
     const args = buildClaudeArgs(req, this.extraArgs, 'stream-json', {
-      maxTurns: effectiveMaxTurns,
+      ...(effectiveMaxTurns !== undefined ? { maxTurns: effectiveMaxTurns } : {}),
     });
     const promptText = composePromptText(req.systemPrompt, req.messages);
     const cwd = req.cwd ?? this.defaultCwd;

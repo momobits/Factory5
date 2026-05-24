@@ -130,7 +130,8 @@ export function materialisePlannerTasks(
       status: 'pending',
       attempts: 0,
     };
-    if (t.maxTurns !== undefined) task.maxTurns = t.maxTurns;
+    // F4 / ADR 0034 §6 — maxTurns stripped from LLM output. Turn budgets are
+    // pool-managed per-agent-class; per-task caps are no longer used.
     return task;
   });
 
@@ -250,6 +251,8 @@ export async function runPlanner(opts: PlannerOptions): Promise<PlannerResult> {
     // task caps no longer apply. The field stays optional in `taskSchema`
     // for backward read-back of resumed pre-Tier-15 plans but the planner
     // prompt explicitly does NOT instruct the LLM to emit it.
+    '  - Do NOT emit a `maxTurns` field on any task. Turn budgets are managed by the',
+    '       directive-level pool (ADR 0035); per-task caps are not used.',
     '  - `estimatedUsd` (optional) — your best-guess model spend in USD for this task.',
     '       Emit when the directive carries a `maxUsdPerTask` cap so the brain can',
     '       escalate via askUser BEFORE launching an expensive task. Reasonable',
