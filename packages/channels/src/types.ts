@@ -83,15 +83,18 @@ export interface ChannelContext {
   resolveBuildLimits?: (name: string) => Promise<DirectiveLimits | undefined>;
   /**
    * Set per-project budget defaults from a channel surface (Discord
-   * `/factory budget`, Telegram `/budget` once 2.2 ships). The daemon
-   * binds this to a closure that:
+   * `/factory budget`, Telegram `/budget`). The daemon binds this to a
+   * closure that:
    *
    *   1. Resolves the project by name via `projectsQ.findByName` (most
    *      recently touched wins on duplicates per ADR 0021).
    *   2. Calls `wiki.updateProjectMetadata` to write
    *      `metadata.budgetDefaults = defaults` (or clears it when
-   *      `defaults` has neither field set, per ADR 0027 §4 PUT semantics).
-   *   3. Returns the resolved project id and the persisted defaults so
+   *      `defaults` has no fields set, per ADR 0027 §4 PUT semantics).
+   *   3. Optionally writes `metadata.autoIncreaseBudgets` and
+   *      `metadata.autoIncreaseCeilingMultiplier` (Tier 15 scalars —
+   *      ADR 0034 §5). Absent scalars are removed from on-disk metadata.
+   *   4. Returns the resolved project id and the persisted values so
    *      the caller can render a confirmation.
    *
    * Throws {@link SetProjectBudgetError} on lookup / corruption failures
@@ -104,7 +107,13 @@ export interface ChannelContext {
   setProjectBudget?: (
     name: string,
     defaults: ProjectBudgetDefaults,
-  ) => Promise<{ projectId: string; defaults: ProjectBudgetDefaults }>;
+    scalars?: { autoIncreaseBudgets?: boolean; autoIncreaseCeilingMultiplier?: number },
+  ) => Promise<{
+    projectId: string;
+    defaults: ProjectBudgetDefaults;
+    autoIncreaseBudgets?: boolean;
+    autoIncreaseCeilingMultiplier?: number;
+  }>;
   /**
    * Classify a free-form chat message into an {@link Intent} (Phase 2.5).
    * The daemon binds this to the brain's `triageDirective` against the

@@ -43,6 +43,7 @@ interface InteractionOpts {
   string?: Record<string, string>;
   integer?: Record<string, number>;
   number?: Record<string, number>;
+  boolean?: Record<string, boolean>;
   user?: { id: string; tag: string };
   guildId?: string | null;
 }
@@ -72,6 +73,7 @@ function makeInteraction(opts: InteractionOpts): FakeInteraction {
   const stringMap = opts.string ?? {};
   const integerMap = opts.integer ?? {};
   const numberMap = opts.number ?? {};
+  const booleanMap = opts.boolean ?? {};
   const fake = {
     commandName: 'factory',
     isChatInputCommand: () => true,
@@ -99,6 +101,14 @@ function makeInteraction(opts: InteractionOpts): FakeInteraction {
         const v = numberMap[name];
         if (v === undefined) {
           if (required === true) throw new Error(`missing required number ${name}`);
+          return null;
+        }
+        return v;
+      },
+      getBoolean: (name: string, required = false): boolean | null => {
+        const v = booleanMap[name];
+        if (v === undefined) {
+          if (required === true) throw new Error(`missing required boolean ${name}`);
           return null;
         }
         return v;
@@ -506,7 +516,7 @@ describe('dispatchSlashInteraction — /factory cancel', () => {
 // ---------------------------------------------------------------------------
 
 describe('dispatchSlashInteraction — /factory budget', () => {
-  it('invokes setProjectBudget with the supplied caps', async () => {
+  it('invokes setProjectBudget with the supplied caps (2-axis backward compat)', async () => {
     const db = freshDb();
     const setProjectBudget = vi.fn(
       async (
@@ -525,13 +535,13 @@ describe('dispatchSlashInteraction — /factory budget', () => {
       integer: { 'max-steps': 200 },
     });
     await dispatchSlashInteraction(ctx, fake as never);
-    expect(setProjectBudget).toHaveBeenCalledWith('demo', { maxUsd: 5, maxSteps: 200 });
+    expect(setProjectBudget).toHaveBeenCalledWith('demo', { maxUsd: 5, maxSteps: 200 }, undefined);
     const desc = recorded.editReply[0]!.embeds[0]!.description as string;
     expect(desc).toContain('max-usd');
     expect(desc).toContain('max-steps');
   });
 
-  it('renders a "cleared" embed when neither cap is set', async () => {
+  it('renders a "cleared" embed when no axes or scalars are set', async () => {
     const db = freshDb();
     const setProjectBudget = vi.fn(async (_name: string, defaults: ProjectBudgetDefaults) => ({
       projectId: newId(),
@@ -543,7 +553,7 @@ describe('dispatchSlashInteraction — /factory budget', () => {
       string: { project: 'demo' },
     });
     await dispatchSlashInteraction(ctx, fake as never);
-    expect(setProjectBudget).toHaveBeenCalledWith('demo', {});
+    expect(setProjectBudget).toHaveBeenCalledWith('demo', {}, undefined);
     expect(recorded.editReply[0]!.embeds[0]!.description as string).toContain('_cleared_');
   });
 
@@ -576,6 +586,181 @@ describe('dispatchSlashInteraction — /factory budget', () => {
     const embed = recorded.editReply[0]!.embeds[0]!;
     expect(embed.title).toBe('/factory budget — error');
     expect(embed.description as string).toContain('ghost');
+  });
+
+  it('passes maxTurnsScaffolder to setProjectBudget', async () => {
+    const db = freshDb();
+    const setProjectBudget = vi.fn(async (_name: string, defaults: ProjectBudgetDefaults) => ({
+      projectId: newId(),
+      defaults,
+    }));
+    const ctx = makeCtx({ db, setProjectBudget });
+    const { recorded, fake } = makeInteraction({
+      subcommand: 'budget',
+      string: { project: 'demo' },
+      integer: { 'max-turns-scaffolder': 150 },
+    });
+    await dispatchSlashInteraction(ctx, fake as never);
+    expect(setProjectBudget).toHaveBeenCalledWith('demo', { maxTurnsScaffolder: 150 }, undefined);
+    const desc = recorded.editReply[0]!.embeds[0]!.description as string;
+    expect(desc).toContain('max-turns-scaffolder');
+    expect(desc).toContain('150');
+  });
+
+  it('passes maxTurnsBuilder to setProjectBudget', async () => {
+    const db = freshDb();
+    const setProjectBudget = vi.fn(async (_name: string, defaults: ProjectBudgetDefaults) => ({
+      projectId: newId(),
+      defaults,
+    }));
+    const ctx = makeCtx({ db, setProjectBudget });
+    const { fake } = makeInteraction({
+      subcommand: 'budget',
+      string: { project: 'demo' },
+      integer: { 'max-turns-builder': 100 },
+    });
+    await dispatchSlashInteraction(ctx, fake as never);
+    expect(setProjectBudget).toHaveBeenCalledWith('demo', { maxTurnsBuilder: 100 }, undefined);
+  });
+
+  it('passes maxTurnsFixer to setProjectBudget', async () => {
+    const db = freshDb();
+    const setProjectBudget = vi.fn(async (_name: string, defaults: ProjectBudgetDefaults) => ({
+      projectId: newId(),
+      defaults,
+    }));
+    const ctx = makeCtx({ db, setProjectBudget });
+    const { fake } = makeInteraction({
+      subcommand: 'budget',
+      string: { project: 'demo' },
+      integer: { 'max-turns-fixer': 60 },
+    });
+    await dispatchSlashInteraction(ctx, fake as never);
+    expect(setProjectBudget).toHaveBeenCalledWith('demo', { maxTurnsFixer: 60 }, undefined);
+  });
+
+  it('passes maxUsdPerTask to setProjectBudget', async () => {
+    const db = freshDb();
+    const setProjectBudget = vi.fn(async (_name: string, defaults: ProjectBudgetDefaults) => ({
+      projectId: newId(),
+      defaults,
+    }));
+    const ctx = makeCtx({ db, setProjectBudget });
+    const { recorded, fake } = makeInteraction({
+      subcommand: 'budget',
+      string: { project: 'demo' },
+      number: { 'max-usd-per-task': 1.5 },
+    });
+    await dispatchSlashInteraction(ctx, fake as never);
+    expect(setProjectBudget).toHaveBeenCalledWith('demo', { maxUsdPerTask: 1.5 }, undefined);
+    const desc = recorded.editReply[0]!.embeds[0]!.description as string;
+    expect(desc).toContain('max-usd-per-task');
+  });
+
+  it('passes askUserDeadlineMs to setProjectBudget', async () => {
+    const db = freshDb();
+    const setProjectBudget = vi.fn(async (_name: string, defaults: ProjectBudgetDefaults) => ({
+      projectId: newId(),
+      defaults,
+    }));
+    const ctx = makeCtx({ db, setProjectBudget });
+    const { fake } = makeInteraction({
+      subcommand: 'budget',
+      string: { project: 'demo' },
+      integer: { 'ask-user-deadline-ms': 60000 },
+    });
+    await dispatchSlashInteraction(ctx, fake as never);
+    expect(setProjectBudget).toHaveBeenCalledWith('demo', { askUserDeadlineMs: 60000 }, undefined);
+  });
+
+  it('passes maxWikiReadinessAttempts to setProjectBudget', async () => {
+    const db = freshDb();
+    const setProjectBudget = vi.fn(async (_name: string, defaults: ProjectBudgetDefaults) => ({
+      projectId: newId(),
+      defaults,
+    }));
+    const ctx = makeCtx({ db, setProjectBudget });
+    const { fake } = makeInteraction({
+      subcommand: 'budget',
+      string: { project: 'demo' },
+      integer: { 'max-wiki-readiness-attempts': 5 },
+    });
+    await dispatchSlashInteraction(ctx, fake as never);
+    expect(setProjectBudget).toHaveBeenCalledWith(
+      'demo',
+      { maxWikiReadinessAttempts: 5 },
+      undefined,
+    );
+  });
+
+  it('passes autoIncreaseBudgets scalar via the scalars arg', async () => {
+    const db = freshDb();
+    const setProjectBudget = vi.fn(
+      async (
+        _name: string,
+        defaults: ProjectBudgetDefaults,
+        _scalars?: { autoIncreaseBudgets?: boolean; autoIncreaseCeilingMultiplier?: number },
+      ): Promise<{
+        projectId: string;
+        defaults: ProjectBudgetDefaults;
+        autoIncreaseBudgets?: boolean;
+      }> => ({
+        projectId: newId(),
+        defaults,
+        autoIncreaseBudgets: true,
+      }),
+    );
+    const ctx = makeCtx({ db, setProjectBudget });
+    const { recorded, fake } = makeInteraction({
+      subcommand: 'budget',
+      string: { project: 'demo' },
+      boolean: { 'auto-increase-budgets': true },
+    });
+    await dispatchSlashInteraction(ctx, fake as never);
+    expect(setProjectBudget).toHaveBeenCalledWith('demo', {}, { autoIncreaseBudgets: true });
+    const desc = recorded.editReply[0]!.embeds[0]!.description as string;
+    expect(desc).toContain('auto-increase-budgets');
+    expect(desc).toContain('on');
+  });
+
+  it('passes autoIncreaseCeilingMultiplier scalar via the scalars arg', async () => {
+    const db = freshDb();
+    const setProjectBudget = vi.fn(
+      async (
+        _name: string,
+        defaults: ProjectBudgetDefaults,
+        _scalars?: { autoIncreaseBudgets?: boolean; autoIncreaseCeilingMultiplier?: number },
+      ): Promise<{
+        projectId: string;
+        defaults: ProjectBudgetDefaults;
+        autoIncreaseCeilingMultiplier?: number;
+      }> => ({
+        projectId: newId(),
+        defaults,
+        autoIncreaseCeilingMultiplier: 3,
+      }),
+    );
+    const ctx = makeCtx({ db, setProjectBudget });
+    const { recorded, fake } = makeInteraction({
+      subcommand: 'budget',
+      string: { project: 'demo' },
+      integer: { 'auto-increase-ceiling-multiplier': 3 },
+    });
+    await dispatchSlashInteraction(ctx, fake as never);
+    expect(setProjectBudget).toHaveBeenCalledWith('demo', {}, { autoIncreaseCeilingMultiplier: 3 });
+    const desc = recorded.editReply[0]!.embeds[0]!.description as string;
+    expect(desc).toContain('auto-increase-ceiling-multiplier');
+    expect(desc).toContain('3x');
+  });
+
+  it('budget subcommand has 11 options (project + 8 budget axes + 2 scalars)', () => {
+    const json = buildFactorySlashCommand();
+    const budgetSub = (json.options ?? []).find(
+      (o) => (o as { type: number; name: string }).name === 'budget',
+    ) as { type: number; name: string; options?: unknown[] } | undefined;
+    expect(budgetSub).toBeDefined();
+    // 1 required (project) + 8 budget axes + 2 Tier-15 scalars
+    expect(budgetSub?.options).toHaveLength(11);
   });
 });
 

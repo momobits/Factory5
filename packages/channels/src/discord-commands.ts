@@ -28,7 +28,7 @@
  * slow read (large registry) doesn't blow Discord's three-second window.
  */
 
-import { type AutonomyMode } from '@factory5/core';
+import { BUDGET_DEFAULTS, type AutonomyMode } from '@factory5/core';
 import type { Logger } from '@factory5/logger';
 import { type Database, type FindingsRegistryEntry, spend as spendQ } from '@factory5/state';
 import {
@@ -52,6 +52,7 @@ import {
   runStatus,
   SPEND_GROUPS,
   type BudgetData,
+  type BudgetInput,
   type BuildData,
   type CancelData,
   type CommandHandlerContext,
@@ -92,6 +93,20 @@ const COLOR_ERROR = 0xed4245;
 // ---------------------------------------------------------------------------
 // Slash command definition (single command, seven subcommands)
 // ---------------------------------------------------------------------------
+
+/**
+ * Discord caps slash-command option descriptions at 100 characters. Truncate
+ * the BUDGET_DEFAULTS explainer strings at the nearest word boundary so the
+ * single source-of-truth string is still used without duplicating prose.
+ */
+function budgetExplainer(axis: keyof typeof BUDGET_DEFAULTS): string {
+  const s = BUDGET_DEFAULTS[axis].explainer;
+  if (s.length <= 100) return s;
+  // Truncate at the last space before char 97 and append '…'
+  const cut = s.slice(0, 97);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${lastSpace > 0 ? cut.slice(0, lastSpace) : cut}…`;
+}
 
 /**
  * Build the JSON payload registered with Discord's REST API. The shape is
@@ -179,13 +194,64 @@ export function buildFactorySlashCommand(): RESTPostAPIApplicationCommandsJSONBo
   cmd.addSubcommand((s) =>
     s
       .setName('budget')
-      .setDescription('set per-project budget defaults (overwrites; omit both to clear)')
+      .setDescription('set per-project budget defaults — all axes optional; omit all to clear')
       .addStringOption((o) => o.setName('project').setDescription('project name').setRequired(true))
       .addNumberOption((o) =>
-        o.setName('max-usd').setDescription('hard USD ceiling').setMinValue(0.01),
+        o.setName('max-usd').setDescription(budgetExplainer('maxUsd')).setMinValue(0),
       )
       .addIntegerOption((o) =>
-        o.setName('max-steps').setDescription('hard call-count ceiling').setMinValue(1),
+        o.setName('max-steps').setDescription(budgetExplainer('maxSteps')).setMinValue(0),
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName('max-turns-scaffolder')
+          .setDescription(budgetExplainer('maxTurnsScaffolder'))
+          .setMinValue(1),
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName('max-turns-builder')
+          .setDescription(budgetExplainer('maxTurnsBuilder'))
+          .setMinValue(1),
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName('max-turns-fixer')
+          .setDescription(budgetExplainer('maxTurnsFixer'))
+          .setMinValue(1),
+      )
+      .addNumberOption((o) =>
+        o
+          .setName('max-usd-per-task')
+          .setDescription(budgetExplainer('maxUsdPerTask'))
+          .setMinValue(0),
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName('ask-user-deadline-ms')
+          .setDescription(budgetExplainer('askUserDeadlineMs'))
+          .setMinValue(1),
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName('max-wiki-readiness-attempts')
+          .setDescription(budgetExplainer('maxWikiReadinessAttempts'))
+          .setMinValue(0),
+      )
+      .addBooleanOption((o) =>
+        o
+          .setName('auto-increase-budgets')
+          .setDescription(
+            'Auto-bump exhausted turn-pool axes instead of parking the directive (ADR 0034 §5).',
+          ),
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName('auto-increase-ceiling-multiplier')
+          .setDescription(
+            'Safety ceiling for auto-bump: abort when cap exceeds projectDefault × multiplier. Min 1.',
+          )
+          .setMinValue(1),
       ),
   );
 
@@ -425,18 +491,32 @@ function cancelInput(interaction: ChatInputCommandInteraction): {
   return reason !== undefined ? { directiveId, reason } : { directiveId };
 }
 
-function budgetInput(interaction: ChatInputCommandInteraction): {
-  project: string;
-  maxUsd?: number;
-  maxSteps?: number;
-} {
+function budgetInput(interaction: ChatInputCommandInteraction): BudgetInput {
   const project = interaction.options.getString('project', true);
   const maxUsd = interaction.options.getNumber('max-usd') ?? undefined;
   const maxSteps = interaction.options.getInteger('max-steps') ?? undefined;
+  const maxTurnsScaffolder = interaction.options.getInteger('max-turns-scaffolder') ?? undefined;
+  const maxTurnsBuilder = interaction.options.getInteger('max-turns-builder') ?? undefined;
+  const maxTurnsFixer = interaction.options.getInteger('max-turns-fixer') ?? undefined;
+  const maxUsdPerTask = interaction.options.getNumber('max-usd-per-task') ?? undefined;
+  const askUserDeadlineMs = interaction.options.getInteger('ask-user-deadline-ms') ?? undefined;
+  const maxWikiReadinessAttempts =
+    interaction.options.getInteger('max-wiki-readiness-attempts') ?? undefined;
+  const autoIncreaseBudgets = interaction.options.getBoolean('auto-increase-budgets') ?? undefined;
+  const autoIncreaseCeilingMultiplier =
+    interaction.options.getInteger('auto-increase-ceiling-multiplier') ?? undefined;
   return {
     project,
     ...(maxUsd !== undefined ? { maxUsd } : {}),
     ...(maxSteps !== undefined ? { maxSteps } : {}),
+    ...(maxTurnsScaffolder !== undefined ? { maxTurnsScaffolder } : {}),
+    ...(maxTurnsBuilder !== undefined ? { maxTurnsBuilder } : {}),
+    ...(maxTurnsFixer !== undefined ? { maxTurnsFixer } : {}),
+    ...(maxUsdPerTask !== undefined ? { maxUsdPerTask } : {}),
+    ...(askUserDeadlineMs !== undefined ? { askUserDeadlineMs } : {}),
+    ...(maxWikiReadinessAttempts !== undefined ? { maxWikiReadinessAttempts } : {}),
+    ...(autoIncreaseBudgets !== undefined ? { autoIncreaseBudgets } : {}),
+    ...(autoIncreaseCeilingMultiplier !== undefined ? { autoIncreaseCeilingMultiplier } : {}),
   };
 }
 
@@ -601,14 +681,37 @@ function embedBudget(result: CommandResult<BudgetData>): EmbedBuilder {
   const data = result.data;
   const lines: string[] = [`**Project:** \`${data.project}\` (\`…${data.projectId.slice(-4)}\`)`];
   const persisted = data.defaults;
-  if (persisted.maxUsd === undefined && persisted.maxSteps === undefined) {
+  const axisKeys = Object.keys(persisted) as Array<keyof typeof persisted>;
+  const hasScalars =
+    data.autoIncreaseBudgets !== undefined || data.autoIncreaseCeilingMultiplier !== undefined;
+  if (axisKeys.length === 0 && !hasScalars) {
     lines.push('**Budget:** _cleared_ — directives now run uncapped from this project tier.');
   } else {
     const parts: string[] = [];
     if (persisted.maxUsd !== undefined) parts.push(`max-usd \`$${persisted.maxUsd.toFixed(2)}\``);
     if (persisted.maxSteps !== undefined)
       parts.push(`max-steps \`${persisted.maxSteps.toString()}\``);
-    lines.push(`**Budget:** ${parts.join(' · ')}`);
+    if (persisted.maxTurnsScaffolder !== undefined)
+      parts.push(`max-turns-scaffolder \`${persisted.maxTurnsScaffolder.toString()}\``);
+    if (persisted.maxTurnsBuilder !== undefined)
+      parts.push(`max-turns-builder \`${persisted.maxTurnsBuilder.toString()}\``);
+    if (persisted.maxTurnsFixer !== undefined)
+      parts.push(`max-turns-fixer \`${persisted.maxTurnsFixer.toString()}\``);
+    if (persisted.maxUsdPerTask !== undefined)
+      parts.push(`max-usd-per-task \`$${persisted.maxUsdPerTask.toFixed(2)}\``);
+    if (persisted.askUserDeadlineMs !== undefined)
+      parts.push(`ask-user-deadline-ms \`${persisted.askUserDeadlineMs.toString()}\``);
+    if (persisted.maxWikiReadinessAttempts !== undefined)
+      parts.push(
+        `max-wiki-readiness-attempts \`${persisted.maxWikiReadinessAttempts.toString()}\``,
+      );
+    if (data.autoIncreaseBudgets !== undefined)
+      parts.push(`auto-increase-budgets \`${data.autoIncreaseBudgets ? 'on' : 'off'}\``);
+    if (data.autoIncreaseCeilingMultiplier !== undefined)
+      parts.push(
+        `auto-increase-ceiling-multiplier \`${data.autoIncreaseCeilingMultiplier.toString()}x\``,
+      );
+    if (parts.length > 0) lines.push(`**Budget:** ${parts.join(' · ')}`);
   }
   return new EmbedBuilder()
     .setColor(COLOR_OK)

@@ -310,12 +310,21 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
       // the project by name (most-recently-touched wins on ties per
       // ADR 0021), writes `metadata.budgetDefaults` via
       // `updateProjectMetadata`, and maps wiki errors onto the stable
-      // `SetProjectBudgetError` codes.
+      // `SetProjectBudgetError` codes. Also persists the Tier-15 scalars
+      // `autoIncreaseBudgets` and `autoIncreaseCeilingMultiplier` when
+      // supplied — absent scalars remove the key from on-disk metadata
+      // (same PUT semantics as the web-UI route).
       const dbHandle = db as NonNullable<typeof db>;
       const registrySetProjectBudget = async (
         name: string,
         defaults: ProjectBudgetDefaults,
-      ): Promise<{ projectId: string; defaults: ProjectBudgetDefaults }> => {
+        scalars?: { autoIncreaseBudgets?: boolean; autoIncreaseCeilingMultiplier?: number },
+      ): Promise<{
+        projectId: string;
+        defaults: ProjectBudgetDefaults;
+        autoIncreaseBudgets?: boolean;
+        autoIncreaseCeilingMultiplier?: number;
+      }> => {
         const matches = projectsQ.findByName(dbHandle, name);
         if (matches.length === 0) {
           throw new SetProjectBudgetError('NOT_FOUND', `no project named "${name}"`);
@@ -328,12 +337,36 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<DaemonHandl
         }
         const project = matches[0]!;
         try {
-          const updated = await updateProjectMetadata(project.workspacePath, (meta) => ({
-            ...meta,
-            metadata: { ...meta.metadata, budgetDefaults: defaults },
-          }));
+          const hasBudgetDefaults = Object.keys(defaults).length > 0;
+          const updated = await updateProjectMetadata(project.workspacePath, (meta) => {
+            const next: Record<string, unknown> = { ...meta.metadata };
+            // Always replace managed keys — PUT semantics.
+            delete next['budgetDefaults'];
+            delete next['autoIncreaseBudgets'];
+            delete next['autoIncreaseCeilingMultiplier'];
+            if (hasBudgetDefaults) next['budgetDefaults'] = defaults;
+            if (scalars?.autoIncreaseBudgets !== undefined) {
+              next['autoIncreaseBudgets'] = scalars.autoIncreaseBudgets;
+            }
+            if (scalars?.autoIncreaseCeilingMultiplier !== undefined) {
+              next['autoIncreaseCeilingMultiplier'] = scalars.autoIncreaseCeilingMultiplier;
+            }
+            return { ...meta, metadata: next };
+          });
           const persistedDefaults = budgetDefaultsFromProjectMeta(updated) ?? {};
-          return { projectId: project.id, defaults: persistedDefaults };
+          const autoIncreaseRaw = updated.metadata['autoIncreaseBudgets'];
+          const ceilingRaw = updated.metadata['autoIncreaseCeilingMultiplier'];
+          const persistedAuto = typeof autoIncreaseRaw === 'boolean' ? autoIncreaseRaw : undefined;
+          const persistedCeiling =
+            typeof ceilingRaw === 'number' && ceilingRaw >= 1 ? ceilingRaw : undefined;
+          return {
+            projectId: project.id,
+            defaults: persistedDefaults,
+            ...(persistedAuto !== undefined ? { autoIncreaseBudgets: persistedAuto } : {}),
+            ...(persistedCeiling !== undefined
+              ? { autoIncreaseCeilingMultiplier: persistedCeiling }
+              : {}),
+          };
         } catch (err) {
           if (err instanceof ProjectMetadataNotFoundError) {
             throw new SetProjectBudgetError('PATH_UNREADABLE', err.message);

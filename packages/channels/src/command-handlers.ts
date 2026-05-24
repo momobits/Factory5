@@ -517,14 +517,38 @@ function resolveDirectiveId(db: Database, raw: string): string | 'AMBIGUOUS' | u
 
 export interface BudgetInput {
   project: string;
+  /** Hard ceiling in USD across the whole build. 0 = unlimited. */
   maxUsd?: number;
+  /** Hard ceiling on LLM call count across the build. 0 = unlimited. */
   maxSteps?: number;
+  /** Per-task tool-conversation cap for the scaffolder (ADR 0032). */
+  maxTurnsScaffolder?: number;
+  /** Per-task tool-conversation cap for builders (ADR 0032). */
+  maxTurnsBuilder?: number;
+  /** Per-task tool-conversation cap for fixers (ADR 0032). */
+  maxTurnsFixer?: number;
+  /** Per-task USD ceiling. 0 = unlimited. */
+  maxUsdPerTask?: number;
+  /** How long the brain waits on an askUser before falling back (ms). */
+  askUserDeadlineMs?: number;
+  /** Architect+critic cycles per build before escalating (ADR 0033). 0 = unlimited. */
+  maxWikiReadinessAttempts?: number;
+  /** When true, the pool dispatcher auto-bumps exhausted axes (ADR 0034 §5). */
+  autoIncreaseBudgets?: boolean;
+  /**
+   * Safety ceiling for the auto-bump loop. Must be ≥ 1.
+   * The bump aborts when the effective cap would exceed
+   * `projectDefault × multiplier` (ADR 0034 §5).
+   */
+  autoIncreaseCeilingMultiplier?: number;
 }
 
 export interface BudgetData {
   project: string;
   projectId: string;
   defaults: ProjectBudgetDefaults;
+  autoIncreaseBudgets?: boolean;
+  autoIncreaseCeilingMultiplier?: number;
 }
 
 export async function runBudget(
@@ -540,17 +564,58 @@ export async function runBudget(
   const defaults: ProjectBudgetDefaults = {
     ...(input.maxUsd !== undefined ? { maxUsd: input.maxUsd } : {}),
     ...(input.maxSteps !== undefined ? { maxSteps: input.maxSteps } : {}),
+    ...(input.maxTurnsScaffolder !== undefined
+      ? { maxTurnsScaffolder: input.maxTurnsScaffolder }
+      : {}),
+    ...(input.maxTurnsBuilder !== undefined ? { maxTurnsBuilder: input.maxTurnsBuilder } : {}),
+    ...(input.maxTurnsFixer !== undefined ? { maxTurnsFixer: input.maxTurnsFixer } : {}),
+    ...(input.maxUsdPerTask !== undefined ? { maxUsdPerTask: input.maxUsdPerTask } : {}),
+    ...(input.askUserDeadlineMs !== undefined
+      ? { askUserDeadlineMs: input.askUserDeadlineMs }
+      : {}),
+    ...(input.maxWikiReadinessAttempts !== undefined
+      ? { maxWikiReadinessAttempts: input.maxWikiReadinessAttempts }
+      : {}),
+  };
+  const scalars: { autoIncreaseBudgets?: boolean; autoIncreaseCeilingMultiplier?: number } = {
+    ...(input.autoIncreaseBudgets !== undefined
+      ? { autoIncreaseBudgets: input.autoIncreaseBudgets }
+      : {}),
+    ...(input.autoIncreaseCeilingMultiplier !== undefined
+      ? { autoIncreaseCeilingMultiplier: input.autoIncreaseCeilingMultiplier }
+      : {}),
   };
   try {
-    const result = await ctx.setProjectBudget(input.project, defaults);
+    const result = await ctx.setProjectBudget(
+      input.project,
+      defaults,
+      Object.keys(scalars).length > 0 ? scalars : undefined,
+    );
     ctx.log.info(
-      { projectId: result.projectId, defaults, source: ctx.source, principal: ctx.principal },
+      {
+        projectId: result.projectId,
+        defaults,
+        ...(result.autoIncreaseBudgets !== undefined
+          ? { autoIncreaseBudgets: result.autoIncreaseBudgets }
+          : {}),
+        ...(result.autoIncreaseCeilingMultiplier !== undefined
+          ? { autoIncreaseCeilingMultiplier: result.autoIncreaseCeilingMultiplier }
+          : {}),
+        source: ctx.source,
+        principal: ctx.principal,
+      },
       'command-handlers: project budget updated',
     );
     return ok({
       project: input.project,
       projectId: result.projectId,
       defaults: result.defaults,
+      ...(result.autoIncreaseBudgets !== undefined
+        ? { autoIncreaseBudgets: result.autoIncreaseBudgets }
+        : {}),
+      ...(result.autoIncreaseCeilingMultiplier !== undefined
+        ? { autoIncreaseCeilingMultiplier: result.autoIncreaseCeilingMultiplier }
+        : {}),
     });
   } catch (err) {
     if (err instanceof SetProjectBudgetError) {

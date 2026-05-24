@@ -918,7 +918,7 @@ export class TelegramChannel implements ChannelPlugin {
         if (input === undefined) {
           return usageReply(
             'budget',
-            '/budget <project> [--max-usd N] [--max-steps M]  (omit both to clear)',
+            '/budget <project> [--max-usd N] [--max-steps M] [--max-turns-scaffolder N] [--max-turns-builder N] [--max-turns-fixer N] [--max-usd-per-task N] [--ask-user-deadline-ms N] [--max-wiki-readiness-attempts N] [--auto-increase-budgets true|false] [--auto-increase-ceiling-multiplier N]',
           );
         }
         return formatBudgetReply(await runBudget(ctx, input));
@@ -1259,7 +1259,8 @@ export const FACTORY_TELEGRAM_COMMANDS: ReadonlyArray<TelegramBotCommandSpec> = 
   { command: 'cancel', description: 'cancel a directive — /cancel <id> [reason]' },
   {
     command: 'budget',
-    description: 'set project budget — /budget <project> [--max-usd N --max-steps M]',
+    description:
+      'set project budget — /budget <project> [--max-usd N] [--max-steps M] [--max-turns-scaffolder N] [--auto-increase-budgets true]',
   },
   { command: 'build', description: 'kick off a build — /build <project> [-- <spec>]' },
 ];
@@ -1390,10 +1391,75 @@ function parseBudgetArgs(text: string): BudgetInput | undefined {
   const maxUsd = flags['max-usd'] !== undefined ? Number.parseFloat(flags['max-usd']) : undefined;
   const maxSteps =
     flags['max-steps'] !== undefined ? Number.parseInt(flags['max-steps'], 10) : undefined;
+  const maxTurnsScaffolder =
+    flags['max-turns-scaffolder'] !== undefined
+      ? Number.parseInt(flags['max-turns-scaffolder'], 10)
+      : undefined;
+  const maxTurnsBuilder =
+    flags['max-turns-builder'] !== undefined
+      ? Number.parseInt(flags['max-turns-builder'], 10)
+      : undefined;
+  const maxTurnsFixer =
+    flags['max-turns-fixer'] !== undefined
+      ? Number.parseInt(flags['max-turns-fixer'], 10)
+      : undefined;
+  const maxUsdPerTask =
+    flags['max-usd-per-task'] !== undefined
+      ? Number.parseFloat(flags['max-usd-per-task'])
+      : undefined;
+  const askUserDeadlineMs =
+    flags['ask-user-deadline-ms'] !== undefined
+      ? Number.parseInt(flags['ask-user-deadline-ms'], 10)
+      : undefined;
+  const maxWikiReadinessAttempts =
+    flags['max-wiki-readiness-attempts'] !== undefined
+      ? Number.parseInt(flags['max-wiki-readiness-attempts'], 10)
+      : undefined;
+  const autoIncreaseBudgetsRaw = flags['auto-increase-budgets'];
+  const autoIncreaseBudgets =
+    autoIncreaseBudgetsRaw === 'true'
+      ? true
+      : autoIncreaseBudgetsRaw === 'false'
+        ? false
+        : undefined;
+  const autoIncreaseCeilingMultiplier =
+    flags['auto-increase-ceiling-multiplier'] !== undefined
+      ? Number.parseInt(flags['auto-increase-ceiling-multiplier'], 10)
+      : undefined;
   return {
     project,
-    ...(maxUsd !== undefined && Number.isFinite(maxUsd) && maxUsd > 0 ? { maxUsd } : {}),
-    ...(maxSteps !== undefined && Number.isFinite(maxSteps) && maxSteps > 0 ? { maxSteps } : {}),
+    ...(maxUsd !== undefined && Number.isFinite(maxUsd) && maxUsd >= 0 ? { maxUsd } : {}),
+    ...(maxSteps !== undefined && Number.isFinite(maxSteps) && maxSteps >= 0 ? { maxSteps } : {}),
+    ...(maxTurnsScaffolder !== undefined &&
+    Number.isFinite(maxTurnsScaffolder) &&
+    maxTurnsScaffolder > 0
+      ? { maxTurnsScaffolder }
+      : {}),
+    ...(maxTurnsBuilder !== undefined && Number.isFinite(maxTurnsBuilder) && maxTurnsBuilder > 0
+      ? { maxTurnsBuilder }
+      : {}),
+    ...(maxTurnsFixer !== undefined && Number.isFinite(maxTurnsFixer) && maxTurnsFixer > 0
+      ? { maxTurnsFixer }
+      : {}),
+    ...(maxUsdPerTask !== undefined && Number.isFinite(maxUsdPerTask) && maxUsdPerTask >= 0
+      ? { maxUsdPerTask }
+      : {}),
+    ...(askUserDeadlineMs !== undefined &&
+    Number.isFinite(askUserDeadlineMs) &&
+    askUserDeadlineMs > 0
+      ? { askUserDeadlineMs }
+      : {}),
+    ...(maxWikiReadinessAttempts !== undefined &&
+    Number.isFinite(maxWikiReadinessAttempts) &&
+    maxWikiReadinessAttempts >= 0
+      ? { maxWikiReadinessAttempts }
+      : {}),
+    ...(autoIncreaseBudgets !== undefined ? { autoIncreaseBudgets } : {}),
+    ...(autoIncreaseCeilingMultiplier !== undefined &&
+    Number.isFinite(autoIncreaseCeilingMultiplier) &&
+    autoIncreaseCeilingMultiplier >= 1
+      ? { autoIncreaseCeilingMultiplier }
+      : {}),
   };
 }
 
@@ -1682,14 +1748,33 @@ function formatBudgetReply(result: CommandResult<BudgetData>): TelegramReply {
     `factory budget — updated`,
     `Project: ${d.project} (…${d.projectId.slice(-4)})`,
   ];
-  if (d.defaults.maxUsd === undefined && d.defaults.maxSteps === undefined) {
+  const persisted = d.defaults;
+  const axisKeys = Object.keys(persisted) as Array<keyof typeof persisted>;
+  const hasScalars =
+    d.autoIncreaseBudgets !== undefined || d.autoIncreaseCeilingMultiplier !== undefined;
+  if (axisKeys.length === 0 && !hasScalars) {
     lines.push(`Budget: cleared — directives now run uncapped from this project tier.`);
   } else {
     const parts: string[] = [];
-    if (d.defaults.maxUsd !== undefined) parts.push(`max-usd $${d.defaults.maxUsd.toFixed(2)}`);
-    if (d.defaults.maxSteps !== undefined)
-      parts.push(`max-steps ${d.defaults.maxSteps.toString()}`);
-    lines.push(`Budget: ${parts.join(' · ')}`);
+    if (persisted.maxUsd !== undefined) parts.push(`max-usd $${persisted.maxUsd.toFixed(2)}`);
+    if (persisted.maxSteps !== undefined) parts.push(`max-steps ${persisted.maxSteps.toString()}`);
+    if (persisted.maxTurnsScaffolder !== undefined)
+      parts.push(`max-turns-scaffolder ${persisted.maxTurnsScaffolder.toString()}`);
+    if (persisted.maxTurnsBuilder !== undefined)
+      parts.push(`max-turns-builder ${persisted.maxTurnsBuilder.toString()}`);
+    if (persisted.maxTurnsFixer !== undefined)
+      parts.push(`max-turns-fixer ${persisted.maxTurnsFixer.toString()}`);
+    if (persisted.maxUsdPerTask !== undefined)
+      parts.push(`max-usd-per-task $${persisted.maxUsdPerTask.toFixed(2)}`);
+    if (persisted.askUserDeadlineMs !== undefined)
+      parts.push(`ask-user-deadline-ms ${persisted.askUserDeadlineMs.toString()}`);
+    if (persisted.maxWikiReadinessAttempts !== undefined)
+      parts.push(`max-wiki-readiness-attempts ${persisted.maxWikiReadinessAttempts.toString()}`);
+    if (d.autoIncreaseBudgets !== undefined)
+      parts.push(`auto-increase-budgets ${d.autoIncreaseBudgets ? 'on' : 'off'}`);
+    if (d.autoIncreaseCeilingMultiplier !== undefined)
+      parts.push(`auto-increase-ceiling-multiplier ${d.autoIncreaseCeilingMultiplier.toString()}x`);
+    if (parts.length > 0) lines.push(`Budget: ${parts.join(' · ')}`);
   }
   return { text: lines.join('\n') };
 }
