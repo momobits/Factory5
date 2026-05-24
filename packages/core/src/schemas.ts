@@ -502,5 +502,5 @@ export const projectMetadataSchema = z.object({
   name: z.string().min(1),
   createdAt: isoDateTimeSchema,
   factoryVersion: z.string().min(1),
-  metadata: projectTier15MetadataSchema,
+  metadata: projectTier15MetadataSchema.optional(),
 });

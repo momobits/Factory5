@@ -321,6 +321,9 @@ describe('projectMetadataSchema — Tier 15 scalars', () => {
       metadata: { autoIncreaseCeilingMultiplier: 0 },
     });
     expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].path).toEqual(['metadata', 'autoIncreaseCeilingMultiplier']);
+    }
   });
 
   it('rejects negative autoIncreaseCeilingMultiplier', () => {
@@ -332,6 +335,9 @@ describe('projectMetadataSchema — Tier 15 scalars', () => {
       metadata: { autoIncreaseCeilingMultiplier: -1 },
     });
     expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].path).toEqual(['metadata', 'autoIncreaseCeilingMultiplier']);
+    }
   });
 
   it('treats both fields as optional', () => {
@@ -341,6 +347,16 @@ describe('projectMetadataSchema — Tier 15 scalars', () => {
       createdAt: '2026-05-23T20:28:06.332Z',
       factoryVersion: '0.x',
       metadata: {},
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a file with no metadata block (backward compat with old project.json)', () => {
+    const result = projectMetadataSchema.safeParse({
+      id: '01KSB8C3AAAAAAAAAAAAAAAAAA',
+      name: 'pythonetl',
+      createdAt: '2026-05-23T20:28:06.332Z',
+      factoryVersion: '0.x',
     });
     expect(result.success).toBe(true);
   });
