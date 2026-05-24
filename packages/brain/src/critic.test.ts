@@ -357,4 +357,27 @@ describe('runWikiCritic', () => {
       }),
     ).rejects.toThrow(/budget_exceeded/i);
   });
+
+  // -------------------------------------------------------------------------
+  // 11. cwd isolation (post-Tier-15 fix — pythonetl resume incident)
+  // -------------------------------------------------------------------------
+  it('passes opts.projectPath as req.cwd to the provider (prevents factory5 repo leak)', async () => {
+    const captured: Array<{ cwd?: string }> = [];
+    const registry = makeFakeRegistry({
+      response: PASSING_JSON,
+      captureTo: captured,
+    });
+
+    await runWikiCritic({
+      registry: registry as Parameters<typeof runWikiCritic>[0]['registry'],
+      projectPath: '/fake/proj',
+      directiveBody: 'x',
+      claudeMd: '# x',
+      pages: [FAKE_PAGE],
+    });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.cwd).toBe('/fake/proj');
+    expect(captured[0]?.cwd).toBeDefined();
+  });
 });

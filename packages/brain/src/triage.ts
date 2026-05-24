@@ -15,6 +15,7 @@ import type { Database } from '@factory5/state';
 import { z } from 'zod';
 
 import { assertBudget } from './budget.js';
+import { resolveLlmCwd } from './llm-cwd.js';
 import { buildAgentSystemPrompt } from './prompts.js';
 import { recordUsage } from './usage.js';
 
@@ -49,6 +50,16 @@ export interface TriageOptions {
    * breach the ceiling.
    */
   limits?: DirectiveLimits;
+  /**
+   * Project root for the provider's cwd (post-Tier-15 fix). Threaded
+   * straight into {@link ProviderRequest.cwd} via {@link resolveLlmCwd},
+   * so the spawned claude-cli subprocess never inherits factoryd's own
+   * `process.cwd()` (which is the factory5 repo itself). When absent,
+   * the helper falls back to `os.tmpdir()` so the model still doesn't
+   * see factory5's CLAUDE.md/STATE.md. See `llm-cwd.ts` for the full
+   * incident note.
+   */
+  projectPath?: string;
 }
 
 /**
@@ -124,6 +135,7 @@ export async function triageDirective(text: string, opts: TriageOptions): Promis
       messages: [{ role: 'user', content: userPrompt }],
       temperature: 0,
       maxTokens: 256,
+      cwd: resolveLlmCwd(opts.projectPath),
     });
   } catch (err) {
     log.error({ err, category }, 'triage provider call failed');

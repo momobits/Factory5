@@ -26,6 +26,7 @@ beforeAll(() => {
 interface CallRecord {
   systemPrompt: string;
   userPrompt: string;
+  cwd?: string;
 }
 
 interface ScriptedProviderOptions {
@@ -50,14 +51,20 @@ class ScriptedProvider {
     return Promise.resolve(true);
   }
 
-  call(req: { systemPrompt: string; messages: Array<{ role: string; content: string }> }): Promise<{
+  call(req: {
+    systemPrompt: string;
+    messages: Array<{ role: string; content: string }>;
+    cwd?: string;
+  }): Promise<{
     text: string;
     usage: { inputTokens: number; outputTokens: number; costUsd: number };
     resolvedProvider: string;
     resolvedModel: string;
   }> {
     const userPrompt = req.messages.find((m) => m.role === 'user')?.content ?? '';
-    this.calls.push({ systemPrompt: req.systemPrompt, userPrompt });
+    const record: CallRecord = { systemPrompt: req.systemPrompt, userPrompt };
+    if (req.cwd !== undefined) record.cwd = req.cwd;
+    this.calls.push(record);
     const next = this.script.shift();
     if (next === undefined) throw new Error('scripted provider: out of responses');
     if (next === null) throw new Error('scripted provider: simulated failure');
@@ -352,6 +359,74 @@ describe('autoAnswerOne — Tier 14 / ADR 0030 amendment [CRITIC] deterministic 
     await autoAnswerOne(q2, { db, registry: noProviderCall(), now: () => 2, retryBackoffMs: 0 });
     expect(pendingQuestions.getById(db, q1.id)?.answer).toBe('continue');
     expect(pendingQuestions.getById(db, q2.id)?.answer).toBe('continue');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cwd isolation (post-Tier-15 fix — pythonetl resume incident)
+// ---------------------------------------------------------------------------
+
+describe('autoAnswerOne — cwd isolation', () => {
+  let db: Database;
+
+  beforeEach(() => {
+    db = freshDb();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  /** Seed a directive whose payload carries a projectPath (build/resume case). */
+  function seedDirectiveWithProject(projectPath: string): Directive {
+    const d: Directive = {
+      id: newId(),
+      source: 'cli',
+      principal: 'tester',
+      channelRef: 'sess-1',
+      intent: 'build',
+      payload: { text: 'build', projectPath },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: 'running',
+    };
+    directivesQ.insert(db, d);
+    return d;
+  }
+
+  it('passes directive.payload.projectPath as req.cwd to the provider', async () => {
+    const d = seedDirectiveWithProject('/work/some-project');
+    const q = seedQuestion(db, d.id);
+    const provider = new ScriptedProvider({ script: ['answer'] });
+
+    await autoAnswerOne(q, {
+      db,
+      registry: registryFor(provider),
+      now: () => Date.parse('2026-05-08T11:05:00.000Z'),
+      retryBackoffMs: 0,
+    });
+
+    expect(provider.calls).toHaveLength(1);
+    expect(provider.calls[0]?.cwd).toBe('/work/some-project');
+  });
+
+  it('falls back to os.tmpdir() when directive payload lacks projectPath', async () => {
+    const { tmpdir } = await import('node:os');
+    const d = seedDirective(db); // payload = { text: 'hello' } — no projectPath
+    const q = seedQuestion(db, d.id);
+    const provider = new ScriptedProvider({ script: ['answer'] });
+
+    await autoAnswerOne(q, {
+      db,
+      registry: registryFor(provider),
+      now: () => Date.parse('2026-05-08T11:05:00.000Z'),
+      retryBackoffMs: 0,
+    });
+
+    expect(provider.calls).toHaveLength(1);
+    // Crucially never undefined — that's the bug shape the fix prevents.
+    expect(provider.calls[0]?.cwd).toBeDefined();
+    expect(provider.calls[0]?.cwd).toBe(tmpdir());
   });
 });
 

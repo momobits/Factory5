@@ -25,6 +25,7 @@ import { ProviderRegistry, StubProvider } from '@factory5/providers';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { runPlanner } from './planner.js';
+import { makeFakeRegistry } from './test-helpers.js';
 
 beforeAll(() => {
   initLogger({ processName: 'planner-emit-test', noFile: true, noConsole: true });
@@ -228,5 +229,37 @@ describe('planner emit sites (ADR 0031)', () => {
     const detail = attrs['detail'];
     expect(typeof detail).toBe('string');
     expect((detail as string).startsWith('{"plan":')).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // cwd isolation (post-Tier-15 fix — pythonetl resume incident)
+  // -------------------------------------------------------------------------
+  it('passes opts.projectPath as req.cwd to the provider (prevents factory5 repo leak)', async () => {
+    const fix = makeFixture();
+    const validPlan = JSON.stringify({
+      tasks: [
+        {
+          title: 'a',
+          agent: 'scaffolder',
+          category: 'planning',
+          inputs: { files: [], context: '' },
+          expectedOutputs: { files: ['a.ts'], signals: [] },
+          dependsOn: [],
+        },
+      ],
+    });
+    const captured: Array<{ cwd?: string }> = [];
+    const registry = makeFakeRegistry({ response: validPlan, captureTo: captured });
+
+    await runPlanner({
+      registry: registry as Parameters<typeof runPlanner>[0]['registry'],
+      projectPath: fix.projectPath,
+      directiveId: newId(),
+      emit: fix.emit,
+    });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.cwd).toBe(fix.projectPath);
+    expect(captured[0]?.cwd).toBeDefined();
   });
 });

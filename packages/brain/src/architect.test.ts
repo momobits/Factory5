@@ -368,4 +368,28 @@ describe('runArchitect — Tier 14 modifications (ADR 0033)', () => {
       rmSync(projectPath, { recursive: true, force: true });
     }
   });
+
+  // -------------------------------------------------------------------------
+  // cwd isolation (post-Tier-15 fix — pythonetl resume incident)
+  // -------------------------------------------------------------------------
+
+  it('passes opts.projectPath as req.cwd to the provider (prevents factory5 repo leak)', async () => {
+    const captured: Array<{ cwd?: string }> = [];
+    const registry = makeFakeRegistry({
+      response: JSON.stringify({ pages: [{ slug: 'overview.md', content: '# x' }], notes: '' }),
+      captureTo: captured,
+    });
+    const projectPath = await tmpProjectWithClaudeMd();
+    try {
+      await runArchitect({
+        registry: registry as Parameters<typeof runArchitect>[0]['registry'],
+        projectPath,
+      });
+      expect(captured).toHaveLength(1);
+      expect(captured[0]?.cwd).toBe(projectPath);
+      expect(captured[0]?.cwd).toBeDefined();
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
 });

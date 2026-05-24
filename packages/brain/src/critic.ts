@@ -20,6 +20,7 @@ import type { DirectiveEventEmitter } from '@factory5/ipc';
 
 import { assertBudget } from './budget.js';
 import { emitLogLine } from './emit.js';
+import { resolveLlmCwd } from './llm-cwd.js';
 import { buildAgentSystemPrompt } from './prompts.js';
 import { extractJsonObject } from './triage.js';
 import { recordUsage } from './usage.js';
@@ -148,6 +149,7 @@ export async function runWikiCritic(opts: RunWikiCriticOptions): Promise<WikiCri
     messages: [{ role: 'user', content: userPrompt }],
     temperature: 0,
     reasoning: 'low',
+    cwd: resolveLlmCwd(opts.projectPath),
   });
   const durationMs = Date.now() - started;
 

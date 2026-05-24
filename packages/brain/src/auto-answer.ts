@@ -27,6 +27,7 @@ import type { ProviderRegistry } from '@factory5/providers';
 import { directives as directivesQ, pendingQuestions, type Database } from '@factory5/state';
 
 import { CRITIC_MARKER } from './architect-loop.js';
+import { resolveLlmCwd } from './llm-cwd.js';
 import { recordUsage } from './usage.js';
 
 const log = createLogger('brain.auto-answer');
@@ -144,8 +145,14 @@ export async function autoAnswerOne(q: PendingQuestion, deps: AutoAnswerOneDeps)
   const pastQA = collectPastQA(deps.db, q.directiveId, q.id);
   const prompt = buildAutoAnswerPrompt(q, directive, pastQA);
 
+  // Resolve cwd from the parent directive's payload — falling back to
+  // os.tmpdir() when absent so the provider never inherits factoryd's
+  // own process.cwd() (the factory5 repo). See `llm-cwd.ts` for the
+  // pythonetl resume incident that motivated this guard.
+  const cwd = resolveLlmCwd(extractProjectPathFromPayload(directive.payload));
+
   const retryBackoffMs = deps.retryBackoffMs ?? RETRY_BACKOFF_MS;
-  const result = await callProviderWithOneRetry(prompt, deps, directive.id, retryBackoffMs);
+  const result = await callProviderWithOneRetry(prompt, deps, directive.id, retryBackoffMs, cwd);
   const finalizedAt = new Date(now()).toISOString();
 
   if (result.kind === 'ok') {
@@ -191,6 +198,7 @@ async function callProviderWithOneRetry(
   deps: AutoAnswerDeps,
   directiveId: string,
   retryBackoffMs: number,
+  cwd: string,
 ): Promise<ProviderOk | ProviderFail> {
   for (let attempt = 1; attempt <= 2; attempt++) {
     const started = Date.now();
@@ -202,6 +210,7 @@ async function callProviderWithOneRetry(
         messages: [{ role: 'user', content: prompt.userPrompt }],
         temperature: 0.2,
         maxTokens: 1024,
+        cwd,
       });
       const durationMs = Date.now() - started;
       // Spend recorded only on success (ADR 0030 §6).
@@ -331,6 +340,25 @@ function safeStringify(v: unknown): string {
   } catch {
     return String(v);
   }
+}
+
+/**
+ * Pull `projectPath` (or its `project` alias) from a directive payload.
+ * Returns `undefined` when the payload is missing/non-object or the key
+ * is absent — callers pass the result through {@link resolveLlmCwd}
+ * which falls back to `os.tmpdir()` when undefined.
+ *
+ * Mirrors the extraction logic in `loop.ts`/`serve.ts` but lives here
+ * because auto-answer dispatches independently of the build pipeline
+ * (chat directives, generic questions, etc. legitimately lack a
+ * project root and we don't want to throw).
+ */
+function extractProjectPathFromPayload(payload: unknown): string | undefined {
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const p = payload as Record<string, unknown>;
+  const candidate = p['projectPath'] ?? p['project'];
+  if (typeof candidate === 'string' && candidate.length > 0) return candidate;
+  return undefined;
 }
 
 function sleep(ms: number): Promise<void> {

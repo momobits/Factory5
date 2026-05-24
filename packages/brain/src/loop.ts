@@ -189,11 +189,17 @@ async function runInline(
     try {
       // -------- TRIAGE --------
       const triageText = renderDirectiveForTriage(directive);
+      // Resolve the project path eagerly for the cwd-isolation guard
+      // (post-Tier-15 fix). Build directives carry payload.projectPath;
+      // chat / system directives don't — `resolveLlmCwd` falls back to
+      // os.tmpdir() inside triage in that case.
+      const triageProjectPath = extractProjectPathSafely(directive);
       const triage = await triageDirective(triageText, {
         registry,
         db,
         directiveId: directive.id,
         ...(limits !== undefined ? { limits } : {}),
+        ...(triageProjectPath !== undefined ? { projectPath: triageProjectPath } : {}),
       });
 
       // For inline builds, respect the original intent; triage is the audit record.
@@ -624,6 +630,23 @@ function extractProjectPath(d: Directive): string {
   throw new Error(
     `directive ${d.id}: payload.projectPath (or payload.project) is required for build intent`,
   );
+}
+
+/**
+ * Non-throwing variant of {@link extractProjectPath}. Returns `undefined`
+ * for directives whose payload legitimately lacks a project root (chat,
+ * system, generic auto-answer questions). Used by the triage call site
+ * to thread `projectPath` into the cwd-isolation guard without forcing
+ * a hard failure for pre-triage directives whose intent hasn't been
+ * classified as 'build' yet.
+ */
+function extractProjectPathSafely(d: Directive): string | undefined {
+  if (typeof d.payload === 'object' && d.payload !== null) {
+    const p = d.payload as Record<string, unknown>;
+    const candidate = p['projectPath'] ?? p['project'];
+    if (typeof candidate === 'string' && candidate.length > 0) return candidate;
+  }
+  return undefined;
 }
 
 /**

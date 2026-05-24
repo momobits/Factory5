@@ -26,6 +26,7 @@ import type { DirectiveEventEmitter } from '@factory5/ipc';
 
 import { assertBudget } from './budget.js';
 import { emitLogLine } from './emit.js';
+import { resolveLlmCwd } from './llm-cwd.js';
 import { buildAgentSystemPrompt } from './prompts.js';
 import { extractJsonObject } from './triage.js';
 import { recordUsage } from './usage.js';
@@ -196,6 +197,7 @@ export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectRes
     messages: [{ role: 'user', content: promptWithFeedback }],
     temperature: 0.2,
     reasoning: 'medium',
+    cwd: resolveLlmCwd(opts.projectPath),
   });
   const durationMs = Date.now() - started;
 
