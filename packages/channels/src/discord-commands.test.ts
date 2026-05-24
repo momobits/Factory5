@@ -753,14 +753,14 @@ describe('dispatchSlashInteraction — /factory budget', () => {
     expect(desc).toContain('3x');
   });
 
-  it('budget subcommand has 11 options (project + 8 budget axes + 2 scalars)', () => {
+  it('budget subcommand has 15 options (project + 12 budget axes + 2 scalars)', () => {
     const json = buildFactorySlashCommand();
     const budgetSub = (json.options ?? []).find(
       (o) => (o as { type: number; name: string }).name === 'budget',
     ) as { type: number; name: string; options?: unknown[] } | undefined;
     expect(budgetSub).toBeDefined();
-    // 1 required (project) + 8 budget axes + 2 Tier-15 scalars
-    expect(budgetSub?.options).toHaveLength(11);
+    // 1 required (project) + 12 budget axes + 2 Tier-15 scalars
+    expect(budgetSub?.options).toHaveLength(15);
   });
 });
 

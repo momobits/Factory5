@@ -334,6 +334,53 @@ describe('computePoolUsage', () => {
       /not found/,
     );
   });
+
+  // ---- Feature F3 — maxTotalTurns cross-class aggregation ----
+
+  it('sums turnsUsed across ALL agent classes for maxTotalTurns', () => {
+    const directiveId = newId();
+    seedDirective(db, directiveId);
+
+    seedTask(db, { id: newId(), directiveId, agent: 'scaffolder', turnsUsed: 30 });
+    seedTask(db, { id: newId(), directiveId, agent: 'builder', turnsUsed: 50 });
+    seedTask(db, { id: newId(), directiveId, agent: 'fixer', turnsUsed: 20 });
+
+    const pool = computePoolUsage(db, directiveId, {
+      budgetDefaults: { maxTotalTurns: 200 },
+    });
+
+    expect(pool.perAxis.maxTotalTurns.used).toBe(30 + 50 + 20);
+    expect(pool.perAxis.maxTotalTurns.cap).toBe(200);
+    expect(pool.perAxis.maxTotalTurns.tasks).toHaveLength(3);
+  });
+
+  it('marks maxTotalTurns as exhausted when sum across all classes >= cap', () => {
+    const directiveId = newId();
+    seedDirective(db, directiveId);
+
+    seedTask(db, { id: newId(), directiveId, agent: 'scaffolder', turnsUsed: 100 });
+    seedTask(db, { id: newId(), directiveId, agent: 'builder', turnsUsed: 100 });
+
+    const pool = computePoolUsage(db, directiveId, {
+      budgetDefaults: { maxTotalTurns: 200 },
+    });
+
+    expect(pool.perAxis.maxTotalTurns.used).toBe(200);
+    expect(pool.perAxis.maxTotalTurns.status).toBe('exhausted');
+  });
+
+  it('returns 0 used for maxTotalTurns with no tasks (cap defaults to BUDGET_DEFAULTS = 0 = unlimited)', () => {
+    const directiveId = newId();
+    seedDirective(db, directiveId);
+
+    const pool = computePoolUsage(db, directiveId, { budgetDefaults: {} });
+
+    // BUDGET_DEFAULTS.maxTotalTurns.value = 0 (unlimited)
+    expect(pool.perAxis.maxTotalTurns.cap).toBe(0);
+    expect(pool.perAxis.maxTotalTurns.used).toBe(0);
+    expect(pool.perAxis.maxTotalTurns.pct).toBe(0);
+    expect(pool.perAxis.maxTotalTurns.status).toBe('ok');
+  });
 });
 
 // ---------------------------------------------------------------------------

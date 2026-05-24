@@ -532,17 +532,50 @@ async function executeTaskWithBudgetGuard(
   const projectBudgets: ProjectBudgetsLike = await loadProjectBudgets(projectPath);
   let outcome: WorkerOutcome;
 
+  // Feature F3 — maxRetriesPerTask check. Per-task safety: if the task has
+  // already been retried up to (or beyond) the resolved cap, fail it
+  // immediately. Auto-bumps count as retries. When cap is 0, retries are
+  // unlimited (no check).
+  const pBudgets = payloadBudgets(db, directiveId);
+  const maxRetriesCap = resolveEffectiveCap('maxRetriesPerTask', projectBudgets, pBudgets);
+  if (maxRetriesCap > 0 && task.attempts >= maxRetriesCap) {
+    clearInterval(hb);
+    const result: TaskResult = {
+      exitCode: 1,
+      filesChanged: [],
+      findingsRaised: [],
+      signalsEmitted: [],
+      error: `Task "${task.title}" exceeded maxRetriesPerTask cap (${String(maxRetriesCap)} retries)`,
+      errorSubtype: 'per-task-retries-exceeded',
+      durationMs: 0,
+    };
+    tasksInflight.markFailed(db, task.id, result, now());
+    emit?.({
+      type: 'task.completed',
+      taskId: task.id,
+      directiveId,
+      status: 'failed',
+      exitCode: result.exitCode,
+      finishedAt: now(),
+      error: result.error ?? null,
+    });
+    outcome = { result };
+    const updatedTask: Task = {
+      ...task,
+      status: 'failed',
+      attempts: task.attempts + 1,
+      result,
+    };
+    return { id: task.id, outcome, task: updatedTask };
+  }
+
   // Feature F2 / Relay issue #1 — maxUsdPerTask resurrection. Per-task safety:
   // if the planner emitted an `estimatedUsd` for this task, check it against
   // the unified resolution of `maxUsdPerTask`. Task FAILS immediately (not
   // directive parks) when the estimate exceeds the cap. When `estimatedUsd` is
   // undefined (planner didn't emit it) or cap is 0 (unlimited), the check is
   // a no-op.
-  const maxUsdPerTaskCap = resolveEffectiveCap(
-    'maxUsdPerTask',
-    projectBudgets,
-    payloadBudgets(db, directiveId),
-  );
+  const maxUsdPerTaskCap = resolveEffectiveCap('maxUsdPerTask', projectBudgets, pBudgets);
   if (
     maxUsdPerTaskCap > 0 &&
     task.estimatedUsd !== undefined &&
@@ -836,7 +869,28 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
   const updatedTasks = new Map<string, Task>();
   const pending = new Set<string>(order.map((t) => t.id));
   const running = new Map<string, RunningEntry>();
-  const concurrency = Math.max(1, opts.concurrency ?? defaultConcurrency());
+
+  // Feature F3 — load project budgets once for concurrency + wall-clock checks.
+  const poolProjectBudgets = await loadProjectBudgets(opts.plan.projectPath);
+  const poolPayloadBudgets = payloadBudgets(opts.db, opts.directiveId);
+
+  // Feature F3 — maxConcurrentTasks replaces the hardcoded default. Resolve
+  // from project + payload budgets via the unified rule. Falls back to
+  // `defaultConcurrency()` when the resolved value is 0 (shouldn't happen
+  // since BUDGET_DEFAULTS.maxConcurrentTasks.value = 4, but defensive).
+  // The caller's explicit `opts.concurrency` still wins if provided (test
+  // harness, CLI override).
+  let concurrency: number;
+  if (opts.concurrency !== undefined) {
+    concurrency = Math.max(1, opts.concurrency);
+  } else {
+    const resolvedConcurrency = resolveEffectiveCap(
+      'maxConcurrentTasks',
+      poolProjectBudgets,
+      poolPayloadBudgets,
+    );
+    concurrency = Math.max(1, resolvedConcurrency > 0 ? resolvedConcurrency : defaultConcurrency());
+  }
 
   // Resume path: treat already-complete tasks as no-ops.
   for (const t of order) {
@@ -902,10 +956,69 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
     return d !== undefined && d.status === 'blocked';
   };
 
+  // Feature F3 — maxWallClockMinutes enforcement. Per-directive wall-clock
+  // cap checked via poll against `directive.createdAt + cap`. Poll approach
+  // survives daemon restarts — the createdAt timestamp is in the DB.
+  const checkWallClock = (): boolean => {
+    const directive = directivesQ.getById(opts.db, opts.directiveId);
+    if (directive === undefined) return false;
+    const wallClockCap = resolveEffectiveCap(
+      'maxWallClockMinutes',
+      poolProjectBudgets,
+      poolPayloadBudgets,
+    );
+    if (wallClockCap <= 0) return false;
+    const elapsedMin = (Date.now() - new Date(directive.createdAt).getTime()) / 60_000;
+    if (elapsedMin >= wallClockCap) {
+      const blockedReason = JSON.stringify({
+        kind: 'wall-clock-exceeded',
+        axis: 'maxWallClockMinutes',
+        elapsedMin: Math.round(elapsedMin * 100) / 100,
+        capMin: wallClockCap,
+      });
+      opts.db
+        .prepare(`UPDATE directives SET status = 'blocked', blocked_reason = ? WHERE id = ?`)
+        .run(blockedReason, opts.directiveId);
+      emitLogLine(
+        opts.emitDirectiveEvent,
+        opts.directiveId,
+        'warn',
+        'brain.pool',
+        `pool: maxWallClockMinutes exceeded (${String(Math.round(elapsedMin))} min >= ${String(wallClockCap)} min) — directive parked`,
+        { axis: 'maxWallClockMinutes', elapsedMin, capMin: wallClockCap },
+      );
+      return true;
+    }
+    return false;
+  };
+
   while (pending.size > 0 || running.size > 0) {
     if (opts.signal?.aborted === true && running.size === 0) {
       for (const id of [...pending]) markBlocked(id, 'aborted before start');
       break;
+    }
+
+    // Feature F3 — wall-clock check per iteration.
+    const wallClockExceeded = checkWallClock();
+    if (wallClockExceeded) {
+      for (const id of [...pending]) {
+        markBlocked(id, 'directive parked (maxWallClockMinutes exceeded)');
+      }
+      // Let running tasks drain naturally; just stop launching new ones.
+      if (running.size === 0) break;
+      const settled = await Promise.race([...running.values()].map((e) => e.promise));
+      running.delete(settled.id);
+      results.set(settled.id, {
+        taskId: settled.id,
+        exitCode: settled.outcome.result.exitCode,
+        findingsRaised: settled.outcome.result.findingsRaised,
+        filesChanged: settled.outcome.result.filesChanged,
+        ...(settled.outcome.result.error !== undefined
+          ? { error: settled.outcome.result.error }
+          : {}),
+      });
+      updatedTasks.set(settled.id, settled.task);
+      continue;
     }
 
     // Fail fast on tasks whose deps already failed.

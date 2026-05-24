@@ -238,6 +238,30 @@ export function buildFactorySlashCommand(): RESTPostAPIApplicationCommandsJSONBo
           .setDescription(budgetExplainer('maxWikiReadinessAttempts'))
           .setMinValue(0),
       )
+      .addIntegerOption((o) =>
+        o
+          .setName('max-total-turns')
+          .setDescription(budgetExplainer('maxTotalTurns'))
+          .setMinValue(0),
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName('max-retries-per-task')
+          .setDescription(budgetExplainer('maxRetriesPerTask'))
+          .setMinValue(0),
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName('max-wall-clock-minutes')
+          .setDescription(budgetExplainer('maxWallClockMinutes'))
+          .setMinValue(0),
+      )
+      .addIntegerOption((o) =>
+        o
+          .setName('max-concurrent-tasks')
+          .setDescription(budgetExplainer('maxConcurrentTasks'))
+          .setMinValue(1),
+      )
       .addBooleanOption((o) =>
         o
           .setName('auto-increase-budgets')
@@ -498,10 +522,14 @@ function budgetInput(interaction: ChatInputCommandInteraction): BudgetInput {
   const maxTurnsScaffolder = interaction.options.getInteger('max-turns-scaffolder') ?? undefined;
   const maxTurnsBuilder = interaction.options.getInteger('max-turns-builder') ?? undefined;
   const maxTurnsFixer = interaction.options.getInteger('max-turns-fixer') ?? undefined;
+  const maxTotalTurns = interaction.options.getInteger('max-total-turns') ?? undefined;
   const maxUsdPerTask = interaction.options.getNumber('max-usd-per-task') ?? undefined;
+  const maxRetriesPerTask = interaction.options.getInteger('max-retries-per-task') ?? undefined;
   const askUserDeadlineMs = interaction.options.getInteger('ask-user-deadline-ms') ?? undefined;
   const maxWikiReadinessAttempts =
     interaction.options.getInteger('max-wiki-readiness-attempts') ?? undefined;
+  const maxWallClockMinutes = interaction.options.getInteger('max-wall-clock-minutes') ?? undefined;
+  const maxConcurrentTasks = interaction.options.getInteger('max-concurrent-tasks') ?? undefined;
   const autoIncreaseBudgets = interaction.options.getBoolean('auto-increase-budgets') ?? undefined;
   const autoIncreaseCeilingMultiplier =
     interaction.options.getInteger('auto-increase-ceiling-multiplier') ?? undefined;
@@ -512,9 +540,13 @@ function budgetInput(interaction: ChatInputCommandInteraction): BudgetInput {
     ...(maxTurnsScaffolder !== undefined ? { maxTurnsScaffolder } : {}),
     ...(maxTurnsBuilder !== undefined ? { maxTurnsBuilder } : {}),
     ...(maxTurnsFixer !== undefined ? { maxTurnsFixer } : {}),
+    ...(maxTotalTurns !== undefined ? { maxTotalTurns } : {}),
     ...(maxUsdPerTask !== undefined ? { maxUsdPerTask } : {}),
+    ...(maxRetriesPerTask !== undefined ? { maxRetriesPerTask } : {}),
     ...(askUserDeadlineMs !== undefined ? { askUserDeadlineMs } : {}),
     ...(maxWikiReadinessAttempts !== undefined ? { maxWikiReadinessAttempts } : {}),
+    ...(maxWallClockMinutes !== undefined ? { maxWallClockMinutes } : {}),
+    ...(maxConcurrentTasks !== undefined ? { maxConcurrentTasks } : {}),
     ...(autoIncreaseBudgets !== undefined ? { autoIncreaseBudgets } : {}),
     ...(autoIncreaseCeilingMultiplier !== undefined ? { autoIncreaseCeilingMultiplier } : {}),
   };

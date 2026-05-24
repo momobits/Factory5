@@ -1403,9 +1403,17 @@ function parseBudgetArgs(text: string): BudgetInput | undefined {
     flags['max-turns-fixer'] !== undefined
       ? Number.parseInt(flags['max-turns-fixer'], 10)
       : undefined;
+  const maxTotalTurns =
+    flags['max-total-turns'] !== undefined
+      ? Number.parseInt(flags['max-total-turns'], 10)
+      : undefined;
   const maxUsdPerTask =
     flags['max-usd-per-task'] !== undefined
       ? Number.parseFloat(flags['max-usd-per-task'])
+      : undefined;
+  const maxRetriesPerTask =
+    flags['max-retries-per-task'] !== undefined
+      ? Number.parseInt(flags['max-retries-per-task'], 10)
       : undefined;
   const askUserDeadlineMs =
     flags['ask-user-deadline-ms'] !== undefined
@@ -1414,6 +1422,14 @@ function parseBudgetArgs(text: string): BudgetInput | undefined {
   const maxWikiReadinessAttempts =
     flags['max-wiki-readiness-attempts'] !== undefined
       ? Number.parseInt(flags['max-wiki-readiness-attempts'], 10)
+      : undefined;
+  const maxWallClockMinutes =
+    flags['max-wall-clock-minutes'] !== undefined
+      ? Number.parseInt(flags['max-wall-clock-minutes'], 10)
+      : undefined;
+  const maxConcurrentTasks =
+    flags['max-concurrent-tasks'] !== undefined
+      ? Number.parseInt(flags['max-concurrent-tasks'], 10)
       : undefined;
   const autoIncreaseBudgetsRaw = flags['auto-increase-budgets'];
   const autoIncreaseBudgets =
@@ -1441,8 +1457,16 @@ function parseBudgetArgs(text: string): BudgetInput | undefined {
     ...(maxTurnsFixer !== undefined && Number.isFinite(maxTurnsFixer) && maxTurnsFixer > 0
       ? { maxTurnsFixer }
       : {}),
+    ...(maxTotalTurns !== undefined && Number.isFinite(maxTotalTurns) && maxTotalTurns >= 0
+      ? { maxTotalTurns }
+      : {}),
     ...(maxUsdPerTask !== undefined && Number.isFinite(maxUsdPerTask) && maxUsdPerTask >= 0
       ? { maxUsdPerTask }
+      : {}),
+    ...(maxRetriesPerTask !== undefined &&
+    Number.isFinite(maxRetriesPerTask) &&
+    maxRetriesPerTask >= 0
+      ? { maxRetriesPerTask }
       : {}),
     ...(askUserDeadlineMs !== undefined &&
     Number.isFinite(askUserDeadlineMs) &&
@@ -1453,6 +1477,16 @@ function parseBudgetArgs(text: string): BudgetInput | undefined {
     Number.isFinite(maxWikiReadinessAttempts) &&
     maxWikiReadinessAttempts >= 0
       ? { maxWikiReadinessAttempts }
+      : {}),
+    ...(maxWallClockMinutes !== undefined &&
+    Number.isFinite(maxWallClockMinutes) &&
+    maxWallClockMinutes >= 0
+      ? { maxWallClockMinutes }
+      : {}),
+    ...(maxConcurrentTasks !== undefined &&
+    Number.isFinite(maxConcurrentTasks) &&
+    maxConcurrentTasks >= 1
+      ? { maxConcurrentTasks }
       : {}),
     ...(autoIncreaseBudgets !== undefined ? { autoIncreaseBudgets } : {}),
     ...(autoIncreaseCeilingMultiplier !== undefined &&

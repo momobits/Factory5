@@ -527,12 +527,20 @@ export interface BudgetInput {
   maxTurnsBuilder?: number;
   /** Per-task tool-conversation cap for fixers (ADR 0032). */
   maxTurnsFixer?: number;
+  /** Total tool-use turns across ALL agent classes combined. 0 = unlimited. */
+  maxTotalTurns?: number;
   /** Per-task USD ceiling. 0 = unlimited. */
   maxUsdPerTask?: number;
+  /** Maximum times a single task is retried (including auto-bumps). 0 = unlimited. */
+  maxRetriesPerTask?: number;
   /** How long the brain waits on an askUser before falling back (ms). */
   askUserDeadlineMs?: number;
   /** Architect+critic cycles per build before escalating (ADR 0033). 0 = unlimited. */
   maxWikiReadinessAttempts?: number;
+  /** Total wall-clock time for the build before directive parks. 0 = unlimited. */
+  maxWallClockMinutes?: number;
+  /** Concurrent task slots in the pool dispatcher. Minimum 1. */
+  maxConcurrentTasks?: number;
   /** When true, the pool dispatcher auto-bumps exhausted axes (ADR 0034 §5). */
   autoIncreaseBudgets?: boolean;
   /**
@@ -569,12 +577,22 @@ export async function runBudget(
       : {}),
     ...(input.maxTurnsBuilder !== undefined ? { maxTurnsBuilder: input.maxTurnsBuilder } : {}),
     ...(input.maxTurnsFixer !== undefined ? { maxTurnsFixer: input.maxTurnsFixer } : {}),
+    ...(input.maxTotalTurns !== undefined ? { maxTotalTurns: input.maxTotalTurns } : {}),
     ...(input.maxUsdPerTask !== undefined ? { maxUsdPerTask: input.maxUsdPerTask } : {}),
+    ...(input.maxRetriesPerTask !== undefined
+      ? { maxRetriesPerTask: input.maxRetriesPerTask }
+      : {}),
     ...(input.askUserDeadlineMs !== undefined
       ? { askUserDeadlineMs: input.askUserDeadlineMs }
       : {}),
     ...(input.maxWikiReadinessAttempts !== undefined
       ? { maxWikiReadinessAttempts: input.maxWikiReadinessAttempts }
+      : {}),
+    ...(input.maxWallClockMinutes !== undefined
+      ? { maxWallClockMinutes: input.maxWallClockMinutes }
+      : {}),
+    ...(input.maxConcurrentTasks !== undefined
+      ? { maxConcurrentTasks: input.maxConcurrentTasks }
       : {}),
   };
   const scalars: { autoIncreaseBudgets?: boolean; autoIncreaseCeilingMultiplier?: number } = {

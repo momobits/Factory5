@@ -89,9 +89,10 @@ export interface ProjectBudgetsLike {
 // -----------------------------------------------------------------------------
 
 /**
- * The five operator-facing pool axes in stable iteration order.
- * `askUserDeadlineMs`, `maxUsdPerTask`, and `maxWikiReadinessAttempts` are
- * directive-level scalar limits, not pools, so they are excluded here.
+ * The six operator-facing pool axes in stable iteration order.
+ * `askUserDeadlineMs`, `maxUsdPerTask`, `maxRetriesPerTask`,
+ * `maxWikiReadinessAttempts`, `maxWallClockMinutes`, and `maxConcurrentTasks`
+ * are non-pool axes excluded here.
  */
 const POOL_AXES: ReadonlyArray<BudgetAxis> = [
   'maxUsd',
@@ -99,6 +100,7 @@ const POOL_AXES: ReadonlyArray<BudgetAxis> = [
   'maxTurnsScaffolder',
   'maxTurnsBuilder',
   'maxTurnsFixer',
+  'maxTotalTurns',
 ] as const;
 
 /** Percentage at which status transitions from 'ok' to 'warn'. */
@@ -300,6 +302,43 @@ function aggregateUsed(db: Database, directiveId: string, axis: BudgetAxis): Agg
         const result = row.result_json !== null ? safeParseJson(row.result_json) : null;
         // turnsUsed will be present once Tier 15 wires the worker callback.
         // For pre-Tier-15 rows it is absent; treat as 0 (no double-count).
+        const turnsUsed =
+          isRecord(result) && typeof result['turnsUsed'] === 'number' ? result['turnsUsed'] : 0;
+        contributions.push({
+          taskId: row.id,
+          title: row.title,
+          agent: row.agent,
+          contribution: turnsUsed,
+        });
+        used += turnsUsed;
+      }
+
+      return { used, tasks: contributions };
+    }
+
+    case 'maxTotalTurns': {
+      // Feature F3 — cross-class total turn aggregation. Sums turnsUsed
+      // across ALL tasks regardless of agent class. Both class-specific
+      // pools and this total pool are active simultaneously; whichever
+      // fires first parks the directive.
+      const rows = db
+        .prepare(
+          `SELECT id, title, agent, result_json
+           FROM tasks_inflight
+           WHERE directive_id = ?`,
+        )
+        .all(directiveId) as Array<{
+        id: string;
+        title: string;
+        agent: string;
+        result_json: string | null;
+      }>;
+
+      const contributions: PoolTaskContribution[] = [];
+      let used = 0;
+
+      for (const row of rows) {
+        const result = row.result_json !== null ? safeParseJson(row.result_json) : null;
         const turnsUsed =
           isRecord(result) && typeof result['turnsUsed'] === 'number' ? result['turnsUsed'] : 0;
         contributions.push({
