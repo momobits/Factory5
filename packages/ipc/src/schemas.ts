@@ -734,6 +734,40 @@ export const apiV1PoolUsageResponseSchema = z.object({
 export type ApiV1PoolUsageResponse = z.infer<typeof apiV1PoolUsageResponseSchema>;
 
 // -----------------------------------------------------------------------------
+// GET /api/v1/projects/:id/budget-stats  (Feature F5 — budget observability)
+// -----------------------------------------------------------------------------
+
+/**
+ * Per-axis aggregated stat entry for `GET /api/v1/projects/:id/budget-stats`.
+ * Provides p50/p90/max across all completed builds for a given project.
+ */
+const apiV1BudgetAxisStatSchema = z.object({
+  p50: z.number(),
+  p90: z.number(),
+  max: z.number(),
+  currentCap: z.number(),
+  builds: z.number().int().nonnegative(),
+});
+
+/**
+ * Response shape for `GET /api/v1/projects/:id/budget-stats` — aggregated
+ * budget-axis usage statistics across all completed/failed/blocked directives
+ * for a project. Feature F5 (budget observability).
+ *
+ *   - `projectId` — echoes the path param.
+ *   - `buildCount` — total directives in the aggregation window.
+ *   - `computedAt` — ISO8601 timestamp of computation.
+ *   - `perAxis` — keyed by `BudgetAxis`; each entry has p50/p90/max/currentCap/builds.
+ */
+export const apiV1ProjectBudgetStatsResponseSchema = z.object({
+  projectId: z.string(),
+  buildCount: z.number().int().nonnegative(),
+  computedAt: z.string(),
+  perAxis: z.record(apiV1BudgetAxisStatSchema),
+});
+export type ApiV1ProjectBudgetStatsResponse = z.infer<typeof apiV1ProjectBudgetStatsResponseSchema>;
+
+// -----------------------------------------------------------------------------
 // GET /api/v1/spend  (web UI, ADR 0025 sub-step 9.6)
 // -----------------------------------------------------------------------------
 

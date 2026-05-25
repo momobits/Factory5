@@ -113,7 +113,8 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
         { id: 'live', num: '01', label: 'Live' },
         { id: 'defaults', num: '02', label: 'Defaults' },
         { id: 'history', num: '03', label: 'History' },
-        { id: 'settings', num: '04', label: 'Settings' },
+        { id: 'stats', num: '04', label: 'Stats' },
+        { id: 'settings', num: '05', label: 'Settings' },
       ]}
     />
 
@@ -247,6 +248,43 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
         <button type="button" class="btn" id="history-prev" disabled>← Prev</button>
         <span id="history-page-info" class="history-page-info"></span>
         <button type="button" class="btn" id="history-next">Next →</button>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- Stats tab (Feature F5 — budget observability) -->
+    <!-- ============================================================== -->
+    <section
+      class="tab-panel"
+      id="tab-stats"
+      role="tabpanel"
+      aria-labelledby="tab-stats-trigger"
+      hidden
+    >
+      <h3 class="tab-section-title">Budget usage statistics</h3>
+      <p class="tab-section-prose">
+        Aggregated p50/p90/max across all completed builds. Use these to set data-informed defaults.
+      </p>
+
+      <div id="stats-error" class="err" hidden></div>
+      <p id="stats-loading" class="page-loading">Loading stats…</p>
+      <p id="stats-empty" class="empty" hidden>— No completed builds yet. Stats require at least one finished directive. —</p>
+
+      <div id="stats-table-wrap" class="table-wrap" hidden>
+        <p id="stats-build-count" class="stats-build-count"></p>
+        <table id="stats-table">
+          <thead>
+            <tr>
+              <th>Axis</th>
+              <th class="num">p50</th>
+              <th class="num">p90</th>
+              <th class="num">max</th>
+              <th class="num">Current cap</th>
+              <th class="num">Builds</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
     </section>
 
@@ -660,6 +698,13 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
       color: var(--cool);
       border-color: color-mix(in srgb, var(--cool) 35%, var(--hairline));
     }
+
+    /* ----- Stats tab ----------------------------------------------- */
+    .stats-build-count {
+      font-size: 0.85rem;
+      color: color-mix(in srgb, currentColor 70%, transparent);
+      margin-bottom: 0.75rem;
+    }
   </style>
 
   <script>
@@ -746,8 +791,8 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
       limit: number;
       offset: number;
     }
-    type TabName = 'live' | 'defaults' | 'history' | 'settings';
-    const TAB_NAMES = ['live', 'defaults', 'history', 'settings'] as const;
+    type TabName = 'live' | 'defaults' | 'history' | 'stats' | 'settings';
+    const TAB_NAMES = ['live', 'defaults', 'history', 'stats', 'settings'] as const;
     const TAB_STORAGE_KEY = 'factory5.projectDetail.activeTab';
     const HISTORY_PAGE_SIZE = 50;
 
@@ -1677,6 +1722,113 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
     };
 
     // ------------------------------------------------------------------
+    // Stats tab (Feature F5 — budget observability)
+    // ------------------------------------------------------------------
+    interface BudgetAxisStat {
+      p50: number;
+      p90: number;
+      max: number;
+      currentCap: number;
+      builds: number;
+    }
+    interface BudgetStatsResp {
+      projectId: string;
+      buildCount: number;
+      computedAt: string;
+      perAxis: Record<string, BudgetAxisStat>;
+    }
+
+    /** Human-friendly axis labels reused from the Defaults tab. */
+    const STATS_AXIS_LABEL: Record<string, string> = {
+      maxUsd: 'Max USD',
+      maxSteps: 'Max steps',
+      maxTurnsScaffolder: 'Turns — scaffolder',
+      maxTurnsBuilder: 'Turns — builder',
+      maxTurnsFixer: 'Turns — fixer',
+      maxTotalTurns: 'Total turns',
+    };
+
+    const loadStats = async (projectId: string): Promise<void> => {
+      const loading = document.getElementById('stats-loading');
+      const empty = document.getElementById('stats-empty');
+      const wrap = document.getElementById('stats-table-wrap');
+      if (loading !== null) loading.hidden = false;
+      if (empty !== null) empty.hidden = true;
+      if (wrap !== null) wrap.hidden = true;
+      setError('stats-error', null);
+
+      try {
+        const resp = await apiFetch<BudgetStatsResp>(
+          `/api/v1/projects/${encodeURIComponent(projectId)}/budget-stats`,
+        );
+
+        if (loading !== null) loading.hidden = true;
+
+        if (resp.buildCount === 0 || Object.keys(resp.perAxis).length === 0) {
+          if (empty !== null) empty.hidden = false;
+          return;
+        }
+
+        // Populate the build count header.
+        const countEl = document.getElementById('stats-build-count');
+        if (countEl !== null) {
+          countEl.textContent = `Aggregated across ${String(resp.buildCount)} build${resp.buildCount === 1 ? '' : 's'}`;
+        }
+
+        // Render the stats table.
+        const tbody = document.querySelector('#stats-table tbody');
+        if (tbody === null) return;
+        tbody.innerHTML = '';
+
+        for (const [axis, stat] of Object.entries(resp.perAxis)) {
+          const tr = document.createElement('tr');
+
+          const axisTd = document.createElement('td');
+          axisTd.textContent = STATS_AXIS_LABEL[axis] ?? axis;
+          tr.appendChild(axisTd);
+
+          const p50Td = document.createElement('td');
+          p50Td.className = 'num';
+          p50Td.textContent = formatUsage(axis, stat.p50);
+          tr.appendChild(p50Td);
+
+          const p90Td = document.createElement('td');
+          p90Td.className = 'num';
+          p90Td.textContent = formatUsage(axis, stat.p90);
+          tr.appendChild(p90Td);
+
+          const maxTd = document.createElement('td');
+          maxTd.className = 'num';
+          maxTd.textContent = formatUsage(axis, stat.max);
+          tr.appendChild(maxTd);
+
+          const capTd = document.createElement('td');
+          capTd.className = 'num';
+          capTd.textContent = formatCap(axis, stat.currentCap);
+          tr.appendChild(capTd);
+
+          const buildsTd = document.createElement('td');
+          buildsTd.className = 'num';
+          buildsTd.textContent = String(stat.builds);
+          tr.appendChild(buildsTd);
+
+          tbody.appendChild(tr);
+        }
+
+        if (wrap !== null) wrap.hidden = false;
+      } catch (err) {
+        if (loading !== null) loading.hidden = true;
+        if (err instanceof ApiError) {
+          setError('stats-error', `${codeHeading(err.code, err.status)} (${err.message})`);
+        } else if (err instanceof Error) {
+          setError('stats-error', err.message);
+        } else {
+          setError('stats-error', 'Failed to load budget stats.');
+        }
+      }
+    };
+
+    // ------------------------------------------------------------------
     // Bootstrap
     // ------------------------------------------------------------------
     captureTokenFromUrl();
@@ -1716,6 +1868,7 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
           // Tab strip: activate the persisted tab and lazily load tab data.
           const historyLoaded = { value: false };
           const liveLoaded = { value: false };
+          const statsLoaded = { value: false };
           wireTabStrip((tab) => {
             if (tab === 'live' && !liveLoaded.value) {
               liveLoaded.value = true;
@@ -1724,6 +1877,10 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
             if (tab === 'history' && !historyLoaded.value) {
               historyLoaded.value = true;
               void loadHistory(id);
+            }
+            if (tab === 'stats' && !statsLoaded.value) {
+              statsLoaded.value = true;
+              void loadStats(id);
             }
           });
 

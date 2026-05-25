@@ -36,6 +36,7 @@ import process from 'node:process';
 import fastifyStatic from '@fastify/static';
 import type { ChannelId, OutboundMessage } from '@factory5/core';
 import { directiveSchema, newId } from '@factory5/core';
+import { BUDGET_DEFAULTS, type BudgetAxis } from '@factory5/core/budgets';
 import {
   apiV1AnswerPendingQuestionRequestSchema,
   apiV1AnswerPendingQuestionResponseSchema,
@@ -58,6 +59,7 @@ import {
   apiV1PendingQuestionsListQuerySchema,
   apiV1PendingQuestionsListResponseSchema,
   apiV1PoolUsageResponseSchema,
+  apiV1ProjectBudgetStatsResponseSchema,
   apiV1ProjectBudgetDefaultsPutBodySchema,
   apiV1ProjectDetailResponseSchema,
   apiV1ProjectsListResponseSchema,
@@ -89,6 +91,7 @@ import {
   type ApiV1PendingQuestionDetailResponse,
   type ApiV1PendingQuestionsListResponse,
   type ApiV1PoolUsageResponse,
+  type ApiV1ProjectBudgetStatsResponse,
   type ApiV1ProjectDetailResponse,
   type ApiV1ProjectsListResponse,
   type ApiV1SpendResponse,
@@ -714,6 +717,94 @@ function registerRoutes(
           parked: pool.parkedReason !== undefined,
         },
         'ipc: /api/v1/directives/:id/pool-usage',
+      );
+      reply.send(resp);
+    },
+  );
+
+  // ----- GET /api/v1/projects/:id/budget-stats (Feature F5 — budget observability) -----
+  // Aggregated per-axis usage stats (p50/p90/max) across all completed/failed/
+  // blocked directives for a project. Single endpoint, single SQL pass per
+  // directive, percentile computation server-side. Drives the Stats tab on the
+  // project page — operators use observed data to tune budget defaults.
+  app.get<{ Params: { id: string } }>(
+    '/api/v1/projects/:id/budget-stats',
+    async (request, reply) => {
+      requireUiAuth(request, opts.uiAuthToken);
+      const { id } = request.params;
+
+      const project = projectsQ.getById(opts.db, id);
+      if (project === undefined) {
+        throw new IpcRequestError(404, 'PROJECT_NOT_FOUND', `project ${id} not found`);
+      }
+
+      // Read project-level budget defaults from disk for currentCap computation.
+      let projectBudgetDefaults: Partial<Record<BudgetAxis, number>> = {};
+      try {
+        const meta = await readProjectMetadata(project.workspacePath);
+        if (meta !== undefined) {
+          projectBudgetDefaults =
+            (budgetDefaultsFromProjectMeta(meta) as Partial<Record<BudgetAxis, number>>) ?? {};
+        }
+      } catch {
+        // Best-effort — fall through to BUDGET_DEFAULTS for cap computation.
+      }
+
+      // Fetch all completed/failed/blocked directives for this project.
+      const directives = directivesQ.listPaged(opts.db, {
+        projectId: id,
+        limit: 100,
+        offset: 0,
+      });
+      const terminalDirectives = directives.items.filter(
+        (d) => d.status === 'complete' || d.status === 'failed' || d.status === 'blocked',
+      );
+
+      // For each terminal directive, compute its pool usage and collect per-axis used values.
+      const axisValues: Record<string, number[]> = {};
+      const projectBudgets = {
+        budgetDefaults: projectBudgetDefaults as Record<string, number>,
+      };
+
+      for (const d of terminalDirectives) {
+        try {
+          const pool = computePoolUsage(opts.db, d.id, projectBudgets);
+          for (const [axis, usage] of Object.entries(pool.perAxis)) {
+            if (axisValues[axis] === undefined) axisValues[axis] = [];
+            axisValues[axis].push(usage.used);
+          }
+        } catch {
+          // Skip directives whose data is corrupt/missing.
+        }
+      }
+
+      // Compute percentiles per axis.
+      const perAxis: Record<
+        string,
+        { p50: number; p90: number; max: number; currentCap: number; builds: number }
+      > = {};
+      for (const [axis, values] of Object.entries(axisValues)) {
+        if (values.length === 0) continue;
+        const sorted = [...values].sort((a, b) => a - b);
+        const p50 = percentile(sorted, 50);
+        const p90 = percentile(sorted, 90);
+        const max = sorted[sorted.length - 1] ?? 0;
+        const currentCap = Math.max(
+          projectBudgetDefaults[axis as BudgetAxis] ?? 0,
+          BUDGET_DEFAULTS[axis as BudgetAxis]?.value ?? 0,
+        );
+        perAxis[axis] = { p50, p90, max, currentCap, builds: values.length };
+      }
+
+      const resp: ApiV1ProjectBudgetStatsResponse = apiV1ProjectBudgetStatsResponseSchema.parse({
+        projectId: id,
+        buildCount: terminalDirectives.length,
+        computedAt: new Date().toISOString(),
+        perAxis,
+      });
+      ipcLog.debug(
+        { reqId: request.id, projectId: id, buildCount: terminalDirectives.length },
+        'ipc: /api/v1/projects/:id/budget-stats',
       );
       reply.send(resp);
     },
@@ -1503,6 +1594,17 @@ function parseStoredBlockedReason(raw: string | undefined): DirectiveBlockedReas
   }
   const validated = directiveBlockedReasonSchema.safeParse(parsed);
   return validated.success ? validated.data : raw;
+}
+
+/**
+ * Compute the k-th percentile from a pre-sorted array of numbers.
+ * Uses the "nearest rank" method: percentile(sorted, 50) returns the median.
+ * Returns 0 for an empty array.
+ */
+function percentile(sorted: number[], k: number): number {
+  if (sorted.length === 0) return 0;
+  const index = Math.ceil((k / 100) * sorted.length) - 1;
+  return sorted[Math.max(0, index)] ?? 0;
 }
 
 /**

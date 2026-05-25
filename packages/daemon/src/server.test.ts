@@ -4510,5 +4510,201 @@ describe('IPC server — POST /api/v1/projects (Phase 3 step 3.7)', () => {
   });
 });
 
+describe('IPC server — GET /api/v1/projects/:id/budget-stats (Feature F5)', () => {
+  let db: Database;
+  let doorbell: Doorbell;
+  let projectDir: string;
+
+  beforeEach(async () => {
+    db = freshDb();
+    doorbell = new Doorbell();
+    projectDir = await mkdtemp(join(tmpdir(), 'factory5-budget-stats-'));
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  const UI_TOKEN = 'ui-secret-stats';
+
+  const baseOpts = (): Parameters<typeof buildIpcServer>[0] => ({
+    host: '127.0.0.1',
+    port: 0,
+    db,
+    doorbell,
+    startedAt: STARTED_AT,
+    version: '0.0.1',
+    processName: 'factoryd-test',
+    uiAuthToken: UI_TOKEN,
+  });
+
+  async function seedProject(projectMetadata: Record<string, unknown> = {}): Promise<string> {
+    const factoryDir = join(projectDir, '.factory');
+    await mkdir(factoryDir, { recursive: true });
+    const projectId = newId();
+    await writeFile(
+      join(factoryDir, 'project.json'),
+      JSON.stringify(
+        {
+          id: projectId,
+          name: 'stats-test',
+          createdAt: '2026-04-25T00:00:00.000Z',
+          factoryVersion: '0.x',
+          metadata: projectMetadata,
+        },
+        null,
+        2,
+      ),
+    );
+    // Register the project in the DB.
+    projectsQ.upsert(db, {
+      id: projectId,
+      name: 'stats-test',
+      workspacePath: projectDir,
+      status: 'active',
+      createdAt: '2026-04-25T00:00:00.000Z',
+      lastTouchedAt: '2026-05-25T00:00:00.000Z',
+    });
+    return projectId;
+  }
+
+  function seedDirective(projectId: string, status: string): string {
+    const id = newId();
+    const directive: Directive = {
+      id,
+      source: 'cli',
+      principal: 'web-ui',
+      channelRef: 'budget-stats-test',
+      intent: 'build',
+      payload: { projectPath: projectDir, project: 'stats-test' },
+      autonomy: 'autonomous',
+      createdAt: new Date().toISOString(),
+      status: status as Directive['status'],
+      projectId,
+    };
+    directivesQ.insert(db, directive);
+    return id;
+  }
+
+  it('returns 401 without bearer', async () => {
+    const projectId = await seedProject();
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectId}/budget-stats`,
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns 404 on missing project', async () => {
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${newId()}/budget-stats`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('PROJECT_NOT_FOUND');
+    await app.close();
+  });
+
+  it('returns empty perAxis for a project with no terminal directives', async () => {
+    const projectId = await seedProject({ budgetDefaults: { maxTurnsBuilder: 200 } });
+    // Seed a running directive (should be excluded from stats).
+    seedDirective(projectId, 'running');
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectId}/budget-stats`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      projectId: string;
+      buildCount: number;
+      computedAt: string;
+      perAxis: Record<string, unknown>;
+    };
+    expect(body.projectId).toBe(projectId);
+    expect(body.buildCount).toBe(0);
+    expect(Object.keys(body.perAxis).length).toBe(0);
+    await app.close();
+  });
+
+  it('computes stats for completed directives with model_usage data', async () => {
+    const projectId = await seedProject({ budgetDefaults: { maxUsd: 10, maxTurnsBuilder: 200 } });
+
+    // Seed 3 completed directives with different model_usage.
+    const dId1 = seedDirective(projectId, 'complete');
+    const dId2 = seedDirective(projectId, 'complete');
+    const dId3 = seedDirective(projectId, 'failed');
+
+    // Insert model_usage rows: dId1=$1, dId2=$3, dId3=$2
+    const insertUsage = db.prepare(
+      `INSERT INTO model_usage (id, directive_id, task_id, provider, model, category, input_tokens, output_tokens, cost_usd, duration_ms, called_at)
+       VALUES (?, ?, ?, 'anthropic', 'claude-3', 'chat', 100, 50, ?, 500, ?)`,
+    );
+    insertUsage.run(newId(), dId1, newId(), 1.0, '2026-05-01T00:00:00Z');
+    insertUsage.run(newId(), dId2, newId(), 3.0, '2026-05-02T00:00:00Z');
+    insertUsage.run(newId(), dId3, newId(), 2.0, '2026-05-03T00:00:00Z');
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectId}/budget-stats`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      projectId: string;
+      buildCount: number;
+      perAxis: Record<
+        string,
+        { p50: number; p90: number; max: number; currentCap: number; builds: number }
+      >;
+    };
+    expect(body.projectId).toBe(projectId);
+    expect(body.buildCount).toBe(3);
+    // maxUsd should have stats: sorted = [1, 2, 3], p50=2, p90=3, max=3
+    expect(body.perAxis['maxUsd']).toBeDefined();
+    expect(body.perAxis['maxUsd']?.max).toBe(3);
+    expect(body.perAxis['maxUsd']?.p50).toBe(2);
+    expect(body.perAxis['maxUsd']?.p90).toBe(3);
+    // currentCap = max(projectDefault=10, BUDGET_DEFAULTS.maxUsd.value=0) = 10
+    expect(body.perAxis['maxUsd']?.currentCap).toBe(10);
+    expect(body.perAxis['maxUsd']?.builds).toBe(3);
+    await app.close();
+  });
+
+  it('excludes running directives from stats', async () => {
+    const projectId = await seedProject({});
+    seedDirective(projectId, 'running');
+    seedDirective(projectId, 'pending');
+    const dComplete = seedDirective(projectId, 'complete');
+
+    // Only the complete one gets model_usage.
+    db.prepare(
+      `INSERT INTO model_usage (id, directive_id, task_id, provider, model, category, input_tokens, output_tokens, cost_usd, duration_ms, called_at)
+       VALUES (?, ?, ?, 'anthropic', 'claude-3', 'chat', 100, 50, 5.0, 500, ?)`,
+    ).run(newId(), dComplete, newId(), '2026-05-01T00:00:00Z');
+
+    const app = await buildIpcServer(baseOpts());
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectId}/budget-stats`,
+      headers: { authorization: `Bearer ${UI_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { buildCount: number };
+    // Only the complete directive counts.
+    expect(body.buildCount).toBe(1);
+    await app.close();
+  });
+});
+
 // Workaround for unused-import lint when only types are referenced above.
 void IpcRequestError;
