@@ -26,7 +26,7 @@
 | 4 | [claude-cli-default-maxTurns-80-conflicts-with-pool-model](issues/claude-cli-default-maxTurns-80-conflicts-with-pool-model.md) | P1 | OUTSTANDING | Feature 4 (budget_provider_maxturns_fix) |
 | 5 | [directiveLimits-ADR-0020-not-resolved-via-three-tier-max-rule](issues/directiveLimits-ADR-0020-not-resolved-via-three-tier-max-rule.md) | P1 | OUTSTANDING | Feature 2 (budget_unified_resolution) |
 | 6 | [maxWikiReadinessAttempts-ignores-project-defaults](issues/maxWikiReadinessAttempts-ignores-project-defaults.md) | P2 | OUTSTANDING | Feature 2 (budget_unified_resolution) |
-| 7 | [validateMetadataOrReason-vs-projectMetadataSchema-dual-validators](issues/validateMetadataOrReason-vs-projectMetadataSchema-dual-validators.md) | P2 | OUTSTANDING | Standalone (Task #30) |
+| 7 | [validateMetadataOrReason-vs-projectMetadataSchema-dual-validators](archive/validateMetadataOrReason-vs-projectMetadataSchema-dual-validators.md) | P2 | RESOLVED (`9bb9dde`) | Standalone (Task #30) |
 | 8 | [budget-axis-semantic-models-undocumented](issues/budget-axis-semantic-models-undocumented.md) | P2 | OUTSTANDING | Feature 1 (budget_canonical_table) |
 | 9 | [projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume](issues/projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume.md) | P2 | OUTSTANDING | Standalone (Task #31) |
 | 10 | [apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible](issues/apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible.md) | P3 | OUTSTANDING | Doc sweep (Task #32) |

@@ -61,7 +61,7 @@ Build order: 5 of 5 in brainstorm sequence.
 
 | ID | Title | File | Complexity | Dependencies | Closes |
 |----|-------|------|-----------|-------------|--------|
-| S1 | Validator dedup | [validateMetadataOrReason-vs-projectMetadataSchema-dual-validators.md](issues/validateMetadataOrReason-vs-projectMetadataSchema-dual-validators.md) | Small | None | Relay #7 |
+| S1 | Validator dedup | [validateMetadataOrReason-vs-projectMetadataSchema-dual-validators.md](archive/validateMetadataOrReason-vs-projectMetadataSchema-dual-validators.md) | Small | None | Relay #7 | DONE (`9bb9dde`) |
 | S2 | pool/pool-resume budget-extraction dedup | [projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume.md](issues/projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume.md) | Tiny | None | Relay #9 |
 | S3 | Doc hygiene sweep | [apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible.md](issues/apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible.md), [planner-still-emits-estimatedUsd-instruction-for-dead-cap.md](issues/planner-still-emits-estimatedUsd-instruction-for-dead-cap.md), [task-result-errorSubtype-references-deleted-escalation-path.md](issues/task-result-errorSubtype-references-deleted-escalation-path.md), [Budgets-import-cycle-comment-mentions-Tier-15.7-deletion-of-resolveDirectivePayloadBudgets.md](issues/Budgets-import-cycle-comment-mentions-Tier-15.7-deletion-of-resolveDirectivePayloadBudgets.md) | Tiny | None | Relay #10, #11, #12, #13 |
 

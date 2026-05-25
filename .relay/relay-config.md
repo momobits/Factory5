@@ -22,7 +22,7 @@
 ### Config Boundaries
 
 - **`<dataDir>/config.json`** — daemon-wide config (Tier 8 + Tier 14). Keys: `askUserDeadlineMs`, `[agents.architect/critic]` category overrides, `[categories.*]` model bindings. Schema: `factoryConfigFileSchema` in `@factory5/core`.
-- **`<project>/.factory/project.json`** — per-project metadata + budget defaults. Schema: `projectMetadataSchema` in `@factory5/core` (validates via Zod on write since Tier 15.4; read path uses hand-rolled `validateMetadataOrReason` in wiki for legacy compat).
+- **`<project>/.factory/project.json`** — per-project metadata + budget defaults. Schema: `projectMetadataSchema` in `@factory5/core` (validates via Zod on both read and write paths since S1 fix `9bb9dde`).
 - **`directive.payload.budgets`** — per-build override snapshot. Per Tier 15 / ADR 0034: acts as a floor in `max(project.json, payload.budgets, BUDGET_DEFAULTS)` pool cap resolution.
 - **`<dataDir>/factory.db`** — single SQLite DB, multi-tenant across projects. Tables: directives, tasks_inflight, plans (NONE — plan lives at `<project>/.factory/plan.json`), model_usage, findings_registry, pending_questions, sessions, directive_log_lines, projects, learnings, outbound_messages, events_audit, migrations.
 
