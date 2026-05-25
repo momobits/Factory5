@@ -15,7 +15,6 @@
 
 import type { AutonomyMode, Directive, DirectiveLimits, ModelCategory, Plan } from '@factory5/core';
 import { newId } from '@factory5/core';
-import type { BudgetAxis } from '@factory5/core/budgets';
 import { createLogger } from '@factory5/logger';
 import { assess, type AssessResult, type Runtime } from '@factory5/assessor';
 import type { DirectiveEventEmitter } from '@factory5/ipc';
@@ -37,7 +36,7 @@ import {
   readPlan,
   readWiki,
 } from '@factory5/wiki';
-import { resolveAxisCap, type ProjectBudgetsLike } from './pool-usage.js';
+import { projectBudgetsFromMetadata, resolveAxisCap, type ProjectBudgetsLike } from './pool-usage.js';
 
 import { runArchitect, type ArchitectResult } from './architect.js';
 import { runArchitectWithCritique, WikiReadinessAbortError } from './architect-loop.js';
@@ -701,34 +700,14 @@ function isAbortAnswer(res: AskUserResult): boolean {
 
 /**
  * Feature F2 — load project-level budget defaults for unified resolution.
- * Mirrors the same pattern as `pool.ts`'s private `loadProjectBudgets` but
- * usable from loop.ts without coupling to the pool module's internals.
- * Falls back to empty defaults on read failure so the brain never crashes
- * on a corrupt `project.json`.
+ * Uses the shared {@link projectBudgetsFromMetadata} transform (pool-usage.ts)
+ * to avoid duplicating extraction logic. Falls back to empty defaults on read
+ * failure so the brain never crashes on a corrupt `project.json`.
  */
 async function loadProjectBudgetsForDirective(projectPath: string): Promise<ProjectBudgetsLike> {
   try {
     const metadata = await loadOrCreateProjectMetadata(projectPath, '');
-    const rawBudgetDefaults = metadata.metadata['budgetDefaults'];
-    const budgetDefaults: Partial<Record<BudgetAxis, number>> =
-      typeof rawBudgetDefaults === 'object' &&
-      rawBudgetDefaults !== null &&
-      !Array.isArray(rawBudgetDefaults)
-        ? (rawBudgetDefaults as Partial<Record<BudgetAxis, number>>)
-        : {};
-    const autoIncreaseBudgets =
-      typeof metadata.metadata['autoIncreaseBudgets'] === 'boolean'
-        ? metadata.metadata['autoIncreaseBudgets']
-        : undefined;
-    const autoIncreaseCeilingMultiplier =
-      typeof metadata.metadata['autoIncreaseCeilingMultiplier'] === 'number'
-        ? metadata.metadata['autoIncreaseCeilingMultiplier']
-        : undefined;
-    return {
-      budgetDefaults,
-      ...(autoIncreaseBudgets !== undefined ? { autoIncreaseBudgets } : {}),
-      ...(autoIncreaseCeilingMultiplier !== undefined ? { autoIncreaseCeilingMultiplier } : {}),
-    };
+    return projectBudgetsFromMetadata(metadata);
   } catch (err) {
     log.warn(
       { err, projectPath },

@@ -51,7 +51,6 @@ import {
   loadOrCreateProjectMetadata,
   updateProjectMetadata,
   writePlan,
-  type ProjectMetadata,
 } from '@factory5/wiki';
 import {
   isToolUsingAgent,
@@ -60,7 +59,12 @@ import {
   type WorkerOutcome,
 } from '@factory5/worker';
 
-import { computePoolUsage, resolveEffectiveCap, type ProjectBudgetsLike } from './pool-usage.js';
+import {
+  computePoolUsage,
+  projectBudgetsFromMetadata,
+  resolveEffectiveCap,
+  type ProjectBudgetsLike,
+} from './pool-usage.js';
 import { loadDaemonEndpoint } from './daemon-endpoint.js';
 import { emitLogLine } from './emit.js';
 import { buildAgentSystemPrompt } from './prompts.js';
@@ -198,27 +202,6 @@ async function loadProjectBudgets(projectPath: string): Promise<ProjectBudgetsLi
     );
     return { budgetDefaults: {} };
   }
-}
-
-/** Pure transform — extract a {@link ProjectBudgetsLike} from raw metadata. */
-function projectBudgetsFromMetadata(metadata: ProjectMetadata): ProjectBudgetsLike {
-  const rawBudgetDefaults = metadata.metadata['budgetDefaults'];
-  const budgetDefaults: Partial<Record<BudgetAxis, number>> = isRecord(rawBudgetDefaults)
-    ? (rawBudgetDefaults as Partial<Record<BudgetAxis, number>>)
-    : {};
-  const autoIncreaseBudgets =
-    typeof metadata.metadata['autoIncreaseBudgets'] === 'boolean'
-      ? metadata.metadata['autoIncreaseBudgets']
-      : undefined;
-  const autoIncreaseCeilingMultiplier =
-    typeof metadata.metadata['autoIncreaseCeilingMultiplier'] === 'number'
-      ? metadata.metadata['autoIncreaseCeilingMultiplier']
-      : undefined;
-  return {
-    budgetDefaults,
-    ...(autoIncreaseBudgets !== undefined ? { autoIncreaseBudgets } : {}),
-    ...(autoIncreaseCeilingMultiplier !== undefined ? { autoIncreaseCeilingMultiplier } : {}),
-  };
 }
 
 /** Type-guard: `value` is a non-null `Record<string, unknown>`. */

@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { newId } from '@factory5/core';
-import { computePoolUsage, resolveAxisCap, resolveEffectiveCap } from './pool-usage.js';
+import { computePoolUsage, projectBudgetsFromMetadata, resolveAxisCap, resolveEffectiveCap } from './pool-usage.js';
 import { openDatabase, runMigrations, type Database } from '@factory5/state';
 import { BUDGET_DEFAULTS } from '@factory5/core/budgets';
 
@@ -479,5 +479,76 @@ describe('resolveAxisCap', () => {
 
     // No payload, no project → falls back to BUDGET_DEFAULTS.maxUsdPerTask.value (0)
     expect(cap).toBe(BUDGET_DEFAULTS.maxUsdPerTask.value);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// projectBudgetsFromMetadata (S2 dedup)
+// ---------------------------------------------------------------------------
+
+describe('projectBudgetsFromMetadata', () => {
+  const baseMeta = {
+    id: '01JAAAAAAAAAAAAAAAAAAAAAAA',
+    name: 'test-project',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    factoryVersion: '0.x',
+  };
+
+  it('extracts budgetDefaults from metadata', () => {
+    const result = projectBudgetsFromMetadata({
+      ...baseMeta,
+      metadata: { budgetDefaults: { maxTurnsBuilder: 100, maxUsd: 50 } },
+    });
+    expect(result.budgetDefaults).toEqual({ maxTurnsBuilder: 100, maxUsd: 50 });
+  });
+
+  it('returns empty budgetDefaults when metadata key is absent', () => {
+    const result = projectBudgetsFromMetadata({ ...baseMeta, metadata: {} });
+    expect(result.budgetDefaults).toEqual({});
+  });
+
+  it('returns empty budgetDefaults when metadata key is not an object', () => {
+    const result = projectBudgetsFromMetadata({ ...baseMeta, metadata: { budgetDefaults: 'bad' } });
+    expect(result.budgetDefaults).toEqual({});
+  });
+
+  it('extracts autoIncreaseBudgets when present as boolean', () => {
+    const result = projectBudgetsFromMetadata({
+      ...baseMeta,
+      metadata: { budgetDefaults: {}, autoIncreaseBudgets: true },
+    });
+    expect(result.autoIncreaseBudgets).toBe(true);
+  });
+
+  it('omits autoIncreaseBudgets when not a boolean', () => {
+    const result = projectBudgetsFromMetadata({
+      ...baseMeta,
+      metadata: { budgetDefaults: {}, autoIncreaseBudgets: 'yes' },
+    });
+    expect(result).not.toHaveProperty('autoIncreaseBudgets');
+  });
+
+  it('extracts autoIncreaseCeilingMultiplier when present as number', () => {
+    const result = projectBudgetsFromMetadata({
+      ...baseMeta,
+      metadata: { budgetDefaults: {}, autoIncreaseCeilingMultiplier: 3.5 },
+    });
+    expect(result.autoIncreaseCeilingMultiplier).toBe(3.5);
+  });
+
+  it('omits autoIncreaseCeilingMultiplier when not a number', () => {
+    const result = projectBudgetsFromMetadata({
+      ...baseMeta,
+      metadata: { budgetDefaults: {}, autoIncreaseCeilingMultiplier: null },
+    });
+    expect(result).not.toHaveProperty('autoIncreaseCeilingMultiplier');
+  });
+
+  it('handles arrays in budgetDefaults slot gracefully (not a record)', () => {
+    const result = projectBudgetsFromMetadata({
+      ...baseMeta,
+      metadata: { budgetDefaults: [1, 2, 3] },
+    });
+    expect(result.budgetDefaults).toEqual({});
   });
 });

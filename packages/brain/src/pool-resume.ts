@@ -28,7 +28,7 @@ import { loadOrCreateProjectMetadata } from '@factory5/wiki';
 import type { Database } from '@factory5/state';
 import type { Logger } from '@factory5/logger';
 
-import { computePoolUsage, type ProjectBudgetsLike } from './pool-usage.js';
+import { computePoolUsage, projectBudgetsFromMetadata, type ProjectBudgetsLike } from './pool-usage.js';
 
 /** Default debounce window — prevents a rapid-save sequence from firing N re-checks. */
 const DEFAULT_DEBOUNCE_MS = 250;
@@ -189,27 +189,7 @@ export function createPoolResume(deps: PoolResumeDeps): PoolResume {
       // Re-read project.json to get the current budgetDefaults + the project ULID.
       const metadata = await loadOrCreateProjectMetadata(projectPath, '');
       projectId = metadata.id;
-
-      const rawBudgetDefaults = metadata.metadata['budgetDefaults'];
-      const budgetDefaults: Partial<Record<BudgetAxis, number>> = isRecord(rawBudgetDefaults)
-        ? (rawBudgetDefaults as Partial<Record<BudgetAxis, number>>)
-        : {};
-
-      const autoIncreaseBudgets =
-        typeof metadata.metadata['autoIncreaseBudgets'] === 'boolean'
-          ? metadata.metadata['autoIncreaseBudgets']
-          : undefined;
-
-      const autoIncreaseCeilingMultiplier =
-        typeof metadata.metadata['autoIncreaseCeilingMultiplier'] === 'number'
-          ? metadata.metadata['autoIncreaseCeilingMultiplier']
-          : undefined;
-
-      projectBudgets = {
-        budgetDefaults,
-        ...(autoIncreaseBudgets !== undefined ? { autoIncreaseBudgets } : {}),
-        ...(autoIncreaseCeilingMultiplier !== undefined ? { autoIncreaseCeilingMultiplier } : {}),
-      };
+      projectBudgets = projectBudgetsFromMetadata(metadata);
     } catch (err) {
       logger.warn({ err, projectPath }, 'pool-resume: failed to load project.json');
       return;
@@ -273,11 +253,3 @@ export function createPoolResume(deps: PoolResumeDeps): PoolResume {
   return { registerProject, unregisterProject, activeWatchers, shutdown, flush };
 }
 
-// ---------------------------------------------------------------------------
-// Tiny helpers
-// ---------------------------------------------------------------------------
-
-/** Type-guard: `value` is a non-null `Record<string, unknown>`. */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}

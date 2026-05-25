@@ -15,6 +15,7 @@
 import { BUDGET_DEFAULTS, type BudgetAxis } from '@factory5/core/budgets';
 import { createLogger } from '@factory5/logger';
 import type { Database } from '@factory5/state';
+import type { ProjectMetadata } from '@factory5/wiki';
 
 const log = createLogger('brain.pool-usage');
 
@@ -398,6 +399,37 @@ function parseParkedReason(
     usedAtPark,
     capAtPark,
     nextBumpTo: capAtPark + projectDefault,
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Metadata → ProjectBudgetsLike transform
+// -----------------------------------------------------------------------------
+
+/**
+ * Pure transform — extract a {@link ProjectBudgetsLike} from raw project metadata.
+ *
+ * Single source of truth for the brain's budget-extraction from `project.json`.
+ * Consumed by `pool.ts`, `pool-resume.ts`, and `loop.ts` to avoid duplicating
+ * the `isRecord` + type-narrowing + spread logic in each module.
+ */
+export function projectBudgetsFromMetadata(metadata: ProjectMetadata): ProjectBudgetsLike {
+  const rawBudgetDefaults = metadata.metadata['budgetDefaults'];
+  const budgetDefaults: Partial<Record<BudgetAxis, number>> = isRecord(rawBudgetDefaults)
+    ? (rawBudgetDefaults as Partial<Record<BudgetAxis, number>>)
+    : {};
+  const autoIncreaseBudgets =
+    typeof metadata.metadata['autoIncreaseBudgets'] === 'boolean'
+      ? metadata.metadata['autoIncreaseBudgets']
+      : undefined;
+  const autoIncreaseCeilingMultiplier =
+    typeof metadata.metadata['autoIncreaseCeilingMultiplier'] === 'number'
+      ? metadata.metadata['autoIncreaseCeilingMultiplier']
+      : undefined;
+  return {
+    budgetDefaults,
+    ...(autoIncreaseBudgets !== undefined ? { autoIncreaseBudgets } : {}),
+    ...(autoIncreaseCeilingMultiplier !== undefined ? { autoIncreaseCeilingMultiplier } : {}),
   };
 }
 
