@@ -321,9 +321,8 @@ export async function readProjectMetadata(
  * Write a {@link ProjectMetadata} object to `<projectPath>/.factory/project.json`.
  *
  * Validates the metadata bag via {@link projectMetadataSchema} from
- * `@factory5/core` before writing — this is the drift-safe write path for
- * Tier 15 scalars (`autoIncreaseBudgets`, `autoIncreaseCeilingMultiplier`).
- * The read path keeps its lenient `validateMetadataOrReason` for backward compat.
+ * `@factory5/core` before writing — both the read and write paths now share
+ * the same Zod schema (single source of truth; see issue S1 / dual-validators).
  *
  * Throws a Zod `ZodError` when the metadata fails schema validation (e.g.
  * `autoIncreaseCeilingMultiplier: -1`). Creates the `.factory/` directory if
@@ -343,38 +342,29 @@ export async function writeProjectMetadata(
   return meta;
 }
 
-const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
-
 /**
- * Validate parsed JSON against the {@link ProjectMetadata} shape.
+ * Validate parsed JSON against the {@link ProjectMetadata} shape via the
+ * canonical Zod schema ({@link projectMetadataSchema} from `@factory5/core`).
  * Returns the validated object on success, or a short reason string on
  * failure (which the caller wraps in {@link ProjectMetadataCorruptError}).
  *
- * Hand-validated rather than Zod-ed because the file is read at every
- * directive-creation path — keeping this dependency-light is worth the
- * handful of explicit checks.
+ * Single source of truth — both the read and write paths now share the same
+ * schema. Previously the read path used a hand-rolled validator that could
+ * drift from the write path's Zod parse (see issue S1 / dual-validators).
  */
 function validateMetadataOrReason(raw: unknown): ProjectMetadata | string {
-  if (typeof raw !== 'object' || raw === null) return 'not an object';
-  const obj = raw as Record<string, unknown>;
-  if (typeof obj.id !== 'string' || !ULID_RE.test(obj.id)) return 'id missing or not a ULID';
-  if (typeof obj.name !== 'string' || obj.name.length === 0) return 'name missing or empty';
-  if (typeof obj.createdAt !== 'string' || obj.createdAt.length === 0) {
-    return 'createdAt missing or empty';
+  const result = projectMetadataSchema.safeParse(raw);
+  if (!result.success) {
+    const first = result.error.issues[0];
+    return first ? `${first.path.join('.')}: ${first.message}` : 'unknown validation error';
   }
-  if (typeof obj.factoryVersion !== 'string' || obj.factoryVersion.length === 0) {
-    return 'factoryVersion missing or empty';
-  }
-  const metadata =
-    typeof obj.metadata === 'object' && obj.metadata !== null && !Array.isArray(obj.metadata)
-      ? (obj.metadata as Record<string, unknown>)
-      : {};
+  const data = result.data;
   return {
-    id: obj.id,
-    name: obj.name,
-    createdAt: obj.createdAt,
-    factoryVersion: obj.factoryVersion,
-    metadata,
+    id: data.id,
+    name: data.name,
+    createdAt: data.createdAt,
+    factoryVersion: data.factoryVersion,
+    metadata: (data.metadata as Record<string, unknown> | undefined) ?? {},
   };
 }
 

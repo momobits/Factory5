@@ -507,10 +507,9 @@ export const projectTier15MetadataSchema = z
 /**
  * Zod schema for `<project>/.factory/project.json` (ADR 0021).
  *
- * Primarily used for test fixtures and any new code paths that want
- * boundary-validated parsing of the project identity file. Legacy readers
- * in `@factory5/wiki` use the hand-rolled `validateMetadataOrReason`
- * (kept for performance on the hot directive-creation path).
+ * Single source of truth for both the read and write paths in
+ * `@factory5/wiki`. The read path's `validateMetadataOrReason` now
+ * delegates to `safeParse` against this schema (issue S1 / dual-validators).
  */
 export const projectMetadataSchema = z.object({
   id: ulidSchema,
