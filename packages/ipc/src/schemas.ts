@@ -648,16 +648,6 @@ export type ApiV1ProjectBudgetDefaultsPutBody = z.infer<
 >;
 
 /**
- * Pre-Tier-15 alias for the PUT body schema. Kept as a re-export so any
- * downstream consumer that still imports the old name compiles; the schema
- * now accepts the wrapped shape so callers must update their request bodies.
- *
- * @deprecated Use {@link apiV1ProjectBudgetDefaultsPutBodySchema} directly.
- */
-export const apiV1UpdateProjectBudgetRequestSchema = apiV1ProjectBudgetDefaultsPutBodySchema;
-export type ApiV1UpdateProjectBudgetRequest = z.infer<typeof apiV1UpdateProjectBudgetRequestSchema>;
-
-/**
  * Response shape for `PUT /api/v1/projects/:id/budget`. Echoes the persisted
  * `metadata.budgetDefaults` document plus the two Tier-15 scalars so the SPA
  * can confirm its form state matches disk. The `budgetDefaults` field is

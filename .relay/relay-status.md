@@ -29,10 +29,10 @@
 | 7 | [validateMetadataOrReason-vs-projectMetadataSchema-dual-validators](archive/validateMetadataOrReason-vs-projectMetadataSchema-dual-validators.md) | P2 | RESOLVED (`9bb9dde`) | Standalone (Task #30) |
 | 8 | [budget-axis-semantic-models-undocumented](issues/budget-axis-semantic-models-undocumented.md) | P2 | OUTSTANDING | Feature 1 (budget_canonical_table) |
 | 9 | [projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume](issues/projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume.md) | P2 | OUTSTANDING | Standalone (Task #31) |
-| 10 | [apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible](issues/apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible.md) | P3 | OUTSTANDING | Doc sweep (Task #32) |
-| 11 | [planner-still-emits-estimatedUsd-instruction-for-dead-cap](issues/planner-still-emits-estimatedUsd-instruction-for-dead-cap.md) | P3 | OUTSTANDING | Doc sweep (Task #32) |
-| 12 | [task-result-errorSubtype-references-deleted-escalation-path](issues/task-result-errorSubtype-references-deleted-escalation-path.md) | P3 | OUTSTANDING | Doc sweep (Task #32) |
-| 13 | [Budgets-import-cycle-comment-mentions-Tier-15.7-deletion-of-resolveDirectivePayloadBudgets](issues/Budgets-import-cycle-comment-mentions-Tier-15.7-deletion-of-resolveDirectivePayloadBudgets.md) | P3 | OUTSTANDING | Doc sweep (Task #32) |
+| 10 | [apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible](archive/issues/apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible.md) | P3 | RESOLVED | Doc sweep (Task #32 / S3) |
+| 11 | [planner-still-emits-estimatedUsd-instruction-for-dead-cap](archive/issues/planner-still-emits-estimatedUsd-instruction-for-dead-cap.md) | P3 | RESOLVED | Doc sweep (Task #32 / S3) |
+| 12 | [task-result-errorSubtype-references-deleted-escalation-path](archive/issues/task-result-errorSubtype-references-deleted-escalation-path.md) | P3 | RESOLVED | Doc sweep (Task #32 / S3) |
+| 13 | [Budgets-import-cycle-comment-mentions-Tier-15.7-deletion-of-resolveDirectivePayloadBudgets](archive/issues/Budgets-import-cycle-comment-mentions-Tier-15.7-deletion-of-resolveDirectivePayloadBudgets.md) | P3 | RESOLVED | Doc sweep (Task #32 / S3) |
 
 ---
 

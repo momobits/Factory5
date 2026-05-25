@@ -118,12 +118,13 @@ export const directiveLimitsSchema = z.object({
  *   `--max-usd flag` → project `metadata.budgetDefaults` → config `[budget.defaults]` → unlimited.
  *
  * For `maxUsd`/`maxSteps` the resolution lands on `directive.limits` via
- * {@link wiki.resolveDirectiveLimits}; for the other axes it lands on
- * `directive.payload.budgets` via a per-axis merge in the daemon (Tier 15.4:
- * `resolveDirectivePayloadBudgets` deleted; Tier 15.7 replaces with live
- * re-resolve via `computePoolUsage`). Same source key on disk; two consumers
- * because the legacy ADR 0020 path and the new ADR 0032 path persist to
- * different directive fields.
+ * {@link wiki.resolveDirectiveLimits} (mint-time-static; see ADR 0020). For
+ * the other axes, Tier 15.9 retired the daemon-side per-axis merge — the
+ * daemon now writes operator-supplied `payload.budgets` verbatim, and the
+ * brain's `computePoolUsage` does live resolution on every consumption tick
+ * (ADR 0034 §1). Same source key on disk; two consumers because the ADR 0020
+ * pre-call path and the ADR 0034 pool path persist to different directive
+ * fields.
  *
  * The Web UI write path is `PUT /api/v1/projects/:id/budget` with full-document
  * replacement semantics (ADR 0027 §1): the request body is the new state.
@@ -235,13 +236,22 @@ export const taskResultSchema = z.object({
   signalsEmitted: z.array(z.string()),
   error: z.string().optional(),
   /**
-   * Tier-12 / ADR 0032 §4 — typed error subtype the worker bubbles up from
-   * the provider when the model layer reports a structured failure. Today
-   * the only populator is the claude-cli provider's `error_max_turns`
-   * result event, surfaced as `'error_max_turns'`. The pool reads this to
-   * trigger the budget-escalation askUser flow instead of hard-failing
-   * the task. Optional: read-only-agent failures + worker-internal errors
-   * (worktree allocation, cleanup, sandbox) carry only `error` text.
+   * Tier 15 / ADR 0034 §3 — typed error subtype carrying the structured
+   * failure mode when a task didn't exit cleanly. Known values:
+   *
+   *   - `'error_max_turns'` — claude-cli reported per-call turn limit;
+   *     surfaced verbatim from the provider's terminal `result` event.
+   *   - `'pool-exhausted-midstream'` — the pool watchdog interrupted the
+   *     stream because directive-wide pool consumption crossed the cap
+   *     mid-task. The pool dispatcher parks the directive with a structured
+   *     `blockedReason`.
+   *   - `'pool-exhausted'` — synthesized when the pre-launch pool check
+   *     refuses to dispatch a task.
+   *   - `'per-task-usd-exceeded'` — the pre-launch estimatedUsd check
+   *     rejected the task against the maxUsdPerTask cap.
+   *
+   * Optional: read-only-agent failures + worker-internal errors (worktree
+   * allocation, cleanup, sandbox) carry only `error` text.
    */
   errorSubtype: z.string().optional(),
   durationMs: z.number().int().nonnegative(),
