@@ -25,6 +25,7 @@
  */
 
 import { createWriteStream, statSync } from 'node:fs';
+import type { WriteStream } from 'node:fs';
 import { rm, writeFile, unlink, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -590,7 +591,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
   // overwrite previous attempts. The level filter defaults to 'full'
   // (every line); 'tools' keeps only tool_use / tool_result / result
   // events; 'off' skips entirely.
-  let transcriptStream: import('node:fs').WriteStream | undefined;
+  let transcriptStream: WriteStream | undefined;
   let transcriptLineCount = 0;
   let transcriptMeta: WorkerOutcome['transcript'];
 
