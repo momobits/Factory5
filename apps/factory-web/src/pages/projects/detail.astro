@@ -21,32 +21,44 @@ import Dashboard from '../../layouts/Dashboard.astro';
 const AXIS_LABEL: Record<BudgetAxis, string> = {
   maxUsd: 'Max USD',
   maxSteps: 'Max steps',
-  askUserDeadlineMs: 'Ask-user deadline (ms)',
   maxTurnsScaffolder: 'Max turns — scaffolder',
   maxTurnsBuilder: 'Max turns — builder',
   maxTurnsFixer: 'Max turns — fixer',
+  maxTotalTurns: 'Max total turns',
   maxUsdPerTask: 'Max USD — per task',
+  maxRetriesPerTask: 'Max retries — per task',
+  askUserDeadlineMs: 'Ask-user deadline (ms)',
   maxWikiReadinessAttempts: 'Max wiki-readiness attempts',
+  maxWallClockMinutes: 'Max wall-clock (minutes)',
+  maxConcurrentTasks: 'Max concurrent tasks',
 };
 const AXIS_STEP: Record<BudgetAxis, string> = {
   maxUsd: '0.01',
   maxSteps: '1',
-  askUserDeadlineMs: '1000',
   maxTurnsScaffolder: '1',
   maxTurnsBuilder: '1',
   maxTurnsFixer: '1',
+  maxTotalTurns: '1',
   maxUsdPerTask: '0.01',
+  maxRetriesPerTask: '1',
+  askUserDeadlineMs: '1000',
   maxWikiReadinessAttempts: '1',
+  maxWallClockMinutes: '1',
+  maxConcurrentTasks: '1',
 };
 const AXIS_MIN: Record<BudgetAxis, string> = {
   maxUsd: '0',
   maxSteps: '0',
-  askUserDeadlineMs: '1',
   maxTurnsScaffolder: '1',
   maxTurnsBuilder: '1',
   maxTurnsFixer: '1',
+  maxTotalTurns: '0',
   maxUsdPerTask: '0',
+  maxRetriesPerTask: '0',
+  askUserDeadlineMs: '1',
   maxWikiReadinessAttempts: '0',
+  maxWallClockMinutes: '0',
+  maxConcurrentTasks: '1',
 };
 
 // Live tab layout — three groups per spec §4. The Live tab iterates these
@@ -195,6 +207,7 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
               type="number"
               step={AXIS_STEP[axis]}
               min={AXIS_MIN[axis]}
+              placeholder={`${BUDGET_DEFAULTS[axis].value} (system default)`}
               hint={BUDGET_DEFAULTS[axis].explainer}
             />
           ))
@@ -416,6 +429,9 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
     /* ----- Tab panels ----------------------------------------------- */
     .tab-panel {
       display: block;
+    }
+    .tab-panel[hidden] {
+      display: none;
     }
     .tab-section-title {
       margin: 0 0 0.5rem 0;

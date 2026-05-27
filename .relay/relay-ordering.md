@@ -6,77 +6,77 @@
 
 ---
 
-## Phase 1 — Foundation: Canonical Table
+## Phase 1 — Foundation: Canonical Table — COMPLETE
 
 *Priority rationale: every subsequent phase depends on the 12-axis table + AxisType classification. Doc + schema only — no runtime behavior change. Quick to ship, unblocks everything.*
 
-| ID | Title | File | Complexity | Dependencies | Closes |
-|----|-------|------|-----------|-------------|--------|
-| F1 | Budget Canonical Table (ADR 0035) | [budget_canonical_table.md](implemented/budget_canonical_table.md) | Medium | None | Relay #2, #8 | DONE (`03bbe05`) |
+| ID | Title | File | Complexity | Dependencies | Closes | Status |
+|----|-------|------|-----------|-------------|--------|--------|
+| ~~F1~~ | ~~Budget Canonical Table (ADR 0035)~~ | [→ impl](implemented/budget_canonical_table.md) | Medium | None | Relay #2, #8 | DONE (`5ea377f`) |
 
 Build order: standalone (1 of 5 in brainstorm sequence).
 
 ---
 
-## Phase 2 — Core Contract: Unified Resolution
+## Phase 2 — Core Contract: Unified Resolution — COMPLETE
 
 *Priority rationale: closes 4 of the 5 P1 issues. Biggest blast radius (touches triage, architect, critic, planner, ask-user, loop, pool) but highest architectural payoff — after this phase, every axis follows one rule.*
 
-| ID | Title | File | Complexity | Dependencies | Closes |
-|----|-------|------|-----------|-------------|--------|
-| F2 | Budget Unified Resolution | [budget_unified_resolution.md](implemented/budget_unified_resolution.md) | Large | F1 | Relay #1, #3, #5, #6 | DONE (`b73e5fa`) |
+| ID | Title | File | Complexity | Dependencies | Closes | Status |
+|----|-------|------|-----------|-------------|--------|--------|
+| ~~F2~~ | ~~Budget Unified Resolution~~ | [→ impl](implemented/budget_unified_resolution.md) | Large | F1 | Relay #1, #3, #5, #6 | DONE (`e2e1122`) |
 
 Build order: 2 of 5 in brainstorm sequence. Requires F1's axis taxonomy.
 
 ---
 
-## Phase 3 — Extensions: New Axes + Provider Fix
+## Phase 3 — Extensions: New Axes + Provider Fix — COMPLETE
 
 *Priority rationale: the 4 new axes (F3) extend the surface; the provider fix (F4) finishes the maxTurns half-migration that caused the pythonetl incidents. F3 and F4 touch different files and can be implemented in parallel.*
 
-| ID | Title | File | Complexity | Dependencies | Closes |
-|----|-------|------|-----------|-------------|--------|
-| F3 | Budget New Axes (4) | [budget_new_axes.md](implemented/budget_new_axes.md) | Large | F1, F2 | (no standalone issues — new surface) | DONE (`fbe3b26`) |
-| F4 | Provider maxTurns Fix | [budget_provider_maxturns_fix.md](implemented/budget_provider_maxturns_fix.md) | Small | F2 | Relay #4 + seed maxTurns dual-cap | DONE (`e78d766`) |
+| ID | Title | File | Complexity | Dependencies | Closes | Status |
+|----|-------|------|-----------|-------------|--------|--------|
+| ~~F3~~ | ~~Budget New Axes (4)~~ | [→ impl](implemented/budget_new_axes.md) | Large | F1, F2 | (new surface) | DONE (`1b45231`) |
+| ~~F4~~ | ~~Provider maxTurns Fix~~ | [→ impl](implemented/budget_provider_maxturns_fix.md) | Small | F2 | Relay #4 | DONE (`6e0b4a2`) |
 
 Build order: F3 is 3 of 5; F4 is 4 of 5 in brainstorm sequence. F4 can proceed in parallel with F3 since they touch different files (worker/provider vs CLI/Web/channels).
 
 ---
 
-## Phase 4 — Observability: Telemetry Surface
+## Phase 4 — Observability: Telemetry Surface — COMPLETE
 
 *Priority rationale: consumes the data model all prior phases establish. No other feature depends on it. Can be deferred without blocking correctness work.*
 
-| ID | Title | File | Complexity | Dependencies | Closes |
-|----|-------|------|-----------|-------------|--------|
-| F5 | Budget Observability | [budget_observability.md](features/budget_observability.md) | Medium | F1, F2, F3 | (no standalone issues — new surface) |
+| ID | Title | File | Complexity | Dependencies | Closes | Status |
+|----|-------|------|-----------|-------------|--------|--------|
+| ~~F5~~ | ~~Budget Observability~~ | [→ impl](implemented/budget_observability.md) | Medium | F1, F2, F3 | (new surface) | DONE (`29745ad`) |
 
 Build order: 5 of 5 in brainstorm sequence.
 
 ---
 
-## Phase 5 — Cleanup: Standalone Tasks
+## Phase 5 — Cleanup: Standalone Tasks — COMPLETE
 
 *Priority rationale: independent of the 5-feature sequence. Can be executed at any time — before, during, or after the feature phases. Grouped here because they're small and don't justify their own phase gate.*
 
-| ID | Title | File | Complexity | Dependencies | Closes |
-|----|-------|------|-----------|-------------|--------|
-| S1 | Validator dedup | [validateMetadataOrReason-vs-projectMetadataSchema-dual-validators.md](archive/validateMetadataOrReason-vs-projectMetadataSchema-dual-validators.md) | Small | None | Relay #7 | DONE (`9bb9dde`) |
-| S2 | pool/pool-resume budget-extraction dedup | [projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume.md](archive/projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume.md) | Tiny | None | Relay #9 | DONE (`4d96ed8`) |
-| S3 | Doc hygiene sweep | [apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible.md](archive/issues/apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible.md), [planner-still-emits-estimatedUsd-instruction-for-dead-cap.md](archive/issues/planner-still-emits-estimatedUsd-instruction-for-dead-cap.md), [task-result-errorSubtype-references-deleted-escalation-path.md](archive/issues/task-result-errorSubtype-references-deleted-escalation-path.md), [Budgets-import-cycle-comment-mentions-Tier-15.7-deletion-of-resolveDirectivePayloadBudgets.md](archive/issues/Budgets-import-cycle-comment-mentions-Tier-15.7-deletion-of-resolveDirectivePayloadBudgets.md) | Tiny | None | Relay #10, #11, #12, #13 | DONE |
+| ID | Title | File | Complexity | Dependencies | Closes | Status |
+|----|-------|------|-----------|-------------|--------|--------|
+| ~~S1~~ | ~~Validator dedup~~ | [→ archive](archive/validateMetadataOrReason-vs-projectMetadataSchema-dual-validators.md) | Small | None | Relay #7 | DONE (`a979097`) |
+| ~~S2~~ | ~~pool/pool-resume budget-extraction dedup~~ | [→ archive](archive/projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume.md) | Tiny | None | Relay #9 | DONE (`6e1250d`) |
+| ~~S3~~ | ~~Doc hygiene sweep~~ | [→ impl](implemented/doc_hygiene_sweep.md) | Tiny | None | Relay #10–13 | DONE (`34a1643`) |
 
 ---
 
 ## Summary
 
-| Phase | Items | P1 issues closed | Complexity | Cumulative closed |
-|-------|-------|------------------|------------|-------------------|
-| 1 — Foundation | F1 | 0 | Medium | 2 of 13 |
-| 2 — Core Contract | F2 | 4 | Large | 6 of 13 |
-| 3 — Extensions | F3, F4 | 1 | Large + Small | 7 of 13 |
-| 4 — Observability | F5 | 0 | Medium | 7 of 13 |
-| 5 — Cleanup | S1, S2, S3 | 0 | Small + Tiny | 13 of 13 |
+| Phase | Items | P1 issues closed | Complexity | Cumulative closed | Status |
+|-------|-------|------------------|------------|-------------------|--------|
+| 1 — Foundation | F1 | 0 | Medium | 2 of 13 | COMPLETE |
+| 2 — Core Contract | F2 | 4 | Large | 6 of 13 | COMPLETE |
+| 3 — Extensions | F3, F4 | 1 | Large + Small | 7 of 13 | COMPLETE |
+| 4 — Observability | F5 | 0 | Medium | 7 of 13 | COMPLETE |
+| 5 — Cleanup | S1, S2, S3 | 0 | Small + Tiny | 13 of 13 | COMPLETE |
 
-Total: 5 phases, 8 work items (5 features + 3 standalone), closing all 13 Relay issues.
+Total: 5 phases, 8 work items (5 features + 3 standalone), closing all 13 Relay issues. **All phases complete.**
 
-**Critical path**: Phase 1 → Phase 2 → Phase 3 (sequential dependency chain). Phase 4 can overlap with Phase 3. Phase 5 can run any time.
+**Outstanding work: none.** The backlog is empty. Run `/relay-discover` to surface new items, `/relay-brainstorm` to start a feature, or `/relay-exercise` to stress-test capabilities.

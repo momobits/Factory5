@@ -10,84 +10,111 @@
 
 | Category | Outstanding | Resolved | Total |
 |----------|-------------|----------|-------|
-| Issues (issues/) | 13 | 0 | 13 |
-| Features (features/) | 5 | 0 | 5 |
-| Implemented (implemented/) | — | 0 | 0 |
+| Issues (issues/) | 0 | 6 | 6 |
+| Issues (archive/) | — | 7 | 7 |
+| Features (features/) | 0 | 2 | 2 |
+| Implemented (implemented/) | — | 7 | 7 |
+
+**All 13 original Relay issues are RESOLVED.** All 5 designed features are IMPLEMENTED.
 
 ---
 
 ## Active Issues — .relay/issues/
 
-| # | Issue | Severity | Status | Addressed by |
+| # | Issue | Severity | Status | Resolved by |
 |---|-------|----------|--------|-------------|
-| 1 | [maxUsdPerTask-silently-dead-code](issues/maxUsdPerTask-silently-dead-code.md) | P1 | OUTSTANDING | Feature 2 (budget_unified_resolution) |
-| 2 | [budget-defaults-explainers-stale-post-tier-15](issues/budget-defaults-explainers-stale-post-tier-15.md) | P1 | OUTSTANDING | Feature 1 (budget_canonical_table) |
-| 3 | [askUserDeadlineMs-axis-not-honored-per-project-per-build](issues/askUserDeadlineMs-axis-not-honored-per-project-per-build.md) | P1 | OUTSTANDING | Feature 2 (budget_unified_resolution) |
-| 4 | [claude-cli-default-maxTurns-80-conflicts-with-pool-model](issues/claude-cli-default-maxTurns-80-conflicts-with-pool-model.md) | P1 | OUTSTANDING | Feature 4 (budget_provider_maxturns_fix) |
-| 5 | [directiveLimits-ADR-0020-not-resolved-via-three-tier-max-rule](issues/directiveLimits-ADR-0020-not-resolved-via-three-tier-max-rule.md) | P1 | OUTSTANDING | Feature 2 (budget_unified_resolution) |
-| 6 | [maxWikiReadinessAttempts-ignores-project-defaults](issues/maxWikiReadinessAttempts-ignores-project-defaults.md) | P2 | OUTSTANDING | Feature 2 (budget_unified_resolution) |
-| 7 | [validateMetadataOrReason-vs-projectMetadataSchema-dual-validators](archive/validateMetadataOrReason-vs-projectMetadataSchema-dual-validators.md) | P2 | RESOLVED (`9bb9dde`) | Standalone (Task #30) |
-| 8 | [budget-axis-semantic-models-undocumented](issues/budget-axis-semantic-models-undocumented.md) | P2 | OUTSTANDING | Feature 1 (budget_canonical_table) |
-| 9 | [projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume](issues/projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume.md) | P2 | OUTSTANDING | Standalone (Task #31) |
-| 10 | [apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible](archive/issues/apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible.md) | P3 | RESOLVED | Doc sweep (Task #32 / S3) |
-| 11 | [planner-still-emits-estimatedUsd-instruction-for-dead-cap](archive/issues/planner-still-emits-estimatedUsd-instruction-for-dead-cap.md) | P3 | RESOLVED | Doc sweep (Task #32 / S3) |
-| 12 | [task-result-errorSubtype-references-deleted-escalation-path](archive/issues/task-result-errorSubtype-references-deleted-escalation-path.md) | P3 | RESOLVED | Doc sweep (Task #32 / S3) |
-| 13 | [Budgets-import-cycle-comment-mentions-Tier-15.7-deletion-of-resolveDirectivePayloadBudgets](archive/issues/Budgets-import-cycle-comment-mentions-Tier-15.7-deletion-of-resolveDirectivePayloadBudgets.md) | P3 | RESOLVED | Doc sweep (Task #32 / S3) |
+| 1 | [maxUsdPerTask-silently-dead-code](issues/maxUsdPerTask-silently-dead-code.md) | P1 | RESOLVED | F2 — unified resolution (commit `b73e5fa`, pool.ts:555-574) |
+| 2 | [budget-defaults-explainers-stale-post-tier-15](issues/budget-defaults-explainers-stale-post-tier-15.md) | P1 | RESOLVED | F1 — canonical table (commit `5ea377f`, budget-defaults.ts:100-159) |
+| 3 | [askUserDeadlineMs-axis-not-honored-per-project-per-build](issues/askUserDeadlineMs-axis-not-honored-per-project-per-build.md) | P1 | RESOLVED | F2 — unified resolution (commit `b73e5fa`, ask-user.ts:92-116) |
+| 4 | [maxWikiReadinessAttempts-ignores-project-defaults](issues/maxWikiReadinessAttempts-ignores-project-defaults.md) | P2 | RESOLVED | F2 — unified resolution (commit `b73e5fa`, loop.ts:319-328) |
+| 5 | [directiveLimits-ADR-0020-not-resolved-via-three-tier-max-rule](issues/directiveLimits-ADR-0020-not-resolved-via-three-tier-max-rule.md) | P2 | RESOLVED | F2 — unified resolution (commit `b73e5fa`, loop.ts:180-196) |
+| 6 | [budget-axis-semantic-models-undocumented](issues/budget-axis-semantic-models-undocumented.md) | P2 | RESOLVED | F1 — canonical table (ADR 0035, commit `03bbe05`) |
+
+> **Note:** These 6 issues are fully resolved in code but have not yet been archived via /relay-resolve. They need resolution docs created and archival.
+
+---
+
+## Archived Issues — .relay/archive/
+
+| # | Issue | Status | Resolved by |
+|---|-------|--------|-------------|
+| 1 | [validateMetadataOrReason-vs-projectMetadataSchema-dual-validators](archive/validateMetadataOrReason-vs-projectMetadataSchema-dual-validators.md) | RESOLVED | S1 — validator dedup (commit `a979097`) |
+| 2 | [projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume](archive/projectBudgetsFromMetadata-duplicated-between-pool-and-pool-resume.md) | RESOLVED | S2 — budget extraction dedup (commit `6e1250d`) |
+| 3 | [claude-cli-default-maxTurns-80-conflicts-with-pool-model](archive/claude-cli-default-maxTurns-80-conflicts-with-pool-model.md) | RESOLVED | F4 — provider maxTurns fix (commit `6e0b4a2`) |
+| 4 | [apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible](archive/issues/apiV1UpdateProjectBudgetRequestSchema-deprecated-alias-not-backward-compatible.md) | RESOLVED | S3 — doc hygiene sweep (commit `34a1643`) |
+| 5 | [planner-still-emits-estimatedUsd-instruction-for-dead-cap](archive/issues/planner-still-emits-estimatedUsd-instruction-for-dead-cap.md) | RESOLVED | S3 — doc hygiene sweep (commit `34a1643`) |
+| 6 | [task-result-errorSubtype-references-deleted-escalation-path](archive/issues/task-result-errorSubtype-references-deleted-escalation-path.md) | RESOLVED | S3 — doc hygiene sweep (commit `34a1643`) |
+| 7 | [Budgets-import-cycle-comment-mentions-Tier-15.7-deletion-of-resolveDirectivePayloadBudgets](archive/issues/Budgets-import-cycle-comment-mentions-Tier-15.7-deletion-of-resolveDirectivePayloadBudgets.md) | RESOLVED | S3 — doc hygiene sweep (commit `34a1643`) |
+
+No regressions detected in archived items.
 
 ---
 
 ## Active Features — .relay/features/
 
-| # | Feature | Status | Dependencies | Dev Order |
-|---|---------|--------|-------------|-----------|
-| 1 | [budget_canonical_table](features/budget_canonical_table.md) | DESIGNED | None | 1st |
-| 2 | [budget_unified_resolution](features/budget_unified_resolution.md) | DESIGNED | Feature 1 | 2nd |
-| 3 | [budget_new_axes](features/budget_new_axes.md) | DESIGNED | Features 1, 2 | 3rd |
-| 4 | [budget_provider_maxturns_fix](features/budget_provider_maxturns_fix.md) | DESIGNED | Feature 2 | 4th |
-| 5 | [budget_observability](features/budget_observability.md) | DESIGNED | Features 1, 2, 3 | 5th |
+| # | Feature | Status | Implementation Doc |
+|---|---------|--------|--------------------|
+| 1 | [budget_canonical_table](features/budget_canonical_table.md) | IMPLEMENTED | [implemented/budget_canonical_table.md](implemented/budget_canonical_table.md) |
+| 2 | [budget_observability](features/budget_observability.md) | IMPLEMENTED | [implemented/budget_observability.md](implemented/budget_observability.md) |
 
-Brainstorm: [budget_axis_unification_brainstorm.md](features/budget_axis_unification_brainstorm.md) — DESIGN COMPLETE
+> **Note:** These 2 feature files are fully implemented but still in features/. They should be archived via /relay-resolve.
+
+Brainstorm: [budget_axis_unification_brainstorm.md](features/budget_axis_unification_brainstorm.md) — DESIGN COMPLETE (all 5 features implemented)
 
 ---
 
 ## Implemented — .relay/implemented/
 
-None yet.
+| # | Implementation Doc | Source | Commit |
+|---|-------------------|--------|--------|
+| 1 | [budget_canonical_table.md](implemented/budget_canonical_table.md) | Feature F1 | `5ea377f` |
+| 2 | [budget_unified_resolution.md](implemented/budget_unified_resolution.md) | Feature F2 | `e2e1122` |
+| 3 | [budget_new_axes.md](implemented/budget_new_axes.md) | Feature F3 | `1b45231` |
+| 4 | [budget_provider_maxturns_fix.md](implemented/budget_provider_maxturns_fix.md) | Feature F4 | `6e0b4a2` |
+| 5 | [budget_observability.md](implemented/budget_observability.md) | Feature F5 | `29745ad` |
+| 6 | [budget_extraction_dedup.md](implemented/budget_extraction_dedup.md) | Issue S2 | `6e1250d` |
+| 7 | [doc_hygiene_sweep.md](implemented/doc_hygiene_sweep.md) | Issues S3 (4 items) | `34a1643` |
 
 ---
 
 ## In-Progress Work
 
+None. All items have completed the full pipeline (analyze → plan → review → implement → verify → resolve).
+
 ### Feature Pipeline
 
 | Item | File | Stage | Next Step |
 |------|------|-------|-----------|
-| Budget Axis Unification | budget_axis_unification_brainstorm.md | DESIGN COMPLETE | Run /relay-order to integrate, then /relay-analyze on Feature 1 |
-| Canonical Table (ADR 0035) | budget_canonical_table.md | DESIGNED | Run /relay-analyze |
-| Unified Resolution | budget_unified_resolution.md | DESIGNED | Run /relay-analyze (after Feature 1) |
-| New Axes (4) | budget_new_axes.md | DESIGNED | Run /relay-analyze (after Features 1, 2) |
-| Provider maxTurns Fix | budget_provider_maxturns_fix.md | DESIGNED | Run /relay-analyze (after Feature 2) |
-| Observability | budget_observability.md | DESIGNED | Run /relay-analyze (after Features 1, 2, 3) |
+| Budget Axis Unification | budget_axis_unification_brainstorm.md | DESIGN COMPLETE | All 5 features implemented — brainstorm can be cleaned up via /relay-cleanup |
 
-### Standalone Work (not from brainstorm)
+---
 
-| Item | Source | Next Step |
-|------|--------|-----------|
-| Validator dedup | Relay issue #7 | Direct implementation (Task #30) |
-| pool/pool-resume budget-extraction dedup | Relay issue #9 | Direct refactor (Task #31) |
-| Doc hygiene sweep | Relay issues #10-13 | Mechanical sweep (Task #32) |
+## Items needing archival
+
+The following items are **RESOLVED in code** with implementation docs but still reside in active directories. Run /relay-resolve on each to archive:
+
+| Item | Current Location | Implementation Doc |
+|------|-----------------|-------------------|
+| maxUsdPerTask-silently-dead-code | issues/ | (closed by F2) |
+| budget-defaults-explainers-stale-post-tier-15 | issues/ | (closed by F1) |
+| askUserDeadlineMs-axis-not-honored-per-project-per-build | issues/ | (closed by F2) |
+| maxWikiReadinessAttempts-ignores-project-defaults | issues/ | (closed by F2) |
+| directiveLimits-ADR-0020-not-resolved-via-three-tier-max-rule | issues/ | (closed by F2) |
+| budget-axis-semantic-models-undocumented | issues/ | (closed by F1) |
+| budget_canonical_table | features/ | implemented/budget_canonical_table.md |
+| budget_observability | features/ | implemented/budget_observability.md |
 
 ---
 
 ## Closure map
 
-Features 1-5 collectively close all 13 Relay issues:
+All 13 original Relay issues are now closed:
 
-| Relay issues | Closed by |
-|-------------|-----------|
-| #1 (maxUsdPerTask dead), #3 (askDeadline placebo), #5 (limits stale), #6 (wikiAttempts ignores project) | Feature 2 (unified resolution) |
-| #2 (explainers stale), #8 (semantics undocumented) | Feature 1 (canonical table) |
-| #4 (claude-cli default 80) + seed maxTurns dual-cap | Feature 4 (provider fix) |
-| #7 (validator dup) | Standalone Task #30 |
-| #9 (budget extraction dup) | Standalone Task #31 |
-| #10, #11, #12, #13 (doc staleness) | Doc sweep Task #32 |
+| Relay issues | Closed by | Commit |
+|-------------|-----------|--------|
+| #1 (maxUsdPerTask dead), #3 (askDeadline placebo), #5 (limits stale), #6 (wikiAttempts ignores project) | F2 — unified resolution | `e2e1122` |
+| #2 (explainers stale), #8 (semantics undocumented) | F1 — canonical table | `5ea377f` |
+| #4 (claude-cli default 80) | F4 — provider maxTurns fix | `6e0b4a2` |
+| #7 (validator dup) | S1 — validator dedup | `a979097` |
+| #9 (budget extraction dup) | S2 — budget extraction dedup | `6e1250d` |
+| #10, #11, #12, #13 (doc staleness) | S3 — doc hygiene sweep | `34a1643` |

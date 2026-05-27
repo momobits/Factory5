@@ -1,0 +1,69 @@
+<h2>Live tab — detail</h2>
+<p class="subtitle">Showing the bar style you picked, with all 8 axes including the per-class turn pool breakdown.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Project: pythonetl &nbsp;·&nbsp; Live tab</div>
+  <div class="mockup-body" style="padding: 1.5rem; font-family: ui-monospace, monospace; font-size: 0.85rem; line-height: 1.7;">
+
+    <div style="border: 1px solid #ff4d1c; padding: 0.75rem 1rem; margin-bottom: 1.5rem; background: rgba(255,77,28,0.05);">
+      <strong style="color: #ff4d1c;">⚠ Parked:</strong> pool <code>maxTurnsBuilder</code> exhausted at 240<br/>
+      <span style="opacity: 0.7; font-size: 0.8rem;">Directive 01KSB8DEZQCENQEKBKBRCKNYZK · raised 1 time (120 → 240)</span><br/>
+      <span style="margin-top: 0.5rem; display: inline-block; border: 1px solid #ff4d1c; padding: 0.25rem 0.75rem; color: #ff4d1c; cursor: pointer;">Raise cap to 360</span>
+      &nbsp;
+      <span style="display: inline-block; border: 1px solid #999; padding: 0.25rem 0.75rem; cursor: pointer;">Abort directive</span>
+    </div>
+
+    <div style="opacity: 0.6; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem;">In-flight · 01KSB8DEZ…</div>
+
+    <div style="margin-bottom: 0.4rem;">
+      <span style="display: inline-block; width: 14rem;">maxUsd</span>
+      <span style="display: inline-block; width: 8rem;">$1.43 / $100.00</span>
+      <span style="display: inline-block;">[<span style="color: #5eb85c;">■</span>──────────] 1.4%</span>
+    </div>
+    <div style="margin-bottom: 0.4rem;">
+      <span style="display: inline-block; width: 14rem;">maxSteps</span>
+      <span style="display: inline-block; width: 8rem;">47 / 500</span>
+      <span style="display: inline-block;">[<span style="color: #5eb85c;">■</span>──────────] 9.4%</span>
+    </div>
+
+    <div style="opacity: 0.6; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 1rem 0 0.5rem 0;">Turn pools (per agent class)</div>
+
+    <div style="margin-bottom: 0.4rem;">
+      <span style="display: inline-block; width: 14rem;">maxTurnsScaffolder</span>
+      <span style="display: inline-block; width: 8rem;">38 / 120</span>
+      <span style="display: inline-block;">[<span style="color: #5eb85c;">■■■</span>───────] 31.7% · 1 task</span>
+    </div>
+    <div style="margin-bottom: 0.4rem;">
+      <span style="display: inline-block; width: 14rem;"><strong>maxTurnsBuilder</strong></span>
+      <span style="display: inline-block; width: 8rem;"><strong>240 / 240</strong></span>
+      <span style="display: inline-block;">[<span style="color: #ff4d1c;">■■■■■■■■■■</span>] <strong style="color: #ff4d1c;">EXHAUSTED · 13 tasks</strong></span>
+    </div>
+    <div style="margin-bottom: 0.4rem;">
+      <span style="display: inline-block; width: 14rem;">maxTurnsFixer</span>
+      <span style="display: inline-block; width: 8rem;">0 / 80</span>
+      <span style="display: inline-block;">[──────────] 0% · 0 tasks</span>
+    </div>
+
+    <div style="opacity: 0.6; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 1rem 0 0.5rem 0;">Other caps</div>
+
+    <div style="margin-bottom: 0.4rem;">
+      <span style="display: inline-block; width: 14rem;">maxUsdPerTask</span>
+      <span style="display: inline-block; width: 8rem;">$0.34 max / $100.00</span>
+      <span style="display: inline-block; opacity: 0.7;">(highest single-task spend)</span>
+    </div>
+    <div style="margin-bottom: 0.4rem;">
+      <span style="display: inline-block; width: 14rem;">maxWikiReadinessAttempts</span>
+      <span style="display: inline-block; width: 8rem;">1 / 3</span>
+      <span style="display: inline-block; opacity: 0.7;">(critic passed first try)</span>
+    </div>
+
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top: 1.5rem;">Notes on this treatment:</p>
+<ul style="font-size: 0.9rem;">
+  <li><strong>Parked alert</strong> at top with the <em>specific</em> next bump value (240 → 360, linear rule) and one-click Raise-cap CTA. No popup, no question detail page navigation.</li>
+  <li><strong>Three sections</strong>: directive-wide pools (USD/steps), per-class turn pools (the new pool model), other caps (per-task and single-shot axes that stay as-is).</li>
+  <li><strong>Color</strong>: green &lt;80%, amber 80-99%, vermillion at 100% / exhausted.</li>
+  <li><strong>Task counts</strong> next to turn pools — the "what is using the most turns" answer at a glance.</li>
+</ul>

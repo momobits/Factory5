@@ -1,0 +1,97 @@
+<h2>Project page — budget cockpit layout</h2>
+<p class="subtitle">Three layouts for the new project detail page. All three carry the same information; the question is hierarchy and operator scanning behavior.</p>
+
+<div class="cards">
+  <div class="card" data-choice="single-column" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding: 1rem; font-family: ui-monospace, monospace; font-size: 0.7rem; line-height: 1.4;">
+        <div style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 0.5rem;">
+          <strong>pythonetl</strong> <span style="opacity:0.6;">· ULID 01KSB8C3...</span>
+        </div>
+        <div style="border: 1px solid #ff4d1c; padding: 0.5rem; margin-bottom: 0.5rem; background: rgba(255,77,28,0.05);">
+          <strong>! Parked:</strong> pool maxTurnsBuilder exhausted &nbsp;&nbsp; <span style="border: 1px solid #ff4d1c; padding: 0.1rem 0.4rem;">Raise cap</span>
+        </div>
+        <div style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 0.5rem;">
+          <strong>Budget defaults</strong><br/>
+          <span style="opacity:0.7;">maxUsd · maxSteps · askDeadline ·</span><br/>
+          <span style="opacity:0.7;">maxTurnsScaffolder/Builder/Fixer · maxUsdPerTask · maxWikiReadinessAttempts</span><br/>
+          <span style="opacity:0.6;">[Auto-increase: ON · ceiling 5×]</span>
+        </div>
+        <div style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 0.5rem;">
+          <strong>Live tally (in-flight 01KSB8DEZ...)</strong><br/>
+          <span style="opacity:0.7;">maxUsd       $1.43 / $100  [■■────────]</span><br/>
+          <span style="opacity:0.7;">maxSteps      47 / 500     [■─────────]</span><br/>
+          <span style="opacity:0.7;">turnsBuilder  240/240      [■■■■■■■■■■] EXHAUSTED</span>
+        </div>
+        <div style="border: 1px solid #999; padding: 0.5rem;">
+          <strong>Build history</strong> (expandable rows)
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Single column (stacked)</h3>
+      <p>Top-to-bottom scan order: alert → defaults → live tally → history. Each section is its own block. Matches today's project page rhythm.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="two-column" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding: 1rem; font-family: ui-monospace, monospace; font-size: 0.7rem; line-height: 1.4;">
+        <div style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 0.5rem;">
+          <strong>pythonetl</strong> <span style="opacity:0.6;">· ULID 01KSB8C3...</span>
+        </div>
+        <div style="border: 1px solid #ff4d1c; padding: 0.5rem; margin-bottom: 0.5rem; background: rgba(255,77,28,0.05);">
+          <strong>! Parked:</strong> pool maxTurnsBuilder exhausted &nbsp;&nbsp; <span style="border: 1px solid #ff4d1c; padding: 0.1rem 0.4rem;">Raise cap</span>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <div style="border: 1px solid #999; padding: 0.5rem; flex: 1;">
+            <strong>Budget defaults</strong><br/>
+            <span style="opacity:0.7;">all 8 axes form</span><br/>
+            <span style="opacity:0.7;">+ auto-increase toggle</span>
+          </div>
+          <div style="border: 1px solid #999; padding: 0.5rem; flex: 1;">
+            <strong>Live tally</strong><br/>
+            <span style="opacity:0.7;">per-axis bars</span><br/>
+            <span style="opacity:0.7;">used / cap</span>
+          </div>
+        </div>
+        <div style="border: 1px solid #999; padding: 0.5rem; margin-top: 0.5rem;">
+          <strong>Build history</strong>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Two-column (defaults | live)</h3>
+      <p>Defaults form on the left, live tally on the right — they share visual weight. Operator can edit caps and watch the tally update side-by-side. History below.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="tabbed" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="padding: 1rem; font-family: ui-monospace, monospace; font-size: 0.7rem; line-height: 1.4;">
+        <div style="border: 1px solid #999; padding: 0.5rem; margin-bottom: 0.5rem;">
+          <strong>pythonetl</strong> <span style="opacity:0.6;">· ULID 01KSB8C3...</span>
+        </div>
+        <div style="border: 1px solid #ff4d1c; padding: 0.5rem; margin-bottom: 0.5rem; background: rgba(255,77,28,0.05);">
+          <strong>! Parked:</strong> pool maxTurnsBuilder exhausted &nbsp;&nbsp; <span style="border: 1px solid #ff4d1c; padding: 0.1rem 0.4rem;">Raise cap</span>
+        </div>
+        <div style="margin-bottom: 0.5rem;">
+          <span style="border: 1px solid #ff4d1c; padding: 0.2rem 0.6rem;"><strong>Live</strong></span>
+          <span style="border: 1px solid #999; padding: 0.2rem 0.6rem;">Defaults</span>
+          <span style="border: 1px solid #999; padding: 0.2rem 0.6rem;">History</span>
+          <span style="border: 1px solid #999; padding: 0.2rem 0.6rem;">Settings</span>
+        </div>
+        <div style="border: 1px solid #999; padding: 0.5rem;">
+          <strong>Live tally (active tab)</strong><br/>
+          <span style="opacity:0.7;">All 8 axes with bars</span><br/>
+          <span style="opacity:0.7;">Click axis name to drill into</span><br/>
+          <span style="opacity:0.7;">per-task contribution</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Tabbed (Live / Defaults / History / Settings)</h3>
+      <p>Each concern gets a tab. Live tab is default. Cleaner per-screen but operators have to navigate between tabs to edit a cap and watch the tally.</p>
+    </div>
+  </div>
+</div>

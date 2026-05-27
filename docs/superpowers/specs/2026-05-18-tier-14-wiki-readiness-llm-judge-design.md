@@ -20,16 +20,16 @@ Tier 14 replaces the regex checks with an LLM judge that evaluates the wiki agai
 
 The architect's default model category flips from `reasoning` (Opus) to `planning` (Sonnet) as part of the change. The critic defaults to `reasoning` (Opus). Both are configurable via a new `[agents.*]` table in `.factory/config.toml`.
 
-| Choice | Resolution |
-|--------|-----------|
-| Judge contract | Directive-intent broad: "does this wiki satisfy what the operator asked for" |
-| Judge output | Rich critique: `{passes, severity, findings[], summary}` |
-| Retry feedback | Critique-only; architect rewrites |
-| Budget axis | `maxWikiReadinessAttempts` count, default 3 — 8th `BUDGET_DEFAULTS` axis |
-| Exhaustion | `askUser` with `[continue/abort/extend-N]`; auto-answer defaults to `continue` |
-| Existing regex | Removed entirely; `wikiReadiness` deleted |
-| Models | Architect → `planning` (Sonnet, was `reasoning`); critic → `reasoning` (Opus); both overridable via `[agents.*]` |
-| Agent role | New generic `critic` role added to `AGENT_ROLES` |
+| Choice               | Resolution                                                                                                           |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Judge contract       | Directive-intent broad: "does this wiki satisfy what the operator asked for"                                         |
+| Judge output         | Rich critique: `{passes, severity, findings[], summary}`                                                             |
+| Retry feedback       | Critique-only; architect rewrites                                                                                    |
+| Budget axis          | `maxWikiReadinessAttempts` count, default 3 — 8th `BUDGET_DEFAULTS` axis                                             |
+| Exhaustion           | `askUser` with `[continue/abort/extend-N]`; auto-answer defaults to `continue`                                       |
+| Existing regex       | Removed entirely; `wikiReadiness` deleted                                                                            |
+| Models               | Architect → `planning` (Sonnet, was `reasoning`); critic → `reasoning` (Opus); both overridable via `[agents.*]`     |
+| Agent role           | New generic `critic` role added to `AGENT_ROLES`                                                                     |
 | Implementation shape | Wrapper module `architect-loop.ts` orchestrates; `runArchitect` and `runWikiCritic` stay sharp single-pass functions |
 
 **Intentional scope expansion:** flipping the architect's default category from Opus to Sonnet changes existing behavior across all builds (cheaper, faster architect; planner reads whatever Sonnet writes). Defensible: cheap fast author + thorough expensive critic can net lower spend than today's expensive author with no critic. Called out here so the change is a known intentional outcome of Tier 14, not a side effect. Operators can flip it back via `[agents].architect = "reasoning"` in their config.
@@ -125,14 +125,14 @@ maxWikiReadinessAttempts: {
 
 Resolves through the five-surface pipeline Phase 13.6 established:
 
-| Surface | File | Pattern |
-|---------|------|---------|
-| Core schema | `packages/core/src/budget-defaults.ts` | Adds axis to `BUDGET_DEFAULTS` + extends `budgetsSchema` |
-| Per-project default | `<project>/.factory/project.json` `metadata.budgetDefaults` | Already accepts all axes via Phase 13.5's `resolveDirectivePayloadBudgets` — free |
-| CLI flag | `packages/cli/src/commands/budget-flags.ts` | Adds `--max-wiki-readiness-attempts <n>` via `parsePositiveInt` |
-| Web UI | `apps/factory-web/src/pages/build.astro` | New accordion row (8th axis); accordion summary "seven axes" → "eight axes" |
-| Resume inheritance | `packages/daemon/src/server.ts` | Per-axis via Phase 12.7 `budgetsFromDirective` helper — free |
-| Brain consumption | `packages/brain/src/architect-loop.ts` | New site; reads `directive.payload.budgets.maxWikiReadinessAttempts` via `resolveBudgets` |
+| Surface             | File                                                        | Pattern                                                                                   |
+| ------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Core schema         | `packages/core/src/budget-defaults.ts`                      | Adds axis to `BUDGET_DEFAULTS` + extends `budgetsSchema`                                  |
+| Per-project default | `<project>/.factory/project.json` `metadata.budgetDefaults` | Already accepts all axes via Phase 13.5's `resolveDirectivePayloadBudgets` — free         |
+| CLI flag            | `packages/cli/src/commands/budget-flags.ts`                 | Adds `--max-wiki-readiness-attempts <n>` via `parsePositiveInt`                           |
+| Web UI              | `apps/factory-web/src/pages/build.astro`                    | New accordion row (8th axis); accordion summary "seven axes" → "eight axes"               |
+| Resume inheritance  | `packages/daemon/src/server.ts`                             | Per-axis via Phase 12.7 `budgetsFromDirective` helper — free                              |
+| Brain consumption   | `packages/brain/src/architect-loop.ts`                      | New site; reads `directive.payload.budgets.maxWikiReadinessAttempts` via `resolveBudgets` |
 
 Operator-set value is the active cap. (Phase 13.3's "operator-as-ceiling" precedent applies in spirit: the operator's value is authoritative. For this axis the planner doesn't emit a competing value, so the operator value alone governs.) Zero sentinel = unlimited (matches the existing `maxUsd: 0` / `maxSteps: 0` pattern).
 
@@ -166,8 +166,8 @@ const agentsConfigSchema = z
 
 ```ts
 export const DEFAULT_AGENT_CATEGORIES = {
-  architect: 'planning',    // Sonnet — was 'reasoning' (Opus) pre-Tier-14
-  critic: 'reasoning',      // Opus — new
+  architect: 'planning', // Sonnet — was 'reasoning' (Opus) pre-Tier-14
+  critic: 'reasoning', // Opus — new
 } as const;
 ```
 
@@ -195,7 +195,12 @@ Per ADR 0032 §6 (operator-overrides-only). When the operator sets `--max-wiki-r
 
 ```ts
 export const wikiCritiqueAspectSchema = z.enum([
-  'overview', 'modules', 'testing', 'hygiene', 'directive-fit', 'other',
+  'overview',
+  'modules',
+  'testing',
+  'hygiene',
+  'directive-fit',
+  'other',
 ]);
 export const wikiCritiqueSeveritySchema = z.enum(['pass', 'minor', 'major', 'blocking']);
 
@@ -214,7 +219,7 @@ export const wikiCritiqueSchema = z.object({
 export type WikiCritique = z.infer<typeof wikiCritiqueSchema>;
 ```
 
-The `aspect` enum is fixed (Q2 picked rich critique over fixed taxonomy, but the *aspect tag* is bounded — `'other'` as escape hatch keeps the schema validating without forcing the critic into a Procrustean bed).
+The `aspect` enum is fixed (Q2 picked rich critique over fixed taxonomy, but the _aspect tag_ is bounded — `'other'` as escape hatch keeps the schema validating without forcing the critic into a Procrustean bed).
 
 **`budgetsSchema`** — extended in place with `maxWikiReadinessAttempts: z.number().int().nonnegative().optional()`. Phase 13.5's per-project resolution path is schema-driven; this single extension covers core + per-project + payload + resume inheritance.
 
@@ -225,9 +230,16 @@ The `aspect` enum is fixed (Q2 picked rich critique over fixed taxonomy, but the
 ```ts
 // packages/core/src/constants.ts
 export const AGENT_ROLES = [
-  'triage', 'architect', 'planner', 'scaffolder', 'builder',
-  'reviewer', 'fixer', 'investigator', 'verifier',
-  'critic',                                              // NEW (10th)
+  'triage',
+  'architect',
+  'planner',
+  'scaffolder',
+  'builder',
+  'reviewer',
+  'fixer',
+  'investigator',
+  'verifier',
+  'critic', // NEW (10th)
 ] as const;
 ```
 
@@ -273,15 +285,15 @@ Migration count stays at 9. Phase 8's hard-coded `[1..N]` arrays in `003-finding
 
 ## 7. Error handling
 
-| Condition | Behavior |
-|-----------|----------|
-| Critic returns malformed JSON | `ClaudeCliStreamError` thrown; error log emitted with `attrs.detail` carrying first 500 chars; wrapper treats as "attempt failed" and retries; counts against the cap |
-| Critic returns valid JSON failing schema | Same as above — Zod parse error wraps to error log + retry |
-| Architect throws on retry | Propagates up; loop catches, flips directive to `failed` (same as today's architect error path) |
-| Budget exhausted mid-loop (maxUsd hit) | `assertBudget` throws `BudgetExceededError`; loop catches per existing path; pending-question NOT filed because the directive is already terminating |
-| `askUser` deadline expires without operator | Auto-answer dispatcher returns `continue` per ADR 0030 + amendment; wrapper resolves with `exhausted: true` |
-| `askUser` operator selects `abort` | Wrapper throws `WikiReadinessAbortError`; loop catches; directive flipped to `blocked`. Operator finds the rendered critique in the pending_questions row (persisted) and in the activity panel via the Phase 11 `directive_log_lines` replay |
-| Wiki pages empty when critic runs | Critic errors early with clear message before LLM call ("no pages to evaluate at `<projectPath>/docs/knowledge/`"); wrapper treats as architect failure (the architect didn't write anything); counts as attempt; retries |
+| Condition                                   | Behavior                                                                                                                                                                                                                                      |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Critic returns malformed JSON               | `ClaudeCliStreamError` thrown; error log emitted with `attrs.detail` carrying first 500 chars; wrapper treats as "attempt failed" and retries; counts against the cap                                                                         |
+| Critic returns valid JSON failing schema    | Same as above — Zod parse error wraps to error log + retry                                                                                                                                                                                    |
+| Architect throws on retry                   | Propagates up; loop catches, flips directive to `failed` (same as today's architect error path)                                                                                                                                               |
+| Budget exhausted mid-loop (maxUsd hit)      | `assertBudget` throws `BudgetExceededError`; loop catches per existing path; pending-question NOT filed because the directive is already terminating                                                                                          |
+| `askUser` deadline expires without operator | Auto-answer dispatcher returns `continue` per ADR 0030 + amendment; wrapper resolves with `exhausted: true`                                                                                                                                   |
+| `askUser` operator selects `abort`          | Wrapper throws `WikiReadinessAbortError`; loop catches; directive flipped to `blocked`. Operator finds the rendered critique in the pending_questions row (persisted) and in the activity panel via the Phase 11 `directive_log_lines` replay |
+| Wiki pages empty when critic runs           | Critic errors early with clear message before LLM call ("no pages to evaluate at `<projectPath>/docs/knowledge/`"); wrapper treats as architect failure (the architect didn't write anything); counts as attempt; retries                     |
 
 ## 8. Testing strategy
 
@@ -380,7 +392,7 @@ For each module:
 4. Verify GREEN
 5. Refactor if needed; tests stay GREEN
 
-For the regex deletion: existing `wikiReadiness` tests in `packages/wiki/src/wiki.test.ts` are deleted in the *same commit* that introduces the critic — not a setup commit. Workspace stays green at every commit boundary.
+For the regex deletion: existing `wikiReadiness` tests in `packages/wiki/src/wiki.test.ts` are deleted in the _same commit_ that introduces the critic — not a setup commit. Workspace stays green at every commit boundary.
 
 ## 9. Out of scope (for Tier 14)
 
@@ -394,14 +406,14 @@ These were considered and intentionally excluded:
 
 ## 10. Risks and mitigations
 
-| Risk | Mitigation |
-|------|-----------|
-| Sonnet architect produces lower-quality wikis than Opus did | Critic catches it on attempt 1; architect-loop retries with feedback. Net quality should match or exceed today's Opus-only path. Operator can flip config back to `agents.architect = "reasoning"` if needed |
+| Risk                                                               | Mitigation                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sonnet architect produces lower-quality wikis than Opus did        | Critic catches it on attempt 1; architect-loop retries with feedback. Net quality should match or exceed today's Opus-only path. Operator can flip config back to `agents.architect = "reasoning"` if needed                |
 | Critic non-determinism (passes today, fails tomorrow on same wiki) | Temperature 0.0 on the critic call (vs 0.2 on the architect); deterministic JSON schema reduces variance. If non-determinism is still measurable, future tier can introduce a "stability check" (run twice, take consensus) |
-| Loop runs forever via `maxWikiReadinessAttempts: 0` (unlimited) | Existing `maxUsd` and `maxSteps` axes still cap total spend; loop will trip those instead. Sentinel matches established `BUDGET_DEFAULTS` pattern |
-| Critic approves a genuinely bad wiki (false-pass) | Operator-felt during planner stage when the planner can't decompose; existing planner-emit error path (ADR 0031) surfaces this. Critic prompt evolves over time if false-pass rate is measurable |
-| Cost spike per build (worst case: 3 Sonnet + 3 Opus calls) | Default `maxWikiReadinessAttempts: 3` caps the worst case; operator can lower to 1 (no retry) if cost-sensitive; `assertBudget` against directive `maxUsd` is a hard backstop |
-| `askUser` interrupts builds when operator's away | Auto-answer dispatcher (ADR 0030 + Tier 14 amendment) defaults the `[CRITIC]` marker to `continue` — preserves today's advisory contract end-to-end for autonomous operation |
+| Loop runs forever via `maxWikiReadinessAttempts: 0` (unlimited)    | Existing `maxUsd` and `maxSteps` axes still cap total spend; loop will trip those instead. Sentinel matches established `BUDGET_DEFAULTS` pattern                                                                           |
+| Critic approves a genuinely bad wiki (false-pass)                  | Operator-felt during planner stage when the planner can't decompose; existing planner-emit error path (ADR 0031) surfaces this. Critic prompt evolves over time if false-pass rate is measurable                            |
+| Cost spike per build (worst case: 3 Sonnet + 3 Opus calls)         | Default `maxWikiReadinessAttempts: 3` caps the worst case; operator can lower to 1 (no retry) if cost-sensitive; `assertBudget` against directive `maxUsd` is a hard backstop                                               |
+| `askUser` interrupts builds when operator's away                   | Auto-answer dispatcher (ADR 0030 + Tier 14 amendment) defaults the `[CRITIC]` marker to `continue` — preserves today's advisory contract end-to-end for autonomous operation                                                |
 
 ## 11. Implementation order (rough — full plan to be written next)
 

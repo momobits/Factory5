@@ -1,0 +1,16 @@
+<h2>Consolidating design</h2>
+<p class="subtitle">Returning to the terminal to lay out approaches and the design proposal.</p>
+
+<div class="section" style="opacity: 0.85;">
+  <p><strong>Decisions banked so far:</strong></p>
+  <ol>
+    <li>Pool model — one directive-wide cap per agent class (scaffolder/builder/fixer)</li>
+    <li>Linear bump (+default) on accept, not doubling</li>
+    <li>Drop planner per-task <code>maxTurns</code> entirely</li>
+    <li>Live re-resolve from <code>project.json</code> — edits take effect on in-flight directives</li>
+    <li>Pool exhaustion parks + notifies; no <code>[BUDGET]</code> askUser, no parser, no auto-answer policy for budgets</li>
+    <li>Per-project auto-increase toggle bounded by safety multiplier (default 5×)</li>
+    <li>Project page is the budget cockpit (tabbed: Live / Defaults / History / Settings)</li>
+    <li>Live tab uses bar treatment + per-class breakdown + drill-down on row click</li>
+  </ol>
+</div>

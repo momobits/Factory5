@@ -16,47 +16,47 @@
 
 **New files:**
 
-| Path | Responsibility |
-|------|---------------|
-| `packages/brain/src/critic.ts` | `runWikiCritic` — single LLM call producing a `WikiCritique` |
-| `packages/brain/src/critic.test.ts` | Unit tests for critic |
-| `packages/brain/src/architect-loop.ts` | `runArchitectWithCritique` wrapper — orchestrates retry loop + askUser exhaustion |
-| `packages/brain/src/architect-loop.test.ts` | Unit tests for wrapper |
-| `docs/decisions/0033-wiki-readiness-critique-loop.md` | ADR 0033 (new) |
-| `UPGRADE/plans/tier-14-wiki-readiness-judge.md` | Control-framework tier plan (separate from this implementation plan) |
-| `.control/phases/phase-14-wiki-readiness-judge/README.md` | Phase README |
-| `.control/phases/phase-14-wiki-readiness-judge/steps.md` | Phase steps checkboxes |
+| Path                                                      | Responsibility                                                                    |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `packages/brain/src/critic.ts`                            | `runWikiCritic` — single LLM call producing a `WikiCritique`                      |
+| `packages/brain/src/critic.test.ts`                       | Unit tests for critic                                                             |
+| `packages/brain/src/architect-loop.ts`                    | `runArchitectWithCritique` wrapper — orchestrates retry loop + askUser exhaustion |
+| `packages/brain/src/architect-loop.test.ts`               | Unit tests for wrapper                                                            |
+| `docs/decisions/0033-wiki-readiness-critique-loop.md`     | ADR 0033 (new)                                                                    |
+| `UPGRADE/plans/tier-14-wiki-readiness-judge.md`           | Control-framework tier plan (separate from this implementation plan)              |
+| `.control/phases/phase-14-wiki-readiness-judge/README.md` | Phase README                                                                      |
+| `.control/phases/phase-14-wiki-readiness-judge/steps.md`  | Phase steps checkboxes                                                            |
 
 **Modified files:**
 
-| Path | Change |
-|------|--------|
-| `packages/core/src/constants.ts` | Add `'critic'` to `AGENT_ROLES` |
-| `packages/core/src/schemas.ts` | Add `wikiCritiqueSchema` + helpers; extend `budgetsSchema` |
-| `packages/core/src/budget-defaults.ts` | Add `maxWikiReadinessAttempts` (8th axis) to `BUDGET_AXES`, `BUDGET_DEFAULTS`, `budgetsSchema`, `resolveBudgets` |
-| `packages/state/src/config.ts` | Add `agentsConfigSchema` + `DEFAULT_AGENT_CATEGORIES` + `resolveAgentCategory` |
-| `packages/state/src/config.test.ts` | Tests for new helpers |
-| `packages/wiki/src/readiness.ts` | Delete file entirely |
-| `packages/wiki/src/wiki.test.ts` | Delete `describe('wikiReadiness')` block |
-| `packages/wiki/src/index.ts` | Remove `wikiReadiness` / `ReadinessReport` / `ReadinessCheck` re-exports |
-| `packages/brain/src/architect.ts` | Add `priorCritique?` param; resolve category via config |
-| `packages/brain/src/architect.test.ts` | Tests for priorCritique + category resolution |
-| `packages/brain/src/loop.ts` | Swap `runArchitect` → `runArchitectWithCritique` |
-| `packages/brain/src/loop.test.ts` | Integration tests for retry paths |
-| `packages/cli/src/commands/budget-flags.ts` | Add `--max-wiki-readiness-attempts` |
-| `packages/cli/src/commands/budget-flags.test.ts` | Tests for new flag |
-| `packages/daemon/src/server.ts` | Body schema already accepts axes via Phase 13.5; verify and add tests |
-| `packages/daemon/src/server.test.ts` | Tests for new axis acceptance + persistence + resume inheritance |
-| `apps/factory-web/src/pages/build.astro` | 8th accordion row; summary "seven axes" → "eight axes" |
-| `docs/decisions/INDEX.md` | Add 0033 row |
-| `docs/decisions/0004-category-based-model-routing.md` | Append amendment block |
-| `docs/decisions/0030-pending-question-auto-answer.md` | Append amendment block |
-| `docs/decisions/0032-budget-ux-paradigm.md` | Append amendment block |
-| `docs/ARCHITECTURE.md` | ADR count 32 → 33 |
-| `UPGRADE/ROADMAP.md` | Add Tier 14 row; bump intro count |
-| `UPGRADE/ISSUES.md` | Open U035 (wiki-readiness false-positives) |
-| `.control/architecture/phase-plan.md` | Add Phase 14 row |
-| `.control/progress/STATE.md` | Cursor flip arc-complete → Phase 14 active |
+| Path                                                  | Change                                                                                                           |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/constants.ts`                      | Add `'critic'` to `AGENT_ROLES`                                                                                  |
+| `packages/core/src/schemas.ts`                        | Add `wikiCritiqueSchema` + helpers; extend `budgetsSchema`                                                       |
+| `packages/core/src/budget-defaults.ts`                | Add `maxWikiReadinessAttempts` (8th axis) to `BUDGET_AXES`, `BUDGET_DEFAULTS`, `budgetsSchema`, `resolveBudgets` |
+| `packages/state/src/config.ts`                        | Add `agentsConfigSchema` + `DEFAULT_AGENT_CATEGORIES` + `resolveAgentCategory`                                   |
+| `packages/state/src/config.test.ts`                   | Tests for new helpers                                                                                            |
+| `packages/wiki/src/readiness.ts`                      | Delete file entirely                                                                                             |
+| `packages/wiki/src/wiki.test.ts`                      | Delete `describe('wikiReadiness')` block                                                                         |
+| `packages/wiki/src/index.ts`                          | Remove `wikiReadiness` / `ReadinessReport` / `ReadinessCheck` re-exports                                         |
+| `packages/brain/src/architect.ts`                     | Add `priorCritique?` param; resolve category via config                                                          |
+| `packages/brain/src/architect.test.ts`                | Tests for priorCritique + category resolution                                                                    |
+| `packages/brain/src/loop.ts`                          | Swap `runArchitect` → `runArchitectWithCritique`                                                                 |
+| `packages/brain/src/loop.test.ts`                     | Integration tests for retry paths                                                                                |
+| `packages/cli/src/commands/budget-flags.ts`           | Add `--max-wiki-readiness-attempts`                                                                              |
+| `packages/cli/src/commands/budget-flags.test.ts`      | Tests for new flag                                                                                               |
+| `packages/daemon/src/server.ts`                       | Body schema already accepts axes via Phase 13.5; verify and add tests                                            |
+| `packages/daemon/src/server.test.ts`                  | Tests for new axis acceptance + persistence + resume inheritance                                                 |
+| `apps/factory-web/src/pages/build.astro`              | 8th accordion row; summary "seven axes" → "eight axes"                                                           |
+| `docs/decisions/INDEX.md`                             | Add 0033 row                                                                                                     |
+| `docs/decisions/0004-category-based-model-routing.md` | Append amendment block                                                                                           |
+| `docs/decisions/0030-pending-question-auto-answer.md` | Append amendment block                                                                                           |
+| `docs/decisions/0032-budget-ux-paradigm.md`           | Append amendment block                                                                                           |
+| `docs/ARCHITECTURE.md`                                | ADR count 32 → 33                                                                                                |
+| `UPGRADE/ROADMAP.md`                                  | Add Tier 14 row; bump intro count                                                                                |
+| `UPGRADE/ISSUES.md`                                   | Open U035 (wiki-readiness false-positives)                                                                       |
+| `.control/architecture/phase-plan.md`                 | Add Phase 14 row                                                                                                 |
+| `.control/progress/STATE.md`                          | Cursor flip arc-complete → Phase 14 active                                                                       |
 
 ---
 
@@ -301,7 +301,11 @@ describe('wikiCritiqueSchema', () => {
       passes: false,
       severity: 'major',
       findings: [
-        { aspect: 'modules', gap: 'no module relationships', suggestion: 'add a section listing module imports' },
+        {
+          aspect: 'modules',
+          gap: 'no module relationships',
+          suggestion: 'add a section listing module imports',
+        },
       ],
       summary: 'Wiki missing module-relationship documentation',
     });
@@ -472,6 +476,7 @@ In `packages/core/src/budget-defaults.ts`:
   maxWikiReadinessAttempts: z.number().int().nonnegative(),
   ```
 - Append to `resolveBudgets` return literal:
+
   ```ts
   maxWikiReadinessAttempts:
     input.maxWikiReadinessAttempts ?? BUDGET_DEFAULTS.maxWikiReadinessAttempts.value,
@@ -575,11 +580,7 @@ Confirm the existing `factoryConfigFileSchema` (or similar — name from Phase 8
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import {
-  DEFAULT_AGENT_CATEGORIES,
-  agentsConfigSchema,
-  resolveAgentCategory,
-} from './config.js';
+import { DEFAULT_AGENT_CATEGORIES, agentsConfigSchema, resolveAgentCategory } from './config.js';
 
 describe('agentsConfigSchema', () => {
   it('accepts empty object', () => {
@@ -780,13 +781,22 @@ describe('runWikiCritic', () => {
       projectPath: '/fake/proj',
       directiveBody: 'build a tiny CLI todo app',
       claudeMd: '# Project\n\nA todo app.',
-      pages: [{ slug: 'overview.md', path: '/fake/proj/docs/knowledge/overview.md', content: '# Overview\n\nA todo CLI.' }],
+      pages: [
+        {
+          slug: 'overview.md',
+          path: '/fake/proj/docs/knowledge/overview.md',
+          content: '# Overview\n\nA todo CLI.',
+        },
+      ],
       directiveId: '01TESTDIRECTIVE',
       emit,
     });
     expect(result.passes).toBe(true);
     expect(emit).toHaveBeenCalledWith(
-      expect.anything(), '01TESTDIRECTIVE', 'info', 'brain.critic',
+      expect.anything(),
+      '01TESTDIRECTIVE',
+      'info',
+      'brain.critic',
       expect.stringContaining('critic'),
       expect.anything(),
     );
@@ -828,8 +838,12 @@ describe('runWikiCritic', () => {
       }),
     ).rejects.toThrow();
     expect(emit).toHaveBeenCalledWith(
-      expect.anything(), '01ERR', 'error', 'brain.critic',
-      expect.anything(), expect.objectContaining({ detail: expect.any(String) }),
+      expect.anything(),
+      '01ERR',
+      'error',
+      'brain.critic',
+      expect.anything(),
+      expect.objectContaining({ detail: expect.any(String) }),
     );
   });
 
@@ -964,13 +978,18 @@ function makeFakeRegistry(opts: {
     resolve: async (category: string) => {
       if (opts.captureCategoryTo) opts.captureCategoryTo.push(category);
       return {
-        provider: { id: 'fake', call: async (args: { systemPrompt: string; messages: { content: string }[] }) => {
-          if (opts.captureTo) opts.captureTo.push(args);
-          if (opts.capturePromptTo) {
-            opts.capturePromptTo.push({ userPrompt: args.messages.map((m) => m.content).join('\n') });
-          }
-          return { text: opts.response, usage: { input_tokens: 100, output_tokens: 50 } };
-        } },
+        provider: {
+          id: 'fake',
+          call: async (args: { systemPrompt: string; messages: { content: string }[] }) => {
+            if (opts.captureTo) opts.captureTo.push(args);
+            if (opts.capturePromptTo) {
+              opts.capturePromptTo.push({
+                userPrompt: args.messages.map((m) => m.content).join('\n'),
+              });
+            }
+            return { text: opts.response, usage: { input_tokens: 100, output_tokens: 50 } };
+          },
+        },
         model: 'fake-model',
       };
     },
@@ -1054,9 +1073,7 @@ export async function runWikiCritic(opts: RunWikiCriticOptions): Promise<WikiCri
   const resolution = await opts.registry.resolve(category);
   const systemPrompt = await buildAgentSystemPrompt('critic');
 
-  const renderedPages = opts.pages
-    .map((p) => `--- ${p.slug} ---\n${p.content}`)
-    .join('\n\n');
+  const renderedPages = opts.pages.map((p) => `--- ${p.slug} ---\n${p.content}`).join('\n\n');
 
   const userPrompt = [
     'You are evaluating whether a project wiki adequately designs what the operator requested.',
@@ -1098,7 +1115,12 @@ export async function runWikiCritic(opts: RunWikiCriticOptions): Promise<WikiCri
   ].join('\n');
 
   log.info(
-    { projectPath: opts.projectPath, provider: resolution.provider.id, model: resolution.model, category },
+    {
+      projectPath: opts.projectPath,
+      provider: resolution.provider.id,
+      model: resolution.model,
+      category,
+    },
     'critic: calling',
   );
   if (opts.directiveId !== undefined) {
@@ -1151,8 +1173,14 @@ export async function runWikiCritic(opts: RunWikiCriticOptions): Promise<WikiCri
   if (jsonText === undefined) {
     const detail = response.text.slice(0, 500);
     if (opts.directiveId !== undefined) {
-      emitLogLine(opts.emit, opts.directiveId, 'error', 'brain.critic',
-        'critic: no JSON in response', { detail });
+      emitLogLine(
+        opts.emit,
+        opts.directiveId,
+        'error',
+        'brain.critic',
+        'critic: no JSON in response',
+        { detail },
+      );
     }
     throw new Error(`critic: response contained no JSON object. First 500 chars: ${detail}`);
   }
@@ -1161,9 +1189,16 @@ export async function runWikiCritic(opts: RunWikiCriticOptions): Promise<WikiCri
   } catch (err) {
     if (opts.directiveId !== undefined) {
       const detail = response.text.slice(0, 500);
-      const zodIssues = err instanceof z.ZodError ? err.issues.slice(0, 3) : [{ message: String(err) }];
-      emitLogLine(opts.emit, opts.directiveId, 'error', 'brain.critic',
-        'critic: schema parse failed', { detail, zodIssues });
+      const zodIssues =
+        err instanceof z.ZodError ? err.issues.slice(0, 3) : [{ message: String(err) }];
+      emitLogLine(
+        opts.emit,
+        opts.directiveId,
+        'error',
+        'brain.critic',
+        'critic: schema parse failed',
+        { detail, zodIssues },
+      );
     }
     throw err;
   }
@@ -1332,7 +1367,12 @@ export interface ArchitectOptions {
    *  on retry so the architect can address specific gaps (ADR 0033 §4). */
   priorCritique?: WikiCritique;
   /** Loaded config — used to resolve `agents.architect` category override (ADR 0004 amendment). */
-  config?: { agents?: { architect?: import('@factory5/core').ModelCategory; critic?: import('@factory5/core').ModelCategory } };
+  config?: {
+    agents?: {
+      architect?: import('@factory5/core').ModelCategory;
+      critic?: import('@factory5/core').ModelCategory;
+    };
+  };
 }
 ```
 
@@ -1435,7 +1475,14 @@ import { runArchitectWithCritique, WikiReadinessAbortError } from './architect-l
 
 describe('runArchitectWithCritique', () => {
   it('passes on attempt 1 — one architect + one critic call', async () => {
-    const arch = vi.fn().mockResolvedValue({ projectPath: '/p', pages: [{slug:'overview.md',path:'/p/x',content:'# x'}], readiness: { ok: true, checks: [] }, rawResponse: '' });
+    const arch = vi
+      .fn()
+      .mockResolvedValue({
+        projectPath: '/p',
+        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+        readiness: { ok: true, checks: [] },
+        rawResponse: '',
+      });
     const crit = vi.fn().mockResolvedValue(passing());
     const result = await runArchitectWithCritique({
       runArchitect: arch,
@@ -1453,14 +1500,23 @@ describe('runArchitectWithCritique', () => {
   });
 
   it('passes on attempt 2 — second architect call gets priorCritique', async () => {
-    const arch = vi.fn().mockResolvedValue({ projectPath: '/p', pages: [{slug:'overview.md',path:'/p/x',content:'# x'}], readiness: { ok: true, checks: [] }, rawResponse: '' });
-    const crit = vi.fn()
-      .mockResolvedValueOnce(failing('major'))
-      .mockResolvedValueOnce(passing());
+    const arch = vi
+      .fn()
+      .mockResolvedValue({
+        projectPath: '/p',
+        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+        readiness: { ok: true, checks: [] },
+        rawResponse: '',
+      });
+    const crit = vi.fn().mockResolvedValueOnce(failing('major')).mockResolvedValueOnce(passing());
     const result = await runArchitectWithCritique({
-      runArchitect: arch, runWikiCritic: crit, askUser: vi.fn(),
+      runArchitect: arch,
+      runWikiCritic: crit,
+      askUser: vi.fn(),
       readClaudeMd: vi.fn().mockResolvedValue('# md'),
-      projectPath: '/p', directiveBody: 'x', maxAttempts: 3,
+      projectPath: '/p',
+      directiveBody: 'x',
+      maxAttempts: 3,
     } as any);
     expect(result.attempts).toBe(2);
     expect(arch).toHaveBeenCalledTimes(2);
@@ -1470,13 +1526,24 @@ describe('runArchitectWithCritique', () => {
   });
 
   it('exhausts after 3 attempts and calls askUser with rendered critique', async () => {
-    const arch = vi.fn().mockResolvedValue({ projectPath: '/p', pages: [{slug:'overview.md',path:'/p/x',content:'# x'}], readiness: { ok: true, checks: [] }, rawResponse: '' });
+    const arch = vi
+      .fn()
+      .mockResolvedValue({
+        projectPath: '/p',
+        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+        readiness: { ok: true, checks: [] },
+        rawResponse: '',
+      });
     const crit = vi.fn().mockResolvedValue(failing('major'));
     const askUser = vi.fn().mockResolvedValue('continue');
     await runArchitectWithCritique({
-      runArchitect: arch, runWikiCritic: crit, askUser,
+      runArchitect: arch,
+      runWikiCritic: crit,
+      askUser,
       readClaudeMd: vi.fn().mockResolvedValue('# md'),
-      projectPath: '/p', directiveBody: 'x', maxAttempts: 3,
+      projectPath: '/p',
+      directiveBody: 'x',
+      maxAttempts: 3,
     } as any);
     expect(arch).toHaveBeenCalledTimes(3);
     expect(crit).toHaveBeenCalledTimes(3);
@@ -1496,7 +1563,14 @@ describe('runArchitectWithCritique', () => {
   });
 
   it('operator extend-3 → 3 more attempts', async () => {
-    const arch = vi.fn().mockResolvedValue({ projectPath: '/p', pages: [{slug:'overview.md',path:'/p/x',content:'# x'}], readiness: { ok: true, checks: [] }, rawResponse: '' });
+    const arch = vi
+      .fn()
+      .mockResolvedValue({
+        projectPath: '/p',
+        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+        readiness: { ok: true, checks: [] },
+        rawResponse: '',
+      });
     const crit = vi.fn().mockResolvedValue(failing('major'));
     let asked = 0;
     const askUser = vi.fn().mockImplementation(() => {
@@ -1504,9 +1578,13 @@ describe('runArchitectWithCritique', () => {
       return asked === 1 ? 'extend-3' : 'continue';
     });
     const result = await runArchitectWithCritique({
-      runArchitect: arch, runWikiCritic: crit, askUser,
+      runArchitect: arch,
+      runWikiCritic: crit,
+      askUser,
       readClaudeMd: vi.fn().mockResolvedValue('# md'),
-      projectPath: '/p', directiveBody: 'x', maxAttempts: 3,
+      projectPath: '/p',
+      directiveBody: 'x',
+      maxAttempts: 3,
     } as any);
     expect(arch).toHaveBeenCalledTimes(6);
     expect(askUser).toHaveBeenCalledTimes(2);
@@ -1515,26 +1593,50 @@ describe('runArchitectWithCritique', () => {
 
   it('maxAttempts: 0 (unlimited) — passes after N attempts without askUser', async () => {
     let i = 0;
-    const arch = vi.fn().mockResolvedValue({ projectPath: '/p', pages: [{slug:'overview.md',path:'/p/x',content:'# x'}], readiness: { ok: true, checks: [] }, rawResponse: '' });
-    const crit = vi.fn().mockImplementation(() => Promise.resolve(++i === 7 ? passing() : failing('major')));
+    const arch = vi
+      .fn()
+      .mockResolvedValue({
+        projectPath: '/p',
+        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+        readiness: { ok: true, checks: [] },
+        rawResponse: '',
+      });
+    const crit = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(++i === 7 ? passing() : failing('major')));
     const askUser = vi.fn();
     const result = await runArchitectWithCritique({
-      runArchitect: arch, runWikiCritic: crit, askUser,
+      runArchitect: arch,
+      runWikiCritic: crit,
+      askUser,
       readClaudeMd: vi.fn().mockResolvedValue('# md'),
-      projectPath: '/p', directiveBody: 'x', maxAttempts: 0,
+      projectPath: '/p',
+      directiveBody: 'x',
+      maxAttempts: 0,
     } as any);
     expect(result.attempts).toBe(7);
     expect(askUser).not.toHaveBeenCalled();
   });
 
   it('maxAttempts: 1 — first fail triggers immediate askUser, no retry', async () => {
-    const arch = vi.fn().mockResolvedValue({ projectPath: '/p', pages: [{slug:'overview.md',path:'/p/x',content:'# x'}], readiness: { ok: true, checks: [] }, rawResponse: '' });
+    const arch = vi
+      .fn()
+      .mockResolvedValue({
+        projectPath: '/p',
+        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+        readiness: { ok: true, checks: [] },
+        rawResponse: '',
+      });
     const crit = vi.fn().mockResolvedValue(failing('major'));
     const askUser = vi.fn().mockResolvedValue('continue');
     await runArchitectWithCritique({
-      runArchitect: arch, runWikiCritic: crit, askUser,
+      runArchitect: arch,
+      runWikiCritic: crit,
+      askUser,
       readClaudeMd: vi.fn().mockResolvedValue('# md'),
-      projectPath: '/p', directiveBody: 'x', maxAttempts: 1,
+      projectPath: '/p',
+      directiveBody: 'x',
+      maxAttempts: 1,
     } as any);
     expect(arch).toHaveBeenCalledTimes(1);
     expect(crit).toHaveBeenCalledTimes(1);
@@ -1542,16 +1644,26 @@ describe('runArchitectWithCritique', () => {
   });
 
   it('emits a per-attempt log line', async () => {
-    const arch = vi.fn().mockResolvedValue({ projectPath: '/p', pages: [{slug:'overview.md',path:'/p/x',content:'# x'}], readiness: { ok: true, checks: [] }, rawResponse: '' });
-    const crit = vi.fn()
-      .mockResolvedValueOnce(failing('major'))
-      .mockResolvedValueOnce(passing());
+    const arch = vi
+      .fn()
+      .mockResolvedValue({
+        projectPath: '/p',
+        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+        readiness: { ok: true, checks: [] },
+        rawResponse: '',
+      });
+    const crit = vi.fn().mockResolvedValueOnce(failing('major')).mockResolvedValueOnce(passing());
     const emit = vi.fn();
     await runArchitectWithCritique({
-      runArchitect: arch, runWikiCritic: crit, askUser: vi.fn(),
+      runArchitect: arch,
+      runWikiCritic: crit,
+      askUser: vi.fn(),
       readClaudeMd: vi.fn().mockResolvedValue('# md'),
-      projectPath: '/p', directiveBody: 'x', maxAttempts: 3,
-      directiveId: '01TEST', emit,
+      projectPath: '/p',
+      directiveBody: 'x',
+      maxAttempts: 3,
+      directiveId: '01TEST',
+      emit,
     } as any);
     const msgs = emit.mock.calls.map((c) => c[4]).join('|');
     expect(msgs).toMatch(/attempt 1\/3/);
@@ -1569,9 +1681,13 @@ describe('runArchitectWithCritique', () => {
     const arch = vi.fn().mockRejectedValue(new Error('architect blew up'));
     await expect(
       runArchitectWithCritique({
-        runArchitect: arch, runWikiCritic: vi.fn(), askUser: vi.fn(),
+        runArchitect: arch,
+        runWikiCritic: vi.fn(),
+        askUser: vi.fn(),
         readClaudeMd: vi.fn().mockResolvedValue('# md'),
-        projectPath: '/p', directiveBody: 'x', maxAttempts: 3,
+        projectPath: '/p',
+        directiveBody: 'x',
+        maxAttempts: 3,
       } as any),
     ).rejects.toThrow(/architect blew up/);
   });
@@ -1579,13 +1695,24 @@ describe('runArchitectWithCritique', () => {
   // --- shared helpers ---
 
   async function runWithExhaustionAnswer(answer: string, emit?: any) {
-    const arch = vi.fn().mockResolvedValue({ projectPath: '/p', pages: [{slug:'overview.md',path:'/p/x',content:'# x'}], readiness: { ok: true, checks: [] }, rawResponse: '' });
+    const arch = vi
+      .fn()
+      .mockResolvedValue({
+        projectPath: '/p',
+        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+        readiness: { ok: true, checks: [] },
+        rawResponse: '',
+      });
     const crit = vi.fn().mockResolvedValue(failing('major'));
     const askUser = vi.fn().mockResolvedValue(answer);
     return runArchitectWithCritique({
-      runArchitect: arch, runWikiCritic: crit, askUser,
+      runArchitect: arch,
+      runWikiCritic: crit,
+      askUser,
       readClaudeMd: vi.fn().mockResolvedValue('# md'),
-      projectPath: '/p', directiveBody: 'x', maxAttempts: 3,
+      projectPath: '/p',
+      directiveBody: 'x',
+      maxAttempts: 3,
       ...(emit ? { directiveId: '01EX', emit } : {}),
     } as any);
   }
@@ -1660,7 +1787,11 @@ export interface RunArchitectWithCritiqueOptions {
   // --- dependencies (real call sites inject the live implementations) ---
   runArchitect: (opts: any) => Promise<ArchitectResult>;
   runWikiCritic: (opts: any) => Promise<WikiCritique>;
-  askUser: (opts: { prompt: string; options: readonly string[]; directiveId?: string }) => Promise<string>;
+  askUser: (opts: {
+    prompt: string;
+    options: readonly string[];
+    directiveId?: string;
+  }) => Promise<string>;
   /** Read CLAUDE.md from disk; injected for test isolation. */
   readClaudeMd?: (projectPath: string) => Promise<string>;
 }
@@ -1706,9 +1837,14 @@ export async function runArchitectWithCritique(
     });
 
     if (opts.directiveId !== undefined) {
-      emitLogLine(opts.emit, opts.directiveId, 'info', 'brain.architect-loop',
+      emitLogLine(
+        opts.emit,
+        opts.directiveId,
+        'info',
+        'brain.architect-loop',
         `critic: evaluating wiki (attempt ${attempts}/${opts.maxAttempts === 0 ? '∞' : opts.maxAttempts})`,
-        { attempt: attempts });
+        { attempt: attempts },
+      );
     }
 
     critique = await opts.runWikiCritic({
@@ -1726,26 +1862,41 @@ export async function runArchitectWithCritique(
 
     if (critique.passes) {
       if (opts.directiveId !== undefined) {
-        emitLogLine(opts.emit, opts.directiveId, 'info', 'brain.architect-loop',
+        emitLogLine(
+          opts.emit,
+          opts.directiveId,
+          'info',
+          'brain.architect-loop',
           `critic: passed on attempt ${attempts} — '${critique.summary}'`,
-          { attempt: attempts, severity: critique.severity });
+          { attempt: attempts, severity: critique.severity },
+        );
       }
       return { architectResult, critique, attempts, exhausted: false };
     }
 
     if (opts.directiveId !== undefined) {
-      emitLogLine(opts.emit, opts.directiveId, 'warn', 'brain.architect-loop',
+      emitLogLine(
+        opts.emit,
+        opts.directiveId,
+        'warn',
+        'brain.architect-loop',
         `critic: failed (${critique.severity}) on attempt ${attempts} — ${critique.summary}`,
-        { attempt: attempts, severity: critique.severity, findings: critique.findings });
+        { attempt: attempts, severity: critique.severity, findings: critique.findings },
+      );
     }
     priorCritique = critique;
   }
 
   // Exhausted — escalate to operator
   if (opts.directiveId !== undefined) {
-    emitLogLine(opts.emit, opts.directiveId, 'warn', 'brain.architect-loop',
+    emitLogLine(
+      opts.emit,
+      opts.directiveId,
+      'warn',
+      'brain.architect-loop',
       `critic: exhausted (${attempts}/${opts.maxAttempts} attempts) — escalating to operator`,
-      { attempts, lastSeverity: critique.severity, lastSummary: critique.summary });
+      { attempts, lastSeverity: critique.severity, lastSummary: critique.summary },
+    );
   }
 
   const renderedFindings = critique.findings
@@ -1897,8 +2048,8 @@ Imports to add:
 ```ts
 import { runArchitectWithCritique, WikiReadinessAbortError } from './architect-loop.js';
 import { runWikiCritic } from './critic.js';
-import { runArchitect } from './architect.js';   // (likely already imported)
-import { askUser } from './ask-user.js';         // verify exact export name
+import { runArchitect } from './architect.js'; // (likely already imported)
+import { askUser } from './ask-user.js'; // verify exact export name
 import { loadConfig } from '@factory5/state';
 import { resolveBudgets } from '@factory5/core';
 import { readWiki } from '@factory5/wiki';
@@ -1921,6 +2072,7 @@ pnpm build
 ```
 
 Expected errors point to:
+
 - `packages/brain/src/loop.ts` (now uses `readWiki` not `wikiReadiness`)
 - `packages/brain/src/architect.ts` (post-architect readiness call must be removed)
 - `packages/wiki/src/wiki.test.ts` (`wikiReadiness` describe block must be deleted)
@@ -1938,6 +2090,7 @@ pnpm build
 ```
 
 Fix one error at a time. Common follow-ons:
+
 - `ArchitectResult` shape change may break `loop.ts` if it reads `architect.readiness` — switch to `architectLoopResult.critique`.
 - The Assisted-mode checkpoint at `loop.ts:301` reads `architect?.pages.length` — adjust to `architectLoopResult.architectResult.pages.length`.
 
@@ -2433,28 +2586,28 @@ Closes the session, updates STATE.md, regenerates `next.md`.
 
 Spec coverage check (each spec section → tasks):
 
-| Spec § | Coverage |
-|--------|----------|
-| §3.1 New modules (critic, architect-loop) | Tasks 5, 7 |
-| §3.2 Modified modules | Tasks 3, 4, 6, 8, 9, 10, 11 |
-| §3.3 Call graph | Tasks 7, 8 |
-| §4 Data flow (happy/retry/exhaustion/resume) | Task 7 (wrapper), Task 8 (integration tests) |
-| §5.1 BUDGET_DEFAULTS 8th axis | Task 3 (core), 9 (daemon), 10 (CLI), 11 (Web) |
-| §5.2 `[agents.*]` config | Task 4 |
-| §5.3 payload.budgets persistence | Task 9 |
-| §6.1 New Zod schemas | Task 3 |
-| §6.2 AGENT_ROLES bump | Task 3 |
-| §6.3 ADRs (0033 + 3 amendments) | Task 2 |
-| §6.4 No migrations | (acknowledged in Task 9 — no migration code) |
-| §6.5 Removed code | Task 8 |
-| §7 Error handling | Tasks 5, 7 (each branch tested) |
-| §8.1 Per-module unit tests | Tasks 5, 6, 7 |
-| §8.2 Schema tests | Tasks 3, 4 |
-| §8.3 Daemon integration tests | Task 9 |
-| §8.4 CLI tests | Task 10 |
-| §8.5 Loop integration tests | Task 8 |
-| §8.6 Live browser smoke | Task 12 |
-| §10 Risks | Tasks 5 (temperature 0 on critic), 7 (extend-N + abort paths), all (assertBudget cap) |
+| Spec §                                       | Coverage                                                                              |
+| -------------------------------------------- | ------------------------------------------------------------------------------------- |
+| §3.1 New modules (critic, architect-loop)    | Tasks 5, 7                                                                            |
+| §3.2 Modified modules                        | Tasks 3, 4, 6, 8, 9, 10, 11                                                           |
+| §3.3 Call graph                              | Tasks 7, 8                                                                            |
+| §4 Data flow (happy/retry/exhaustion/resume) | Task 7 (wrapper), Task 8 (integration tests)                                          |
+| §5.1 BUDGET_DEFAULTS 8th axis                | Task 3 (core), 9 (daemon), 10 (CLI), 11 (Web)                                         |
+| §5.2 `[agents.*]` config                     | Task 4                                                                                |
+| §5.3 payload.budgets persistence             | Task 9                                                                                |
+| §6.1 New Zod schemas                         | Task 3                                                                                |
+| §6.2 AGENT_ROLES bump                        | Task 3                                                                                |
+| §6.3 ADRs (0033 + 3 amendments)              | Task 2                                                                                |
+| §6.4 No migrations                           | (acknowledged in Task 9 — no migration code)                                          |
+| §6.5 Removed code                            | Task 8                                                                                |
+| §7 Error handling                            | Tasks 5, 7 (each branch tested)                                                       |
+| §8.1 Per-module unit tests                   | Tasks 5, 6, 7                                                                         |
+| §8.2 Schema tests                            | Tasks 3, 4                                                                            |
+| §8.3 Daemon integration tests                | Task 9                                                                                |
+| §8.4 CLI tests                               | Task 10                                                                               |
+| §8.5 Loop integration tests                  | Task 8                                                                                |
+| §8.6 Live browser smoke                      | Task 12                                                                               |
+| §10 Risks                                    | Tasks 5 (temperature 0 on critic), 7 (extend-N + abort paths), all (assertBudget cap) |
 
 No spec section is uncovered.
 

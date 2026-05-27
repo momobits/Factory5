@@ -74,3 +74,8 @@ notes.md
 
 # Browser-smoke screenshots dropped at repo root by Playwright MCP runs.
 /smoke-*.png
+
+.agents/
+.claude/
+.control/
+.relay/
