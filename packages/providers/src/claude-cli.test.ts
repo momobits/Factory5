@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, test } from 'vitest';
 
 import {
+  ClaudeCliProvider,
   buildClaudeArgs,
   composePromptText,
   extractUsage,
@@ -213,5 +214,17 @@ describe('extractUsage', () => {
     expect(u.inputTokens).toBe(0);
     expect(u.outputTokens).toBe(0);
     expect(u.costUsd).toBe(0);
+  });
+});
+
+describe('ClaudeCliProvider constructor defaults', () => {
+  test('default stream timeout is 60 minutes (timeoutMs * 6)', () => {
+    const provider = new ClaudeCliProvider();
+    expect((provider as any).streamTimeoutMs).toBe(60 * 60 * 1000);
+  });
+
+  test('explicit streamTimeoutMs overrides default', () => {
+    const provider = new ClaudeCliProvider({ streamTimeoutMs: 5000 });
+    expect((provider as any).streamTimeoutMs).toBe(5000);
   });
 });

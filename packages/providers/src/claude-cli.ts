@@ -617,7 +617,7 @@ export class ClaudeCliProvider implements ModelProvider {
     this.extraArgs = opts.extraArgs ?? [];
     this.defaultCwd = opts.cwd;
     this.timeoutMs = opts.timeoutMs ?? 10 * 60 * 1000;
-    this.streamTimeoutMs = opts.streamTimeoutMs ?? this.timeoutMs * 2;
+    this.streamTimeoutMs = opts.streamTimeoutMs ?? this.timeoutMs * 6;
     this.maxTurns = opts.maxTurns;
     this.noAvailabilityCache = opts.noAvailabilityCache ?? false;
   }
