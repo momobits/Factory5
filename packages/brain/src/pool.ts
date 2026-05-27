@@ -26,6 +26,7 @@
  * @packageDocumentation
  */
 
+import { existsSync } from 'node:fs';
 import { cpus } from 'node:os';
 import { join } from 'node:path';
 import { env } from 'node:process';
@@ -490,7 +491,7 @@ async function executeTaskWithBudgetGuard(
   autoBumpDepth: number,
 ): Promise<{ id: string; outcome: WorkerOutcome; task: Task }> {
   const systemPrompt = await buildAgentSystemPrompt(task.agent);
-  const userPrompt = [
+  const basePrompt = [
     `Task: ${task.title}`,
     '',
     `Context: ${task.inputs.context}`,
@@ -498,6 +499,20 @@ async function executeTaskWithBudgetGuard(
     `Expected outputs (files): ${JSON.stringify(task.expectedOutputs.files)}`,
     `Expected signals: ${JSON.stringify(task.expectedOutputs.signals)}`,
   ].join('\n');
+
+  // Tier 15 — resume prompt prefix for retried tasks. When a task has been
+  // attempted before (attempts > 0) and a worktree exists from the prior
+  // attempt, prepend context so the agent knows to continue from partial work
+  // rather than starting from scratch.
+  let resumePrefix = '';
+  if (task.attempts > 0) {
+    const worktreeDir = join(plan.projectPath, '.factory', 'worktrees', `task-${task.id}`);
+    if (existsSync(worktreeDir)) {
+      resumePrefix =
+        'This task was previously attempted but did not complete. The worktree contains partial work from the prior attempt. Continue from where it left off.\n\n';
+    }
+  }
+  const userPrompt = resumePrefix + basePrompt;
 
   const now = (): string => new Date().toISOString();
   const startedAt = now();
@@ -760,17 +775,18 @@ async function executeTaskWithBudgetGuard(
   // When the pool has an SSE emitter AND the task has a transcript path,
   // each parsed NDJSON line is forwarded as a `transcript.line` event so
   // connected frontends see live output without polling.
-  const emitTranscriptLine = emit !== undefined && transcriptPath !== undefined
-    ? (line: unknown, lineIndex: number): void => {
-        emit({
-          type: 'transcript.line',
-          taskId: task.id,
-          directiveId,
-          line,
-          lineIndex,
-        });
-      }
-    : undefined;
+  const emitTranscriptLine =
+    emit !== undefined && transcriptPath !== undefined
+      ? (line: unknown, lineIndex: number): void => {
+          emit({
+            type: 'transcript.line',
+            taskId: task.id,
+            directiveId,
+            line,
+            lineIndex,
+          });
+        }
+      : undefined;
 
   try {
     outcome = await runWorker({

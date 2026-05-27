@@ -25,7 +25,7 @@ import type { Directive } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import type { DirectiveEventEmitter } from '@factory5/ipc';
 import type { ProviderRegistry } from '@factory5/providers';
-import { directives as directivesQ, type Database } from '@factory5/state';
+import { directives as directivesQ, directiveSignals, type Database } from '@factory5/state';
 
 import { runAutoAnswerSweep } from './auto-answer.js';
 import { registerCancellation } from './cancellation.js';
@@ -260,6 +260,113 @@ export async function runServe(opts: ServeOptions): Promise<void> {
             pendingWake?.();
           });
         inflight.set(directive.id, runPromise);
+      }
+
+      // Tier 15 — signal-aware re-entry: check for `task_retry` signals on
+      // running directives that are NOT already inflight. The retry daemon
+      // endpoint flips the directive to `running` and inserts a signal; this
+      // is the brain-side consumer that re-enters directive execution. The
+      // pool loop naturally picks up the now-pending (cascade-reset) tasks.
+      if (inflight.size < concurrency && !opts.signal.aborted) {
+        try {
+          const retryIds = directiveSignals.directiveIdsWithPendingSignal(opts.db, 'task_retry');
+          for (const retryDirectiveId of retryIds) {
+            if (inflight.size >= concurrency) break;
+            if (opts.signal.aborted) break;
+            if (inflight.has(retryDirectiveId)) continue;
+
+            // Consume the signal atomically so no other loop iteration
+            // processes it twice.
+            const signal = directiveSignals.consumeNext(opts.db, retryDirectiveId, 'task_retry');
+            if (signal === undefined) continue;
+
+            const directive = directivesQ.getById(opts.db, retryDirectiveId);
+            if (directive === undefined || directive.status !== 'running') continue;
+
+            log.info(
+              { directiveId: directive.id, signalId: signal.id, inflight: inflight.size + 1 },
+              'serve: re-entering directive on task_retry signal',
+            );
+
+            const projectPath = extractProjectPathSafely(directive);
+            if (projectPath !== undefined) {
+              poolResume.registerProject(projectPath).catch((err: unknown) => {
+                log.warn(
+                  { err, directiveId: directive.id, projectPath },
+                  'serve: poolResume.registerProject failed on retry re-entry',
+                );
+              });
+            }
+
+            const cancellation = registerCancellation(directive.id, opts.signal);
+            const retryPromise = runOne(directive, {
+              db: opts.db,
+              registry: opts.registry,
+              claimedBy,
+              signal: cancellation.signal,
+              ...(opts.emitDirectiveEvent !== undefined
+                ? { emitDirectiveEvent: opts.emitDirectiveEvent }
+                : {}),
+            })
+              .then(() => {
+                log.info({ directiveId: directive.id }, 'serve: retried directive finished');
+              })
+              .catch((err: unknown) => {
+                if (cancellation.signal.aborted && !opts.signal.aborted) {
+                  log.info(
+                    { directiveId: directive.id, err },
+                    'serve: retried directive cancelled',
+                  );
+                  return;
+                }
+                if (opts.signal.aborted) {
+                  try {
+                    directivesQ.updateStatus(opts.db, directive.id, 'blocked');
+                  } catch (writeErr) {
+                    log.warn(
+                      { writeErr, directiveId: directive.id },
+                      'serve: failed to mark aborted retried directive as blocked',
+                    );
+                  }
+                  return;
+                }
+                try {
+                  directivesQ.updateStatus(opts.db, directive.id, 'failed');
+                } catch (writeErr) {
+                  log.warn(
+                    { writeErr, directiveId: directive.id },
+                    'serve: failed to mark failed retried directive',
+                  );
+                }
+                log.error({ err, directiveId: directive.id }, 'serve: retried directive threw');
+                const emit = opts.emitDirectiveEvent;
+                if (emit !== undefined) {
+                  const errMsg = err instanceof Error ? err.message : String(err);
+                  emitLogLine(
+                    emit,
+                    directive.id,
+                    'error',
+                    'brain.loop',
+                    `brain: retried directive threw — ${errMsg.slice(0, 200)}`,
+                  );
+                  emit({
+                    type: 'directive.completed',
+                    directiveId: directive.id,
+                    status: 'failed',
+                    blockedReason: null,
+                  });
+                }
+              })
+              .finally(() => {
+                cancellation.release();
+                inflight.delete(directive.id);
+                pendingWake?.();
+              });
+            inflight.set(directive.id, retryPromise);
+          }
+        } catch (err) {
+          log.warn({ err }, 'serve: task_retry signal poll failed — non-fatal');
+        }
       }
 
       if (opts.signal.aborted) break;

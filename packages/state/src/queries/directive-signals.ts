@@ -97,8 +97,7 @@ export function insert(
 ): string {
   const id = newId();
   const createdAt = new Date().toISOString();
-  const payloadJson =
-    payload !== undefined && payload !== null ? JSON.stringify(payload) : null;
+  const payloadJson = payload !== undefined && payload !== null ? JSON.stringify(payload) : null;
   db.prepare(
     `INSERT INTO directive_signals (id, directive_id, signal_type, payload_json, created_at, consumed_at)
      VALUES (?, ?, ?, ?, ?, NULL)`,
@@ -175,4 +174,31 @@ export function pendingForDirective(db: Database, directiveId: string): Directiv
     )
     .all(directiveId) as Row[];
   return rows.map(rowToSignal);
+}
+
+/**
+ * Return directive IDs that have at least one unconsumed signal of the given
+ * type AND whose directive row has `status = 'running'`.
+ *
+ * Used by the brain's serve loop to discover `task_retry` signals that need
+ * re-entry. The query joins on `directives` so that signals targeting
+ * non-running directives (e.g. already `complete` or `blocked`) are ignored.
+ *
+ * Returns distinct directive IDs ordered by the oldest pending signal's
+ * `created_at` so the brain processes retries in FIFO order.
+ */
+export function directiveIdsWithPendingSignal(db: Database, signalType: string): string[] {
+  const rows = db
+    .prepare(
+      `SELECT ds.directive_id, MIN(ds.created_at) AS oldest
+         FROM directive_signals ds
+         JOIN directives d ON d.id = ds.directive_id
+        WHERE ds.signal_type = ?
+          AND ds.consumed_at IS NULL
+          AND d.status = 'running'
+        GROUP BY ds.directive_id
+        ORDER BY oldest ASC`,
+    )
+    .all(signalType) as Array<{ directive_id: string; oldest: string }>;
+  return rows.map((r) => r.directive_id);
 }
