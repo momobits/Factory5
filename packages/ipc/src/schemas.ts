@@ -276,8 +276,34 @@ export const apiV1InflightTaskSchema = z.object({
   result: taskResultSchema.optional(),
   waitingQuestionId: ulidSchema.optional(),
   abortedReason: z.string().optional(),
+  transcriptPath: z.string().optional(),
+  transcriptBytes: z.number().int().nonnegative().optional(),
+  transcriptLines: z.number().int().nonnegative().optional(),
 });
 export type ApiV1InflightTask = z.infer<typeof apiV1InflightTaskSchema>;
+
+// -----------------------------------------------------------------------------
+// GET /api/v1/directives/:directiveId/tasks/:taskId/transcript
+// -----------------------------------------------------------------------------
+
+/**
+ * Response shape for `GET /api/v1/directives/:directiveId/tasks/:taskId/transcript`.
+ * Returns paginated NDJSON transcript lines with level-based filtering.
+ *
+ *   - `lines` — parsed JSON objects from the transcript NDJSON file.
+ *   - `total` — total number of lines matching the level filter.
+ *   - `bytesTotal` — total byte size of the transcript file on disk.
+ *   - `level` — the active level filter (`full`, `tools`, or `errors`).
+ *   - `hasMore` — `true` when more lines exist beyond `offset + limit`.
+ */
+export const apiV1TaskTranscriptResponseSchema = z.object({
+  lines: z.array(z.unknown()),
+  total: z.number().int().nonnegative(),
+  bytesTotal: z.number().int().nonnegative(),
+  level: z.string(),
+  hasMore: z.boolean(),
+});
+export type ApiV1TaskTranscriptResponse = z.infer<typeof apiV1TaskTranscriptResponseSchema>;
 
 // -----------------------------------------------------------------------------
 // Structured blocked-reason union (Tier 15 / ADR 0034 §6)

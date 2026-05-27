@@ -65,6 +65,7 @@ import {
   apiV1ProjectsListResponseSchema,
   apiV1SpendQuerySchema,
   apiV1SpendResponseSchema,
+  apiV1TaskTranscriptResponseSchema,
   apiV1UpdateProjectBudgetResponseSchema,
   cancelDirectiveRequestSchema,
   cancelDirectiveResponseSchema,
@@ -95,6 +96,7 @@ import {
   type ApiV1ProjectDetailResponse,
   type ApiV1ProjectsListResponse,
   type ApiV1SpendResponse,
+  type ApiV1TaskTranscriptResponse,
   type ApiV1UpdateProjectBudgetResponse,
   type CancelDirectiveResponse,
   type DirectiveBlockedReason,
@@ -140,6 +142,7 @@ import type { DirectiveStreamHub } from './directive-stream.js';
 import { registerDirectiveStreamRoute } from './directive-stream-route.js';
 import type { Doorbell } from './doorbell.js';
 import type { OutboundDeliverer } from './outbound-worker.js';
+import { readTranscriptLines } from './transcript-reader.js';
 
 const log = createLogger('daemon.ipc');
 
@@ -674,6 +677,80 @@ function registerRoutes(
     );
     reply.send(resp);
   });
+
+  // ----- GET /api/v1/directives/:directiveId/tasks/:taskId/transcript -----
+  // Paginated transcript-line reader for a single task. Returns parsed
+  // NDJSON lines from the on-disk transcript file (written by the worker
+  // heartbeat subsystem, Task 6). Supports three level filters:
+  //   full   — every line (default)
+  //   tools  — tool_use / tool_result / result lines only
+  //   errors — error / is_error / result lines only
+  // Returns an empty envelope when the task has no transcript metadata
+  // (worker hasn't reported yet, or the task doesn't exist).
+  app.get<{
+    Params: { directiveId: string; taskId: string };
+    Querystring: { offset?: string; limit?: string; level?: string };
+  }>(
+    '/api/v1/directives/:directiveId/tasks/:taskId/transcript',
+    async (request, reply) => {
+      requireUiAuth(request, opts.uiAuthToken);
+      const { directiveId, taskId } = request.params;
+
+      const directive = directivesQ.getById(opts.db, directiveId);
+      if (directive === undefined) {
+        throw new IpcRequestError(
+          404,
+          'DIRECTIVE_NOT_FOUND',
+          `directive ${directiveId} not found`,
+        );
+      }
+
+      const meta = tasksInflight.getTranscriptMeta(opts.db, taskId);
+      if (meta === undefined) {
+        const empty: ApiV1TaskTranscriptResponse = apiV1TaskTranscriptResponseSchema.parse({
+          lines: [],
+          total: 0,
+          bytesTotal: 0,
+          level: 'full',
+          hasMore: false,
+        });
+        reply.send(empty);
+        return;
+      }
+
+      const offset = parseInt(request.query.offset ?? '0', 10);
+      const limit = parseInt(request.query.limit ?? '500', 10);
+      const level = (request.query.level ?? 'full') as 'full' | 'tools' | 'errors';
+
+      const { lines, total } = await readTranscriptLines(meta.transcriptPath, {
+        offset,
+        limit,
+        level,
+      });
+
+      const resp: ApiV1TaskTranscriptResponse = apiV1TaskTranscriptResponseSchema.parse({
+        lines,
+        total,
+        bytesTotal: meta.transcriptBytes,
+        level,
+        hasMore: offset + limit < total,
+      });
+      ipcLog.debug(
+        {
+          reqId: request.id,
+          directiveId,
+          taskId,
+          offset,
+          limit,
+          level,
+          linesReturned: lines.length,
+          total,
+        },
+        'ipc: /api/v1/directives/:directiveId/tasks/:taskId/transcript',
+      );
+      reply.send(resp);
+    },
+  );
 
   // ----- GET /api/v1/directives/:id/pool-usage (Tier 15 / ADR 0034 §6) -----
   // Live budget-pool tally for the SPA's Live tab. Brain's
