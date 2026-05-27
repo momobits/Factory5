@@ -22,6 +22,7 @@ import { migration008 } from './008-pending-questions-bot-message-id.js';
 import { migration009 } from './009-pending-questions-answered-by.js';
 import { migration010 } from './010-directive-log-lines.js';
 import { migration011 } from './011-task-transcript.js';
+import { migration012 } from './012-directive-signals.js';
 
 const log = createLogger('state.migrations');
 
@@ -55,6 +56,7 @@ export const migrations: readonly Migration[] = [
   migration009,
   migration010,
   migration011,
+  migration012,
 ];
 
 /** Highest migration id currently shipped. Useful for clients gating on schema. */

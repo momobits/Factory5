@@ -53,3 +53,5 @@ export type {
   PerDaySpend,
   PerModelSpend,
 } from './queries/spend.js';
+export * as directiveSignals from './queries/directive-signals.js';
+export type { DirectiveSignal } from './queries/directive-signals.js';
