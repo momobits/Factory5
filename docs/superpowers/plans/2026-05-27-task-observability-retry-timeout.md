@@ -864,7 +864,7 @@ git commit -m "feat(worker): emit transcript.line SSE events for live frontend s
 
 ## Feature 3: Frontend Viewer + Per-Task Retry
 
-### Task 9: Migration 012 — `directive_signals` table
+### Task 10: Migration 012 — `directive_signals` table
 
 **Files:**
 - Create: `packages/state/src/migrations/012-directive-signals.ts`
@@ -987,7 +987,7 @@ git commit -m "feat(state): migration 012 — directive_signals table for per-ta
 
 ---
 
-### Task 10: Per-task retry daemon endpoint
+### Task 11: Per-task retry daemon endpoint
 
 **Files:**
 - Modify: `packages/daemon/src/server.ts`
@@ -1165,7 +1165,7 @@ git commit -m "feat(daemon): POST per-task retry endpoint with cascade reset and
 
 ---
 
-### Task 11: Brain signal-aware re-entry loop
+### Task 12: Brain signal-aware re-entry loop
 
 **Files:**
 - Modify: `packages/brain/src/pool.ts`
@@ -1222,7 +1222,7 @@ git commit -m "feat(brain): signal-aware re-entry loop for per-task retry"
 
 ---
 
-### Task 12: Frontend — expandable task panel with transcript viewer
+### Task 13: Frontend — expandable task panel with transcript viewer
 
 **Files:**
 - Modify: `apps/factory-web/src/pages/directives/detail.astro`
@@ -1539,7 +1539,7 @@ git commit -m "feat(web): expandable transcript viewer + per-task retry buttons 
 
 ## Verification
 
-### Task 13: End-to-end verification
+### Task 14: End-to-end verification
 
 - [ ] **Step 1: Verify timeout config**
 
