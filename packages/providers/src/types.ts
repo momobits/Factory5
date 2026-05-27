@@ -73,6 +73,8 @@ export interface ProviderRequest {
    * passes here so the in-stream agent can call `ask_user`.
    */
   mcpConfigPath?: string;
+  /** Per-call stream timeout override (ms). Takes precedence over the provider's default. */
+  streamTimeoutMs?: number;
 }
 
 export interface ProviderUsage {

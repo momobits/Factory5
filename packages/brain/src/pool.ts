@@ -185,22 +185,45 @@ interface RunningEntry {
 // Pool dispatcher helpers (Tier 15 / ADR 0034)
 // ---------------------------------------------------------------------------
 
+/** Return type for {@link loadProjectBudgets} — carries budget config plus the optional stream timeout. */
+interface ProjectBudgetsWithTimeout {
+  budgets: ProjectBudgetsLike;
+  /** Per-project stream timeout override (ms) from `metadata.budgetDefaults.taskStreamTimeoutMs`. */
+  taskStreamTimeoutMs?: number;
+}
+
 /**
  * Load the project's budget configuration (defaults + auto-increase policy)
  * from `<projectPath>/.factory/project.json`. Failure to read the file
  * (corrupt or absent) falls back to an empty config — the dispatcher's
  * cap resolution then drops through to {@link BUDGET_DEFAULTS}.
+ *
+ * Also extracts `taskStreamTimeoutMs` from the raw `budgetDefaults` object
+ * (if present) so callers can thread it to the worker without a second
+ * metadata load.
  */
-async function loadProjectBudgets(projectPath: string): Promise<ProjectBudgetsLike> {
+async function loadProjectBudgets(projectPath: string): Promise<ProjectBudgetsWithTimeout> {
   try {
     const metadata = await loadOrCreateProjectMetadata(projectPath, '');
-    return projectBudgetsFromMetadata(metadata);
+    const budgets = projectBudgetsFromMetadata(metadata);
+    // taskStreamTimeoutMs lives in metadata.budgetDefaults alongside the
+    // budget-axis keys but is not a BudgetAxis itself — extract it from the
+    // raw metadata object.
+    const rawBudgetDefaults = metadata.metadata['budgetDefaults'];
+    const hasTimeout =
+      isRecord(rawBudgetDefaults) && typeof rawBudgetDefaults['taskStreamTimeoutMs'] === 'number';
+    return {
+      budgets,
+      ...(hasTimeout
+        ? { taskStreamTimeoutMs: rawBudgetDefaults['taskStreamTimeoutMs'] as number }
+        : {}),
+    };
   } catch (err) {
     log.warn(
       { err, projectPath },
       'pool: failed to load project.json — falling back to BUDGET_DEFAULTS',
     );
-    return { budgetDefaults: {} };
+    return { budgets: { budgetDefaults: {} } };
   }
 }
 
@@ -512,7 +535,8 @@ async function executeTaskWithBudgetGuard(
   // Tier 15 / ADR 0034 — pre-launch pool check for tool-using agents.
   // Read-only agents skip the check entirely (no maxTurns axis applies).
   const axis = axisForAgent(task.agent);
-  const projectBudgets: ProjectBudgetsLike = await loadProjectBudgets(projectPath);
+  const { budgets: projectBudgets, taskStreamTimeoutMs: streamTimeoutMs } =
+    await loadProjectBudgets(projectPath);
   let outcome: WorkerOutcome;
 
   // Feature F3 — maxRetriesPerTask check. Per-task safety: if the task has
@@ -723,6 +747,7 @@ async function executeTaskWithBudgetGuard(
       ...(signal !== undefined ? { signal } : {}),
       ...(onTurnComplete !== undefined ? { onTurnComplete } : {}),
       ...(poolRemainingTurns !== undefined ? { poolRemainingTurns } : {}),
+      ...(streamTimeoutMs !== undefined ? { streamTimeoutMs } : {}),
     });
   } finally {
     clearInterval(hb);
@@ -873,7 +898,7 @@ export async function runPlanPool(opts: PoolOptions): Promise<TaskOutcome[]> {
   const running = new Map<string, RunningEntry>();
 
   // Feature F3 — load project budgets once for concurrency + wall-clock checks.
-  const poolProjectBudgets = await loadProjectBudgets(opts.plan.projectPath);
+  const { budgets: poolProjectBudgets } = await loadProjectBudgets(opts.plan.projectPath);
   const poolPayloadBudgets = payloadBudgets(opts.db, opts.directiveId);
 
   // Feature F3 — maxConcurrentTasks replaces the hardcoded default. Resolve

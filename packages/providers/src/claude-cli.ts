@@ -758,7 +758,7 @@ export class ClaudeCliProvider implements ModelProvider {
 
     const child = spawnClaude(bin, args, cwd);
     const iter = streamClaude(child, {
-      timeoutMs: this.streamTimeoutMs,
+      timeoutMs: req.streamTimeoutMs ?? this.streamTimeoutMs,
       stdin: promptText,
       ...(req.signal !== undefined ? { signal: req.signal } : {}),
     });

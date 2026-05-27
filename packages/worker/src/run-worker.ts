@@ -120,6 +120,8 @@ export interface WorkerOptions {
    * pool watchdog is the sole authority.
    */
   poolRemainingTurns?: number;
+  /** Per-project stream timeout override (ms). Read from project.json metadata.taskStreamTimeoutMs. */
+  streamTimeoutMs?: number;
 }
 
 export interface WorkerAskUserConfig {
@@ -589,6 +591,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
       permissionMode: sandbox !== undefined ? 'acceptEdits' : 'bypassPermissions',
       ...(mcpConfigPath !== undefined ? { mcpConfigPath } : {}),
       ...(opts.poolRemainingTurns !== undefined ? { maxTurns: opts.poolRemainingTurns } : {}),
+      ...(opts.streamTimeoutMs !== undefined ? { streamTimeoutMs: opts.streamTimeoutMs } : {}),
       signal: internalAbort.signal,
     });
     for await (const chunk of iter) {
