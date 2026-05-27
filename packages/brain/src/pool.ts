@@ -756,6 +756,22 @@ async function executeTaskWithBudgetGuard(
       ? join(projectPath, '.factory', 'transcripts', `${task.id}.ndjson`)
       : undefined;
 
+  // Tier 15 / Task 9 — SSE emission callback for live transcript lines.
+  // When the pool has an SSE emitter AND the task has a transcript path,
+  // each parsed NDJSON line is forwarded as a `transcript.line` event so
+  // connected frontends see live output without polling.
+  const emitTranscriptLine = emit !== undefined && transcriptPath !== undefined
+    ? (line: unknown, lineIndex: number): void => {
+        emit({
+          type: 'transcript.line',
+          taskId: task.id,
+          directiveId,
+          line,
+          lineIndex,
+        });
+      }
+    : undefined;
+
   try {
     outcome = await runWorker({
       task,
@@ -777,6 +793,7 @@ async function executeTaskWithBudgetGuard(
       ...(resolvedTranscriptLevel !== 'off'
         ? { transcriptLevel: resolvedTranscriptLevel as 'full' | 'tools' }
         : {}),
+      ...(emitTranscriptLine !== undefined ? { emitTranscriptLine } : {}),
     });
   } finally {
     clearInterval(hb);

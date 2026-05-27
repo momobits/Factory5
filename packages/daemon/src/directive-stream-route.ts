@@ -188,6 +188,11 @@ export function registerDirectiveStreamRoute(opts: RegisterDirectiveStreamOption
         deltaUsd: 0,
       });
 
+      // transcript.line events are NOT backfilled on SSE reconnect. The
+      // persisted transcript file (via GET .../transcript) is the recovery
+      // path. On reconnect the frontend re-fetches from the API and resumes
+      // the SSE tail from the last lineIndex seen.
+
       // ----- already-terminal short-circuit -----
       if (
         directive.status === 'complete' ||

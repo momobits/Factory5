@@ -113,6 +113,26 @@ export const spendUpdatedEventSchema = z.object({
 export type SpendUpdatedEvent = z.infer<typeof spendUpdatedEventSchema>;
 
 // -----------------------------------------------------------------------------
+// transcript.line
+// -----------------------------------------------------------------------------
+
+/**
+ * Emitted on each raw NDJSON line the worker tees to the per-task
+ * transcript file.  Fire-and-forget — no persistence to
+ * `directive_log_lines`; the transcript file (via `GET .../transcript`)
+ * is the durable store.  The FE uses `lineIndex` to detect gaps on
+ * reconnect and falls back to a full transcript re-fetch.
+ */
+export const transcriptLineEventSchema = z.object({
+  type: z.literal('transcript.line'),
+  taskId: ulidSchema,
+  directiveId: ulidSchema,
+  line: z.unknown(),
+  lineIndex: z.number().int().nonnegative(),
+});
+export type TranscriptLineEvent = z.infer<typeof transcriptLineEventSchema>;
+
+// -----------------------------------------------------------------------------
 // log.line
 // -----------------------------------------------------------------------------
 
@@ -225,6 +245,7 @@ export const directiveStreamEventSchema = z.discriminatedUnion('type', [
   taskCompletedEventSchema,
   findingCreatedEventSchema,
   spendUpdatedEventSchema,
+  transcriptLineEventSchema,
   logLineEventSchema,
   poolTallyEventSchema,
   directiveCompletedEventSchema,

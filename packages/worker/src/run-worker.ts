@@ -128,6 +128,13 @@ export interface WorkerOptions {
   transcriptPath?: string;
   /** Transcript verbosity: 'full' logs every line, 'tools' only tool events, 'off' disables. Default 'full'. */
   transcriptLevel?: 'full' | 'tools' | 'off';
+  /**
+   * SSE emission callback for live transcript streaming. Called with each
+   * parsed NDJSON line and its zero-based index so connected frontends can
+   * display live output. Wired by the brain's pool dispatcher when an SSE
+   * emitter is available; undefined for standalone/test runs.
+   */
+  emitTranscriptLine?: (line: unknown, lineIndex: number) => void;
 }
 
 export interface WorkerAskUserConfig {
@@ -612,6 +619,13 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
         if (shouldLogLine(line)) {
           transcriptStream!.write(line + '\n');
           transcriptLineCount++;
+          if (opts.emitTranscriptLine !== undefined) {
+            try {
+              opts.emitTranscriptLine(JSON.parse(line) as unknown, transcriptLineCount - 1);
+            } catch {
+              // Malformed line — written to file as-is, skip SSE emission
+            }
+          }
         }
       }
     : undefined;
