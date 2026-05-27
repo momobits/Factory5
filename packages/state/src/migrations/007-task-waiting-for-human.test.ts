@@ -64,10 +64,10 @@ describe('migration 007-task-waiting-for-human — schema shape', () => {
     expect(Boolean(aborted?.notnull)).toBe(false);
   });
 
-  it('preserves the original 14 columns + adds 2 = 16 total', () => {
+  it('preserves the original 14 columns + adds 2 (007) + adds 3 (011) = 19 total', () => {
     const db = freshDb();
     const cols = db.prepare('PRAGMA table_info(tasks_inflight)').all() as ColumnInfo[];
-    expect(cols).toHaveLength(16);
+    expect(cols).toHaveLength(19);
     // Spot-check a few originals to confirm rebuild preserved everything.
     expect(cols.find((c) => c.name === 'id')?.pk).toBe(1);
     expect(cols.find((c) => c.name === 'directive_id')?.notnull).toBe(1);

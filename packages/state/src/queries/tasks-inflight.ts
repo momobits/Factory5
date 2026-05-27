@@ -201,6 +201,46 @@ export function markAborted(db: Database, id: string, reason: string, when: stri
 }
 
 /**
+ * Return transcript metadata for a task, or `undefined` if the worker has
+ * not yet written a transcript file (migration 011). Returns `undefined` also
+ * when `transcript_path` is NULL — i.e. the task exists but hasn't reported
+ * back yet.
+ */
+export function getTranscriptMeta(
+  db: Database,
+  taskId: string,
+): { transcriptPath: string; transcriptBytes: number; transcriptLines: number } | undefined {
+  const row = db
+    .prepare(
+      'SELECT transcript_path, transcript_bytes, transcript_lines FROM tasks_inflight WHERE id = ?',
+    )
+    .get(taskId) as
+    | { transcript_path: string | null; transcript_bytes: number | null; transcript_lines: number | null }
+    | undefined;
+  if (row === undefined || row.transcript_path === null) return undefined;
+  return {
+    transcriptPath: row.transcript_path,
+    transcriptBytes: row.transcript_bytes ?? 0,
+    transcriptLines: row.transcript_lines ?? 0,
+  };
+}
+
+/**
+ * Persist transcript metadata after a worker heartbeat (migration 011).
+ * Called by the brain whenever the worker reports updated file stats so the
+ * cockpit can show live progress without polling the filesystem.
+ */
+export function updateTranscriptMeta(
+  db: Database,
+  taskId: string,
+  meta: { transcriptPath: string; transcriptBytes: number; transcriptLines: number },
+): void {
+  db.prepare(
+    'UPDATE tasks_inflight SET transcript_path = ?, transcript_bytes = ?, transcript_lines = ? WHERE id = ?',
+  ).run(meta.transcriptPath, meta.transcriptBytes, meta.transcriptLines, taskId);
+}
+
+/**
  * Delete a task row entirely so a subsequent {@link register} with the same
  * id succeeds. Used by the auto-bump recursion path in `pool.ts` to clear
  * the prior `failed` row before re-registering the task at a higher cap.
