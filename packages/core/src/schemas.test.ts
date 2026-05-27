@@ -450,3 +450,24 @@ describe('projectBudgetDefaultsSchema — taskStreamTimeoutMs', () => {
     expect(parsed.taskStreamTimeoutMs).toBeUndefined();
   });
 });
+
+describe('projectBudgetDefaultsSchema — transcriptLevel', () => {
+  it('accepts transcriptLevel', () => {
+    const parsed = projectBudgetDefaultsSchema.parse({
+      maxUsd: 100,
+      transcriptLevel: 'tools',
+    });
+    expect(parsed.transcriptLevel).toBe('tools');
+  });
+
+  it('rejects invalid values', () => {
+    expect(() =>
+      projectBudgetDefaultsSchema.parse({ transcriptLevel: 'verbose' }),
+    ).toThrow();
+  });
+
+  it('defaults to undefined (full is applied at runtime)', () => {
+    const parsed = projectBudgetDefaultsSchema.parse({ maxUsd: 100 });
+    expect(parsed.transcriptLevel).toBeUndefined();
+  });
+});

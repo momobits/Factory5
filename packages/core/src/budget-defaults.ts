@@ -205,6 +205,15 @@ export const budgetsSchema = z
      * the `metadata.budgetDefaults` object in `project.json`.
      */
     taskStreamTimeoutMs: z.number().int().positive().optional(),
+    /**
+     * Per-project transcript log level. Controls what NDJSON lines get written
+     * to the task transcript file. `full` = all events, `tools` = tool_use /
+     * tool_result / result only, `off` = no transcript. Optional — absent means
+     * `full` is applied at runtime. Not a budget axis (not in {@link BUDGET_AXES});
+     * lives here for discoverability alongside the other per-project runtime knobs
+     * that share the `metadata.budgetDefaults` object in `project.json`.
+     */
+    transcriptLevel: z.enum(['full', 'tools', 'off']).optional(),
   })
   .partial();
 
