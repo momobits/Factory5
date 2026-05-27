@@ -947,6 +947,37 @@ export const apiV1ChatMessageResponseSchema = z.object({
 export type ApiV1ChatMessageResponse = z.infer<typeof apiV1ChatMessageResponseSchema>;
 
 // -----------------------------------------------------------------------------
+// POST /api/v1/directives/:directiveId/tasks/:taskId/retry  (web UI, Task 11)
+// -----------------------------------------------------------------------------
+
+/**
+ * Request body for retrying a failed task. Two modes:
+ *
+ *   - `resume` — keep the worktree and transcript on disk; the worker
+ *     picks up where it left off.
+ *   - `clean`  — delete the worktree dir and transcript file (best-effort)
+ *     so the worker starts from scratch.
+ *
+ * The endpoint resets the task to `pending`, cascade-resets any downstream
+ * tasks that never ran (`attempts === 0`), reactivates the directive, and
+ * signals the brain via `directive_signals` so it re-enters the directive
+ * execution path.
+ */
+export const apiV1TaskRetryRequestSchema = z.object({
+  mode: z.enum(['resume', 'clean']),
+});
+export type ApiV1TaskRetryRequest = z.infer<typeof apiV1TaskRetryRequestSchema>;
+
+export const apiV1TaskRetryResponseSchema = z.object({
+  taskId: ulidSchema,
+  directiveId: ulidSchema,
+  mode: z.enum(['resume', 'clean']),
+  attempt: z.number().int().positive(),
+  cascadeReset: z.array(ulidSchema),
+});
+export type ApiV1TaskRetryResponse = z.infer<typeof apiV1TaskRetryResponseSchema>;
+
+// -----------------------------------------------------------------------------
 // Error envelope (returned with non-2xx responses)
 // -----------------------------------------------------------------------------
 

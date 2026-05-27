@@ -133,6 +133,27 @@ export const transcriptLineEventSchema = z.object({
 export type TranscriptLineEvent = z.infer<typeof transcriptLineEventSchema>;
 
 // -----------------------------------------------------------------------------
+// task.retried
+// -----------------------------------------------------------------------------
+
+/**
+ * Emitted when an operator retries a failed task via `POST
+ * /api/v1/directives/:directiveId/tasks/:taskId/retry`. The event carries
+ * the retry mode (`resume` keeps the worktree; `clean` wipes it), the new
+ * attempt counter, and the list of cascade-reset downstream tasks so the
+ * FE can update their badge colours in-place without a full detail refetch.
+ */
+export const taskRetriedEventSchema = z.object({
+  type: z.literal('task.retried'),
+  taskId: ulidSchema,
+  directiveId: ulidSchema,
+  mode: z.enum(['resume', 'clean']),
+  attempt: z.number().int().positive(),
+  cascadeReset: z.array(ulidSchema),
+});
+export type TaskRetriedEvent = z.infer<typeof taskRetriedEventSchema>;
+
+// -----------------------------------------------------------------------------
 // log.line
 // -----------------------------------------------------------------------------
 
@@ -243,6 +264,7 @@ export type DirectiveCompletedEvent = z.infer<typeof directiveCompletedEventSche
 export const directiveStreamEventSchema = z.discriminatedUnion('type', [
   taskStartedEventSchema,
   taskCompletedEventSchema,
+  taskRetriedEventSchema,
   findingCreatedEventSchema,
   spendUpdatedEventSchema,
   transcriptLineEventSchema,

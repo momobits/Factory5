@@ -215,7 +215,11 @@ export function getTranscriptMeta(
       'SELECT transcript_path, transcript_bytes, transcript_lines FROM tasks_inflight WHERE id = ?',
     )
     .get(taskId) as
-    | { transcript_path: string | null; transcript_bytes: number | null; transcript_lines: number | null }
+    | {
+        transcript_path: string | null;
+        transcript_bytes: number | null;
+        transcript_lines: number | null;
+      }
     | undefined;
   if (row === undefined || row.transcript_path === null) return undefined;
   return {
@@ -238,6 +242,24 @@ export function updateTranscriptMeta(
   db.prepare(
     'UPDATE tasks_inflight SET transcript_path = ?, transcript_bytes = ?, transcript_lines = ? WHERE id = ?',
   ).run(meta.transcriptPath, meta.transcriptBytes, meta.transcriptLines, taskId);
+}
+
+/**
+ * Reset a failed task back to `pending` for retry. Clears result, finish
+ * timestamp, and transcript metadata so the brain's dispatcher treats the
+ * task as fresh. The caller is responsible for bumping `attempts` — this
+ * function writes whatever value is passed.
+ *
+ * Used by the per-task retry endpoint (`POST /api/v1/directives/:id/tasks/:taskId/retry`).
+ */
+export function resetForRetry(db: Database, taskId: string, attempts: number): void {
+  db.prepare(
+    `UPDATE tasks_inflight
+     SET status = 'pending', attempts = ?, result_json = NULL,
+         finished_at = NULL, transcript_path = NULL,
+         transcript_bytes = NULL, transcript_lines = NULL
+     WHERE id = ?`,
+  ).run(attempts, taskId);
 }
 
 /**

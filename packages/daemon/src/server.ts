@@ -28,7 +28,7 @@
  */
 
 import { constants as fsConstants } from 'node:fs';
-import { access } from 'node:fs/promises';
+import { access, readFile, rm, unlink } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { isAbsolute, join } from 'node:path';
 import process from 'node:process';
@@ -65,6 +65,8 @@ import {
   apiV1ProjectsListResponseSchema,
   apiV1SpendQuerySchema,
   apiV1SpendResponseSchema,
+  apiV1TaskRetryRequestSchema,
+  apiV1TaskRetryResponseSchema,
   apiV1TaskTranscriptResponseSchema,
   apiV1UpdateProjectBudgetResponseSchema,
   cancelDirectiveRequestSchema,
@@ -96,6 +98,7 @@ import {
   type ApiV1ProjectDetailResponse,
   type ApiV1ProjectsListResponse,
   type ApiV1SpendResponse,
+  type ApiV1TaskRetryResponse,
   type ApiV1TaskTranscriptResponse,
   type ApiV1UpdateProjectBudgetResponse,
   type CancelDirectiveResponse,
@@ -113,6 +116,7 @@ import {
   DEFAULT_LOG_LINE_LIMIT,
   directiveLogLines,
   directives as directivesQ,
+  directiveSignals,
   findingsRegistry,
   modelUsage,
   outbound,
@@ -690,63 +694,255 @@ function registerRoutes(
   app.get<{
     Params: { directiveId: string; taskId: string };
     Querystring: { offset?: string; limit?: string; level?: string };
-  }>(
-    '/api/v1/directives/:directiveId/tasks/:taskId/transcript',
-    async (request, reply) => {
-      requireUiAuth(request, opts.uiAuthToken);
-      const { directiveId, taskId } = request.params;
+  }>('/api/v1/directives/:directiveId/tasks/:taskId/transcript', async (request, reply) => {
+    requireUiAuth(request, opts.uiAuthToken);
+    const { directiveId, taskId } = request.params;
 
-      const directive = directivesQ.getById(opts.db, directiveId);
-      if (directive === undefined) {
-        throw new IpcRequestError(
-          404,
-          'DIRECTIVE_NOT_FOUND',
-          `directive ${directiveId} not found`,
-        );
-      }
+    const directive = directivesQ.getById(opts.db, directiveId);
+    if (directive === undefined) {
+      throw new IpcRequestError(404, 'DIRECTIVE_NOT_FOUND', `directive ${directiveId} not found`);
+    }
 
-      const meta = tasksInflight.getTranscriptMeta(opts.db, taskId);
-      if (meta === undefined) {
-        const empty: ApiV1TaskTranscriptResponse = apiV1TaskTranscriptResponseSchema.parse({
-          lines: [],
-          total: 0,
-          bytesTotal: 0,
-          level: 'full',
-          hasMore: false,
-        });
-        reply.send(empty);
-        return;
-      }
+    const meta = tasksInflight.getTranscriptMeta(opts.db, taskId);
+    if (meta === undefined) {
+      const empty: ApiV1TaskTranscriptResponse = apiV1TaskTranscriptResponseSchema.parse({
+        lines: [],
+        total: 0,
+        bytesTotal: 0,
+        level: 'full',
+        hasMore: false,
+      });
+      reply.send(empty);
+      return;
+    }
 
-      const offset = parseInt(request.query.offset ?? '0', 10);
-      const limit = parseInt(request.query.limit ?? '500', 10);
-      const level = (request.query.level ?? 'full') as 'full' | 'tools' | 'errors';
+    const offset = parseInt(request.query.offset ?? '0', 10);
+    const limit = parseInt(request.query.limit ?? '500', 10);
+    const level = (request.query.level ?? 'full') as 'full' | 'tools' | 'errors';
 
-      const { lines, total } = await readTranscriptLines(meta.transcriptPath, {
+    const { lines, total } = await readTranscriptLines(meta.transcriptPath, {
+      offset,
+      limit,
+      level,
+    });
+
+    const resp: ApiV1TaskTranscriptResponse = apiV1TaskTranscriptResponseSchema.parse({
+      lines,
+      total,
+      bytesTotal: meta.transcriptBytes,
+      level,
+      hasMore: offset + limit < total,
+    });
+    ipcLog.debug(
+      {
+        reqId: request.id,
+        directiveId,
+        taskId,
         offset,
         limit,
         level,
+        linesReturned: lines.length,
+        total,
+      },
+      'ipc: /api/v1/directives/:directiveId/tasks/:taskId/transcript',
+    );
+    reply.send(resp);
+  });
+
+  // ----- POST /api/v1/directives/:directiveId/tasks/:taskId/retry (Task 11) -----
+  // Per-task retry: resets the failed task to pending, cascade-resets
+  // downstream tasks that never ran on their own (attempts === 0), flips
+  // the directive back to `running`, signals the brain via
+  // `directive_signals`, and emits a `task.retried` SSE event so the
+  // dashboard updates without a full page refresh.
+  //
+  // Two modes:
+  //   resume — keep the worktree + transcript; worker picks up where it
+  //            left off on the next claim pass.
+  //   clean  — delete worktree dir + transcript file (best-effort) so the
+  //            worker starts from scratch.
+  //
+  // Pre-conditions enforced:
+  //   - directive must be `blocked` (409 DIRECTIVE_NOT_BLOCKED)
+  //   - task must be `failed`       (409 TASK_NOT_FAILED)
+  app.post<{ Params: { directiveId: string; taskId: string } }>(
+    '/api/v1/directives/:directiveId/tasks/:taskId/retry',
+    async (request, reply) => {
+      requireUiAuth(request, opts.uiAuthToken);
+      const { directiveId, taskId } = request.params;
+      const body = apiV1TaskRetryRequestSchema.parse(request.body);
+
+      // 1. Validate directive exists and is blocked.
+      const directive = directivesQ.getById(opts.db, directiveId);
+      if (directive === undefined) {
+        throw new IpcRequestError(404, 'DIRECTIVE_NOT_FOUND', `directive ${directiveId} not found`);
+      }
+      if (directive.status !== 'blocked') {
+        throw new IpcRequestError(
+          409,
+          'DIRECTIVE_NOT_BLOCKED',
+          `directive ${directiveId} is ${directive.status}; only blocked directives can be retried`,
+        );
+      }
+
+      // 2. Validate task exists and is failed.
+      const task = tasksInflight.getById(opts.db, taskId);
+      if (task === undefined) {
+        throw new IpcRequestError(404, 'TASK_NOT_FOUND', `task ${taskId} not found`);
+      }
+      if (task.directiveId !== directiveId) {
+        throw new IpcRequestError(
+          404,
+          'TASK_NOT_FOUND',
+          `task ${taskId} does not belong to directive ${directiveId}`,
+        );
+      }
+      if (task.status !== 'failed') {
+        throw new IpcRequestError(
+          409,
+          'TASK_NOT_FAILED',
+          `task ${taskId} is ${task.status}; only failed tasks can be retried`,
+        );
+      }
+
+      const newAttempts = task.attempts + 1;
+
+      // 3. Capture transcript metadata BEFORE reset (reset NULLs these columns).
+      const preResetTranscript = tasksInflight.getTranscriptMeta(opts.db, taskId);
+
+      // 4. Reset the task.
+      tasksInflight.resetForRetry(opts.db, taskId, newAttempts);
+
+      // 5. If mode === 'clean': delete worktree dir + transcript file (best-effort).
+      if (body.mode === 'clean') {
+        if (task.worktreePath !== undefined) {
+          try {
+            await rm(task.worktreePath, { recursive: true, force: true });
+          } catch (err) {
+            ipcLog.warn(
+              { err, taskId, worktreePath: task.worktreePath },
+              'ipc: task retry — worktree rm failed (best-effort)',
+            );
+          }
+        }
+        if (preResetTranscript !== undefined) {
+          try {
+            await unlink(preResetTranscript.transcriptPath);
+          } catch (err) {
+            ipcLog.warn(
+              { err, taskId, transcriptPath: preResetTranscript.transcriptPath },
+              'ipc: task retry — transcript unlink failed (best-effort)',
+            );
+          }
+        }
+      }
+
+      // 6. Cascade reset: read plan.json from disk to find dependency graph.
+      const cascadeReset: string[] = [];
+      const allTasks = tasksInflight.listByDirective(opts.db, directiveId);
+
+      // Read plan.json to determine the dependency graph.
+      const payload =
+        typeof directive.payload === 'object' && directive.payload !== null
+          ? (directive.payload as Record<string, unknown>)
+          : undefined;
+      const projectPath =
+        typeof payload?.['projectPath'] === 'string' ? payload['projectPath'] : undefined;
+
+      if (projectPath !== undefined) {
+        try {
+          const planDir = join(projectPath, '.factory');
+          const planPath = join(planDir, 'plan.json');
+          const planRaw = await readFile(planPath, 'utf-8');
+          const planData = JSON.parse(planRaw) as {
+            tasks?: Array<{ id?: string; dependsOn?: string[] }>;
+          };
+          if (Array.isArray(planData.tasks)) {
+            // Build adjacency: taskId → set of downstream taskIds
+            const downstream = new Map<string, Set<string>>();
+            for (const pt of planData.tasks) {
+              if (typeof pt.id !== 'string' || !Array.isArray(pt.dependsOn)) continue;
+              for (const dep of pt.dependsOn) {
+                if (typeof dep !== 'string') continue;
+                let set = downstream.get(dep);
+                if (set === undefined) {
+                  set = new Set();
+                  downstream.set(dep, set);
+                }
+                set.add(pt.id);
+              }
+            }
+            // Walk transitively from the retried task.
+            const visited = new Set<string>();
+            const queue = [taskId];
+            while (queue.length > 0) {
+              const current = queue.pop()!;
+              const children = downstream.get(current);
+              if (children === undefined) continue;
+              for (const child of children) {
+                if (visited.has(child)) continue;
+                visited.add(child);
+                queue.push(child);
+              }
+            }
+            // Reset any downstream tasks that are failed with attempts === 0.
+            for (const downstreamId of visited) {
+              const dt = allTasks.find((t) => t.id === downstreamId);
+              if (dt !== undefined && dt.status === 'failed' && dt.attempts === 0) {
+                tasksInflight.resetForRetry(opts.db, downstreamId, 0);
+                cascadeReset.push(downstreamId);
+              }
+            }
+          }
+        } catch (err) {
+          // Best-effort: plan.json might not exist or might be malformed.
+          ipcLog.warn(
+            { err, directiveId, projectPath },
+            'ipc: task retry — plan.json read failed; skipping cascade reset',
+          );
+        }
+      }
+
+      // 7. Re-activate directive.
+      directivesQ.updateStatus(opts.db, directiveId, 'running');
+
+      // 8. Signal the brain.
+      directiveSignals.insert(opts.db, directiveId, 'task_retry', {
+        taskId,
+        mode: body.mode,
+        cascadeReset,
       });
 
-      const resp: ApiV1TaskTranscriptResponse = apiV1TaskTranscriptResponseSchema.parse({
-        lines,
-        total,
-        bytesTotal: meta.transcriptBytes,
-        level,
-        hasMore: offset + limit < total,
+      // 9. Emit SSE.
+      if (opts.directiveStream !== undefined) {
+        opts.directiveStream.emit({
+          type: 'task.retried',
+          taskId,
+          directiveId,
+          mode: body.mode,
+          attempt: newAttempts,
+          cascadeReset,
+        });
+      }
+
+      // 10. Return the response.
+      const resp: ApiV1TaskRetryResponse = apiV1TaskRetryResponseSchema.parse({
+        taskId,
+        directiveId,
+        mode: body.mode,
+        attempt: newAttempts,
+        cascadeReset,
       });
-      ipcLog.debug(
+      ipcLog.info(
         {
           reqId: request.id,
           directiveId,
           taskId,
-          offset,
-          limit,
-          level,
-          linesReturned: lines.length,
-          total,
+          mode: body.mode,
+          attempt: newAttempts,
+          cascadeReset,
         },
-        'ipc: /api/v1/directives/:directiveId/tasks/:taskId/transcript',
+        'ipc: /api/v1/directives/:directiveId/tasks/:taskId/retry — task retried',
       );
       reply.send(resp);
     },
