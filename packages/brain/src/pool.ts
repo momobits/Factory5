@@ -27,6 +27,7 @@
  */
 
 import { cpus } from 'node:os';
+import { join } from 'node:path';
 import { env } from 'node:process';
 
 import type { Finding, Plan, Task, TaskResult } from '@factory5/core';
@@ -185,11 +186,13 @@ interface RunningEntry {
 // Pool dispatcher helpers (Tier 15 / ADR 0034)
 // ---------------------------------------------------------------------------
 
-/** Return type for {@link loadProjectBudgets} — carries budget config plus the optional stream timeout. */
+/** Return type for {@link loadProjectBudgets} — carries budget config plus the optional stream timeout and transcript level. */
 interface ProjectBudgetsWithTimeout {
   budgets: ProjectBudgetsLike;
   /** Per-project stream timeout override (ms) from `metadata.budgetDefaults.taskStreamTimeoutMs`. */
   taskStreamTimeoutMs?: number;
+  /** Per-project transcript verbosity from `metadata.budgetDefaults.transcriptLevel`. */
+  transcriptLevel?: 'full' | 'tools' | 'off';
 }
 
 /**
@@ -206,16 +209,26 @@ async function loadProjectBudgets(projectPath: string): Promise<ProjectBudgetsWi
   try {
     const metadata = await loadOrCreateProjectMetadata(projectPath, '');
     const budgets = projectBudgetsFromMetadata(metadata);
-    // taskStreamTimeoutMs lives in metadata.budgetDefaults alongside the
-    // budget-axis keys but is not a BudgetAxis itself — extract it from the
-    // raw metadata object.
+    // taskStreamTimeoutMs and transcriptLevel live in metadata.budgetDefaults
+    // alongside the budget-axis keys but are not BudgetAxis values themselves —
+    // extract them from the raw metadata object.
     const rawBudgetDefaults = metadata.metadata['budgetDefaults'];
     const hasTimeout =
       isRecord(rawBudgetDefaults) && typeof rawBudgetDefaults['taskStreamTimeoutMs'] === 'number';
+    const transcriptLevelRaw = isRecord(rawBudgetDefaults)
+      ? rawBudgetDefaults['transcriptLevel']
+      : undefined;
+    const hasTranscriptLevel =
+      transcriptLevelRaw === 'full' ||
+      transcriptLevelRaw === 'tools' ||
+      transcriptLevelRaw === 'off';
     return {
       budgets,
       ...(hasTimeout
         ? { taskStreamTimeoutMs: rawBudgetDefaults['taskStreamTimeoutMs'] as number }
+        : {}),
+      ...(hasTranscriptLevel
+        ? { transcriptLevel: transcriptLevelRaw as 'full' | 'tools' | 'off' }
         : {}),
     };
   } catch (err) {
@@ -535,8 +548,11 @@ async function executeTaskWithBudgetGuard(
   // Tier 15 / ADR 0034 — pre-launch pool check for tool-using agents.
   // Read-only agents skip the check entirely (no maxTurns axis applies).
   const axis = axisForAgent(task.agent);
-  const { budgets: projectBudgets, taskStreamTimeoutMs: streamTimeoutMs } =
-    await loadProjectBudgets(projectPath);
+  const {
+    budgets: projectBudgets,
+    taskStreamTimeoutMs: streamTimeoutMs,
+    transcriptLevel,
+  } = await loadProjectBudgets(projectPath);
   let outcome: WorkerOutcome;
 
   // Feature F3 — maxRetriesPerTask check. Per-task safety: if the task has
@@ -731,6 +747,15 @@ async function executeTaskWithBudgetGuard(
     }
   }
 
+  // Tier 15 — construct the per-task transcript path when transcriptLevel
+  // is not 'off'. Default to 'full' when absent. The path lives inside the
+  // project's .factory/transcripts/ directory alongside other project state.
+  const resolvedTranscriptLevel = transcriptLevel ?? 'full';
+  const transcriptPath =
+    resolvedTranscriptLevel !== 'off'
+      ? join(projectPath, '.factory', 'transcripts', `${task.id}.ndjson`)
+      : undefined;
+
   try {
     outcome = await runWorker({
       task,
@@ -748,9 +773,23 @@ async function executeTaskWithBudgetGuard(
       ...(onTurnComplete !== undefined ? { onTurnComplete } : {}),
       ...(poolRemainingTurns !== undefined ? { poolRemainingTurns } : {}),
       ...(streamTimeoutMs !== undefined ? { streamTimeoutMs } : {}),
+      ...(transcriptPath !== undefined ? { transcriptPath } : {}),
+      ...(resolvedTranscriptLevel !== 'off'
+        ? { transcriptLevel: resolvedTranscriptLevel as 'full' | 'tools' }
+        : {}),
     });
   } finally {
     clearInterval(hb);
+  }
+
+  // Persist transcript metadata (path, bytes, lines) to tasks_inflight so the
+  // cockpit can show live progress without polling the filesystem (migration 011).
+  if (outcome.transcript !== undefined) {
+    tasksInflight.updateTranscriptMeta(db, task.id, {
+      transcriptPath: outcome.transcript.path,
+      transcriptBytes: outcome.transcript.bytes,
+      transcriptLines: outcome.transcript.lines,
+    });
   }
 
   // Tier 15 / ADR 0034 — when the watchdog interrupted mid-stream, the
