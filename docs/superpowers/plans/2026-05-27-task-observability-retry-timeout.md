@@ -4,7 +4,7 @@
 
 **Goal:** Give operators visibility into what agents are doing inside tasks (conversation transcripts), the ability to retry individual failed tasks (resume or clean), and per-project stream timeout configuration.
 
-**Architecture:** Three incremental features. Feature 1 adds `taskStreamTimeoutMs` to project metadata and threads it through brain → worker → provider. Feature 2 tees raw NDJSON lines from `streamClaude()` to per-task transcript files on disk, adds DB metadata columns, and exposes a paginated API endpoint. Feature 3 adds an expandable transcript viewer to the directive detail page and a per-task retry mechanism (daemon endpoint + brain signal loop + frontend buttons).
+**Architecture:** Three incremental features. Feature 1 adds `taskStreamTimeoutMs` to project metadata and threads it through brain → worker → provider. Feature 2 tees raw NDJSON lines from `streamClaude()` to per-task transcript files on disk, adds DB metadata columns, exposes a paginated API endpoint, and emits `transcript.line` SSE events for live streaming. Feature 3 adds an expandable transcript viewer (with live tail via SSE) to the directive detail page and a per-task retry mechanism (daemon endpoint + brain signal loop + frontend buttons).
 
 **Tech Stack:** TypeScript, better-sqlite3, Fastify, Astro (SSR + client-side JS), Zod schemas, Node `readline` + `fs.createWriteStream`.
 
@@ -752,6 +752,116 @@ git commit -m "feat(daemon): GET transcript endpoint with pagination and level f
 
 ---
 
+### Task 9: Live transcript streaming via SSE
+
+**Files:**
+- Modify: `packages/ipc/src/sse.ts` (new `transcript.line` event schema)
+- Modify: `packages/worker/src/run-worker.ts` (emit SSE event alongside file tee)
+- Modify: `packages/daemon/src/directive-stream-route.ts` (no backfill for transcript.line — documented skip)
+
+The worker already has an `onRawLine` callback that tees NDJSON lines to the transcript file (Task 6). This task adds a second side-effect: emitting each line as an SSE event through the directive stream hub so connected frontends can display live output.
+
+- [ ] **Step 1: Add `transcript.line` event schema**
+
+In `packages/ipc/src/sse.ts`, after `taskCompletedEventSchema`:
+
+```typescript
+export const transcriptLineEventSchema = z.object({
+  type: z.literal('transcript.line'),
+  taskId: ulidSchema,
+  directiveId: ulidSchema,
+  line: z.unknown(),
+  lineIndex: z.number().int().nonnegative(),
+});
+export type TranscriptLineEvent = z.infer<typeof transcriptLineEventSchema>;
+```
+
+Add it to the `directiveStreamEventSchema` union.
+
+- [ ] **Step 2: Add `emitTranscriptLine` to WorkerOptions**
+
+In `packages/worker/src/run-worker.ts`, add to `WorkerOptions`:
+
+```typescript
+  /**
+   * Callback to emit a transcript line as an SSE event. The brain
+   * passes a closure that calls `streamHub.emit(directiveId, event)`.
+   * Called from the same `onRawLine` callback that tees to the file.
+   */
+  emitTranscriptLine?: (line: unknown, lineIndex: number) => void;
+```
+
+- [ ] **Step 3: Wire the emission into the `onRawLine` callback**
+
+In `runTooling()`, update the `onRawLine` construction (from Task 6) to also emit:
+
+```typescript
+const onRawLine = transcriptStream !== undefined
+  ? (line: string): void => {
+      if (shouldLogLine(line)) {
+        transcriptStream!.write(line + '\n');
+        transcriptLineCount++;
+        // Emit live SSE event for connected frontends
+        if (opts.emitTranscriptLine !== undefined) {
+          try {
+            opts.emitTranscriptLine(JSON.parse(line), transcriptLineCount - 1);
+          } catch {
+            // Malformed line — written to file as-is, skip SSE emission
+          }
+        }
+      }
+    }
+  : undefined;
+```
+
+- [ ] **Step 4: Pass the emission callback from the brain**
+
+In `packages/brain/src/pool.ts`, in the `runWorker()` call site, construct the callback:
+
+```typescript
+const emitTranscriptLine = emit !== undefined && transcriptPath !== undefined
+  ? (line: unknown, lineIndex: number): void => {
+      emit({
+        type: 'transcript.line',
+        taskId: task.id,
+        directiveId,
+        line,
+        lineIndex,
+      });
+    }
+  : undefined;
+
+outcome = await runWorker({
+  // ... existing fields
+  ...(emitTranscriptLine !== undefined ? { emitTranscriptLine } : {}),
+});
+```
+
+- [ ] **Step 5: Document no-backfill in the stream route**
+
+In `packages/daemon/src/directive-stream-route.ts`, add a comment in the backfill section (after the existing task + spend backfill):
+
+```typescript
+// transcript.line events are NOT backfilled on SSE reconnect. The
+// persisted transcript file (via GET .../transcript) is the recovery
+// path. On reconnect the frontend re-fetches from the API and resumes
+// the SSE tail from the last lineIndex seen.
+```
+
+- [ ] **Step 6: Run tests + build**
+
+Run: `pnpm build && pnpm test`
+Expected: PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add packages/ipc/src/sse.ts packages/worker/src/run-worker.ts packages/brain/src/pool.ts packages/daemon/src/directive-stream-route.ts
+git commit -m "feat(worker): emit transcript.line SSE events for live frontend streaming"
+```
+
+---
+
 ## Feature 3: Frontend Viewer + Per-Task Retry
 
 ### Task 9: Migration 012 — `directive_signals` table
@@ -1117,7 +1227,7 @@ git commit -m "feat(brain): signal-aware re-entry loop for per-task retry"
 **Files:**
 - Modify: `apps/factory-web/src/pages/directives/detail.astro`
 
-This is the frontend-only task. The API endpoints from Tasks 8 and 10 are already in place.
+This is the frontend-only task. The API endpoints from Tasks 8 and 10 are already in place. Task 9's `transcript.line` SSE events provide the live-streaming data.
 
 - [ ] **Step 1: Add expandable row behavior to task table**
 
@@ -1308,7 +1418,66 @@ case 'task.retried': {
 }
 ```
 
-- [ ] **Step 7: Add CSS styles for the transcript panel**
+- [ ] **Step 7: Handle `transcript.line` SSE events for live tail**
+
+In the SSE event handler, add:
+
+```typescript
+case 'transcript.line': {
+  // Only append if the panel for this task is currently open
+  const panel = document.getElementById(`task-panel-${event.taskId}`);
+  if (panel) {
+    const body = panel.querySelector('.transcript-body')!;
+    body.appendChild(renderTranscriptLine(event.line));
+    // Auto-scroll to bottom
+    body.scrollTop = body.scrollHeight;
+    // Update line count in header
+    const stats = panel.querySelector('.transcript-stats');
+    if (stats) {
+      const currentLines = body.children.length;
+      stats.textContent = `${currentLines} lines (live)`;
+    }
+  }
+  break;
+}
+```
+
+Also update `toggleTaskPanel` to handle the running-task case — when opening a panel for a running task, load persisted lines first (the file is being written to in real time), then the SSE handler above appends new lines live:
+
+```typescript
+function toggleTaskPanel(taskId: string): void {
+  const existing = document.getElementById(`task-panel-${taskId}`);
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  document.querySelectorAll('.task-panel').forEach((el) => el.remove());
+  const panel = createTaskPanel(taskId);
+  const row = document.querySelector(`[data-task-id="${taskId}"]`);
+  row?.insertAdjacentElement('afterend', panel);
+  loadTranscript(taskId, 0, 'full');
+
+  // If task is running, add a live indicator
+  const task = state.tasks.get(taskId);
+  if (task?.status === 'running') {
+    const stats = panel.querySelector('.transcript-stats');
+    if (stats) stats.textContent += ' (live)';
+  }
+}
+```
+
+When `task.completed` fires, update any open panel to remove the live indicator:
+
+```typescript
+// In the existing task.completed handler, add:
+const openPanel = document.getElementById(`task-panel-${event.taskId}`);
+if (openPanel) {
+  const stats = openPanel.querySelector('.transcript-stats');
+  if (stats) stats.textContent = stats.textContent.replace(' (live)', '');
+}
+```
+
+- [ ] **Step 8: Add CSS styles for the transcript panel and live indicator**
 
 Add to the page's `<style>` section:
 
@@ -1343,7 +1512,7 @@ Add to the page's `<style>` section:
 .retry-clean { background: none; border: 1px solid var(--border); color: var(--text); }
 ```
 
-- [ ] **Step 8: Test in browser**
+- [ ] **Step 9: Test in browser**
 
 Run: `pnpm dev` (start the dev server)
 
@@ -1355,24 +1524,16 @@ Test the following:
 5. For failed tasks, verify retry buttons appear
 6. Click "Retry (Resume)" — confirmation dialog, then task resets to pending
 7. Verify SSE updates the task row back to pending status
+8. For a currently-running task, open the panel — verify "(live)" indicator appears
+9. Watch for new transcript lines appending in real time via SSE
+10. When the task completes, verify "(live)" indicator disappears
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add apps/factory-web/src/pages/directives/detail.astro
 git commit -m "feat(web): expandable transcript viewer + per-task retry buttons on directive detail"
 ```
-
----
-
-## Deferred: Live Transcript Streaming
-
-The spec mentions live transcript streaming for currently-running tasks (SSE-based real-time line appends). This plan defers that to a follow-up because:
-- The persisted transcript API with pagination is the 80% solution — operators can reload to see new lines.
-- Live streaming requires a new SSE event type (`transcript.line`), worker-to-hub piping per raw NDJSON line, and frontend real-time DOM appends — substantial additional complexity.
-- The retry and timeout features are higher-impact for the immediate pythonetl problem.
-
-Follow-up scope: new `transcript.line` SSE event, worker emits each raw line through the stream hub, frontend appends in real time when the task panel is open.
 
 ---
 

@@ -162,8 +162,8 @@ Implementation: stream from disk via `readline`, skip `offset` lines, apply leve
 
 | File | Change |
 |------|--------|
-| `packages/providers/src/claude-cli.ts` | `streamClaude()` accepts + writes to `transcriptSink` |
-| `packages/worker/src/run-worker.ts` | Opens write stream, passes to provider, records byte/line counts on `WorkerOutcome` |
+| `packages/providers/src/claude-cli.ts` | `streamClaude()` accepts + calls `onRawLine` callback per NDJSON line |
+| `packages/worker/src/run-worker.ts` | Opens write stream, passes `onRawLine` to provider (tees to file + emits SSE), records byte/line counts on `WorkerOutcome` |
 | `packages/brain/src/pool.ts` | Constructs transcript path, passes to worker, persists metadata to DB |
 | `packages/state/src/migrations/` | New migration adding columns to `tasks_inflight` |
 | `packages/state/src/queries/tasks-inflight.ts` | Read/write transcript metadata |
@@ -189,7 +189,30 @@ Implementation: stream from disk via `readline`, skip `offset` lines, apply leve
   - `result` (final) — highlighted styling with exit status
   - `system` — collapsed by default (large, rarely needed for debugging)
 - **Pagination:** Loads 500 lines at a time. "Load more" button appends next batch.
-- **Live mode:** For tasks currently running, the panel subscribes to the SSE stream. New transcript lines append in real time as the agent works. On task completion, switches to the persisted transcript API.
+- **Live mode:** For tasks currently running, the panel combines two sources:
+  1. **Initial load:** Fetch persisted lines from the transcript API (the NDJSON file is being appended to in real time, so pagination works against partial files).
+  2. **Live tail:** Subscribe to the existing directive SSE stream for `transcript.line` events, filtered client-side by `taskId`. New lines auto-append and the panel auto-scrolls to bottom.
+  3. **Completion transition:** When `task.completed` fires, the panel stops listening for `transcript.line` events. The persisted transcript is now final.
+
+**SSE transport for live lines:**
+
+New event type `transcript.line` on the existing directive SSE channel (`GET /api/v1/directives/:id/stream`):
+
+```typescript
+{
+  type: 'transcript.line',
+  taskId: string,
+  directiveId: string,
+  line: object,    // the parsed NDJSON object
+  lineIndex: number // sequential index within this task's transcript
+}
+```
+
+The worker emits each raw NDJSON line through the directive's SSE hub as it writes to the transcript file. The `onRawLine` callback (used for the file tee) also emits the SSE event. This means the hub carries transcript lines for ALL running tasks — clients filter by `taskId` in the frontend. The event is NOT persisted to `directive_log_lines` (transcripts have their own persistence via the NDJSON file); it is fire-and-forget through the hub.
+
+**Backfill:** `transcript.line` events are NOT backfilled on SSE reconnect (unlike `task.started`/`task.completed`). The persisted transcript API serves as the recovery path — on reconnect, the frontend re-fetches from the API and resumes the SSE tail from the last `lineIndex` seen. This avoids the hub having to buffer potentially thousands of transcript lines per task.
+
+**Bandwidth note:** All connected directive-detail clients receive all transcript lines for all running tasks in that directive, even if they haven't opened a task panel. For directives with many concurrent tasks, this could be noisy. Acceptable for v1 — the alternative (per-task SSE endpoint) adds significant routing complexity for marginal bandwidth savings. If bandwidth becomes a problem, the per-task endpoint is a clean follow-up.
 
 ### 3b. Per-Task Retry
 
