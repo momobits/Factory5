@@ -120,6 +120,15 @@ import Dashboard from '../../layouts/Dashboard.astro';
     }
     const directiveId: string = id;
 
+    // Transcript response shape mirroring `apiV1TaskTranscriptResponseSchema`.
+    interface TranscriptResponse {
+      lines: unknown[];
+      total: number;
+      bytesTotal: number;
+      level: string;
+      hasMore: boolean;
+    }
+
     interface PageState {
       directive: Directive | null;
       tasks: Map<string, InflightTask>;
@@ -163,6 +172,13 @@ import Dashboard from '../../layouts/Dashboard.astro';
       resumeError: null,
       poolPill: null,
     };
+
+    // Transcript panel state — accordion allows one panel open at a time.
+    let expandedTaskId: string | null = null;
+    // Track the current transcript offset per task for "Load more" pagination.
+    const transcriptOffsets = new Map<string, number>();
+    // Track the current transcript level filter per task.
+    const transcriptLevels = new Map<string, string>();
 
     // Auto-scroll-pin tracking for log tail.
     let logTailPaused = false;
@@ -466,7 +482,7 @@ import Dashboard from '../../layouts/Dashboard.astro';
       }
       const table = el(
         'table',
-        {},
+        { class: 'task-table' },
         el(
           'thead',
           {},
@@ -484,18 +500,24 @@ import Dashboard from '../../layouts/Dashboard.astro';
       );
       const tbody = el('tbody', {});
       for (const t of tasks) {
-        tbody.appendChild(
-          el(
-            'tr',
-            {},
-            el('td', {}, t.id.slice(-8)),
-            el('td', {}, t.title),
-            el('td', {}, `${t.agent} (${t.category})`),
-            el('td', {}, t.status),
-            el('td', {}, tsLabel(t.startedAt)),
-            el('td', {}, tsLabel(t.finishedAt)),
-          ),
+        const isExpanded = expandedTaskId === t.id;
+        const taskRow = el(
+          'tr',
+          {
+            class: `task-row${isExpanded ? ' task-row--expanded' : ''}`,
+            'data-task-id': t.id,
+          },
+          el('td', {}, t.id.slice(-8)),
+          el('td', {}, t.title),
+          el('td', {}, `${t.agent} (${t.category})`),
+          el('td', {}, t.status),
+          el('td', {}, tsLabel(t.startedAt)),
+          el('td', {}, tsLabel(t.finishedAt)),
         );
+        taskRow.addEventListener('click', () => {
+          toggleTaskPanel(t.id);
+        });
+        tbody.appendChild(taskRow);
         // Tier 10 fix: surface the worker's error string when the task
         // failed. Closes the silent-fail UX gap that hid `error_max_turns`
         // and other worker-side throws behind a bare "failed" status.
@@ -507,10 +529,291 @@ import Dashboard from '../../layouts/Dashboard.astro';
           errRow.appendChild(errCell);
           tbody.appendChild(errRow);
         }
+        // Render the transcript panel if this task is expanded.
+        if (isExpanded) {
+          const panelRow = el('tr', { class: 'transcript-panel-row' });
+          const panelCell = el('td', { colspan: '6', class: 'transcript-panel-cell' });
+          panelCell.appendChild(createTaskPanel(t.id));
+          panelRow.appendChild(panelCell);
+          tbody.appendChild(panelRow);
+        }
       }
       table.appendChild(tbody);
       wrap.appendChild(table);
       return wrap;
+    }
+
+    // ----- transcript panel helpers (Tier 15.13) ---------------------------
+
+    function escapeHtml(s: string): string {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function toggleTaskPanel(taskId: string): void {
+      if (expandedTaskId === taskId) {
+        expandedTaskId = null;
+      } else {
+        expandedTaskId = taskId;
+        // Initialize offset and level for this task if not set.
+        if (!transcriptOffsets.has(taskId)) {
+          transcriptOffsets.set(taskId, 0);
+        }
+        if (!transcriptLevels.has(taskId)) {
+          transcriptLevels.set(taskId, 'full');
+        }
+      }
+      render();
+      // After render, kick off transcript load for the newly opened panel.
+      if (expandedTaskId === taskId) {
+        transcriptOffsets.set(taskId, 0);
+        void loadTranscript(taskId, 0, transcriptLevels.get(taskId) ?? 'full');
+      }
+    }
+
+    function createTaskPanel(taskId: string): HTMLElement {
+      const task = state.tasks.get(taskId);
+      const isRunning = task?.status === 'running';
+      const isFailed = task?.status === 'failed';
+
+      const panel = el('div', { class: 'transcript-panel', 'data-panel-task': taskId });
+
+      // Tab bar for level filter.
+      const tabs = el('div', { class: 'transcript-tabs' });
+      const currentLevel = transcriptLevels.get(taskId) ?? 'full';
+      for (const lvl of ['full', 'tools', 'errors']) {
+        const tabClass = lvl === currentLevel ? 'transcript-tab transcript-tab--active' : 'transcript-tab';
+        const tab = el('button', { class: tabClass, type: 'button', 'data-level': lvl }, lvl);
+        tab.addEventListener('click', (e) => {
+          e.stopPropagation();
+          transcriptLevels.set(taskId, lvl);
+          transcriptOffsets.set(taskId, 0);
+          // Clear body and re-fetch.
+          const body = panel.querySelector<HTMLElement>('.transcript-body');
+          if (body !== null) body.innerHTML = '';
+          void loadTranscript(taskId, 0, lvl);
+          // Update active tab styling.
+          for (const t of panel.querySelectorAll('.transcript-tab')) {
+            t.classList.toggle('transcript-tab--active', t.getAttribute('data-level') === lvl);
+          }
+        });
+        tabs.appendChild(tab);
+      }
+      if (isRunning) {
+        tabs.appendChild(el('span', { class: 'transcript-live-badge' }, '(live)'));
+      }
+      panel.appendChild(tabs);
+
+      // Transcript body — lines go here.
+      const body = el('div', { class: 'transcript-body' });
+      body.appendChild(el('div', { class: 'transcript-loading' }, 'Loading transcript…'));
+      panel.appendChild(body);
+
+      // Load-more button (hidden initially, shown when hasMore is true).
+      const loadMore = el('button', {
+        class: 'transcript-load-more',
+        type: 'button',
+        style: 'display:none',
+      }, 'Load more');
+      loadMore.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const offset = transcriptOffsets.get(taskId) ?? 0;
+        void loadTranscript(taskId, offset, transcriptLevels.get(taskId) ?? 'full');
+      });
+      panel.appendChild(loadMore);
+
+      // Retry buttons for failed tasks — only when directive is blocked.
+      if (isFailed) {
+        wireRetryButtons(panel, taskId);
+      }
+
+      return panel;
+    }
+
+    async function loadTranscript(
+      taskId: string,
+      offset: number,
+      level: string,
+    ): Promise<void> {
+      const panel = mount.querySelector<HTMLElement>(
+        `.transcript-panel[data-panel-task="${taskId}"]`,
+      );
+      if (panel === null) return;
+      const body = panel.querySelector<HTMLElement>('.transcript-body');
+      if (body === null) return;
+
+      const limit = 200;
+      try {
+        const resp = await apiFetch<TranscriptResponse>(
+          `/api/v1/directives/${encodeURIComponent(directiveId)}/tasks/${encodeURIComponent(taskId)}/transcript?offset=${String(offset)}&limit=${String(limit)}&level=${encodeURIComponent(level)}`,
+        );
+
+        // On first load (offset 0), clear the loading placeholder.
+        if (offset === 0) {
+          body.innerHTML = '';
+        }
+
+        // Render each line.
+        for (const line of resp.lines) {
+          body.appendChild(renderTranscriptLine(line));
+        }
+
+        // Update offset for next load-more.
+        transcriptOffsets.set(taskId, offset + resp.lines.length);
+
+        // Show/hide load-more button.
+        const loadMoreBtn = panel.querySelector<HTMLElement>('.transcript-load-more');
+        if (loadMoreBtn !== null) {
+          loadMoreBtn.style.display = resp.hasMore ? 'block' : 'none';
+        }
+
+        // Stats in tab bar (total count).
+        const badge = panel.querySelector<HTMLElement>('.transcript-live-badge');
+        if (badge === null) {
+          // Add a count badge.
+          const tabs = panel.querySelector<HTMLElement>('.transcript-tabs');
+          if (tabs !== null) {
+            const existing = tabs.querySelector<HTMLElement>('.transcript-count');
+            if (existing !== null) existing.remove();
+            tabs.appendChild(el('span', { class: 'transcript-count' }, `${String(resp.total)} lines`));
+          }
+        }
+
+        // Empty state.
+        if (resp.total === 0 && offset === 0) {
+          body.appendChild(el('div', { class: 'transcript-empty' }, 'No transcript lines yet.'));
+        }
+      } catch (err: unknown) {
+        if (offset === 0) body.innerHTML = '';
+        let msg = 'Failed to load transcript';
+        if (err instanceof ApiError) {
+          msg = `Transcript error: ${err.code} — ${err.message}`;
+        } else if (err instanceof NoTokenError) {
+          msg = err.message;
+        } else if (err instanceof Error) {
+          msg = `Transcript error: ${err.message}`;
+        }
+        body.appendChild(el('div', { class: 'transcript-error' }, msg));
+      }
+    }
+
+    function renderTranscriptLine(line: unknown): HTMLElement {
+      const obj = (typeof line === 'object' && line !== null ? line : {}) as Record<string, unknown>;
+      const type = typeof obj['type'] === 'string' ? obj['type'] : 'unknown';
+
+      const lineEl = el('div', { class: `transcript-line transcript-line--${type}` });
+
+      if (type === 'assistant') {
+        // Assistant text content.
+        const text = typeof obj['text'] === 'string' ? obj['text'] : JSON.stringify(line);
+        const pre = el('pre', { class: 'transcript-text' });
+        pre.innerHTML = escapeHtml(text);
+        lineEl.appendChild(el('span', { class: 'transcript-type-badge transcript-type--assistant' }, 'assistant'));
+        lineEl.appendChild(pre);
+      } else if (type === 'tool_use') {
+        const name = typeof obj['name'] === 'string' ? obj['name'] : '?';
+        lineEl.appendChild(el('span', { class: 'transcript-type-badge transcript-type--tool-use' }, `tool: ${name}`));
+        const inputStr = obj['input'] !== undefined ? JSON.stringify(obj['input'], null, 2) : '';
+        if (inputStr.length > 0) {
+          const pre = el('pre', { class: 'transcript-code' });
+          pre.innerHTML = escapeHtml(inputStr.length > 2000 ? inputStr.slice(0, 2000) + '\n…(truncated)' : inputStr);
+          lineEl.appendChild(pre);
+        }
+      } else if (type === 'tool_result') {
+        const isError = obj['is_error'] === true;
+        const badgeClass = isError ? 'transcript-type-badge transcript-type--error' : 'transcript-type-badge transcript-type--tool-result';
+        lineEl.appendChild(el('span', { class: badgeClass }, isError ? 'tool error' : 'tool result'));
+        const content = typeof obj['content'] === 'string'
+          ? obj['content']
+          : JSON.stringify(obj['content'] ?? '', null, 2);
+        if (content.length > 0) {
+          const pre = el('pre', { class: 'transcript-code' });
+          pre.innerHTML = escapeHtml(content.length > 2000 ? content.slice(0, 2000) + '\n…(truncated)' : content);
+          lineEl.appendChild(pre);
+        }
+      } else if (type === 'result') {
+        lineEl.appendChild(el('span', { class: 'transcript-type-badge transcript-type--result' }, 'result'));
+        const pre = el('pre', { class: 'transcript-code' });
+        pre.innerHTML = escapeHtml(JSON.stringify(line, null, 2).slice(0, 2000));
+        lineEl.appendChild(pre);
+      } else {
+        // Unknown / other line types — show raw JSON.
+        lineEl.appendChild(el('span', { class: 'transcript-type-badge' }, type));
+        const pre = el('pre', { class: 'transcript-code' });
+        pre.innerHTML = escapeHtml(JSON.stringify(line, null, 2).slice(0, 2000));
+        lineEl.appendChild(pre);
+      }
+
+      return lineEl;
+    }
+
+    function wireRetryButtons(panel: HTMLElement, taskId: string): void {
+      const dirStatus = effectiveStatus();
+      if (dirStatus !== 'blocked' && dirStatus !== 'failed') return;
+
+      const btnRow = el('div', { class: 'transcript-retry-row' });
+      const resumeBtn = el('button', {
+        class: 'transcript-retry-btn transcript-retry--resume',
+        type: 'button',
+      }, 'Resume');
+      resumeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        void postRetry(directiveId, taskId, 'resume');
+      });
+      const cleanBtn = el('button', {
+        class: 'transcript-retry-btn transcript-retry--clean',
+        type: 'button',
+      }, 'Clean retry');
+      cleanBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        void postRetry(directiveId, taskId, 'clean');
+      });
+      btnRow.appendChild(resumeBtn);
+      btnRow.appendChild(cleanBtn);
+      panel.appendChild(btnRow);
+    }
+
+    async function postRetry(
+      dirId: string,
+      taskId: string,
+      mode: 'resume' | 'clean',
+    ): Promise<void> {
+      // Disable buttons in the panel while the request is in flight.
+      const panel = mount.querySelector<HTMLElement>(
+        `.transcript-panel[data-panel-task="${taskId}"]`,
+      );
+      const btns = panel?.querySelectorAll<HTMLButtonElement>('.transcript-retry-btn');
+      if (btns !== undefined) {
+        for (const btn of btns) btn.disabled = true;
+      }
+      try {
+        await apiPost(
+          `/api/v1/directives/${encodeURIComponent(dirId)}/tasks/${encodeURIComponent(taskId)}/retry`,
+          { mode },
+        );
+        // Success — the SSE `task.retried` event will handle state update.
+        // Close the panel to signal the retry took effect.
+        expandedTaskId = null;
+        render();
+      } catch (err: unknown) {
+        let msg = 'Retry failed';
+        if (err instanceof ApiError) {
+          msg = `Retry failed: ${err.code} — ${err.message}`;
+        } else if (err instanceof NoTokenError) {
+          msg = err.message;
+        } else if (err instanceof Error) {
+          msg = `Retry failed: ${err.message}`;
+        }
+        // Show error inline in the panel.
+        if (panel !== null) {
+          const existing = panel.querySelector('.transcript-retry-error');
+          if (existing !== null) existing.remove();
+          panel.appendChild(el('div', { class: 'transcript-retry-error err' }, msg));
+        }
+        // Re-enable buttons.
+        if (btns !== undefined) {
+          for (const btn of btns) btn.disabled = false;
+        }
+      }
     }
 
     function buildLogTail(): HTMLElement | null {
@@ -717,6 +1020,64 @@ import Dashboard from '../../layouts/Dashboard.astro';
               ...errorPatch,
             });
           }
+          // Tier 15.13 — if the completed task's panel is open, remove
+          // the "(live)" indicator since the task is no longer running.
+          if (expandedTaskId === ev.taskId) {
+            const badge = mount.querySelector<HTMLElement>(
+              `.transcript-panel[data-panel-task="${ev.taskId}"] .transcript-live-badge`,
+            );
+            if (badge !== null) badge.remove();
+          }
+          break;
+        }
+        case 'task.retried': {
+          // Tier 15.13 — reset the retried task to pending in the local
+          // state, cascade-reset downstream tasks, close any open panel,
+          // and re-render so the operator sees the retry took effect.
+          const retriedTask = state.tasks.get(ev.taskId);
+          if (retriedTask !== undefined) {
+            state.tasks.set(ev.taskId, {
+              ...retriedTask,
+              status: 'pending',
+              finishedAt: undefined,
+              error: undefined,
+            });
+          }
+          // Cascade-reset downstream tasks.
+          for (const cascadeId of ev.cascadeReset) {
+            const cascadeTask = state.tasks.get(cascadeId);
+            if (cascadeTask !== undefined) {
+              state.tasks.set(cascadeId, {
+                ...cascadeTask,
+                status: 'pending',
+                finishedAt: undefined,
+                error: undefined,
+              });
+            }
+          }
+          // The directive is now running again (retry reactivates it).
+          state.finalStatus = null;
+          state.finalBlockedReason = null;
+          // Close the transcript panel — stale transcript is no longer
+          // relevant after retry.
+          expandedTaskId = null;
+          break;
+        }
+        case 'transcript.line': {
+          // Tier 15.13 — append a live transcript line to the open panel.
+          // Only process if the panel for this task is currently open.
+          // The caller skips render() for this event type so the panel
+          // isn't destroyed+rebuilt on every line (see onEvent callback).
+          if (expandedTaskId === ev.taskId) {
+            const body = mount.querySelector<HTMLElement>(
+              `.transcript-panel[data-panel-task="${ev.taskId}"] .transcript-body`,
+            );
+            if (body !== null) {
+              body.appendChild(renderTranscriptLine(ev.line));
+              // Auto-scroll to the bottom.
+              body.scrollTop = body.scrollHeight;
+            }
+          }
           break;
         }
         case 'finding.created': {
@@ -891,6 +1252,11 @@ import Dashboard from '../../layouts/Dashboard.astro';
       apiStream(`/api/v1/directives/${encodeURIComponent(directiveId)}/stream`, {
         onEvent: (ev) => {
           applyEvent(ev);
+          // Tier 15.13 — transcript.line events are high-frequency and
+          // appended directly to the DOM inside applyEvent. A full
+          // re-render would destroy+rebuild the panel, losing the
+          // appended line and scroll position. Skip re-render for those.
+          if (ev.type === 'transcript.line') return;
           render();
           // After re-render, keep log tail pinned to bottom unless user paused.
           const body = mount.querySelector<HTMLElement>('.log-tail-body');

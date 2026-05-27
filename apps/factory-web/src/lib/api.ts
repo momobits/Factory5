@@ -167,8 +167,10 @@ export const STREAM_POLL_INTERVAL_MS = 5_000;
 const STREAM_EVENT_TYPES = [
   'task.started',
   'task.completed',
+  'task.retried',
   'finding.created',
   'spend.updated',
+  'transcript.line',
   'log.line',
   'pool.tally',
   'directive.completed',
