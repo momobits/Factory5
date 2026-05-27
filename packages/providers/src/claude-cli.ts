@@ -324,6 +324,7 @@ interface RunOptions {
   timeoutMs: number;
   stdin?: string;
   signal?: AbortSignal;
+  onRawLine?: (line: string) => void;
 }
 
 interface RunResult {
@@ -506,6 +507,8 @@ async function* streamClaude(
   let sawResult = false;
 
   rl.on('line', (line) => {
+    if (opts.onRawLine !== undefined) opts.onRawLine(line);
+
     const event = parseStreamJsonLine(line);
     if (event === undefined) return;
     if (event.type === 'result') {
@@ -761,6 +764,7 @@ export class ClaudeCliProvider implements ModelProvider {
       timeoutMs: req.streamTimeoutMs ?? this.streamTimeoutMs,
       stdin: promptText,
       ...(req.signal !== undefined ? { signal: req.signal } : {}),
+      ...(req.onRawLine !== undefined ? { onRawLine: req.onRawLine } : {}),
     });
     for await (const chunk of iter) yield chunk;
   }

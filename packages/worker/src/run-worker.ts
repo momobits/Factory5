@@ -24,7 +24,8 @@
  * usage record the brain persists into `model_usage`.
  */
 
-import { rm, writeFile, unlink } from 'node:fs/promises';
+import { createWriteStream, statSync } from 'node:fs';
+import { rm, writeFile, unlink, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { env, execPath } from 'node:process';
@@ -122,6 +123,10 @@ export interface WorkerOptions {
   poolRemainingTurns?: number;
   /** Per-project stream timeout override (ms). Read from project.json metadata.taskStreamTimeoutMs. */
   streamTimeoutMs?: number;
+  /** Path for the per-task NDJSON transcript file. */
+  transcriptPath?: string;
+  /** Transcript verbosity: 'full' logs every line, 'tools' only tool events, 'off' disables. Default 'full'. */
+  transcriptLevel?: 'full' | 'tools' | 'off';
 }
 
 export interface WorkerAskUserConfig {
@@ -149,6 +154,12 @@ export interface WorkerOutcome {
    * and surfaces the path in logs when tasks fail.
    */
   worktree?: WorktreeHandle;
+  /** Metadata about the raw NDJSON transcript file written during streaming. */
+  transcript?: {
+    path: string;
+    bytes: number;
+    lines: number;
+  };
 }
 
 const DEFAULT_TOOL_ALLOWLIST: readonly string[] = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'];
@@ -574,6 +585,36 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
     else opts.signal.addEventListener('abort', onExternalAbort, { once: true });
   }
 
+  // Transcript tee — capture raw NDJSON lines to a per-task file before
+  // the provider parses them. The file is append-mode so re-runs don't
+  // overwrite previous attempts. The level filter defaults to 'full'
+  // (every line); 'tools' keeps only tool_use / tool_result / result
+  // events; 'off' skips entirely.
+  let transcriptStream: import('node:fs').WriteStream | undefined;
+  let transcriptLineCount = 0;
+  let transcriptMeta: WorkerOutcome['transcript'];
+
+  if (opts.transcriptPath !== undefined && opts.transcriptLevel !== 'off') {
+    await mkdir(join(opts.transcriptPath, '..'), { recursive: true });
+    transcriptStream = createWriteStream(opts.transcriptPath, { flags: 'a', encoding: 'utf8' });
+  }
+
+  const shouldLogLine = (line: string): boolean => {
+    if (opts.transcriptLevel === 'full' || opts.transcriptLevel === undefined) return true;
+    return line.includes('"type":"tool_use"') ||
+      line.includes('"type":"tool_result"') ||
+      line.includes('"type":"result"');
+  };
+
+  const onRawLine = transcriptStream !== undefined
+    ? (line: string): void => {
+        if (shouldLogLine(line)) {
+          transcriptStream!.write(line + '\n');
+          transcriptLineCount++;
+        }
+      }
+    : undefined;
+
   try {
     const iter = resolution.provider.stream({
       model: resolution.model,
@@ -592,6 +633,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
       ...(mcpConfigPath !== undefined ? { mcpConfigPath } : {}),
       ...(opts.poolRemainingTurns !== undefined ? { maxTurns: opts.poolRemainingTurns } : {}),
       ...(opts.streamTimeoutMs !== undefined ? { streamTimeoutMs: opts.streamTimeoutMs } : {}),
+      ...(onRawLine !== undefined ? { onRawLine } : {}),
       signal: internalAbort.signal,
     });
     for await (const chunk of iter) {
@@ -661,6 +703,18 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
         );
       }
     }
+    if (transcriptStream !== undefined) {
+      transcriptStream.end();
+      await new Promise<void>((resolve) => transcriptStream!.once('finish', resolve));
+      try {
+        const stat = statSync(opts.transcriptPath!);
+        transcriptMeta = {
+          path: opts.transcriptPath!,
+          bytes: stat.size,
+          lines: transcriptLineCount,
+        };
+      } catch { /* File may not exist if no lines written */ }
+    }
   }
 
   const durationMs = Date.now() - started;
@@ -729,6 +783,7 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
   );
 
   const outcome: WorkerOutcome = { result, worktree };
+  if (transcriptMeta !== undefined) outcome.transcript = transcriptMeta;
   if (responseText.length > 0) outcome.rawResponse = responseText;
   if (finalUsage !== undefined) {
     const response: ProviderResponse = {

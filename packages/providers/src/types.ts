@@ -75,6 +75,8 @@ export interface ProviderRequest {
   mcpConfigPath?: string;
   /** Per-call stream timeout override (ms). Takes precedence over the provider's default. */
   streamTimeoutMs?: number;
+  /** Called with each raw NDJSON line before parsing. For transcript tee. */
+  onRawLine?: (line: string) => void;
 }
 
 export interface ProviderUsage {
