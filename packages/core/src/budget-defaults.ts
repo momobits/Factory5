@@ -196,6 +196,15 @@ export const budgetsSchema = z
     maxWikiReadinessAttempts: z.number().int().nonnegative(),
     maxWallClockMinutes: z.number().int().nonnegative(),
     maxConcurrentTasks: z.number().int().positive(),
+    /**
+     * Per-project stream-read timeout, milliseconds. When set, the brain's
+     * claude-cli provider aborts the task's event stream after this many ms
+     * of inactivity. Optional — absent means the provider's built-in default
+     * applies. Not a budget axis (not in {@link BUDGET_AXES}); lives here for
+     * discoverability alongside the other per-project runtime knobs that share
+     * the `metadata.budgetDefaults` object in `project.json`.
+     */
+    taskStreamTimeoutMs: z.number().int().positive().optional(),
   })
   .partial();
 

@@ -5,6 +5,7 @@ import {
   eventSchema,
   findingSchema,
   planSchema,
+  projectBudgetDefaultsSchema,
   projectMetadataSchema,
   taskResultSchema,
   taskSchema,
@@ -432,5 +433,20 @@ describe('projectMetadataSchema — Tier 15 scalars', () => {
       metadata: { autoIncreaseBudgets: false },
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe('projectBudgetDefaultsSchema — taskStreamTimeoutMs', () => {
+  it('projectMetadata accepts taskStreamTimeoutMs', () => {
+    const parsed = projectBudgetDefaultsSchema.parse({
+      maxUsd: 100,
+      taskStreamTimeoutMs: 3600000,
+    });
+    expect(parsed.taskStreamTimeoutMs).toBe(3600000);
+  });
+
+  it('projectMetadata taskStreamTimeoutMs is optional', () => {
+    const parsed = projectBudgetDefaultsSchema.parse({ maxUsd: 100 });
+    expect(parsed.taskStreamTimeoutMs).toBeUndefined();
   });
 });
