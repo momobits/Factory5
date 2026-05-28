@@ -368,6 +368,9 @@ importers:
       '@factory5/wiki':
         specifier: workspace:*
         version: link:../wiki
+      '@factory5/worker':
+        specifier: workspace:*
+        version: link:../worker
       '@fastify/static':
         specifier: ^7.0.0
         version: 7.0.4

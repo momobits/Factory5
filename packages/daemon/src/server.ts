@@ -139,6 +139,7 @@ import {
   resolveDirectiveLimits,
   updateProjectMetadata,
 } from '@factory5/wiki';
+import { listAbandonedWorktrees, type AbandonedWorktree } from '@factory5/worker';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 
@@ -1454,6 +1455,22 @@ function registerRoutes(
       );
     }
 
+    // Tier 15.13 — list abandoned worktrees from prior runs of this
+    // directive's chain. The new plan's active task IDs are unknown
+    // until the planner runs, so for the resume response we treat
+    // EVERY existing worktree as potentially abandoned (active set = []).
+    // The CLI / UI surfaces these so the operator can clean up; no
+    // silent removal here.
+    let abandoned: AbandonedWorktree[] = [];
+    try {
+      abandoned = await listAbandonedWorktrees({ projectPath, activeTaskIds: [] });
+    } catch (err) {
+      ipcLog.warn(
+        { err, projectPath, priorId },
+        'ipc: /api/v1/directives/:id/resume — listAbandonedWorktrees failed (non-fatal)',
+      );
+    }
+
     const project = typeof payload?.['project'] === 'string' ? payload['project'] : projectPath;
     const priorLanguage = payload?.['language'];
     const carriedLanguage =
@@ -1519,7 +1536,18 @@ function registerRoutes(
 
     opts.doorbell.emit('directive.new', { directiveId: directive.id, reason: 'new' });
 
-    const resp: ApiV1ResumeResponse = apiV1ResumeResponseSchema.parse({ directive });
+    const resp: ApiV1ResumeResponse = apiV1ResumeResponseSchema.parse({
+      directive,
+      ...(abandoned.length > 0
+        ? {
+            abandonedWorktrees: abandoned.map((w) => ({
+              path: w.path,
+              taskId: w.taskId,
+              abandonedSince: w.abandonedSince.toISOString(),
+            })),
+          }
+        : {}),
+    });
     ipcLog.info(
       {
         reqId: request.id,

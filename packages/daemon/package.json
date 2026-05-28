@@ -33,6 +33,7 @@
     "@factory5/providers": "workspace:*",
     "@factory5/state": "workspace:*",
     "@factory5/wiki": "workspace:*",
+    "@factory5/worker": "workspace:*",
     "@fastify/static": "^7.0.0",
     "fastify": "^4.28.0",
     "zod": "^3.23.0"

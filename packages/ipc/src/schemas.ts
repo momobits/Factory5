@@ -519,8 +519,23 @@ export const apiV1ResumeRequestSchema = z.object({
 });
 export type ApiV1ResumeRequest = z.infer<typeof apiV1ResumeRequestSchema>;
 
+/**
+ * Per-worktree abandoned entry. Surfaced in the resume response so the
+ * operator/web-UI knows there are leftover worktrees from prior failed
+ * runs of this directive's chain. Removal is operator-initiated via the
+ * `factory cleanup` CLI — the daemon never auto-removes.
+ */
+export const apiV1AbandonedWorktreeSchema = z.object({
+  path: z.string().min(1),
+  taskId: z.string().min(1),
+  abandonedSince: z.string().datetime({ offset: true }),
+});
+export type ApiV1AbandonedWorktree = z.infer<typeof apiV1AbandonedWorktreeSchema>;
+
 export const apiV1ResumeResponseSchema = z.object({
   directive: directiveSchema,
+  /** Worktrees from prior runs of this directive's chain that are not in the new plan's active set. */
+  abandonedWorktrees: z.array(apiV1AbandonedWorktreeSchema).optional(),
 });
 export type ApiV1ResumeResponse = z.infer<typeof apiV1ResumeResponseSchema>;
 
