@@ -124,6 +124,26 @@ export async function validateKnowledgeGraph(opts: ValidateOptions): Promise<Val
           config: cfg.config,
         });
         allFindings.push(...docFictionFindings);
+
+        // Dead-code scan (Python only for v1). Runs only when the resolved config
+        // includes a dead_code section.
+        if (opts.runtime === 'python' && cfg.config.dead_code !== undefined) {
+          try {
+            const { checkDeadCodePython } = await import('./dead-code-python.js');
+            const deadFindings = await checkDeadCodePython({
+              projectPath: opts.projectPath,
+              packageGlobs: cfg.config.dead_code.package_globs,
+              exposedVia: cfg.config.dead_code.exposed_via,
+              excludeGlobs: cfg.config.dead_code.caller_scan.exclude_globs,
+            });
+            allFindings.push(...deadFindings);
+          } catch (err) {
+            log.warn(
+              { err, projectPath: opts.projectPath },
+              'validator: dead-code scan threw — non-fatal',
+            );
+          }
+        }
       }
     } catch (err) {
       log.warn(
