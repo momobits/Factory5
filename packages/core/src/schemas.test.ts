@@ -472,6 +472,85 @@ describe('projectBudgetDefaultsSchema — transcriptLevel', () => {
   });
 });
 
+describe('findingSchema — structured shape', () => {
+  it('accepts a fully structured finding', () => {
+    const parsed = findingSchema.parse({
+      id: 'F042',
+      source: 'builder',
+      target: 'etl/cli.py',
+      severity: 'HIGH',
+      status: 'OPEN',
+      description: 'legacy field — present for backward compat',
+      createdAt: '2026-05-28T12:00:00Z',
+      category: 'doc-fiction',
+      location: {
+        file: 'README.md',
+        line: 42,
+        anchor: '#cli-reference',
+      },
+      title: 'CLI Reference documents pipeline_name arg that does not exist',
+      why: 'Users following the README will hit "unexpected extra argument" error.',
+      suggested_fix: 'Either implement the optional arg or remove it from README.md §CLI Reference.',
+      auto_fixable: false,
+    });
+    expect(parsed.category).toBe('doc-fiction');
+    expect(parsed.location?.file).toBe('README.md');
+    expect(parsed.auto_fixable).toBe(false);
+  });
+
+  it('accepts legacy finding shape (backward compat)', () => {
+    const parsed = findingSchema.parse({
+      id: 'F001',
+      source: 'scaffolder',
+      target: 'README.md',
+      severity: 'LOW',
+      status: 'OPEN',
+      description: 'Old-style finding with just a description.',
+      createdAt: '2026-05-24T12:00:00Z',
+    });
+    expect(parsed.description).toBe('Old-style finding with just a description.');
+    expect(parsed.category).toBeUndefined();
+    expect(parsed.title).toBeUndefined();
+  });
+
+  it('accepts location with frontmatter_field for graph findings', () => {
+    const parsed = findingSchema.parse({
+      id: 'F050',
+      source: 'builder',
+      target: 'docs/knowledge/features/cli-run-command.md',
+      severity: 'MEDIUM',
+      status: 'OPEN',
+      description: 'graph orphan',
+      createdAt: '2026-05-28T12:00:00Z',
+      category: 'graph-orphan',
+      location: {
+        file: 'docs/knowledge/features/cli-run-command.md',
+        frontmatter_field: 'implements',
+      },
+      title: 'Feature status=implemented but implements: is empty',
+      why: 'Without implements link, traceability to build commit is lost.',
+      suggested_fix: 'Set implements: [<this-task-id>]',
+      auto_fixable: true,
+    });
+    expect(parsed.location?.frontmatter_field).toBe('implements');
+  });
+
+  it('rejects invalid category enum', () => {
+    expect(() =>
+      findingSchema.parse({
+        id: 'F001',
+        source: 'builder',
+        target: 'x',
+        severity: 'LOW',
+        status: 'OPEN',
+        description: 'x',
+        createdAt: '2026-05-28T12:00:00Z',
+        category: 'invalid-category',
+      }),
+    ).toThrow();
+  });
+});
+
 describe('taskSchema — featureIds', () => {
   it('accepts featureIds as an array of strings', () => {
     const parsed = taskSchema.parse({

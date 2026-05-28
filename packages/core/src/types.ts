@@ -19,6 +19,8 @@ import type {
   directiveStatusSchema,
   eventBodySchema,
   eventSchema,
+  findingCategorySchema,
+  findingLocationSchema,
   findingSchema,
   findingStatusSchema,
   intentSchema,
@@ -54,6 +56,8 @@ export type PlanStatus = z.infer<typeof planStatusSchema>;
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
 export type AgentRole = z.infer<typeof agentRoleSchema>;
 export type ModelCategory = z.infer<typeof modelCategorySchema>;
+export type FindingCategory = z.infer<typeof findingCategorySchema>;
+export type FindingLocation = z.infer<typeof findingLocationSchema>;
 
 // -----------------------------------------------------------------------------
 // Composite shapes

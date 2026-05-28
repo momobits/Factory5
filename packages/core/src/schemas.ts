@@ -205,6 +205,40 @@ export const eventSchema = z.object({
 // Finding
 // -----------------------------------------------------------------------------
 
+/**
+ * Category of a structured finding. Drives the self-healing loop's
+ * decision on what to do with the finding.
+ *
+ * Graph-related categories (graph-orphan, graph-schema-error) are
+ * usually auto-fixable. Code-quality (doc-fiction, dead-code,
+ * half-implementation) need human or fixer-agent judgment.
+ */
+export const findingCategorySchema = z.enum([
+  'graph-orphan',
+  'graph-schema-error',
+  'doc-fiction',
+  'dead-code',
+  'half-implementation',
+  'test-failure',
+  'build-failure',
+  'other',
+]);
+
+/**
+ * Locator for a finding. All fields optional except `file` — different
+ * finding categories populate different combinations:
+ *   - graph findings use file + frontmatter_field
+ *   - doc-fiction findings use file + anchor + line
+ *   - dead-code findings use file + line
+ *   - test-failure findings use file + line
+ */
+export const findingLocationSchema = z.object({
+  file: z.string().min(1),
+  line: z.number().int().positive().optional(),
+  anchor: z.string().optional(),
+  frontmatter_field: z.string().optional(),
+});
+
 export const findingSchema = z.object({
   id: z.string().regex(/^F\d{3,}$/, 'Finding IDs are F001, F002, ... (project-scoped)'),
   source: agentRoleSchema,
@@ -223,6 +257,19 @@ export const findingSchema = z.object({
    * read-only agent doesn't look like a real blocker.
    */
   advisory: z.boolean().optional(),
+  // Tier 15.13 — structured shape additions (all optional for backward compat).
+  /** Classifies the finding for the self-healing loop's routing logic. */
+  category: findingCategorySchema.optional(),
+  /** Precise location in the codebase where the finding applies. */
+  location: findingLocationSchema.optional(),
+  /** Short human-readable title (one line). Complements `description`. */
+  title: z.string().min(1).optional(),
+  /** Explanation of why this is a problem — context for the operator or fixer. */
+  why: z.string().min(1).optional(),
+  /** Actionable suggestion for resolving the finding. */
+  suggested_fix: z.string().min(1).optional(),
+  /** Whether the self-healing loop can resolve this without human intervention. */
+  auto_fixable: z.boolean().optional(),
 });
 
 // -----------------------------------------------------------------------------
