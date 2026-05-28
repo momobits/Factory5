@@ -26,6 +26,7 @@
   "dependencies": {
     "@factory5/brain": "workspace:*",
     "@factory5/channels": "workspace:*",
+    "@factory5/coherence-validator": "workspace:*",
     "@factory5/core": "workspace:*",
     "@factory5/daemon": "workspace:*",
     "@factory5/ipc": "workspace:*",

@@ -239,6 +239,9 @@ importers:
       '@factory5/channels':
         specifier: workspace:*
         version: link:../channels
+      '@factory5/coherence-validator':
+        specifier: workspace:*
+        version: link:../coherence-validator
       '@factory5/core':
         specifier: workspace:*
         version: link:../core

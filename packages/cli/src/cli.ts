@@ -16,6 +16,7 @@ import { registerDaemonCommand } from './commands/daemon.js';
 import { registerDirectiveCommand } from './commands/directive.js';
 import { registerDoctorCommand } from './commands/doctor.js';
 import { registerFindingsCommand } from './commands/findings.js';
+import { registerGraphCheckCommand } from './commands/graph-check.js';
 import { registerInitCommand } from './commands/init.js';
 import { registerProjectCommand } from './commands/project.js';
 import { registerQuestionsCommand } from './commands/questions.js';
@@ -65,6 +66,7 @@ Tab completion:
   registerDirectiveCommand(program);
   registerDoctorCommand(program);
   registerFindingsCommand(program);
+  registerGraphCheckCommand(program);
   registerInitCommand(program);
   registerProjectCommand(program);
   registerQuestionsCommand(program);
