@@ -6,6 +6,47 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-29 — Phase C (Living Knowledge Graph self-healing + workspace hygiene) shipped
+
+9 sub-tasks completed:
+
+- Fixer prompt accepts batched structured findings payloads
+- Brain's self-healing fix loop: dispatches fixer for `auto_fixable` findings before escalating, with zero-progress detection (max 3 attempts)
+- Escalation payload extended with `fixerAttempts` + `remainingFindings` — operator sees what was tried and what's left
+- `@factory5/worker` exports `listAbandonedWorktrees` helper
+- `factory cleanup <projectPath>` CLI lists and removes abandoned worktrees (dry-run by default; `--yes` confirms; `--prune-branches` drops branches too)
+- Daemon resume endpoint surfaces abandoned worktrees in response
+- `GET /api/v1/directives/:id` also surfaces abandoned worktrees
+- Web UI directive detail page shows "Abandoned worktrees from prior attempts" panel
+- Discord + Telegram resume command output lists abandoned worktrees with cleanup hint
+
+**pnpm gates at close**: build clean, lint clean, test 226 passed / 1 pre-existing failure (`planner.test.ts > maxTurns passthrough` — unrelated to Phase C, tracked before Phase A started).
+
+**coherence-validator test suite**: 34 tests across 7 files — all green (unchanged from Phase B close).
+
+**worker test suite**: 56 tests across 7 files — 52 prior + 4 new from Task C4 (`listAbandonedWorktrees`) — all green.
+
+**Cleanup CLI smoke tests**:
+- `factory cleanup .` (factory5 repo itself): `No abandoned worktrees found.` — exit 0.
+- `factory cleanup C:\Users\Momo\factory5-workspace\pythonetl`: lists 5 abandoned worktrees (tasks `01KSB8X8P94XT552JBGQAEAGPX`, `01KSDMNBTFCCZGPXHAAFYVWCQQ`, `01KSDMNBTFH6RM4MHHX6HR0REM`, `01KSNH7ZV10D6F41V1SYFZY00Y`, `01KSNVQMQPZDHP31VVF7JTD2ZJ`) — prompts `Re-run with --yes to confirm.`
+
+**Phase C completes the Living Knowledge Graph spec. Full spec coverage:**
+
+| Component | Status |
+|---|---|
+| Component 1 — Living Knowledge Graph | ✓ |
+| Component 2 — Structured Findings | ✓ |
+| Component 3 — Coherence Validator | ✓ |
+| Component 4 — Self-Healing Loop | ✓ |
+| Component 5 — Workspace Hygiene | ✓ |
+
+Spec: `docs/superpowers/specs/2026-05-28-living-knowledge-graph-design.md`  
+Plans: `docs/superpowers/plans/2026-05-28-living-knowledge-graph-phase-{a,b,c}.md`
+
+**41 sub-tasks across 3 phases (A: 19, B: 13, C: 9). Full implementation arc complete.**
+
+---
+
 ## 2026-05-29 — Phase B (Living Knowledge Graph deeper checks) shipped
 
 13 sub-tasks completed:
