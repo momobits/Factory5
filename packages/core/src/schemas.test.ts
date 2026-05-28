@@ -471,3 +471,38 @@ describe('projectBudgetDefaultsSchema — transcriptLevel', () => {
     expect(parsed.transcriptLevel).toBeUndefined();
   });
 });
+
+describe('taskSchema — featureIds', () => {
+  it('accepts featureIds as an array of strings', () => {
+    const parsed = taskSchema.parse({
+      id: '01HZZZZZZZZZZZZZZZZZZZZZZZ',
+      planId: '01HZZZZZZZZZZZZZZZZZZZZZZZ',
+      title: 'Build CLI',
+      agent: 'builder',
+      category: 'deep',
+      inputs: { files: [], context: '' },
+      expectedOutputs: { files: [], signals: [] },
+      dependsOn: [],
+      status: 'pending',
+      attempts: 0,
+      featureIds: ['cli-run-command', 'cli-validate-command'],
+    });
+    expect(parsed.featureIds).toEqual(['cli-run-command', 'cli-validate-command']);
+  });
+
+  it('defaults featureIds to empty array when absent', () => {
+    const parsed = taskSchema.parse({
+      id: '01HZZZZZZZZZZZZZZZZZZZZZZZ',
+      planId: '01HZZZZZZZZZZZZZZZZZZZZZZZ',
+      title: 'Build CLI',
+      agent: 'builder',
+      category: 'deep',
+      inputs: { files: [], context: '' },
+      expectedOutputs: { files: [], signals: [] },
+      dependsOn: [],
+      status: 'pending',
+      attempts: 0,
+    });
+    expect(parsed.featureIds).toEqual([]);
+  });
+});

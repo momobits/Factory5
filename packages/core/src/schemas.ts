@@ -306,6 +306,15 @@ export const taskSchema = z.object({
    * estimateless planners) skip the check (uncapped path).
    */
   estimatedUsd: z.number().nonnegative().optional(),
+  /**
+   * Knowledge-graph features this task is responsible for implementing.
+   * Read by the validator to verify the task updated each feature's
+   * status: documented → implemented. Empty array (default) means
+   * the task is not part of the knowledge graph workflow (e.g.,
+   * pre-graph projects, infrastructure tasks). See ADR / spec
+   * 2026-05-28-living-knowledge-graph-design.
+   */
+  featureIds: z.array(z.string()).default([]),
 });
 
 export const planSchema = z.object({
