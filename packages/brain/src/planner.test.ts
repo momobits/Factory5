@@ -13,6 +13,7 @@ function mkRaw(
     inputs: { files: [], context: '' },
     expectedOutputs: { files: [], signals: [] },
     dependsOn: [],
+    featureIds: [],
     ...overrides,
   };
 }
@@ -197,5 +198,25 @@ describe('materialisePlannerTasks — maxTurns passthrough', () => {
     const planId = newId();
     const { tasks } = materialisePlannerTasks([mkRaw({ title: 'default builder' })], planId);
     expect(tasks[0]?.maxTurns).toBeUndefined();
+  });
+});
+
+describe('materialisePlannerTasks — featureIds', () => {
+  it('passes featureIds through when set', () => {
+    const planId = newId();
+    const { tasks } = materialisePlannerTasks(
+      [mkRaw({ title: 'build CLI', featureIds: ['cli-run-command'] })],
+      planId,
+    );
+    expect(tasks[0]?.featureIds).toEqual(['cli-run-command']);
+  });
+
+  it('defaults featureIds to empty array when planner omits the field', () => {
+    const planId = newId();
+    const { tasks } = materialisePlannerTasks(
+      [mkRaw({ title: 'build CLI' })],
+      planId,
+    );
+    expect(tasks[0]?.featureIds).toEqual([]);
   });
 });

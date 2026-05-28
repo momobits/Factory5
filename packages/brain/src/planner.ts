@@ -62,6 +62,13 @@ const plannerTaskSchema = z.object({
    * agents (scaffolder / builder / fixer). Passed through to the provider.
    */
   maxTurns: z.number().int().positive().optional(),
+  /**
+   * Knowledge-graph features this task is responsible for; the planner
+   * reads docs/knowledge/features/*.md to determine which features each
+   * task should implement. Empty array (default) means the task is not
+   * graph-bound (e.g. infrastructure tasks).
+   */
+  featureIds: z.array(z.string()).default([]),
 });
 
 const plannerJsonSchema = z.object({
@@ -129,6 +136,7 @@ export function materialisePlannerTasks(
       dependsOn,
       status: 'pending',
       attempts: 0,
+      featureIds: t.featureIds,
     };
     // F4 / ADR 0034 §6 — maxTurns stripped from LLM output. Turn budgets are
     // pool-managed per-agent-class; per-task caps are no longer used.
