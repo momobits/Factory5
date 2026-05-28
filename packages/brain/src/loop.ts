@@ -48,7 +48,7 @@ import { runWikiCritic } from './critic.js';
 import { askUser, escalateBlocked, type AskUserResult } from './ask-user.js';
 import { BudgetExceededError, formatBlockedReason } from './budget.js';
 import { runPlanner } from './planner.js';
-import { runPlanPool, type TaskOutcome } from './pool.js';
+import { executeTask, runPlanPool, type TaskOutcome } from './pool.js';
 import { buildRegistryFromDisk } from './provider-config.js';
 import { runServe, type OnWake } from './serve.js';
 import { triageDirective, type TriageResult } from './triage.js';
@@ -590,32 +590,135 @@ async function runInline(
       // directive still ends up `blocked` here; a follow-up session (or a
       // future planner-driven retry loop) can route the answer back in.
       if (hadFailures && directive.autonomy === 'autonomous') {
-        const failedTasks = taskResults.filter((r) => r.exitCode !== 0);
-        const escalationOpts: Parameters<typeof escalateBlocked>[0] = {
-          db,
-          directiveId: directive.id,
-          reason: `${String(failedTasks.length)} task(s) failed and/or verify gate did not pass`,
-          attempted:
-            failedTasks.length === 0
-              ? [`assessor.verify=${String(assessment.gateResults.verify)}`]
-              : failedTasks.map(
-                  (r) =>
-                    `task ${r.taskId}: exit ${String(r.exitCode)}${r.error !== undefined ? ` — ${r.error}` : ''}`,
+        // Tier 15.13 — self-healing fix loop. Before escalating to the operator,
+        // dispatch the fixer agent for any auto-fixable findings. Up to N
+        // attempts; zero-progress detection breaks early.
+        const MAX_FIXER_ATTEMPTS = 3;
+        let autoFixableRemaining = (
+          await listFindings(projectPath, { status: 'OPEN' })
+        ).filter((f) => f.auto_fixable === true);
+
+        let attemptIndex = 0;
+        while (autoFixableRemaining.length > 0 && attemptIndex < MAX_FIXER_ATTEMPTS) {
+          attemptIndex++;
+          log.info(
+            {
+              directiveId: directive.id,
+              attempt: attemptIndex,
+              maxAttempts: MAX_FIXER_ATTEMPTS,
+              findingCount: autoFixableRemaining.length,
+            },
+            'loop: dispatching fixer for auto-fixable findings',
+          );
+
+          const findingsContext = autoFixableRemaining
+            .map(
+              (f) =>
+                `- ID: ${f.id}\n  Category: ${f.category ?? 'other'}\n  Severity: ${f.severity}\n  Location: ${f.location?.file ?? f.target}${f.location?.frontmatter_field !== undefined ? ` (front-matter: ${f.location.frontmatter_field})` : ''}\n  Title: ${f.title ?? f.description}\n  Why: ${f.why ?? '(no detail)'}\n  Suggested fix: ${f.suggested_fix ?? '(no suggestion)'}`,
+            )
+            .join('\n\n');
+
+          const fixerTask: Task = {
+            id: newId(),
+            planId: plan.id,
+            title: `Self-healing fixer attempt ${String(attemptIndex)}/${String(MAX_FIXER_ATTEMPTS)}`,
+            agent: 'fixer',
+            category: 'reasoning',
+            inputs: {
+              files: [
+                ...new Set(
+                  autoFixableRemaining
+                    .map((f) => f.location?.file ?? f.target)
+                    .filter((p): p is string => typeof p === 'string'),
                 ),
-          suggestions: [
-            'reply "skip" to mark this build blocked and move on',
-            'reply "retry" to try again from the top (brain will re-run `factory build`)',
-            'reply with a specific fix instruction',
-          ],
-          ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
-        };
-        const res = await escalateBlocked(escalationOpts);
-        if (res.answer !== undefined) {
-          await appendBuildLog(projectPath, `escalation answered: ${res.answer}`);
-        } else if (res.aborted) {
-          await appendBuildLog(projectPath, 'escalation aborted (brain shutdown)');
-        } else if (res.timedOut) {
-          await appendBuildLog(projectPath, 'escalation timed out — no human reply');
+              ],
+              context: `## Findings to resolve\n\n${findingsContext}`,
+            },
+            expectedOutputs: { files: [], signals: [] },
+            dependsOn: [],
+            status: 'pending',
+            attempts: 0,
+            featureIds: [],
+          };
+
+          const before = autoFixableRemaining.length;
+          const beforeIds = new Set(autoFixableRemaining.map((f) => f.id));
+
+          try {
+            await executeTask(fixerTask, plan, registry, db, directive.id, opts.signal, emit);
+          } catch (err) {
+            log.warn(
+              { err, attempt: attemptIndex, directiveId: directive.id },
+              'loop: fixer attempt threw — stopping self-healing loop',
+            );
+            break;
+          }
+
+          // Re-query findings to see what changed
+          autoFixableRemaining = (
+            await listFindings(projectPath, { status: 'OPEN' })
+          ).filter((f) => f.auto_fixable === true);
+
+          // Zero-progress detection: if no findings resolved AND no new ones appeared
+          const after = autoFixableRemaining.length;
+          const stillSame = autoFixableRemaining.every((f) => beforeIds.has(f.id));
+          if (after === before && stillSame) {
+            log.warn(
+              {
+                directiveId: directive.id,
+                attempt: attemptIndex,
+                remaining: after,
+              },
+              'loop: fixer made zero progress — breaking out to escalation',
+            );
+            break;
+          }
+        }
+
+        if (autoFixableRemaining.length === 0) {
+          log.info(
+            { directiveId: directive.id, attempts: attemptIndex },
+            'loop: self-healing resolved all auto-fixable findings',
+          );
+          // Re-evaluate hadFailures: if the only thing that flipped it was
+          // these findings, we can clear it. Re-run the validator-driven
+          // assessment is too heavy here; instead, only clear if no other
+          // failures exist (task exit codes + assessor verify gate).
+          const otherFailures =
+            taskResults.some((r) => r.exitCode !== 0) || !assessment.gateResults.verify;
+          if (!otherFailures) {
+            hadFailures = false;
+          }
+        }
+
+        if (hadFailures) {
+          const failedTasks = taskResults.filter((r) => r.exitCode !== 0);
+          const escalationOpts: Parameters<typeof escalateBlocked>[0] = {
+            db,
+            directiveId: directive.id,
+            reason: `${String(failedTasks.length)} task(s) failed and/or verify gate did not pass`,
+            attempted:
+              failedTasks.length === 0
+                ? [`assessor.verify=${String(assessment.gateResults.verify)}`]
+                : failedTasks.map(
+                    (r) =>
+                      `task ${r.taskId}: exit ${String(r.exitCode)}${r.error !== undefined ? ` — ${r.error}` : ''}`,
+                  ),
+            suggestions: [
+              'reply "skip" to mark this build blocked and move on',
+              'reply "retry" to try again from the top (brain will re-run `factory build`)',
+              'reply with a specific fix instruction',
+            ],
+            ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
+          };
+          const res = await escalateBlocked(escalationOpts);
+          if (res.answer !== undefined) {
+            await appendBuildLog(projectPath, `escalation answered: ${res.answer}`);
+          } else if (res.aborted) {
+            await appendBuildLog(projectPath, 'escalation aborted (brain shutdown)');
+          } else if (res.timedOut) {
+            await appendBuildLog(projectPath, 'escalation timed out — no human reply');
+          }
         }
       }
 

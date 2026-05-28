@@ -450,7 +450,7 @@ function synthesizePoolExhaustedResult(axis: MaxTurnsAxis, capAtPark: number): T
  *      after each stream chunk and aborts mid-stream on cap-cross.
  *   4. Emit `pool.tally` post-task so the FE Live tab updates.
  */
-async function executeTask(
+export async function executeTask(
   task: Task,
   plan: Plan,
   registry: ProviderRegistry,
