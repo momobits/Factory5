@@ -25,7 +25,7 @@
  */
 
 import { constants as fsConstants } from 'node:fs';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { platform as processPlatform } from 'node:process';
 
@@ -102,6 +102,31 @@ export function extractMinimumPythonVersion(requires: string): string | undefine
   return `${major}.${minor}`;
 }
 
+/**
+ * Check whether an installed Python version satisfies a minimum
+ * `requires-python` constraint.
+ *
+ * @param venvVersion - The probed version from a venv interpreter, e.g.
+ *   `"3.11.9"` (full triple) or `"3.11"` (major.minor only).
+ * @param requiredMin - The minimum version extracted from the project's
+ *   `requires-python` constraint via {@link extractMinimumPythonVersion},
+ *   e.g. `"3.11"`.
+ * @returns `true` if venv's major.minor is >= required's major.minor.
+ *   Returns `false` for malformed inputs (safe default — caller falls
+ *   through to recreate the venv rather than trust an unparseable version).
+ */
+export function venvSatisfiesConstraint(venvVersion: string, requiredMin: string): boolean {
+  const venvMatch = /^(\d+)\.(\d+)/.exec(venvVersion);
+  const requiredMatch = /^(\d+)\.(\d+)/.exec(requiredMin);
+  if (venvMatch === null || requiredMatch === null) return false;
+  const venvMajor = Number(venvMatch[1]);
+  const venvMinor = Number(venvMatch[2]);
+  const reqMajor = Number(requiredMatch[1]);
+  const reqMinor = Number(requiredMatch[2]);
+  if (venvMajor !== reqMajor) return venvMajor > reqMajor;
+  return venvMinor >= reqMinor;
+}
+
 export interface PythonChoice {
   /** Binary to spawn. */
   bin: string;
@@ -167,7 +192,7 @@ async function defaultProbe(
 
 async function readRequiresPython(
   projectPath: string,
-  deps: Required<PickPythonDeps>,
+  deps: { readTextFile: (p: string) => Promise<string | undefined> },
 ): Promise<string | undefined> {
   const raw = await deps.readTextFile(join(projectPath, 'pyproject.toml'));
   if (raw === undefined) return undefined;
@@ -341,6 +366,13 @@ export interface EnsureAssessorVenvDeps {
   probe?: (bin: string, prefixArgs: readonly string[]) => Promise<string | undefined>;
   resolveOnPath?: (name: string) => Promise<string | undefined>;
   platform?: NodeJS.Platform;
+  /** Read text file for pyproject.toml inspection. Injected for tests. */
+  readTextFile?: (p: string) => Promise<string | undefined>;
+  /**
+   * Remove a stale venv directory. Injected for tests so we can assert
+   * the staleness path was taken without touching the filesystem.
+   */
+  rmDir?: (p: string) => Promise<void>;
 }
 
 function resolveEnsureVenvDeps(override: EnsureAssessorVenvDeps): Required<EnsureAssessorVenvDeps> {
@@ -350,7 +382,13 @@ function resolveEnsureVenvDeps(override: EnsureAssessorVenvDeps): Required<Ensur
     probe: override.probe ?? defaultProbe,
     resolveOnPath: override.resolveOnPath ?? resolveOnPath,
     platform: override.platform ?? processPlatform,
+    readTextFile: override.readTextFile ?? defaultReadTextFile,
+    rmDir: override.rmDir ?? defaultRmDir,
   };
+}
+
+async function defaultRmDir(p: string): Promise<void> {
+  await rm(p, { recursive: true, force: true });
 }
 
 function venvInterpreterPath(envPath: string, platform: NodeJS.Platform): string {
@@ -400,17 +438,44 @@ export async function ensureAssessorVenv(
 
   if (await deps.fileExists(interpreterPath)) {
     const v = await deps.probe(interpreterPath, []);
-    log.debug(
-      { projectPath, interpreter: interpreterPath, version: v ?? '' },
-      'assessor-env: reusing existing venv',
-    );
-    return {
-      bin: interpreterPath,
-      prefixArgs: [],
-      version: v ?? basePython.version,
-      reason: '.factory/assessor-env reused',
-      venvSource: 'factory-managed',
-    };
+    // Staleness check: if the project's `requires-python` constraint has
+    // tightened since this venv was created (e.g., an agent bumped `>=3.11`
+    // to `>=3.12`), the cached venv's Python may no longer satisfy it.
+    // Tear it down and fall through to recreation rather than silently
+    // running tests against an out-of-spec interpreter.
+    const requires = await readRequiresPython(projectPath, deps);
+    const requiredMin = requires !== undefined ? extractMinimumPythonVersion(requires) : undefined;
+    const stale =
+      requiredMin !== undefined &&
+      v !== undefined &&
+      v.length > 0 &&
+      !venvSatisfiesConstraint(v, requiredMin);
+    if (stale) {
+      log.warn(
+        {
+          projectPath,
+          envPath,
+          venvVersion: v,
+          requires,
+          requiredMin,
+        },
+        `assessor-env: venv Python ${v} does not satisfy requires-python=${requires}; deleting and recreating`,
+      );
+      await deps.rmDir(envPath);
+      // Fall through to the create path below.
+    } else {
+      log.debug(
+        { projectPath, interpreter: interpreterPath, version: v ?? '' },
+        'assessor-env: reusing existing venv',
+      );
+      return {
+        bin: interpreterPath,
+        prefixArgs: [],
+        version: v ?? basePython.version,
+        reason: '.factory/assessor-env reused',
+        venvSource: 'factory-managed',
+      };
+    }
   }
 
   log.info(

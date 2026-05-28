@@ -59,14 +59,14 @@ const AGENTS: Record<AgentRole, AgentDefinition> = {
     role: 'scaffolder',
     category: 'planning',
     tools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', ASK_USER_MCP_TOOL],
-    defaultSkills: ['scaffolding', 'dependency-install', 'ask-user'],
+    defaultSkills: ['scaffolding', 'language-toolchain-setup', 'dependency-install', 'ask-user'],
     promptPath: 'scaffolder.md',
   },
   builder: {
     role: 'builder',
     category: 'deep',
     tools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', ASK_USER_MCP_TOOL],
-    defaultSkills: ['tdd', 'progress-tracking', 'work-verification', 'ask-user'],
+    defaultSkills: ['tdd', 'language-toolchain-setup', 'progress-tracking', 'work-verification', 'ask-user'],
     promptPath: 'builder.md',
   },
   reviewer: {
@@ -80,7 +80,7 @@ const AGENTS: Record<AgentRole, AgentDefinition> = {
     role: 'fixer',
     category: 'reasoning',
     tools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', ASK_USER_MCP_TOOL],
-    defaultSkills: ['error-recovery', 'tdd', 'ask-user'],
+    defaultSkills: ['error-recovery', 'tdd', 'language-toolchain-setup', 'ask-user'],
     promptPath: 'fixer.md',
   },
   investigator: {

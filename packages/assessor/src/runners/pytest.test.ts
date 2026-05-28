@@ -28,6 +28,7 @@ import {
   extractMinimumPythonVersion,
   pickPython,
   runPytest,
+  venvSatisfiesConstraint,
   type EnsureAssessorVenvDeps,
   type PickPythonDeps,
   type PythonChoice,
@@ -58,6 +59,41 @@ describe('extractMinimumPythonVersion', () => {
   it('returns undefined when no recognised constraint is present', () => {
     expect(extractMinimumPythonVersion('whatever')).toBeUndefined();
     expect(extractMinimumPythonVersion('')).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// venvSatisfiesConstraint
+// ---------------------------------------------------------------------------
+
+describe('venvSatisfiesConstraint', () => {
+  it('passes when venv major.minor equals required', () => {
+    expect(venvSatisfiesConstraint('3.11.9', '3.11')).toBe(true);
+    expect(venvSatisfiesConstraint('3.11.0', '3.11')).toBe(true);
+  });
+
+  it('passes when venv major.minor is greater than required', () => {
+    expect(venvSatisfiesConstraint('3.12.0', '3.11')).toBe(true);
+    expect(venvSatisfiesConstraint('3.13.5', '3.11')).toBe(true);
+    expect(venvSatisfiesConstraint('4.0.0', '3.11')).toBe(true);
+  });
+
+  it('fails when venv major.minor is less than required', () => {
+    expect(venvSatisfiesConstraint('3.10.5', '3.11')).toBe(false);
+    expect(venvSatisfiesConstraint('3.9.0', '3.12')).toBe(false);
+    expect(venvSatisfiesConstraint('2.7.18', '3.0')).toBe(false);
+  });
+
+  it('returns false for malformed inputs (safe default)', () => {
+    expect(venvSatisfiesConstraint('', '3.11')).toBe(false);
+    expect(venvSatisfiesConstraint('3.11.9', '')).toBe(false);
+    expect(venvSatisfiesConstraint('not-a-version', '3.11')).toBe(false);
+    expect(venvSatisfiesConstraint('3.11.9', 'not-a-version')).toBe(false);
+  });
+
+  it('accepts major.minor format without patch', () => {
+    expect(venvSatisfiesConstraint('3.11', '3.11')).toBe(true);
+    expect(venvSatisfiesConstraint('3.11', '3.12')).toBe(false);
   });
 });
 
@@ -424,6 +460,86 @@ describe('ensureAssessorVenv', () => {
     expect(result.bin).toBe(expected);
     expect(result.reason).toContain('reused');
     expect(spawnCount).toBe(0);
+  });
+
+  it('recreates the venv when stored interpreter no longer satisfies requires-python', async () => {
+    const envPath = join('/proj', '.factory', 'assessor-env');
+    const interpreterPath = join(envPath, 'bin', 'python');
+    const existing = new Set<string>([interpreterPath]);
+    let rmCalls = 0;
+    const spawnCalls: { bin: string; args: readonly string[] }[] = [];
+    const deps: EnsureAssessorVenvDeps = {
+      platform: 'linux',
+      fileExists: async (p) => existing.has(p),
+      // Existing venv has Python 3.10; project now requires >=3.12 → STALE.
+      probe: async () => '3.10.5',
+      readTextFile: async (p) =>
+        p.endsWith('pyproject.toml')
+          ? '[project]\nname = "x"\nrequires-python = ">=3.12"\n'
+          : undefined,
+      rmDir: async (p) => {
+        rmCalls += 1;
+        expect(p).toBe(envPath);
+        existing.delete(interpreterPath);
+      },
+      runSubprocess: async (bin, args) => {
+        spawnCalls.push({ bin, args: [...args] });
+        if (args.includes('venv')) existing.add(interpreterPath);
+        return { stdout: '', stderr: '', exitCode: 0, durationMs: 10 };
+      },
+    };
+    const result = await ensureAssessorVenv('/proj', systemPick(), deps);
+    expect(rmCalls).toBe(1);
+    expect(spawnCalls.length).toBe(1);
+    expect(spawnCalls[0]?.args).toContain('venv');
+    expect(result.venvSource).toBe('factory-managed');
+    expect(result.reason).toContain('created');
+  });
+
+  it('keeps the existing venv when it still satisfies requires-python', async () => {
+    const interpreterPath = join('/proj', '.factory', 'assessor-env', 'bin', 'python');
+    let rmCalls = 0;
+    let spawnCount = 0;
+    const deps: EnsureAssessorVenvDeps = {
+      platform: 'linux',
+      fileExists: async (p) => p === interpreterPath,
+      // 3.11.9 satisfies >=3.11 → reuse, no rm, no spawn.
+      probe: async () => '3.11.9',
+      readTextFile: async (p) =>
+        p.endsWith('pyproject.toml')
+          ? '[project]\nname = "x"\nrequires-python = ">=3.11"\n'
+          : undefined,
+      rmDir: async () => {
+        rmCalls += 1;
+      },
+      runSubprocess: async () => {
+        spawnCount += 1;
+        return { stdout: '', stderr: '', exitCode: 0, durationMs: 0 };
+      },
+    };
+    const result = await ensureAssessorVenv('/proj', systemPick(), deps);
+    expect(rmCalls).toBe(0);
+    expect(spawnCount).toBe(0);
+    expect(result.reason).toContain('reused');
+  });
+
+  it('reuses the venv when pyproject.toml has no requires-python constraint', async () => {
+    const interpreterPath = join('/proj', '.factory', 'assessor-env', 'bin', 'python');
+    let rmCalls = 0;
+    const deps: EnsureAssessorVenvDeps = {
+      platform: 'linux',
+      fileExists: async (p) => p === interpreterPath,
+      // No constraint → staleness check can't decide → trust the cached venv.
+      probe: async () => '3.10.5',
+      readTextFile: async () => '[project]\nname = "x"\n',
+      rmDir: async () => {
+        rmCalls += 1;
+      },
+      runSubprocess: async () => ({ stdout: '', stderr: '', exitCode: 0, durationMs: 0 }),
+    };
+    const result = await ensureAssessorVenv('/proj', systemPick(), deps);
+    expect(rmCalls).toBe(0);
+    expect(result.reason).toContain('reused');
   });
 
   it('falls through to system base interpreter when venv creation fails and virtualenv is absent', async () => {
