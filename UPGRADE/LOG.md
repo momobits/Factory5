@@ -6,6 +6,31 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-29 — Phase B (Living Knowledge Graph deeper checks) shipped
+
+13 sub-tasks completed:
+
+- Brain runs coherence validator post-merge per task (`pool.ts`)
+- Brain runs final-verification validator before directive complete (`loop.ts`)
+- Validator config Zod schema + `python.json` shipped config
+- Three-tier config loader (project override → shipped default → none)
+- Doc-fiction engine: executes README code blocks per config, emits findings on failure
+- Python dead-code scanner via AST subprocess
+- Validator entry point runs doc-fiction + dead-code when runtime resolved
+- `coherence-reviewer` agent prompt + registry entry + `AgentRole` enum
+- Planner auto-appends terminal `coherence-reviewer` task
+- Backward-compat: brain inserts `graph-migration` task for legacy projects without `_schema.md`
+
+**pnpm gates at close**: build clean, lint clean, test 226 passed / 1 pre-existing failure (`planner.test.ts > maxTurns passthrough` — unrelated to Phase B, tracked before Phase A started).
+
+**coherence-validator test suite**: 34 tests across 7 files (schema-check, reference-check, validator, config-schema, config-loader, doc-fiction, dead-code-python) — all green.
+
+**Phase B smoke test** (Step 5): programmatic `validateKnowledgeGraph({ runtime: 'python' })` against a scratch project with a broken `import nonexistent_module_xyz` block under `## Quick Start`. Output: `ok= false`, `finding count= 1`, `- doc-fiction : Documented example fails to execute: README.md §Quick Start`. Config loader resolved the project-override; doc-fiction engine ran and surfaced the finding end-to-end.
+
+**Phase C is next**: self-healing fixer loop + workspace hygiene (cleanup CLI, abandoned worktree detection). Plan at `docs/superpowers/plans/2026-05-28-living-knowledge-graph-phase-c.md`.
+
+---
+
 ## 2026-05-29 — Phase A (Living Knowledge Graph foundation) shipped
 
 19 sub-tasks completed across 19 commits (all on `main`, prefix `feat(15.13):`):
