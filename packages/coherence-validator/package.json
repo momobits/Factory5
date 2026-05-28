@@ -28,6 +28,7 @@
   "dependencies": {
     "@factory5/core": "workspace:*",
     "@factory5/logger": "workspace:*",
+    "glob": "^11.0.0",
     "gray-matter": "^4.0.3",
     "zod": "^3.23.0"
   },
