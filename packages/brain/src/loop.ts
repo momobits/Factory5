@@ -13,7 +13,9 @@
  * `mode: 'serve'` (long-running claim loop) lands in Phase 3.
  */
 
-import type { AutonomyMode, Directive, DirectiveLimits, ModelCategory, Plan } from '@factory5/core';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import type { AutonomyMode, Directive, DirectiveLimits, ModelCategory, Plan, Task } from '@factory5/core';
 import { newId } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import { assess, type AssessResult, type Runtime } from '@factory5/assessor';
@@ -463,6 +465,63 @@ async function runInline(
           ...(emit !== undefined ? { emit } : {}),
         });
         plan = plannerOut.plan;
+      }
+
+      // Tier 15.13 — backward-compat: if the project has docs/knowledge/ but
+      // no _schema.md, insert a migration task at the head of the plan to seed
+      // the graph. All existing tasks gain a dependency on it.
+      const knowledgeDir = join(projectPath, 'docs', 'knowledge');
+      const schemaPath = join(knowledgeDir, '_schema.md');
+      if (
+        existsSync(knowledgeDir) &&
+        !existsSync(schemaPath) &&
+        plan.tasks.length > 0 &&
+        !plan.tasks.some((t) => t.title === 'Migrate to knowledge graph (one-shot)')
+      ) {
+        log.info(
+          { projectPath, planId: plan.id },
+          'loop: graph migration needed — inserting graph-migration task at plan head',
+        );
+        emitLogLine(
+          emit,
+          directive.id,
+          'info',
+          'brain.loop',
+          'loop: inserting graph-migration task (project predates knowledge graph)',
+          { projectPath },
+        );
+        const migrationTaskId = newId();
+        const migrationTask: Task = {
+          id: migrationTaskId,
+          planId: plan.id,
+          title: 'Migrate to knowledge graph (one-shot)',
+          agent: 'architect',
+          category: 'reasoning',
+          inputs: {
+            files: ['docs/knowledge/modules.md'],
+            context:
+              'This project predates the knowledge graph. Read modules.md, infer features (status=implemented since code already exists), copy _schema.md and _templates/ from factory5 assets, write features/*.md and decisions/ skeleton. Single commit. After this task completes, downstream tasks will operate on the seeded graph.',
+          },
+          expectedOutputs: {
+            files: [
+              'docs/knowledge/_schema.md',
+              'docs/knowledge/_templates/feature.md',
+              'docs/knowledge/_templates/decision.md',
+            ],
+            signals: [],
+          },
+          dependsOn: [],
+          status: 'pending',
+          attempts: 0,
+          featureIds: [],
+        };
+        // All existing tasks gain a dependency on the migration task
+        for (const t of plan.tasks) {
+          if (!t.dependsOn.includes(migrationTaskId)) {
+            t.dependsOn = [migrationTaskId, ...t.dependsOn];
+          }
+        }
+        plan.tasks.unshift(migrationTask);
       }
 
       // Assisted-mode checkpoint after planner. Gives the user a chance to
