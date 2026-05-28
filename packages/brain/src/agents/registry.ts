@@ -105,6 +105,14 @@ const AGENTS: Record<AgentRole, AgentDefinition> = {
     defaultSkills: ['documentation'],
     promptPath: 'critic.md',
   },
+  // New in Tier 15.13. Reviews output for cross-cutting coherence issues.
+  'coherence-reviewer': {
+    role: 'coherence-reviewer',
+    category: 'reasoning',
+    tools: ['Read', 'Glob', 'Grep'],
+    defaultSkills: ['knowledge-graph', 'code-review'],
+    promptPath: 'coherence-reviewer.md',
+  },
 };
 
 /** Look up an agent definition by role. Throws on unknown role. */
