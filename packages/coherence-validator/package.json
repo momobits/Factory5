@@ -15,6 +15,7 @@
   },
   "files": [
     "dist",
+    "configs",
     "README.md"
   ],
   "scripts": {

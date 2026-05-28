@@ -1,0 +1,37 @@
+{
+  "runtime": "python",
+  "interpreter": ".factory/assessor-env/Scripts/python.exe",
+  "doc_globs": ["README.md", "docs/**/*.md"],
+  "doc_fiction": {
+    "section_headings": "Quick Start|Configuration|Example|Usage|Reference|CLI Reference",
+    "code_block_runners": {
+      "python": {
+        "command": ["<interpreter>", "-c", "<CODE>"],
+        "timeout_ms": 30000
+      },
+      "yaml": {
+        "wrapper_template": "import sys; sys.path.insert(0, '.'); from <project_pkg>.config import load_yaml; load_yaml(open('<BLOCK_FILE>').read())",
+        "command": ["<interpreter>", "-c", "<WRAPPED>"],
+        "timeout_ms": 30000
+      },
+      "bash": {
+        "binary_lookup": "pyproject.toml::project.scripts",
+        "command": ["<binary>", "<ARGS>"],
+        "timeout_ms": 30000
+      }
+    }
+  },
+  "dead_code": {
+    "package_globs": ["<project_pkg>/**/*.py"],
+    "public_symbol_rule": "no_underscore_prefix",
+    "exposed_via": [
+      { "kind": "entry_points", "source": "pyproject.toml::project.scripts" },
+      { "kind": "explicit_export", "source": "__all__" },
+      { "kind": "feature_surface", "source": "docs/knowledge/features/*.md::documented_in" }
+    ],
+    "caller_scan": {
+      "method": "ast_imports_and_calls",
+      "exclude_globs": ["tests/**", "**/*_test.py", "**/test_*.py"]
+    }
+  }
+}
