@@ -49,11 +49,13 @@ import {
   type UsageMode,
 } from '@factory5/state';
 import {
+  addFinding,
   listFindings,
   loadOrCreateProjectMetadata,
   updateProjectMetadata,
   writePlan,
 } from '@factory5/wiki';
+import { validateKnowledgeGraph } from '@factory5/coherence-validator';
 import {
   isToolUsingAgent,
   runWorker,
@@ -896,6 +898,53 @@ async function executeTaskWithBudgetGuard(
   } else {
     tasksInflight.markFailed(db, task.id, outcome.result, finishedAt);
   }
+
+  // Tier 15.13 — post-merge knowledge graph validation. Runs against the
+  // project root (post-merge state) to catch cross-task issues that only
+  // become detectable after integration. Findings go into the project's
+  // findings.json; the next task or the final-verification gate will see them.
+  if (outcome.result.exitCode === 0) {
+    try {
+      const planTaskIds = plan.tasks.map((t) => t.id);
+      const validation = await validateKnowledgeGraph({
+        projectPath,
+        taskIds: planTaskIds,
+      });
+      if (!validation.ok) {
+        log.warn(
+          { directiveId, taskId: task.id, findingCount: validation.findings.length },
+          'pool: post-merge validation surfaced findings',
+        );
+        for (const pf of validation.findings) {
+          try {
+            await addFinding(projectPath, {
+              source: task.agent,
+              target: pf.location.file,
+              severity: pf.severity === 'high' ? 'HIGH' : pf.severity === 'medium' ? 'MEDIUM' : 'LOW',
+              description: pf.title,
+              category: pf.category,
+              location: pf.location,
+              title: pf.title,
+              why: pf.why,
+              suggested_fix: pf.suggested_fix,
+              auto_fixable: pf.auto_fixable,
+            });
+          } catch (persistErr) {
+            log.warn(
+              { err: persistErr, taskId: task.id, partialFinding: pf },
+              'pool: failed to persist post-merge finding',
+            );
+          }
+        }
+      }
+    } catch (validatorErr) {
+      log.warn(
+        { err: validatorErr, directiveId, taskId: task.id },
+        'pool: post-merge validator threw — non-fatal, task remains complete',
+      );
+    }
+  }
+
   emit?.({
     type: 'task.completed',
     taskId: task.id,

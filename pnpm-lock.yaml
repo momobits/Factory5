@@ -153,6 +153,9 @@ importers:
       '@factory5/assessor':
         specifier: workspace:*
         version: link:../assessor
+      '@factory5/coherence-validator':
+        specifier: workspace:*
+        version: link:../coherence-validator
       '@factory5/core':
         specifier: workspace:*
         version: link:../core

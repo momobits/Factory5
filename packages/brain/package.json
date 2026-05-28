@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@factory5/assessor": "workspace:*",
+    "@factory5/coherence-validator": "workspace:*",
     "@factory5/core": "workspace:*",
     "@factory5/ipc": "workspace:*",
     "@factory5/logger": "workspace:*",
