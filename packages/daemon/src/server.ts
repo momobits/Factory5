@@ -622,6 +622,29 @@ function registerRoutes(
     const totalCostUsd = modelUsage.totalCostForDirective(opts.db, id);
     const callCount = modelUsage.countForDirective(opts.db, id);
     const blockedReason = parseStoredBlockedReason(directive.blockedReason);
+    // Tier 15.13 — list abandoned worktrees for this project. Skipped when
+    // the directive has no projectPath (chat/system directives).
+    let abandoned: Awaited<ReturnType<typeof listAbandonedWorktrees>> = [];
+    const detailPayload =
+      typeof directive.payload === 'object' && directive.payload !== null
+        ? (directive.payload as Record<string, unknown>)
+        : undefined;
+    const detailProjectPath =
+      (typeof detailPayload?.['projectPath'] === 'string' ? detailPayload['projectPath'] : undefined) ??
+      (typeof detailPayload?.['project'] === 'string' ? detailPayload['project'] : undefined);
+    if (detailProjectPath !== undefined) {
+      try {
+        abandoned = await listAbandonedWorktrees({
+          projectPath: detailProjectPath,
+          activeTaskIds: tasks.map((t) => t.id),
+        });
+      } catch (err) {
+        ipcLog.warn(
+          { err, projectPath: detailProjectPath, directiveId: id },
+          'ipc: /api/v1/directives/:id — listAbandonedWorktrees failed (non-fatal)',
+        );
+      }
+    }
     const resp: ApiV1DirectiveDetailResponse = apiV1DirectiveDetailResponseSchema.parse({
       directive,
       timeline: {
@@ -630,6 +653,15 @@ function registerRoutes(
         modelUsage: { totalCostUsd, callCount },
       },
       ...(blockedReason !== undefined ? { blockedReason } : {}),
+      ...(abandoned.length > 0
+        ? {
+            abandonedWorktrees: abandoned.map((w) => ({
+              path: w.path,
+              taskId: w.taskId,
+              abandonedSince: w.abandonedSince.toISOString(),
+            })),
+          }
+        : {}),
     });
     ipcLog.debug(
       {

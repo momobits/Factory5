@@ -333,6 +333,20 @@ export const directiveBlockedReasonSchema = z.union([
 ]);
 export type DirectiveBlockedReason = z.infer<typeof directiveBlockedReasonSchema>;
 
+/**
+ * Per-worktree abandoned entry. Surfaced in the resume response and the
+ * directive detail response so the operator/web-UI knows there are leftover
+ * worktrees from prior failed runs of this directive's chain. Removal is
+ * operator-initiated via the `factory cleanup` CLI — the daemon never
+ * auto-removes.
+ */
+export const apiV1AbandonedWorktreeSchema = z.object({
+  path: z.string().min(1),
+  taskId: z.string().min(1),
+  abandonedSince: z.string().datetime({ offset: true }),
+});
+export type ApiV1AbandonedWorktree = z.infer<typeof apiV1AbandonedWorktreeSchema>;
+
 export const apiV1DirectiveDetailResponseSchema = z.object({
   directive: directiveSchema,
   timeline: z.object({
@@ -358,6 +372,13 @@ export const apiV1DirectiveDetailResponseSchema = z.object({
    * back-compat); the SPA reads this field to render the parked banner.
    */
   blockedReason: directiveBlockedReasonSchema.optional(),
+  /**
+   * Tier 15.13 — worktrees on disk for this project that are NOT in this
+   * directive's active task set. Surfaced so the operator/UI can prompt
+   * `factory cleanup`. Absent when the directive has no projectPath
+   * (chat/system directives) or the project has no worktrees.
+   */
+  abandonedWorktrees: z.array(apiV1AbandonedWorktreeSchema).optional(),
 });
 export type ApiV1DirectiveDetailResponse = z.infer<typeof apiV1DirectiveDetailResponseSchema>;
 
@@ -518,19 +539,6 @@ export const apiV1ResumeRequestSchema = z.object({
   limits: directiveLimitsSchema.optional(),
 });
 export type ApiV1ResumeRequest = z.infer<typeof apiV1ResumeRequestSchema>;
-
-/**
- * Per-worktree abandoned entry. Surfaced in the resume response so the
- * operator/web-UI knows there are leftover worktrees from prior failed
- * runs of this directive's chain. Removal is operator-initiated via the
- * `factory cleanup` CLI — the daemon never auto-removes.
- */
-export const apiV1AbandonedWorktreeSchema = z.object({
-  path: z.string().min(1),
-  taskId: z.string().min(1),
-  abandonedSince: z.string().datetime({ offset: true }),
-});
-export type ApiV1AbandonedWorktree = z.infer<typeof apiV1AbandonedWorktreeSchema>;
 
 export const apiV1ResumeResponseSchema = z.object({
   directive: directiveSchema,
