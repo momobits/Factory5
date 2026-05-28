@@ -16,6 +16,7 @@ Skill files live in [`../skills/`](../skills). Format: YAML frontmatter (`name`,
 | `documentation`       | Produce README/architecture/API docs                                                                  | `verifier`, `architect`                          |
 | `error-recovery`      | Diagnose and recover from a failed step                                                               | `investigator`, `fixer`                          |
 | `integration-testing` | Write and run integration tests                                                                       | `builder`, `verifier`                            |
+| `language-toolchain-setup` | Pick the runtime version (Python `py -3.X`, Node) matching the project's declared constraint before installing dependencies | `scaffolder`, `builder`, `fixer`                 |
 | `progress-tracking`   | Maintain BUILD.md findings + progress                                                                 | All agents                                       |
 | `scaffolding`         | Set up project structure, dependencies, git                                                           | `scaffolder`                                     |
 | `tdd`                 | Strict test-first development                                                                         | `builder`                                        |
