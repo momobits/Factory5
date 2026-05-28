@@ -66,11 +66,25 @@ const STATIC_DENY_RULES: readonly string[] = [
   'Read(C:/Windows/**)',
   'Read(C:/Users/*/.ssh/**)',
   'Read(C:/Users/*/AppData/**)',
-  // Edits + writes outside cwd: belt-and-braces for the affirmative hook.
-  'Edit(~/**)',
+  // Edits + writes to obvious danger zones — belt-and-braces for the
+  // affirmative hook. NARROW patterns under `~/` (mirroring the read side)
+  // rather than `~/**`: on Windows the user's home (`C:\Users\<name>\`) often
+  // contains the factory5 workspace itself (`~/factory5-workspace/...`), so
+  // a blanket `Write(~/**)` rule denies in-scope writes to the worktree.
+  // The affirmative hook is the actual write boundary; these static rules
+  // catch the obvious danger zones if the hook fails.
+  'Edit(~/.ssh/**)',
+  'Edit(~/.aws/**)',
+  'Edit(~/.gnupg/**)',
+  'Edit(~/.config/**)',
+  'Edit(~/.netrc)',
   'Edit(//etc/**)',
   'Edit(C:/Windows/**)',
-  'Write(~/**)',
+  'Write(~/.ssh/**)',
+  'Write(~/.aws/**)',
+  'Write(~/.gnupg/**)',
+  'Write(~/.config/**)',
+  'Write(~/.netrc)',
   'Write(//etc/**)',
   'Write(C:/Windows/**)',
   // Bash gap mitigation per ADR 0028 §4 — heuristic, leaky, but catches

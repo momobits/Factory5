@@ -115,6 +115,42 @@ describe('buildSandboxSettings', () => {
     expect(bashRules.some((r) => r.includes('/etc/'))).toBe(true);
     expect(bashRules.some((r) => r.includes('.ssh/'))).toBe(true);
   });
+
+  it('write-side static denies are narrow (no Write(~/**) blanket)', () => {
+    // Regression: a broad Write(~/**) rule denies in-scope writes to the
+    // worktree on Windows when the factory5 workspace lives under the
+    // user's home directory (e.g. C:\Users\<name>\factory5-workspace\...).
+    // The static deny list should mirror the read-side narrow patterns;
+    // the PreToolUse hook is the actual write boundary.
+    const settings = buildSandboxSettings({
+      hookCommand: baseHookCommand,
+      additionalDirectories: [],
+    });
+    expect(settings.permissions.deny).not.toContain('Write(~/**)');
+    expect(settings.permissions.deny).not.toContain('Edit(~/**)');
+    // Narrow patterns matching the read side should be present.
+    expect(settings.permissions.deny).toContain('Write(~/.ssh/**)');
+    expect(settings.permissions.deny).toContain('Write(~/.aws/**)');
+    expect(settings.permissions.deny).toContain('Edit(~/.ssh/**)');
+    expect(settings.permissions.deny).toContain('Edit(~/.aws/**)');
+  });
+
+  it('write/edit static denies have parity with read static denies under ~/', () => {
+    // The read-side denies known credential/config paths under ~/. The
+    // write/edit side should deny the same paths for symmetry — agents
+    // shouldn't be able to write to a path they can't read.
+    const settings = buildSandboxSettings({
+      hookCommand: baseHookCommand,
+      additionalDirectories: [],
+    });
+    const readUnderHome = settings.permissions.deny
+      .filter((r) => r.startsWith('Read(~/'))
+      .map((r) => r.slice('Read('.length));
+    for (const path of readUnderHome) {
+      expect(settings.permissions.deny).toContain(`Write(${path}`);
+      expect(settings.permissions.deny).toContain(`Edit(${path}`);
+    }
+  });
 });
 
 describe('getHookScriptPath', () => {
