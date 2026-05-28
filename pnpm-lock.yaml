@@ -543,6 +543,9 @@ importers:
 
   packages/worker:
     dependencies:
+      '@factory5/coherence-validator':
+        specifier: workspace:*
+        version: link:../coherence-validator
       '@factory5/core':
         specifier: workspace:*
         version: link:../core

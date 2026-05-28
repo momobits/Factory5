@@ -26,7 +26,7 @@
 
 import { createWriteStream, statSync } from 'node:fs';
 import type { WriteStream } from 'node:fs';
-import { rm, writeFile, unlink, mkdir } from 'node:fs/promises';
+import { rm, writeFile, unlink, mkdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { env, execPath } from 'node:process';
@@ -49,6 +49,7 @@ import {
   updateFindingStatus,
   type FindingRegistryBinding,
 } from '@factory5/wiki';
+import { validateKnowledgeGraph, type PartialFinding } from '@factory5/coherence-validator';
 import { buildMcpConfig, getServerScriptPath } from '@factory5/worker-mcp';
 import {
   evaluateToolCall,
@@ -405,6 +406,26 @@ export async function prepareSandbox(
   return written;
 }
 
+/**
+ * Read the project's plan.json (if present) and return the set of
+ * declared task IDs. Used to validate `implements:` references in
+ * the knowledge graph against the active plan. Returns an empty
+ * array on any read/parse error (pre-graph projects, missing plan,
+ * etc.) — the validator's `taskIds` check is skipped gracefully.
+ */
+async function readPlanTaskIds(projectPath: string): Promise<string[]> {
+  try {
+    const planPath = join(projectPath, '.factory', 'plan.json');
+    const raw = await readFile(planPath, 'utf8');
+    const parsed = JSON.parse(raw) as { tasks?: Array<{ id?: string }> };
+    return (parsed.tasks ?? [])
+      .map((t) => t.id)
+      .filter((id): id is string => typeof id === 'string');
+  } catch {
+    return [];
+  }
+}
+
 async function runReadOnly(opts: WorkerOptions, fullUserPrompt: string): Promise<WorkerOutcome> {
   const resolution = await opts.registry.resolve(opts.task.category);
   log.info(
@@ -748,6 +769,56 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
     responseText,
     opts.findingRegistry,
   );
+
+  // Tier 15.13 — knowledge graph schema + reference integrity check.
+  // Runs only when the task declares `featureIds` (strict mode); tasks
+  // without featureIds are pre-graph or infrastructure tasks and skip.
+  // Failures convert success → failure and the findings are persisted
+  // via addFinding so the fixer can attempt repair on retry.
+  let graphFindings: PartialFinding[] = [];
+  if (error === undefined && (opts.task.featureIds ?? []).length > 0) {
+    const planTaskIds = await readPlanTaskIds(opts.projectPath);
+    const validation = await validateKnowledgeGraph({
+      projectPath: worktree.path,
+      taskIds: planTaskIds,
+    });
+    if (!validation.ok) {
+      graphFindings = validation.findings;
+      error = `coherence-validator: ${String(validation.findings.length)} findings`;
+      log.warn(
+        { taskId: opts.task.id, findingCount: validation.findings.length },
+        'worker: knowledge graph validation failed',
+      );
+    }
+  }
+
+  // Persist any graph findings via the wiki so they get IDs + show up in result.findingsRaised
+  for (const pf of graphFindings) {
+    try {
+      const persisted = await addFinding(
+        opts.projectPath,
+        {
+          source: opts.task.agent,
+          target: pf.location.file,
+          severity: pf.severity === 'high' ? 'HIGH' : pf.severity === 'medium' ? 'MEDIUM' : 'LOW',
+          description: pf.title,
+          category: pf.category,
+          location: pf.location,
+          title: pf.title,
+          why: pf.why,
+          suggested_fix: pf.suggested_fix,
+          auto_fixable: pf.auto_fixable,
+        },
+        opts.findingRegistry,
+      );
+      findingIds.push(persisted.id);
+    } catch (persistErr) {
+      log.warn(
+        { err: persistErr, taskId: opts.task.id, partialFinding: pf },
+        'worker: failed to persist coherence-validator finding (validator output still surfaced via error string)',
+      );
+    }
+  }
 
   // Phase 2.4 — operator-driven cancellation cleans the worktree (operator
   // abandoned the work, no diff to triage). Tier 15 — pool-watchdog-driven
