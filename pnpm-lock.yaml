@@ -266,6 +266,9 @@ importers:
       '@factory5/wiki':
         specifier: workspace:*
         version: link:../wiki
+      '@factory5/worker':
+        specifier: workspace:*
+        version: link:../worker
       commander:
         specifier: ^12.1.0
         version: 12.1.0

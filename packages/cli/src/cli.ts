@@ -11,6 +11,7 @@ import { registerBudgetCommand } from './commands/budget.js';
 import { registerBuildCommand } from './commands/build.js';
 import { registerCancelCommand } from './commands/cancel.js';
 import { registerChatCommand } from './commands/chat.js';
+import { registerCleanupCommand } from './commands/cleanup.js';
 import { registerCompletionCommand } from './commands/completion.js';
 import { registerDaemonCommand } from './commands/daemon.js';
 import { registerDirectiveCommand } from './commands/directive.js';
@@ -61,6 +62,7 @@ Tab completion:
   registerBuildCommand(program);
   registerCancelCommand(program);
   registerChatCommand(program);
+  registerCleanupCommand(program);
   registerCompletionCommand(program);
   registerDaemonCommand(program);
   registerDirectiveCommand(program);
