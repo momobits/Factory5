@@ -14,6 +14,7 @@
  */
 
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -388,6 +389,50 @@ describe('runArchitect — Tier 14 modifications (ADR 0033)', () => {
       expect(captured).toHaveLength(1);
       expect(captured[0]?.cwd).toBe(projectPath);
       expect(captured[0]?.cwd).toBeDefined();
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
+  it('writes README to project root when architect output includes the readme field', async () => {
+    const captured: Array<{ cwd?: string }> = [];
+    const registry = makeFakeRegistry({
+      response: JSON.stringify({
+        pages: [{ slug: 'overview.md', content: '# x' }],
+        readme: '# Project\n\n## Quick Start\n\n<!-- to be filled by scaffolder/builder -->\n',
+        notes: '',
+      }),
+      captureTo: captured,
+    });
+    const projectPath = await tmpProjectWithClaudeMd();
+    try {
+      await runArchitect({
+        registry: registry as Parameters<typeof runArchitect>[0]['registry'],
+        projectPath,
+      });
+      const readmeContent = await readFile(join(projectPath, 'README.md'), 'utf8');
+      expect(readmeContent).toContain('## Quick Start');
+      expect(readmeContent).toContain('<!-- to be filled by scaffolder/builder -->');
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
+  it('does NOT write README when architect output omits the readme field', async () => {
+    const registry = makeFakeRegistry({
+      response: JSON.stringify({
+        pages: [{ slug: 'overview.md', content: '# x' }],
+        notes: '',
+      }),
+    });
+    const projectPath = await tmpProjectWithClaudeMd();
+    try {
+      await runArchitect({
+        registry: registry as Parameters<typeof runArchitect>[0]['registry'],
+        projectPath,
+      });
+      // README.md should not exist
+      await expect(readFile(join(projectPath, 'README.md'), 'utf8')).rejects.toThrow();
     } finally {
       rmSync(projectPath, { recursive: true, force: true });
     }

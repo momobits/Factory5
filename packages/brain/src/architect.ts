@@ -9,8 +9,7 @@
  * `runArchitectWithCritique` in `architect-loop.ts`, ADR 0033).
  */
 
-import { access } from 'node:fs/promises';
-import { readFile } from 'node:fs/promises';
+import { access, readFile, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 
 import type { DirectiveLimits, ModelCategory, WikiCritique } from '@factory5/core';
@@ -43,6 +42,8 @@ const architectJsonSchema = z.object({
     )
     .min(1),
   notes: z.string().default(''),
+  /** Optional stub README content. When present, brain writes it to `<projectPath>/README.md`. */
+  readme: z.string().optional(),
 });
 
 export interface ArchitectResult {
@@ -265,6 +266,14 @@ export async function runArchitect(opts: ArchitectOptions): Promise<ArchitectRes
       'brain.architect',
       `architect: wrote ${String(writtenPages.length)} wiki page${writtenPages.length === 1 ? '' : 's'}`,
       { slugs: writtenPages.map((p) => p.slug) },
+    );
+  }
+
+  if (plan.readme !== undefined && plan.readme.length > 0) {
+    await writeFile(join(opts.projectPath, 'README.md'), plan.readme, 'utf8');
+    log.info(
+      { projectPath: opts.projectPath, bytes: plan.readme.length },
+      'architect: wrote stub README',
     );
   }
 
