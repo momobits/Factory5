@@ -6,6 +6,33 @@ Each entry should answer: what was done, what was decided, what's next.
 
 ---
 
+## 2026-05-29 — Phase A (Living Knowledge Graph foundation) shipped
+
+19 sub-tasks completed across 19 commits (all on `main`, prefix `feat(15.13):`):
+
+- Schema assets + templates seeded in `packages/brain/src/assets/` (`_schema.md`, `_templates/feature.md`, `_templates/decision.md`)
+- `knowledge-graph` skill added to `skills/`; wired into scaffolder/builder/fixer agent prompts
+- Architect prompt updated to seed knowledge graph + stub README on new projects
+- Brain consumes architect's `readme` field; writes `README.md` to project root
+- `featureIds` field on `taskSchema`; planner emits it so tasks carry graph edges
+- `findingSchema` extended with structured fields: `category`, `location`, `title`, `why`, `suggestedFix`, `autoFixable`
+- Wiki `addFinding` persists all structured fields
+- Frontend findings list renders structured shape with legacy fallback for pre-Phase-A findings
+- `@factory5/coherence-validator` package scaffolded (16 tests: 7 schema + 5 reference + 4 validator; all green)
+- Schema validity check (required fields, enum values, kebab-case IDs)
+- Reference integrity check (documented_in paths + anchors exist on disk)
+- `validateKnowledgeGraph` entry point + structured `GraphFinding[]` return type
+- Worker runs validator post-task when `featureIds` is set (findings surfaced via wiki)
+- `factory graph check <projectPath>` CLI subcommand — exits 0 (clean) or 1 (findings found)
+
+**Smoke test** (Step 4 of Task 19): `factory graph check` against a scratch dir with the feature template produced 4 HIGH `graph-schema-error` findings (missing kind / id / status / documented_in) — validator pipeline confirmed end-to-end.
+
+**pnpm gates at close**: build clean, lint clean, test 223 passed / 1 pre-existing failure (`planner.test.ts > maxTurns passthrough` — unrelated to Phase A, tracked before Phase A started).
+
+**Phase B is next**: post-merge validator wiring in brain, doc-fiction engine + python.json, dead-code scan, coherence-reviewer agent, backward-compat graph-migration task. Plan at `docs/superpowers/plans/2026-05-28-living-knowledge-graph-phase-b.md`.
+
+---
+
 ## 2026-05-17 — Phase 13 (budget-followups) closed; upgrade arc complete (ninth time)
 
 Two-session tier closed in one calendar day (2026-05-17). Eight commits this session continuation on top of the prior `dc61c79` session-end:
