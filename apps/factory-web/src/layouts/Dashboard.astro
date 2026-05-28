@@ -1309,6 +1309,74 @@ const navLinks: NavLink[] = [
         border-color: var(--hairline-2);
         background: color-mix(in srgb, var(--ink) 4%, transparent);
       }
+      .transcript-type--thinking {
+        color: var(--mute);
+        border-style: dashed;
+      }
+      .transcript-type--user {
+        color: var(--signal);
+        border-color: color-mix(in srgb, var(--signal) 35%, transparent);
+        background: color-mix(in srgb, var(--signal) 6%, transparent);
+      }
+      .transcript-type--system,
+      .transcript-type--muted {
+        color: var(--mute);
+        opacity: 0.85;
+      }
+      .transcript-meta {
+        display: inline-block;
+        margin-left: 8px;
+        font-family: var(--f-mono);
+        font-size: 10px;
+        color: var(--mute);
+      }
+      .transcript-collapsed,
+      .transcript-thinking,
+      .transcript-system {
+        margin-top: 4px;
+      }
+      .transcript-collapsed > summary,
+      .transcript-thinking > summary,
+      .transcript-system > summary {
+        cursor: pointer;
+        font-family: var(--f-body);
+        font-size: 11px;
+        color: var(--mute);
+        list-style: none;
+        padding: 2px 0;
+        user-select: none;
+      }
+      .transcript-collapsed > summary::-webkit-details-marker,
+      .transcript-thinking > summary::-webkit-details-marker,
+      .transcript-system > summary::-webkit-details-marker {
+        display: none;
+      }
+      .transcript-collapsed > summary::before,
+      .transcript-thinking > summary::before,
+      .transcript-system > summary::before {
+        content: '▸ ';
+        color: var(--mute);
+        font-size: 9px;
+      }
+      .transcript-collapsed[open] > summary::before,
+      .transcript-thinking[open] > summary::before,
+      .transcript-system[open] > summary::before {
+        content: '▾ ';
+      }
+      .transcript-text--muted {
+        color: var(--mute);
+        opacity: 0.85;
+      }
+      .transcript-line--muted {
+        opacity: 0.6;
+        padding: 2px 0;
+      }
+      .transcript-line--muted .transcript-type-badge {
+        margin-bottom: 0;
+      }
+      .transcript-line--system {
+        opacity: 0.7;
+      }
       .transcript-text {
         margin: 4px 0 0;
         padding: 8px 10px;

@@ -698,52 +698,184 @@ import Dashboard from '../../layouts/Dashboard.astro';
 
     function renderTranscriptLine(line: unknown): HTMLElement {
       const obj = (typeof line === 'object' && line !== null ? line : {}) as Record<string, unknown>;
-      const type = typeof obj['type'] === 'string' ? obj['type'] : 'unknown';
+      const envelopeType = typeof obj['type'] === 'string' ? obj['type'] : 'unknown';
 
-      const lineEl = el('div', { class: `transcript-line transcript-line--${type}` });
+      // claude-cli envelope formats:
+      //   { type: 'assistant', message: { content: [{ type: 'thinking'|'text'|'tool_use', ... }] } }
+      //   { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id, content, is_error }] } }
+      //   { type: 'system', subtype: 'init'|'hook_response'|..., ... }
+      //   { type: 'result', subtype: 'ok'|'error_max_turns'|..., result, is_error, num_turns, ... }
+      //   { type: 'rate_limit_event', rate_limit_info: { ... } }
+      // The renderer unwraps the envelope and renders each inner content item.
 
-      if (type === 'assistant') {
-        // Assistant text content.
-        const text = typeof obj['text'] === 'string' ? obj['text'] : JSON.stringify(line);
-        const pre = el('pre', { class: 'transcript-text' });
-        pre.innerHTML = escapeHtml(text);
-        lineEl.appendChild(el('span', { class: 'transcript-type-badge transcript-type--assistant' }, 'assistant'));
-        lineEl.appendChild(pre);
-      } else if (type === 'tool_use') {
-        const name = typeof obj['name'] === 'string' ? obj['name'] : '?';
-        lineEl.appendChild(el('span', { class: 'transcript-type-badge transcript-type--tool-use' }, `tool: ${name}`));
-        const inputStr = obj['input'] !== undefined ? JSON.stringify(obj['input'], null, 2) : '';
-        if (inputStr.length > 0) {
-          const pre = el('pre', { class: 'transcript-code' });
-          pre.innerHTML = escapeHtml(inputStr.length > 2000 ? inputStr.slice(0, 2000) + '\n…(truncated)' : inputStr);
-          lineEl.appendChild(pre);
-        }
-      } else if (type === 'tool_result') {
-        const isError = obj['is_error'] === true;
-        const badgeClass = isError ? 'transcript-type-badge transcript-type--error' : 'transcript-type-badge transcript-type--tool-result';
-        lineEl.appendChild(el('span', { class: badgeClass }, isError ? 'tool error' : 'tool result'));
-        const content = typeof obj['content'] === 'string'
-          ? obj['content']
-          : JSON.stringify(obj['content'] ?? '', null, 2);
-        if (content.length > 0) {
-          const pre = el('pre', { class: 'transcript-code' });
-          pre.innerHTML = escapeHtml(content.length > 2000 ? content.slice(0, 2000) + '\n…(truncated)' : content);
-          lineEl.appendChild(pre);
-        }
-      } else if (type === 'result') {
-        lineEl.appendChild(el('span', { class: 'transcript-type-badge transcript-type--result' }, 'result'));
-        const pre = el('pre', { class: 'transcript-code' });
-        pre.innerHTML = escapeHtml(JSON.stringify(line, null, 2).slice(0, 2000));
-        lineEl.appendChild(pre);
+      const lineEl = el('div', { class: `transcript-line transcript-line--${envelopeType}` });
+
+      if (envelopeType === 'assistant') {
+        renderAssistantEnvelope(lineEl, obj);
+      } else if (envelopeType === 'user') {
+        renderUserEnvelope(lineEl, obj);
+      } else if (envelopeType === 'system') {
+        renderSystemEnvelope(lineEl, obj);
+      } else if (envelopeType === 'result') {
+        renderResultEnvelope(lineEl, obj);
+      } else if (envelopeType === 'rate_limit_event') {
+        renderRateLimitEvent(lineEl, obj);
       } else {
-        // Unknown / other line types — show raw JSON.
-        lineEl.appendChild(el('span', { class: 'transcript-type-badge' }, type));
+        lineEl.appendChild(el('span', { class: 'transcript-type-badge' }, envelopeType));
         const pre = el('pre', { class: 'transcript-code' });
-        pre.innerHTML = escapeHtml(JSON.stringify(line, null, 2).slice(0, 2000));
+        pre.textContent = JSON.stringify(line, null, 2).slice(0, 2000);
         lineEl.appendChild(pre);
       }
 
       return lineEl;
+    }
+
+    function getMessageContent(obj: Record<string, unknown>): Record<string, unknown>[] {
+      const message = obj['message'];
+      if (typeof message !== 'object' || message === null) return [];
+      const content = (message as Record<string, unknown>)['content'];
+      if (!Array.isArray(content)) return [];
+      return content.filter((c): c is Record<string, unknown> => typeof c === 'object' && c !== null);
+    }
+
+    function truncate(s: string, max = 4000): string {
+      return s.length > max ? s.slice(0, max) + '\n…(truncated — ' + String(s.length - max) + ' more chars)' : s;
+    }
+
+    function renderAssistantEnvelope(lineEl: HTMLElement, obj: Record<string, unknown>): void {
+      const items = getMessageContent(obj);
+      if (items.length === 0) {
+        // Empty assistant envelope (e.g. heartbeat) — render compactly
+        lineEl.appendChild(el('span', { class: 'transcript-type-badge transcript-type--assistant' }, 'assistant'));
+        return;
+      }
+      for (const item of items) {
+        const itemType = typeof item['type'] === 'string' ? item['type'] : 'unknown';
+        if (itemType === 'text') {
+          const text = typeof item['text'] === 'string' ? item['text'] : '';
+          lineEl.appendChild(el('span', { class: 'transcript-type-badge transcript-type--assistant' }, 'assistant'));
+          const pre = el('pre', { class: 'transcript-text' });
+          pre.textContent = text;
+          lineEl.appendChild(pre);
+        } else if (itemType === 'thinking') {
+          const thinking = typeof item['thinking'] === 'string' ? item['thinking'] : '';
+          const details = el('details', { class: 'transcript-thinking' });
+          const summary = el('summary');
+          summary.appendChild(el('span', { class: 'transcript-type-badge transcript-type--thinking' }, 'thinking'));
+          summary.appendChild(document.createTextNode(' ' + thinking.slice(0, 80) + (thinking.length > 80 ? '…' : '')));
+          details.appendChild(summary);
+          const pre = el('pre', { class: 'transcript-text transcript-text--muted' });
+          pre.textContent = thinking;
+          details.appendChild(pre);
+          lineEl.appendChild(details);
+        } else if (itemType === 'tool_use') {
+          const name = typeof item['name'] === 'string' ? item['name'] : '?';
+          lineEl.appendChild(el('span', { class: 'transcript-type-badge transcript-type--tool-use' }, `tool: ${name}`));
+          const inputStr = item['input'] !== undefined ? JSON.stringify(item['input'], null, 2) : '';
+          if (inputStr.length > 0) {
+            const details = el('details', { class: 'transcript-collapsed' });
+            details.appendChild(el('summary', {}, 'arguments'));
+            const pre = el('pre', { class: 'transcript-code' });
+            pre.textContent = truncate(inputStr);
+            details.appendChild(pre);
+            lineEl.appendChild(details);
+          }
+        } else {
+          lineEl.appendChild(el('span', { class: 'transcript-type-badge' }, itemType));
+          const pre = el('pre', { class: 'transcript-code' });
+          pre.textContent = JSON.stringify(item, null, 2).slice(0, 2000);
+          lineEl.appendChild(pre);
+        }
+      }
+    }
+
+    function renderUserEnvelope(lineEl: HTMLElement, obj: Record<string, unknown>): void {
+      const items = getMessageContent(obj);
+      for (const item of items) {
+        const itemType = typeof item['type'] === 'string' ? item['type'] : 'unknown';
+        if (itemType === 'tool_result') {
+          const isError = item['is_error'] === true;
+          const badgeClass = isError ? 'transcript-type-badge transcript-type--error' : 'transcript-type-badge transcript-type--tool-result';
+          lineEl.appendChild(el('span', { class: badgeClass }, isError ? '✗ tool error' : '✓ tool result'));
+          const rawContent = item['content'];
+          let contentStr: string;
+          if (typeof rawContent === 'string') {
+            contentStr = rawContent;
+          } else if (Array.isArray(rawContent)) {
+            // Tool result content can be an array of {type:'text', text:'...'} blocks
+            contentStr = rawContent.map((c) => {
+              if (typeof c === 'object' && c !== null) {
+                const cc = c as Record<string, unknown>;
+                if (typeof cc['text'] === 'string') return cc['text'];
+              }
+              return JSON.stringify(c);
+            }).join('\n');
+          } else {
+            contentStr = JSON.stringify(rawContent ?? '', null, 2);
+          }
+          if (contentStr.length > 0) {
+            const details = el('details', { class: 'transcript-collapsed' });
+            details.appendChild(el('summary', {}, isError ? 'error output' : 'output'));
+            const pre = el('pre', { class: 'transcript-code' });
+            pre.textContent = truncate(contentStr);
+            details.appendChild(pre);
+            lineEl.appendChild(details);
+          }
+        } else if (itemType === 'text') {
+          // Some user messages carry plain text (e.g. initial user prompt)
+          lineEl.appendChild(el('span', { class: 'transcript-type-badge transcript-type--user' }, 'user'));
+          const text = typeof item['text'] === 'string' ? item['text'] : '';
+          const pre = el('pre', { class: 'transcript-text' });
+          pre.textContent = truncate(text);
+          lineEl.appendChild(pre);
+        } else {
+          lineEl.appendChild(el('span', { class: 'transcript-type-badge transcript-type--user' }, itemType));
+          const pre = el('pre', { class: 'transcript-code' });
+          pre.textContent = JSON.stringify(item, null, 2).slice(0, 2000);
+          lineEl.appendChild(pre);
+        }
+      }
+    }
+
+    function renderSystemEnvelope(lineEl: HTMLElement, obj: Record<string, unknown>): void {
+      const subtype = typeof obj['subtype'] === 'string' ? obj['subtype'] : 'system';
+      const details = el('details', { class: 'transcript-collapsed transcript-system' });
+      details.appendChild(el('summary', {}, ''))
+        .appendChild(el('span', { class: 'transcript-type-badge transcript-type--system' }, `system: ${subtype}`));
+      const pre = el('pre', { class: 'transcript-code transcript-text--muted' });
+      pre.textContent = JSON.stringify(obj, null, 2).slice(0, 4000);
+      details.appendChild(pre);
+      lineEl.appendChild(details);
+    }
+
+    function renderResultEnvelope(lineEl: HTMLElement, obj: Record<string, unknown>): void {
+      const subtype = typeof obj['subtype'] === 'string' ? obj['subtype'] : 'unknown';
+      const isError = obj['is_error'] === true || subtype.startsWith('error');
+      const badgeClass = isError
+        ? 'transcript-type-badge transcript-type--error'
+        : 'transcript-type-badge transcript-type--result';
+      lineEl.appendChild(el('span', { class: badgeClass }, `final: ${subtype}`));
+      const num_turns = obj['num_turns'];
+      const duration_ms = obj['duration_ms'];
+      const meta: string[] = [];
+      if (typeof num_turns === 'number') meta.push(`${num_turns} turns`);
+      if (typeof duration_ms === 'number') meta.push(`${(duration_ms / 1000).toFixed(1)}s`);
+      if (meta.length > 0) {
+        lineEl.appendChild(el('span', { class: 'transcript-meta' }, meta.join(' · ')));
+      }
+      const resultText = typeof obj['result'] === 'string' ? obj['result'] : JSON.stringify(obj, null, 2);
+      const pre = el('pre', { class: 'transcript-text' });
+      pre.textContent = truncate(resultText);
+      lineEl.appendChild(pre);
+    }
+
+    function renderRateLimitEvent(lineEl: HTMLElement, obj: Record<string, unknown>): void {
+      const info = (obj['rate_limit_info'] as Record<string, unknown>) ?? {};
+      const status = typeof info['status'] === 'string' ? info['status'] : '?';
+      const rateLimitType = typeof info['rateLimitType'] === 'string' ? info['rateLimitType'] : '';
+      lineEl.classList.add('transcript-line--muted');
+      lineEl.appendChild(el('span', { class: 'transcript-type-badge transcript-type--muted' }, 'rate limit'));
+      lineEl.appendChild(el('span', { class: 'transcript-meta' }, `${rateLimitType}: ${status}`));
     }
 
     function wireRetryButtons(panel: HTMLElement, taskId: string): void {
