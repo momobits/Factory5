@@ -17,6 +17,7 @@ import type { AutonomyMode, Directive, DirectiveLimits, ModelCategory, Plan } fr
 import { newId } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import { assess, type AssessResult, type Runtime } from '@factory5/assessor';
+import { validateKnowledgeGraph } from '@factory5/coherence-validator';
 import type { DirectiveEventEmitter } from '@factory5/ipc';
 import type { ProviderRegistry } from '@factory5/providers';
 import {
@@ -29,6 +30,7 @@ import {
   type Database,
 } from '@factory5/state';
 import {
+  addFinding,
   appendBuildLog,
   isAdvisory,
   listFindings,
@@ -520,7 +522,8 @@ async function runInline(
       const blockingFindings = openFindings.filter((f) => !isAdvisory(f));
       // ADR 0018: advisory findings (today: verifier source by default) never
       // enter `hadFailures`. Assessor gate results remain the sole ground truth.
-      const hadFailures =
+      // `let` because the final-verification validator below may flip it to true.
+      let hadFailures =
         taskResults.some((r) => r.exitCode !== 0) || !assessment.gateResults.verify;
 
       // Autonomous mode never silently finishes with failures — escalate (ADR 0005).
@@ -554,6 +557,55 @@ async function runInline(
           await appendBuildLog(projectPath, 'escalation aborted (brain shutdown)');
         } else if (res.timedOut) {
           await appendBuildLog(projectPath, 'escalation timed out — no human reply');
+        }
+      }
+
+      // Tier 15.13 — final knowledge graph validation. Runs against the
+      // fully-integrated project at directive end. This is the gate that
+      // catches doc-fiction + dead-code + reference integrity issues that
+      // only become detectable once all task merges are in main. Skipped
+      // when the directive already failed (the existing findings + the
+      // failed task surface are enough signal for the operator).
+      if (!hadFailures) {
+        try {
+          const planTaskIds = taskResults.map((r) => r.taskId);
+          const finalValidation = await validateKnowledgeGraph({
+            projectPath,
+            taskIds: planTaskIds,
+          });
+          if (!finalValidation.ok) {
+            log.info(
+              { directiveId: directive.id, findingCount: finalValidation.findings.length },
+              'loop: final-verification surfaced findings',
+            );
+            for (const pf of finalValidation.findings) {
+              try {
+                await addFinding(projectPath, {
+                  source: 'verifier',
+                  target: pf.location.file,
+                  severity: pf.severity === 'high' ? 'HIGH' : pf.severity === 'medium' ? 'MEDIUM' : 'LOW',
+                  description: pf.title,
+                  category: pf.category,
+                  location: pf.location,
+                  title: pf.title,
+                  why: pf.why,
+                  suggested_fix: pf.suggested_fix,
+                  auto_fixable: pf.auto_fixable,
+                });
+              } catch (persistErr) {
+                log.warn(
+                  { err: persistErr, directiveId: directive.id, partialFinding: pf },
+                  'loop: failed to persist final-verification finding',
+                );
+              }
+            }
+            hadFailures = true;
+          }
+        } catch (validatorErr) {
+          log.warn(
+            { err: validatorErr, directiveId: directive.id },
+            'loop: final-verification validator threw — non-fatal, directive completes per task results',
+          );
         }
       }
 
