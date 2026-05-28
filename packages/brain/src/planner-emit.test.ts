@@ -156,7 +156,7 @@ describe('planner emit sites (ADR 0031)', () => {
     expect(written).toBeDefined();
     if (written?.type !== 'log.line') return;
     expect(written.level).toBe('info');
-    expect(written.msg).toBe('planner: 2 tasks queued');
+    expect(written.msg).toBe('planner: 3 tasks queued');
   });
 
   it('emits an error `log.line` with first 500 chars in attrs.detail when the LLM returns no JSON', async () => {
@@ -290,7 +290,8 @@ describe('planner emit sites (ADR 0031)', () => {
       emit: fix.emit,
     });
 
-    expect(result.plan.tasks).toHaveLength(1);
+    // 1 LLM task + 1 auto-appended coherence-reviewer = 2 total
+    expect(result.plan.tasks).toHaveLength(2);
     expect(result.plan.tasks[0]?.maxTurns).toBeUndefined();
   });
 });

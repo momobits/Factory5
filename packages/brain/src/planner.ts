@@ -197,6 +197,31 @@ export function materialisePlannerTasks(
     }
   }
 
+  // Tier 15.13 — append a terminal coherence-reviewer task. Runs after
+  // all builder/fixer tasks complete; produces structured findings about
+  // doc/code drift. Idempotent (skip when caller already included one).
+  if (finalTasks.length > 0 && !finalTasks.some((t) => t.agent === 'coherence-reviewer')) {
+    const reviewerId = newId();
+    const reviewerTask: Task = {
+      id: reviewerId,
+      planId,
+      title: 'Final coherence review',
+      agent: 'coherence-reviewer',
+      category: 'reasoning',
+      inputs: {
+        files: [],
+        context:
+          'Read the knowledge area (docs/knowledge/) and verify that the documented features and decisions match the actual code. Emit FINDING markers for any divergence.',
+      },
+      expectedOutputs: { files: [], signals: [] },
+      dependsOn: finalTasks.map((t) => t.id),
+      status: 'pending',
+      attempts: 0,
+      featureIds: [],
+    };
+    finalTasks.push(reviewerTask);
+  }
+
   return { tasks: finalTasks, notes };
 }
 

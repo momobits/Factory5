@@ -220,3 +220,38 @@ describe('materialisePlannerTasks — featureIds', () => {
     expect(tasks[0]?.featureIds).toEqual([]);
   });
 });
+
+describe('materialisePlannerTasks — terminal coherence-reviewer', () => {
+  it('appends a coherence-reviewer task at the end of the plan', () => {
+    const planId = newId();
+    const { tasks } = materialisePlannerTasks(
+      [mkRaw({ title: 'build CLI', agent: 'builder', category: 'deep' })],
+      planId,
+    );
+    expect(tasks.length).toBe(2);
+    const reviewer = tasks.find((t) => t.agent === 'coherence-reviewer');
+    expect(reviewer).toBeDefined();
+    expect(reviewer?.title).toBe('Final coherence review');
+    // It depends on all preceding tasks
+    expect(reviewer?.dependsOn).toEqual([tasks[0]?.id]);
+  });
+
+  it('does not append a second coherence-reviewer when one is already present', () => {
+    const planId = newId();
+    const { tasks } = materialisePlannerTasks(
+      [
+        mkRaw({ title: 'build', agent: 'builder', category: 'deep' }),
+        mkRaw({ title: 'manual review', agent: 'coherence-reviewer', category: 'reasoning' }),
+      ],
+      planId,
+    );
+    const reviewerCount = tasks.filter((t) => t.agent === 'coherence-reviewer').length;
+    expect(reviewerCount).toBe(1);
+  });
+
+  it('skips the auto-append when the input is empty', () => {
+    const planId = newId();
+    const { tasks } = materialisePlannerTasks([], planId);
+    expect(tasks.length).toBe(0);
+  });
+});
