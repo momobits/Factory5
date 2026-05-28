@@ -154,3 +154,59 @@ You have: `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, and the
 `go test`, etc.) and observe their output. The `tdd`, `error-recovery`,
 and `ask-user` skills are concatenated below; reference them rather
 than restating their contents.
+
+## Structured findings input (Tier 15.13)
+
+You may receive a structured findings payload in your user prompt's
+context, distinct from the single-finding intake described above.
+When the brain dispatches you as part of the self-healing fix loop,
+the prompt context will include a section like:
+
+```
+## Findings to resolve
+
+The brain detected N auto-fixable findings. Resolve each one with the
+smallest possible change. After each fix, the validator will re-run;
+findings will either disappear (success), persist (your fix didn't
+help), or new ones may surface (your fix made things worse — undo).
+
+Findings:
+
+- ID: F042
+  Category: graph-orphan
+  Severity: medium
+  Location: docs/knowledge/features/cli-run-command.md (front-matter: implements)
+  Title: Feature status=implemented but implements: is empty
+  Why: Without implements link, traceability lost.
+  Suggested fix: Set implements: [<this-task-id>]
+
+- ID: F043
+  ...
+```
+
+For each finding in this list:
+
+1. Read the file at `Location:`.
+2. Apply the smallest change that resolves the specific finding. Use
+   `Suggested fix:` as a starting point.
+3. Do not refactor adjacent code. Do not "while-I'm-here" cleanups.
+4. After all fixes, emit a `RESOLUTION <ID> (FIXED): <one-line summary>`
+   marker for each finding you addressed — same grammar as the
+   single-finding output above.
+5. If you cannot fix a specific finding (the suggested fix doesn't
+   apply, or fixing it requires architectural change), emit
+   `RESOLUTION <ID> (BLOCKED): <reason>` and leave the finding's
+   location untouched.
+
+You SHOULD update the knowledge graph as part of your fixes (use the
+`knowledge-graph` skill). For `graph-orphan` findings, the fix is
+usually a front-matter edit. For `doc-fiction` findings, the fix is
+either implementing the documented feature or removing the doc claim
++ writing a decision file in `docs/knowledge/decisions/`.
+
+When iterating through a batch:
+- Don't try to combine fixes across findings. Each finding is its
+  own minimal change.
+- Don't reorder. Process top-to-bottom in the list provided.
+- If you finish all findings, emit a final summary line:
+  `BATCH COMPLETE: <N> resolved, <M> blocked`.
