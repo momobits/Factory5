@@ -10,7 +10,14 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-import { findingId, findingSchema, type Finding, type FindingStatus } from '@factory5/core';
+import {
+  findingId,
+  findingSchema,
+  type Finding,
+  type FindingCategory,
+  type FindingLocation,
+  type FindingStatus,
+} from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import { findingsRegistry, type Database } from '@factory5/state';
 import { z } from 'zod';
@@ -66,6 +73,19 @@ export interface AddFindingInput {
    * source defaults to blocking (`advisory` field omitted entirely).
    */
   advisory?: boolean;
+  // Tier 15.13 — structured shape additions (all optional for backward compat).
+  /** Classifies the finding for the self-healing loop's routing logic. */
+  category?: FindingCategory;
+  /** Precise location in the codebase where the finding applies. */
+  location?: FindingLocation;
+  /** Short human-readable title (one line). Complements `description`. */
+  title?: string;
+  /** Explanation of why this is a problem — context for the operator or fixer. */
+  why?: string;
+  /** Actionable suggestion for resolving the finding. */
+  suggested_fix?: string;
+  /** Whether the self-healing loop can resolve this without human intervention. */
+  auto_fixable?: boolean;
 }
 
 /**
@@ -159,6 +179,13 @@ export async function addFinding(
     description: input.description,
     createdAt: input.createdAt ?? new Date().toISOString(),
     ...(advisory === true ? { advisory: true } : {}),
+    // Tier 15.13 — structured fields (only set if provided).
+    ...(input.category !== undefined && { category: input.category }),
+    ...(input.location !== undefined && { location: input.location }),
+    ...(input.title !== undefined && { title: input.title }),
+    ...(input.why !== undefined && { why: input.why }),
+    ...(input.suggested_fix !== undefined && { suggested_fix: input.suggested_fix }),
+    ...(input.auto_fixable !== undefined && { auto_fixable: input.auto_fixable }),
   };
   findingSchema.parse(newFinding);
   const updated: FindingsFile = {
