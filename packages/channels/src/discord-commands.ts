@@ -674,19 +674,24 @@ function embedFindings(result: CommandResult<FindingsData>): EmbedBuilder {
 function embedResume(result: CommandResult<ResumeData>): EmbedBuilder {
   if (!result.ok) return errorEmbed('resume', result.message);
   const data = result.data;
+  const lines = [
+    `**Project:** \`${data.project}\``,
+    `**Path:** \`${truncatePath(data.projectPath)}\``,
+    `**Resuming from:** \`${data.priorId.slice(-8)}\` (${data.priorStatus})`,
+    `**New directive:** \`${data.newDirectiveId.slice(-8)}\``,
+  ];
+  if (data.abandonedWorktrees !== undefined && data.abandonedWorktrees.length > 0) {
+    lines.push('', `**Abandoned worktrees (${String(data.abandonedWorktrees.length)}):**`);
+    for (const w of data.abandonedWorktrees) {
+      lines.push(`  - \`${w.taskId}\` since ${w.abandonedSince.slice(0, 19).replace('T', ' ')}`);
+    }
+    lines.push('_Run `factory cleanup <projectPath>` (CLI) to remove. No silent removal._');
+  }
+  lines.push('', '_The daemon will claim it shortly._');
   return new EmbedBuilder()
     .setColor(COLOR_OK)
     .setTitle('factory resume — queued')
-    .setDescription(
-      [
-        `**Project:** \`${data.project}\``,
-        `**Path:** \`${truncatePath(data.projectPath)}\``,
-        `**Resuming from:** \`${data.priorId.slice(-8)}\` (${data.priorStatus})`,
-        `**New directive:** \`${data.newDirectiveId.slice(-8)}\``,
-        '',
-        '_The daemon will claim it shortly._',
-      ].join('\n'),
-    )
+    .setDescription(lines.join('\n'))
     .setTimestamp();
 }
 

@@ -214,6 +214,9 @@ importers:
       '@factory5/state':
         specifier: workspace:*
         version: link:../state
+      '@factory5/worker':
+        specifier: workspace:*
+        version: link:../worker
       discord.js:
         specifier: ^14.15.3
         version: 14.26.3

@@ -1747,17 +1747,22 @@ function formatFindingsReply(result: CommandResult<FindingsData>): TelegramReply
 function formatResumeReply(result: CommandResult<ResumeData>): TelegramReply {
   if (!result.ok) return { text: `factory resume: ${result.message}` };
   const d = result.data;
-  return {
-    text: [
-      `factory resume — queued`,
-      `Project: ${d.project}`,
-      `Path: ${truncatePath(d.projectPath)}`,
-      `Resuming from: ${d.priorId.slice(-8)} (${d.priorStatus})`,
-      `New directive: ${d.newDirectiveId.slice(-8)}`,
-      ``,
-      `The daemon will claim it shortly.`,
-    ].join('\n'),
-  };
+  const lines = [
+    `factory resume — queued`,
+    `Project: ${d.project}`,
+    `Path: ${truncatePath(d.projectPath)}`,
+    `Resuming from: ${d.priorId.slice(-8)} (${d.priorStatus})`,
+    `New directive: ${d.newDirectiveId.slice(-8)}`,
+  ];
+  if (d.abandonedWorktrees !== undefined && d.abandonedWorktrees.length > 0) {
+    lines.push(``, `Abandoned worktrees (${String(d.abandonedWorktrees.length)}):`);
+    for (const w of d.abandonedWorktrees) {
+      lines.push(`  - ${w.taskId} since ${w.abandonedSince.slice(0, 19).replace('T', ' ')}`);
+    }
+    lines.push(`Run \`factory cleanup <projectPath>\` (CLI) to remove. No silent removal.`);
+  }
+  lines.push(``, `The daemon will claim it shortly.`);
+  return { text: lines.join('\n') };
 }
 
 function formatCancelReply(result: CommandResult<CancelData>): TelegramReply {

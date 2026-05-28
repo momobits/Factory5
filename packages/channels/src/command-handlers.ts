@@ -57,6 +57,8 @@ import {
   MarkBlockedError,
 } from '@factory5/state';
 
+import { listAbandonedWorktrees, type AbandonedWorktree } from '@factory5/worker';
+
 import { SetProjectBudgetError, type ChannelContext } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -322,6 +324,14 @@ export interface ResumeInput {
   autonomy?: AutonomyMode;
 }
 
+/** A worktree directory from a prior run that is no longer tracked in any active plan. */
+export interface ResumeAbandonedWorktree {
+  path: string;
+  taskId: string;
+  /** ISO 8601 datetime of when the directory was last modified. */
+  abandonedSince: string;
+}
+
 export interface ResumeData {
   project: string;
   projectPath: string;
@@ -330,6 +340,8 @@ export interface ResumeData {
   newDirectiveId: string;
   /** Carried language, if the prior directive recorded one. */
   language?: ProjectLanguage;
+  /** Worktrees from prior runs on disk; non-empty when leftover state exists. */
+  abandonedWorktrees?: ResumeAbandonedWorktree[];
 }
 
 export async function runResume(
@@ -358,6 +370,19 @@ export async function runResume(
     return fail(
       'INVALID_INPUT',
       `prior directive ${prior.id} has no projectPath; resume needs an absolute path.`,
+    );
+  }
+
+  // Tier 15.13 — list abandoned worktrees from prior runs so the operator
+  // sees what leftover state exists. activeTaskIds=[] because the new plan
+  // hasn't been computed yet.
+  let abandoned: AbandonedWorktree[] = [];
+  try {
+    abandoned = await listAbandonedWorktrees({ projectPath, activeTaskIds: [] });
+  } catch (err) {
+    ctx.log.warn(
+      { err, projectPath, priorId: prior.id },
+      'command-handlers: runResume — listAbandonedWorktrees failed (non-fatal)',
     );
   }
 
@@ -403,6 +428,15 @@ export async function runResume(
     priorStatus: prior.status,
     newDirectiveId: directive.id,
     ...(carriedLanguage !== undefined ? { language: carriedLanguage } : {}),
+    ...(abandoned.length > 0
+      ? {
+          abandonedWorktrees: abandoned.map((w) => ({
+            path: w.path,
+            taskId: w.taskId,
+            abandonedSince: w.abandonedSince.toISOString(),
+          })),
+        }
+      : {}),
   });
 }
 
