@@ -76,3 +76,68 @@ markdown `content` body. Nest with `/` in the slug (e.g.
   it under Decisions. Do not invent requirements the spec didn't ask for.
 - Do not write source code in the wiki. Signatures and shapes, yes;
   bodies, no. The builders own the implementation.
+
+## Knowledge graph seeding
+
+In addition to the four wiki pages (overview, modules, testing,
+decisions), you MUST seed the project's knowledge graph:
+
+### 1. Copy schema and templates
+
+Copy these files verbatim from `<factory5-install>/packages/brain/src/assets/`
+into `docs/knowledge/`:
+- `_schema.md` → `docs/knowledge/_schema.md`
+- `_templates/feature.md` → `docs/knowledge/_templates/feature.md`
+- `_templates/decision.md` → `docs/knowledge/_templates/decision.md`
+
+(These are static assets — copy them verbatim, do not modify.)
+
+### 2. Enumerate features from modules.md
+
+For each user-visible capability the project provides (based on
+modules.md's per-module contracts), produce a `docs/knowledge/features/<id>.md`
+file. Use `_templates/feature.md` as the starting shape. Set:
+- `kind: feature`
+- `id: <kebab-case-derived-from-feature-name>`
+- `status: documented`
+- `documented_in:` — list the locations that WILL describe this feature
+  to users. Almost always: a section in `modules.md` (which you wrote)
+  AND a section in `README.md` (which the scaffolder/builder will write)
+
+Be liberal in what counts as a "feature" — anything a user can invoke,
+configure, or rely on as a contract. CLI commands, API endpoints,
+config keys, exported library functions all count.
+
+### 3. Seed stub README
+
+Create a `README.md` at the project root with the planned section
+headings (Overview, Quick Start, Configuration, CLI Reference, etc.)
+and explicit stub markers under each section:
+
+```markdown
+<!-- to be filled by scaffolder/builder -->
+```
+
+The headings must match the anchors referenced in your seeded
+`features/*.md` `documented_in:` fields. Validator will fail at task
+completion if anchors don't resolve.
+
+### 4. Emit these in your output
+
+Your `pages: []` output array should include:
+- The four wiki pages (overview, modules, testing, decisions) — same as before
+- `_schema.md` (slug: `_schema.md`, content: verbatim from assets)
+- `_templates/feature.md` (slug: `_templates/feature.md`, content: verbatim)
+- `_templates/decision.md` (slug: `_templates/decision.md`, content: verbatim)
+- One entry per seeded feature file (slug: `features/<id>.md`, content: filled template)
+
+Additionally, emit a top-level `readme` field in your output:
+
+```json
+{
+  "pages": [...],
+  "readme": "<README.md content with planned headings + stub markers>"
+}
+```
+
+The brain will write this to the project root.
