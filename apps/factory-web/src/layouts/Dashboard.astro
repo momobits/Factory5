@@ -1558,6 +1558,42 @@ const navLinks: NavLink[] = [
       *::-webkit-scrollbar-thumb:hover {
         background: var(--mute-2);
       }
+
+      /* Structured findings (Tier 15.13) — rich description cells in the
+         findings list. All cells are JS-created at runtime so the styling
+         MUST live in the global stylesheet. */
+      .finding-structured { display: flex; flex-direction: column; gap: 4px; }
+      .finding-title { font-weight: 600; font-size: 13px; line-height: 1.3; }
+      .finding-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      .finding-category {
+        font-family: var(--f-body);
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 1px 6px;
+        border: 1px solid var(--hairline);
+        border-radius: 2px;
+        color: var(--mute);
+      }
+      .finding-autofix {
+        font-family: var(--f-body);
+        font-size: 10px;
+        color: var(--acid);
+        border: 1px solid color-mix(in srgb, var(--acid) 40%, transparent);
+        padding: 1px 6px;
+        border-radius: 2px;
+      }
+      .finding-location {
+        font-family: var(--f-mono);
+        font-size: 11px;
+        color: var(--mute);
+      }
+      .finding-why, .finding-fix {
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--mute);
+      }
     </style>
   </head>
   <body>

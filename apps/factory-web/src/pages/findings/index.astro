@@ -67,6 +67,13 @@ import Table from '../../components/Table.astro';
       ApiError,
     } from '../../lib/api';
 
+    interface FindingLocation {
+      file: string;
+      line?: number;
+      anchor?: string;
+      frontmatter_field?: string;
+    }
+
     interface Finding {
       id: string;
       source: string;
@@ -76,6 +83,13 @@ import Table from '../../components/Table.astro';
       description: string;
       createdAt: string;
       advisory?: boolean;
+      // Tier 15.13 — structured fields (optional for backward compat).
+      category?: string;
+      location?: FindingLocation;
+      title?: string;
+      why?: string;
+      suggested_fix?: string;
+      auto_fixable?: boolean;
     }
     interface Entry {
       projectId: string;
@@ -94,6 +108,78 @@ import Table from '../../components/Table.astro';
       err.textContent = message;
       err.hidden = false;
     };
+
+    function formatLocation(
+      loc:
+        | { file: string; line?: number; anchor?: string; frontmatter_field?: string }
+        | undefined,
+    ): string {
+      if (loc === undefined) return '';
+      let s = loc.file;
+      if (loc.line !== undefined) s += `:${String(loc.line)}`;
+      if (loc.anchor !== undefined && loc.anchor.length > 0) s += ` (${loc.anchor})`;
+      if (loc.frontmatter_field !== undefined && loc.frontmatter_field.length > 0)
+        s += ` [front-matter: ${loc.frontmatter_field}]`;
+      return s;
+    }
+
+    function buildDescriptionCell(f: Finding): HTMLElement {
+      const cell = document.createElement('div');
+      const isStructured = typeof f.title === 'string' && f.title.length > 0;
+      if (isStructured) {
+        cell.className = 'finding-structured';
+        const titleEl = document.createElement('div');
+        titleEl.className = 'finding-title';
+        titleEl.textContent = f.title ?? '';
+        cell.appendChild(titleEl);
+
+        const metaEl = document.createElement('div');
+        metaEl.className = 'finding-meta';
+        if (f.category !== undefined && f.category.length > 0) {
+          const cat = document.createElement('span');
+          cat.className = 'finding-category';
+          cat.textContent = f.category;
+          metaEl.appendChild(cat);
+        }
+        if (f.auto_fixable === true) {
+          const autofix = document.createElement('span');
+          autofix.className = 'finding-autofix';
+          autofix.textContent = 'auto-fixable';
+          metaEl.appendChild(autofix);
+        }
+        const loc = formatLocation(f.location);
+        if (loc.length > 0) {
+          const locEl = document.createElement('span');
+          locEl.className = 'finding-location';
+          locEl.textContent = loc;
+          metaEl.appendChild(locEl);
+        }
+        if (metaEl.childNodes.length > 0) cell.appendChild(metaEl);
+
+        if (typeof f.why === 'string' && f.why.length > 0) {
+          const why = document.createElement('div');
+          why.className = 'finding-why';
+          const label = document.createElement('strong');
+          label.textContent = 'Why: ';
+          why.appendChild(label);
+          why.appendChild(document.createTextNode(f.why));
+          cell.appendChild(why);
+        }
+        if (typeof f.suggested_fix === 'string' && f.suggested_fix.length > 0) {
+          const fix = document.createElement('div');
+          fix.className = 'finding-fix';
+          const label = document.createElement('strong');
+          label.textContent = 'Fix: ';
+          fix.appendChild(label);
+          fix.appendChild(document.createTextNode(f.suggested_fix));
+          cell.appendChild(fix);
+        }
+      } else {
+        // Legacy fallback: render the description as plain text.
+        cell.textContent = f.description;
+      }
+      return cell;
+    }
 
     const renderRows = (resp: ListResp): void => {
       const tbody = document.querySelector('#findings-table tbody');
@@ -114,21 +200,29 @@ import Table from '../../components/Table.astro';
       }
       for (const e of resp.items) {
         const tr = document.createElement('tr');
-        const cells = [
+        // First 6 cells are plain text.
+        const stringCells: Array<string> = [
           e.updatedAt.slice(0, 19).replace('T', ' '),
           e.finding.id,
           e.finding.severity,
           e.finding.status,
           e.finding.source,
           e.finding.target,
-          e.finding.description,
-          e.finding.advisory === true ? 'advisory' : '',
         ];
-        for (const cell of cells) {
+        for (const cell of stringCells) {
           const td = document.createElement('td');
           td.textContent = cell;
           tr.appendChild(td);
         }
+        // Description cell — structured-aware.
+        const descTd = document.createElement('td');
+        descTd.appendChild(buildDescriptionCell(e.finding));
+        tr.appendChild(descTd);
+        // Advisory cell.
+        const advTd = document.createElement('td');
+        advTd.textContent = e.finding.advisory === true ? 'advisory' : '';
+        tr.appendChild(advTd);
+
         tbody.appendChild(tr);
       }
     };
