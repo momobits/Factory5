@@ -104,4 +104,41 @@ What happens next.
     const result = await validateKnowledgeGraph({ projectPath, taskIds: [] });
     expect(result.ok).toBe(true);
   });
+
+  it('runs doc-fiction when runtime is set and a config resolves', async () => {
+    // Set up a project with a known-bad python block under Quick Start
+    await writeFile(
+      join(projectPath, 'README.md'),
+      '# Project\n\n## Quick Start\n\n```python\nimport nonexistent_module_xyz\n```\n',
+    );
+    // Project override config so we don't depend on the shipped python.json
+    await mkdir(join(projectPath, '.factory'), { recursive: true });
+    await writeFile(
+      join(projectPath, '.factory', 'coherence-validator.json'),
+      JSON.stringify({
+        runtime: 'python',
+        interpreter: 'python',
+        doc_globs: ['README.md'],
+        doc_fiction: {
+          section_headings: 'Quick Start',
+          code_block_runners: {
+            python: { command: ['python', '-c', '<CODE>'], timeout_ms: 10000 },
+          },
+        },
+      }),
+    );
+    const result = await validateKnowledgeGraph({ projectPath, taskIds: [], runtime: 'python' });
+    // Doc-fiction should produce at least one finding
+    expect(result.findings.some((f) => f.category === 'doc-fiction')).toBe(true);
+  });
+
+  it('skips doc-fiction when runtime is unset', async () => {
+    await writeFile(
+      join(projectPath, 'README.md'),
+      '# Project\n\n## Quick Start\n\n```python\nimport nonexistent_module_xyz\n```\n',
+    );
+    const result = await validateKnowledgeGraph({ projectPath, taskIds: [] });
+    // No runtime → no doc-fiction → no findings (assuming no other issues)
+    expect(result.findings.every((f) => f.category !== 'doc-fiction')).toBe(true);
+  });
 });

@@ -21,6 +21,8 @@ const log = createLogger('coherence-validator');
 export interface ValidateOptions {
   projectPath: string;
   taskIds: readonly string[];
+  /** Runtime hint; when set, the engine loads the matching config and runs deeper checks (doc-fiction + dead-code). */
+  runtime?: string;
 }
 
 export interface ValidationResult {
@@ -108,6 +110,28 @@ export async function validateKnowledgeGraph(opts: ValidateOptions): Promise<Val
   // Reference integrity check
   const docs = await collectDocsForReferenceCheck(opts.projectPath);
   allFindings.push(...checkReferences(featureEntries, docs, { taskIds: opts.taskIds }));
+
+  // Tier 15.13 — deeper checks (doc-fiction, dead-code) when a runtime
+  // hint is supplied AND a config can be resolved.
+  if (opts.runtime !== undefined) {
+    try {
+      const { loadValidatorConfig } = await import('./config-loader.js');
+      const cfg = await loadValidatorConfig({ projectPath: opts.projectPath, runtime: opts.runtime });
+      if (cfg.config !== undefined) {
+        const { checkDocFiction } = await import('./doc-fiction.js');
+        const docFictionFindings = await checkDocFiction({
+          projectPath: opts.projectPath,
+          config: cfg.config,
+        });
+        allFindings.push(...docFictionFindings);
+      }
+    } catch (err) {
+      log.warn(
+        { err, projectPath: opts.projectPath, runtime: opts.runtime },
+        'validator: doc-fiction check threw — non-fatal, other findings still surface',
+      );
+    }
+  }
 
   log.debug(
     {
