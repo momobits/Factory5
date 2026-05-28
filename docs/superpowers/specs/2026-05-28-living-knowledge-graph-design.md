@@ -229,32 +229,95 @@ Three trigger points, all in the worker or brain at the right architectural laye
 
 3. **Final verification**, in the brain's `executeDirective()`, before the directive is marked complete. Runs after the last task merges. This is where the programmatic doc-fiction check (executable README examples), dead-code scan, and the coherence-reviewer agent run — the deeper checks that need the integrated codebase, not just per-task changes.
 
-### Programmatic doc-fiction check
+### Programmatic checks (doc-fiction + dead-code): engine + config architecture
 
-For Python (initially):
-- Parse README fenced code blocks (` ```python `, ` ```yaml `, ` ```bash `, etc.).
-- For ` ```yaml ` under a "Quick Start" / "Configuration" / "Example" heading: validate by invoking the project's own config parser as a subprocess (`<assessor-env-python> -c "from <project>.config import load_yaml; load_yaml(<block>)"`). Failure = doc-fiction finding with `category: doc-fiction`, `location.file: README.md`, `location.line: <block-start>`.
-- For ` ```bash ` containing a project-binary invocation (entry in `pyproject.toml [project.scripts]`): spawn it in the assessor-env with the args from the block, capture output. Non-zero exit + the README claims this is a working example = doc-fiction finding.
-- For ` ```python ` showing the project's importable API: run it as a script in the assessor-env. Import errors / attribute errors = doc-fiction finding.
+Instead of per-language imperative code that factory5 has to grow for each new runtime, the programmatic checks (doc-fiction and dead-code) are driven by a small **runtime-agnostic engine** that consumes a declarative JSON config. Adding a new runtime = adding a new JSON file; no engine changes.
 
-This is per-runtime; Python is the v1 target. Node/Go/Rust extend later. The check is conservative — it only flags code blocks under heading patterns matching `/Quick Start|Configuration|Example|Usage|Reference/i`. Tutorial-style "do not run this" snippets aren't validated.
+#### The JSON config shape
 
-### Dead-code scan (Python v1)
+```json
+{
+  "runtime": "python",
+  "interpreter": ".factory/assessor-env/Scripts/python.exe",
+  "doc_globs": ["README.md", "docs/**/*.md"],
+  "doc_fiction": {
+    "section_headings": "Quick Start|Configuration|Example|Usage|Reference",
+    "code_block_runners": {
+      "python": {
+        "command": ["<interpreter>", "-c", "<CODE>"],
+        "timeout_ms": 30000
+      },
+      "yaml": {
+        "wrapper_template": "from <project_pkg>.config import load_yaml; load_yaml(open('<BLOCK_FILE>').read())",
+        "command": ["<interpreter>", "-c", "<WRAPPED>"]
+      },
+      "bash": {
+        "binary_lookup": "pyproject.toml::project.scripts",
+        "command": ["<binary>", "<ARGS>"]
+      }
+    }
+  },
+  "dead_code": {
+    "package_globs": ["<project_pkg>/**/*.py"],
+    "public_symbol_rule": "no_underscore_prefix",
+    "exposed_via": [
+      {"kind": "entry_points", "source": "pyproject.toml::project.scripts"},
+      {"kind": "explicit_export", "source": "__all__"},
+      {"kind": "feature_surface", "source": "docs/knowledge/features/*.md::documented_in"}
+    ],
+    "caller_scan": {
+      "method": "ast_imports_and_calls",
+      "exclude_globs": ["tests/**", "**/*_test.py"]
+    }
+  }
+}
+```
 
-A "dead-code candidate" is any public symbol (no underscore prefix) that is:
-1. Defined at module scope in a file under the project's package(s), AND
-2. Not referenced by any other module in the package (imports + qualified calls scanned via AST), AND
-3. Not exposed as a console script in `pyproject.toml [project.scripts]`, AND
-4. Not exposed in any module's `__all__` list, AND
-5. Not referenced by any `documented_in:` target of an active feature (i.e., not a deliberately exposed API surface).
+The engine reads this and executes. Templates like `<interpreter>`, `<CODE>`, `<BLOCK_FILE>`, `<binary>`, `<ARGS>`, `<project_pkg>` are substituted at run time from the project's resolved environment.
 
-Symbols matching all five = candidates flagged as `category: dead-code` findings. They're not auto-fixable — the agent or operator has to decide: wire it (write the caller) or remove it.
+#### Three-tier config resolution
 
-The scanner is conservative against false positives by design (it excludes anything documented as feature surface, and anything in `__all__`). The pythonetl case (`Pipeline.register_pipeline`, `get_pipeline`, `list_pipelines`) catches because:
-- They're public methods on `Pipeline`
+| Tier | Source | When it applies |
+|---|---|---|
+| **1. Shipped defaults** | `packages/coherence-validator/configs/<runtime>.json` | Always tried first for known runtimes. v1 ships `python.json`. v2+ adds `node.json`, `go.json`, `rust.json` as needed. |
+| **2. Project override** | `<projectPath>/.factory/coherence-validator.json` | Operator-authored, takes precedence over shipped defaults. For projects with unusual config DSLs or non-standard layout. |
+| **3. Agent-generated** | Same path as tier 2, but written by a one-shot `coherence-validator-bootstrap` task | Triggered when the brain detects a runtime with no shipped default AND no project override. An architect-role agent reads `pyproject.toml` / `package.json` / `Cargo.toml` / `go.mod`, infers the config, writes it. Cached forever; regenerated only if `project.json` runtime kind changes. v3 ships this; v1 errors out with a "no validator config for runtime X — add one to .factory/coherence-validator.json" finding. |
+
+This means the v1 implementation has the same code size as the Python-only spec I originally wrote — just structured as `engine + python.json` instead of `python_extractor.ts`. The architectural shift (declarative config, not imperative code) opens the door for v2/v3 without rewrites.
+
+#### Doc-fiction in detail
+
+For each file matching `doc_globs`, the engine:
+1. Parses fenced code blocks (` ```<lang> `).
+2. Walks back to the nearest preceding `#`-level heading; if the heading matches `section_headings` regex, the block is in scope.
+3. Looks up `code_block_runners[<lang>]` from the config. If present, executes per the runner spec:
+   - For inline-runnable blocks (Python, JS, bash command): substitute template vars, spawn subprocess in the assessor-env, capture stdout/stderr/exit code. Non-zero exit OR matching `failure_pattern` = doc-fiction finding.
+   - For config-DSL blocks (YAML, TOML, JSON under a "Configuration" heading): use the `wrapper_template` to invoke the project's own parser. Parser exception = doc-fiction finding.
+4. Emits findings with `category: doc-fiction`, `location.file: <doc-path>`, `location.line: <block-start-line>`, `location.anchor: <heading-slug>`.
+
+The check is conservative: code blocks under headings that don't match `section_headings` (e.g., "Internal notes," "Architecture") aren't validated. Tutorial-style "do not run this" snippets stay safe.
+
+#### Dead-code in detail
+
+For each project-package file (per `package_globs`), the engine:
+1. Parses the file with the runtime's AST (Python: `ast` module; Node: TypeScript compiler API; etc. — runtime-specific, but the rule is the same).
+2. Enumerates public symbols per `public_symbol_rule` (e.g., `no_underscore_prefix`).
+3. For each candidate, checks if it's "exposed" via any source in `exposed_via`:
+   - Entry-point declarations in the manifest
+   - Explicit export lists (`__all__`, `module.exports`, `pub use`)
+   - Feature-surface references (any active feature's `documented_in:` resolves to this symbol)
+4. For each candidate NOT exposed, scans the rest of the package per `caller_scan.method` for callers (imports + qualified calls). Excludes test directories per `exclude_globs`.
+5. Symbols with no callers and no exposure = `category: dead-code` findings. Not auto-fixable — agent/operator decides: wire it or remove it.
+
+The pythonetl case (`Pipeline.register_pipeline`, `get_pipeline`, `list_pipelines`) catches because:
+- Public methods on `Pipeline` (no underscore prefix)
 - No other module imports or calls them
-- They're not in `__all__`
-- The CLI README mentions a `pipeline_name` arg that would invoke them, but the CLI implementation doesn't call them — so they're documented in spirit but not via an active `documented_in:` link in a feature file
+- Not in `__all__`
+- The CLI feature documents a `pipeline_name` arg but the CLI implementation doesn't call them — so no `documented_in:` chain reaches them
+
+#### What v1 ships
+
+The full engine + the `configs/python.json` shipped default. Same total code volume as a Python-only imperative implementation, organized as engine + config rather than monolithic Python code. v2 adds `node.json` when needed; v3 adds the agent-generator.
 
 ### Semantic doc-fiction check (coherence-reviewer agent)
 
@@ -373,9 +436,10 @@ When a blocked directive resumes via Discord/Telegram/Web UI (not the CLI), the 
    - Run pre-merge in the brain.
 
 4. **Validator: doc-fiction (programmatic) + dead-code** (Component 3, deeper checks).
-   - Per-runtime executable-doc checking (Python first).
-   - Dead-code scanner (Python first: parse exports, scan callers).
-   - Both produce structured findings.
+   - Runtime-agnostic engine that consumes JSON config (`configs/<runtime>.json`).
+   - Three-tier resolution: shipped defaults → project override → agent-generated (v3).
+   - v1 ships engine + `python.json` config.
+   - Both checks produce structured findings.
 
 5. **Coherence-reviewer agent** (Component 3, semantic check).
    - New read-only agent role.
@@ -421,6 +485,8 @@ Each section ships as its own commit set and can be verified independently. Sect
 
 ## Out of scope (deferred)
 
+- **Shipped validator configs for runtimes beyond Python.** v1 ships `python.json`. v2 adds `node.json`, `go.json`, `rust.json` as projects in those runtimes need them. The engine handles them when the config exists.
+- **Agent-generated validator config for unknown runtimes** (the v3 tier-3 path). When the brain encounters a runtime with no shipped default AND no project override, v1 emits a finding ("no validator config for runtime X — add one to `.factory/coherence-validator.json`") and operates without doc-fiction / dead-code checks for that project. v3 adds the bootstrap task that generates the config automatically.
 - **Cross-project graph queries** (e.g., "show me every project that uses HTTPExtractor"). Federation requires a shared schema and storage layer. Defer to a future spec.
 - **Visual diagram rendering** (`factory5 graph render`). Useful but cosmetic; not needed for the core coherence improvement.
 - **Graph-aware planner** that builds plans from existing graph state (e.g., "if 2 features are documented but unimplemented, plan tasks to implement them"). Future iteration once the graph is stable.
