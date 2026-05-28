@@ -710,6 +710,34 @@ async function runInline(
               'reply with a specific fix instruction',
             ],
             ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
+            // Tier 15.13 — structured self-healing context
+            ...(attemptIndex > 0
+              ? { fixerAttempts: { tried: attemptIndex, max: MAX_FIXER_ATTEMPTS } }
+              : {}),
+            ...(autoFixableRemaining.length > 0
+              ? {
+                  remainingFindings: autoFixableRemaining.map((f) => {
+                    const loc = f.location;
+                    return {
+                      id: f.id,
+                      ...(f.category !== undefined && { category: f.category }),
+                      ...(f.title !== undefined && { title: f.title }),
+                      ...(f.why !== undefined && { why: f.why }),
+                      ...(f.suggested_fix !== undefined && { suggested_fix: f.suggested_fix }),
+                      ...(loc !== undefined && {
+                        location: {
+                          file: loc.file,
+                          ...(loc.line !== undefined && { line: loc.line }),
+                          ...(loc.anchor !== undefined && { anchor: loc.anchor }),
+                          ...(loc.frontmatter_field !== undefined && {
+                            frontmatter_field: loc.frontmatter_field,
+                          }),
+                        },
+                      }),
+                    };
+                  }),
+                }
+              : {}),
           };
           const res = await escalateBlocked(escalationOpts);
           if (res.answer !== undefined) {

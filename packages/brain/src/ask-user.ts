@@ -542,24 +542,59 @@ export interface EscalateBlockedOptions {
   pollIntervalMs?: number;
   /** See {@link AskUserOptions.gracePeriodMs} (U038). */
   gracePeriodMs?: number;
+  // Tier 15.13 — structured self-healing context. When set, surfaces a
+  // detailed breakdown of what the fixer tried + what remains.
+  fixerAttempts?: {
+    tried: number;
+    max: number;
+  };
+  /** Findings still open after the self-healing loop exhausted. */
+  remainingFindings?: ReadonlyArray<{
+    id: string;
+    category?: string;
+    title?: string;
+    why?: string;
+    suggested_fix?: string;
+    location?: { file: string; line?: number; anchor?: string; frontmatter_field?: string };
+  }>;
 }
 
 /** Default formatter for the "I'm stuck" message (ADR 0005). */
 export function defaultEscalateOutbound(
-  ctx: AskUserRenderContext & { reason: string; attempted: string[]; suggestions: string[] },
+  ctx: AskUserRenderContext & {
+    reason: string;
+    attempted: string[];
+    suggestions: string[];
+    fixerAttempts?: { tried: number; max: number };
+    remainingFindings?: EscalateBlockedOptions['remainingFindings'];
+  },
 ): string {
   const lines = [
     `(escalation ${ctx.questionId})`,
     `I'm stuck. Reason: ${ctx.reason}`,
-    '',
-    'Attempted:',
-    ...ctx.attempted.map((a) => `  - ${a}`),
-    '',
-    'Suggestions:',
-    ...ctx.suggestions.map((s) => `  - ${s}`),
-    '',
-    `Reply with: factory answer ${ctx.questionId} <direction>`,
   ];
+  if (ctx.fixerAttempts !== undefined) {
+    lines.push(
+      '',
+      `Self-healing: ${String(ctx.fixerAttempts.tried)} fixer attempts of ${String(ctx.fixerAttempts.max)} max — findings still open.`,
+    );
+  }
+  lines.push('', 'Attempted:', ...ctx.attempted.map((a) => `  - ${a}`));
+  if (ctx.remainingFindings !== undefined && ctx.remainingFindings.length > 0) {
+    lines.push(
+      '',
+      `Remaining findings (${String(ctx.remainingFindings.length)}):`,
+      ...ctx.remainingFindings.map((f) => {
+        const loc =
+          f.location !== undefined
+            ? `${f.location.file}${f.location.line !== undefined ? `:${String(f.location.line)}` : ''}${f.location.frontmatter_field !== undefined ? ` [${f.location.frontmatter_field}]` : ''}`
+            : '(no location)';
+        return `  - ${f.id} [${f.category ?? 'other'}] ${f.title ?? '(no title)'} @ ${loc}`;
+      }),
+    );
+  }
+  lines.push('', 'Suggestions:', ...ctx.suggestions.map((s) => `  - ${s}`));
+  lines.push('', `Reply with: factory answer ${ctx.questionId} <direction>`);
   return lines.join('\n');
 }
 
@@ -575,6 +610,8 @@ export async function escalateBlocked(opts: EscalateBlockedOptions): Promise<Ask
     reason: opts.reason,
     attempted: opts.attempted,
     suggestions: opts.suggestions,
+    ...(opts.fixerAttempts !== undefined && { fixerAttempts: opts.fixerAttempts }),
+    ...(opts.remainingFindings !== undefined && { remainingFindings: opts.remainingFindings }),
   });
   const question = `[escalation] ${questionBody}`;
 
@@ -593,6 +630,8 @@ export async function escalateBlocked(opts: EscalateBlockedOptions): Promise<Ask
         reason: opts.reason,
         attempted: opts.attempted,
         suggestions: opts.suggestions,
+        ...(opts.fixerAttempts !== undefined && { fixerAttempts: opts.fixerAttempts }),
+        ...(opts.remainingFindings !== undefined && { remainingFindings: opts.remainingFindings }),
       }),
   };
   return askUser(askOpts);
