@@ -12,6 +12,7 @@
  * @packageDocumentation
  */
 
+export * from './abandoned-worktrees.js';
 export * from './run-worker.js';
 export * from './parse-findings.js';
 export * from './parse-resolutions.js';
