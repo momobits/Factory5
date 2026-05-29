@@ -3,7 +3,6 @@ dist/
 node_modules/
 .astro/
 
-# Framework-managed — Control owns its own format rules
-.control/
+# Agent tooling — skill/command markdown, not subject to the build's format rules
 .claude/
 

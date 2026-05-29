@@ -59,12 +59,6 @@ docs/api/
 
 notes.md
 
-# --- Control framework ---
-.control/snapshots/
-.control/.is-source-repo
-.claude/settings.local.json
-# --- /Control ---
-
 # Per-operator MCP server scratch (Serena's activate_project drops a
 # project descriptor here; not shared, not part of the build).
 .serena/
@@ -77,5 +71,4 @@ notes.md
 
 .agents/
 .claude/
-.control/
 .relay/
