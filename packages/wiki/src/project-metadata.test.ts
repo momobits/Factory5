@@ -508,6 +508,24 @@ describe('resolveDirectiveLimits (Phase 13.3 — three-tier merge for I009)', ()
     expect(result).toEqual({ maxSteps: 100 });
     expect(result).not.toHaveProperty('maxUsd');
   });
+
+  it('treats a stored 0 as the unlimited sentinel (does not emit 0, which directiveLimitsSchema rejects)', () => {
+    // budgetsSchema accepts 0 = unlimited (ADR 0035 §6), but directiveLimitsSchema
+    // is .positive() and would throw on 0 — so 0 must resolve to "absent", not pass
+    // through and crash directiveSchema.parse at mint time.
+    expect(resolveDirectiveLimits({ projectDefaults: { maxUsd: 0, maxSteps: 0 } })).toBeUndefined();
+    expect(resolveDirectiveLimits({ explicitFlags: { maxSteps: 0 } })).toBeUndefined();
+  });
+
+  it('an explicit 0 means unlimited and overrides a lower-tier numeric cap', () => {
+    // `--max-usd 0` (unlimited) must win over a stored project default of 5.
+    const result = resolveDirectiveLimits({
+      explicitFlags: { maxUsd: 0 },
+      projectDefaults: { maxUsd: 5, maxSteps: 200 },
+    });
+    expect(result).toEqual({ maxSteps: 200 });
+    expect(result).not.toHaveProperty('maxUsd');
+  });
 });
 
 describe('updateProjectMetadata (ADR 0027 §1 write helper)', () => {

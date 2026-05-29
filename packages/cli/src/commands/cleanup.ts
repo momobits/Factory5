@@ -17,7 +17,7 @@ import { join, resolve } from 'node:path';
 import type { Command } from 'commander';
 
 import { createLogger } from '@factory5/logger';
-import { listAbandonedWorktrees } from '@factory5/worker';
+import { branchNameFor, listAbandonedWorktrees } from '@factory5/worker';
 
 const log = createLogger('cli.cleanup');
 
@@ -46,6 +46,20 @@ export function registerCleanupCommand(parent: Command): void {
     .argument('[projectPath]', 'Project root path (defaults to cwd)', process.cwd())
     .option('--prune-branches', 'Also delete the factory/task-<id> branches')
     .option('-y, --yes', 'Skip the listing-only dry run and actually remove')
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory cleanup                          # list abandoned worktrees in cwd (dry run)
+  factory cleanup ../my-app                # list for a specific project
+  factory cleanup --yes                    # actually remove the worktrees
+  factory cleanup --yes --prune-branches   # also delete the factory/task-<id> branches
+
+Exit codes:
+  0  listed cleanly, or removed successfully
+  1  unexpected error (cannot read project, git removal failed)
+`,
+    )
     .action(async (projectPath: string, opts: CleanupFlags) => {
       const abs = resolve(projectPath);
       const activeTaskIds = await readActiveTaskIds(abs);
@@ -91,7 +105,12 @@ export function registerCleanupCommand(parent: Command): void {
         }
 
         if (opts.pruneBranches === true) {
-          const branchName = `factory/task-${w.taskId.toLowerCase()}`;
+          // Must match the worktree's actual branch name. branchNameFor uses the
+          // last-8 chars of the task id (worktree.ts:465) — building the name from
+          // the full ULID here never matched, so the delete always threw into the
+          // warn-only catch and branch pruning was a silent no-op (ADR 0008 mandates
+          // a single branch-naming source).
+          const branchName = branchNameFor(w.taskId);
           try {
             execFileSync('git', ['branch', '-D', branchName], { cwd: abs, stdio: 'pipe' });
           } catch (err) {

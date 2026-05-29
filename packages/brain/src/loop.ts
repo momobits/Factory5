@@ -160,6 +160,47 @@ import { emitDirectiveCompleted, emitLogLine } from './emit.js';
 
 export { emitDirectiveCompleted, emitLogLine } from './emit.js';
 
+/** Title of the one-shot graph-migration task (also used to detect duplicates). */
+export const GRAPH_MIGRATION_TASK_TITLE = 'Migrate to knowledge graph (one-shot)';
+
+/**
+ * Build the one-shot graph-migration task inserted at the head of a plan when a
+ * project has `docs/knowledge/` but no `_schema.md` (Tier 15.13 backward-compat).
+ *
+ * The `agent` MUST be a tool-using role (`isToolUsingAgent` in `@factory5/worker`)
+ * so the worker runs it through `runTooling` — with a worktree and a commit.
+ * A read-only agent (e.g. `architect`) routes to `runReadOnly`, returns
+ * `filesChanged: []`, never commits, and silently seeds nothing. `scaffolder`
+ * carries the `knowledge-graph` skill and writes the seed files. A regression
+ * test pins this invariant against `isToolUsingAgent`.
+ */
+export function buildGraphMigrationTask(planId: string): Task {
+  return {
+    id: newId(),
+    planId,
+    title: GRAPH_MIGRATION_TASK_TITLE,
+    agent: 'scaffolder',
+    category: 'reasoning',
+    inputs: {
+      files: ['docs/knowledge/modules.md'],
+      context:
+        'This project predates the knowledge graph. Read modules.md, infer features (status=implemented since code already exists), copy _schema.md and _templates/ from factory5 assets, write features/*.md and decisions/ skeleton. Single commit. After this task completes, downstream tasks will operate on the seeded graph.',
+    },
+    expectedOutputs: {
+      files: [
+        'docs/knowledge/_schema.md',
+        'docs/knowledge/_templates/feature.md',
+        'docs/knowledge/_templates/decision.md',
+      ],
+      signals: [],
+    },
+    dependsOn: [],
+    status: 'pending',
+    attempts: 0,
+    featureIds: [],
+  };
+}
+
 async function runInline(
   opts: Required<Pick<BrainOptions, 'directiveId'>> & BrainOptions,
 ): Promise<InlineResult> {
@@ -476,7 +517,7 @@ async function runInline(
         existsSync(knowledgeDir) &&
         !existsSync(schemaPath) &&
         plan.tasks.length > 0 &&
-        !plan.tasks.some((t) => t.title === 'Migrate to knowledge graph (one-shot)')
+        !plan.tasks.some((t) => t.title === GRAPH_MIGRATION_TASK_TITLE)
       ) {
         log.info(
           { projectPath, planId: plan.id },
@@ -490,35 +531,11 @@ async function runInline(
           'loop: inserting graph-migration task (project predates knowledge graph)',
           { projectPath },
         );
-        const migrationTaskId = newId();
-        const migrationTask: Task = {
-          id: migrationTaskId,
-          planId: plan.id,
-          title: 'Migrate to knowledge graph (one-shot)',
-          agent: 'architect',
-          category: 'reasoning',
-          inputs: {
-            files: ['docs/knowledge/modules.md'],
-            context:
-              'This project predates the knowledge graph. Read modules.md, infer features (status=implemented since code already exists), copy _schema.md and _templates/ from factory5 assets, write features/*.md and decisions/ skeleton. Single commit. After this task completes, downstream tasks will operate on the seeded graph.',
-          },
-          expectedOutputs: {
-            files: [
-              'docs/knowledge/_schema.md',
-              'docs/knowledge/_templates/feature.md',
-              'docs/knowledge/_templates/decision.md',
-            ],
-            signals: [],
-          },
-          dependsOn: [],
-          status: 'pending',
-          attempts: 0,
-          featureIds: [],
-        };
+        const migrationTask = buildGraphMigrationTask(plan.id);
         // All existing tasks gain a dependency on the migration task
         for (const t of plan.tasks) {
-          if (!t.dependsOn.includes(migrationTaskId)) {
-            t.dependsOn = [migrationTaskId, ...t.dependsOn];
+          if (!t.dependsOn.includes(migrationTask.id)) {
+            t.dependsOn = [migrationTask.id, ...t.dependsOn];
           }
         }
         plan.tasks.unshift(migrationTask);

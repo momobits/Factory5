@@ -28,6 +28,18 @@ export function registerGraphCheckCommand(parent: Command): void {
     .command('check')
     .description('Validate the project knowledge graph (schema + reference integrity)')
     .argument('[projectPath]', 'Project root path (defaults to cwd)', process.cwd())
+    .addHelpText(
+      'after',
+      `
+Examples:
+  factory graph check               # validate docs/knowledge/ in the current dir
+  factory graph check ../my-app     # validate a specific project
+
+Exit codes:
+  0  validation passed (or no knowledge area to validate)
+  1  one or more findings raised
+`,
+    )
     .action(async (projectPath: string) => {
       const abs = resolve(projectPath);
       log.info({ projectPath: abs }, 'graph check: starting');
