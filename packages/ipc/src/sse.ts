@@ -9,7 +9,9 @@
  * sides shows up as a parse error rather than silently bad rendering.
  *
  * The discriminated union {@link directiveStreamEventSchema} covers all
- * six event types. Adding a new event type:
+ * nine event types (`task.started`, `task.completed`, `task.retried`,
+ * `finding.created`, `spend.updated`, `transcript.line`, `log.line`,
+ * `pool.tally`, `directive.completed`). Adding a new event type:
  *
  *   1. Add a `*EventSchema` for the new payload.
  *   2. Add it to `directiveStreamEventSchema`'s discriminated array.
@@ -246,6 +248,16 @@ export const directiveCompletedEventSchema = z.object({
   type: z.literal('directive.completed'),
   directiveId: ulidSchema,
   status: directiveStatusSchema,
+  /**
+   * Raw, un-parsed `directives.blocked_reason` string as stored in the DB
+   * — a *serialized JSON string* on this SSE channel, NOT the structured
+   * union the directive-detail HTTP endpoint exposes as
+   * `directiveBlockedReason`. Latent contract drift: the two surfaces carry
+   * the same datum in different shapes. A consumer that needs the
+   * structured reason must `JSON.parse` this string itself (and tolerate a
+   * bare token like `'cancelled'`), or read the detail endpoint instead of
+   * relying on this field.
+   */
   blockedReason: z.string().nullable(),
 });
 export type DirectiveCompletedEvent = z.infer<typeof directiveCompletedEventSchema>;

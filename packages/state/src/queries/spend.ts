@@ -200,6 +200,13 @@ export function perProject(db: Database, filter?: SpendFilter): PerProjectSpend[
  * project handle and display name so a CLI dashboard can render the
  * directive's project context without a second query.
  *
+ * Warning: usage recorded without a `directiveId` — pre-directive work such
+ * as triage, architect, and critic calls — is **not** represented here.
+ * That spend is real and is not lost: it surfaces in {@link perProject}'s
+ * `(unassigned)` bucket (NULL `directive_id` ⇒ NULL `project_id`). So
+ * summing `perDirective` totals can undercount the grand total; use
+ * {@link perProject} when you need the full ledger.
+ *
  * Ordering: `lastCalledAt DESC` — recent builds at the top.
  */
 export function perDirective(db: Database, filter?: SpendFilter): PerDirectiveSpend[] {

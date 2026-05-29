@@ -253,9 +253,10 @@ const AGENT_TO_AXIS: Record<string, MaxTurnsAxis | undefined> = {
  * Returns `undefined` for non-tool-using agents (critic, planner, architect)
  * that do not draw against a turn pool (ADR 0034 §1).
  *
- * Co-exists with the identical helper in `packages/brain/src/budget-escalation.ts`
- * until Tier 15.8 deletes that file. Tier 15.5+ consumers (`pool-usage.ts`,
- * `pool.ts`) import from `@factory5/core` exclusively.
+ * Canonical home for this helper. The former duplicate in
+ * `packages/brain/src/budget-escalation.ts` was deleted with the rest of the
+ * `[BUDGET]` askUser path (ADR 0034 §6); all consumers (`pool-usage.ts`,
+ * `pool.ts`, …) import it from `@factory5/core`.
  */
 export function axisForAgent(agent: string): MaxTurnsAxis | undefined {
   return AGENT_TO_AXIS[agent];

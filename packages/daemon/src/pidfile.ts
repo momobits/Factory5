@@ -1,9 +1,10 @@
 /**
  * Pidfile acquire / release for `factoryd`.
  *
- * One daemon per host. We coordinate with a pidfile under the factory5 data
- * directory (`%LOCALAPPDATA%\factory5\factoryd.pid` on Windows,
- * `~/.factory5/factoryd.pid` elsewhere). The protocol:
+ * One daemon per host. We coordinate with a pidfile under the factory data
+ * directory — `<repo>/.factory/factoryd.pid` when a repo-local instance is
+ * discovered, else `~/.factory/factoryd.pid` fallback, on all platforms (see
+ * `@factory5/logger` `dataDir()`). The protocol:
  *
  * 1. If the pidfile does not exist, write our PID and claim it.
  * 2. If it does exist, read the PID and liveness-check it via `kill(pid, 0)`.

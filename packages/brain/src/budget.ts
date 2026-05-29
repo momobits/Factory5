@@ -35,7 +35,7 @@ const COLD_START_MIN_SAMPLES = 2;
  *   - `call` defaults are small (one-shot classifications) and line up
  *     with Phase 6c observed spend.
  *
- * Overridable at runtime via `~/.factory5/config.toml`
+ * Overridable at runtime via `~/.factory/config.toml`
  * `[budget.defaults]` once step 7a.6 lands; for now these hard-coded
  * values are the only cold-start source.
  */
