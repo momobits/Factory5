@@ -2,9 +2,9 @@
 
 Daemon assembly. Wires together:
 
-- pidfile (one daemon per host — `%LOCALAPPDATA%\factory5\factoryd.pid` on
-  Windows, `~/.factory/factoryd.pid` elsewhere; overridable via
-  `FACTORY5_PIDFILE`)
+- pidfile (one daemon per host — `<dataDir>/factoryd.pid`, i.e. the active
+  instance's `.factory/factoryd.pid`; home fallback `~/.factory/` on all
+  platforms, ADR 0023; overridable via `FACTORY5_PIDFILE`)
 - `@factory5/state` (SQLite — the durable bus for directives, outbound
   messages, events, tasks_inflight)
 - `@factory5/ipc` server (Fastify on `127.0.0.1:25295` — Phase 3 step 2)

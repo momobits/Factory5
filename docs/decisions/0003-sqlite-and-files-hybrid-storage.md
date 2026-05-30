@@ -3,6 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-04-18
 
+> **Path note (ADR 0023):** The `~/.factory5/` and `%LOCALAPPDATA%\factory5\` paths below predate [ADR 0023](0023-repo-local-instance-and-cwd-walk.md), which moved factory's runtime state to the active instance's `.factory/` directory (discovered by cwd-walk; home fallback `~/.factory/` on all platforms). Read those paths as `<dataDir>`.
+
 ## Context
 
 Factory 5 has two distinct categories of state:

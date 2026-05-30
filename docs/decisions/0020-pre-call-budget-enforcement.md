@@ -3,6 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-04-21
 
+> **Path note (ADR 0023):** The `~/.factory5/config.toml` paths below predate [ADR 0023](0023-repo-local-instance-and-cwd-walk.md), which moved factory's config to the active instance's `.factory/config.toml` (home fallback `~/.factory/`). Read those paths as `<dataDir>/config.toml`.
+
 ## Context
 
 Phase 7a wires `max_usd` and `max_steps` ceilings into `brain.loop`. The

@@ -43,4 +43,4 @@ Skill files live in [`../skills/`](../skills). Format: YAML frontmatter (`name`,
 
 ## Loading
 
-Skills are loaded by `@factory5/brain` at runtime via the skill loader (`packages/brain/src/prompts.ts`'s `loadSkill(id)`). The loader scans the `skills/` directory plus user-specific overrides at `~/.factory5/skills/` and project-specific overrides at `<project>/.factory/skills/`.
+Skills are loaded by `@factory5/brain` at runtime via the skill loader (`packages/brain/src/prompts.ts`'s `loadSkill(id)`). The loader reads each skill from the repo's `skills/` directory only — there is no per-user or per-project override path today (a `<dataDir>/skills/` or `<project>/.factory/skills/` override layer is a possible future addition, not yet implemented).

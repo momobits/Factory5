@@ -32,22 +32,26 @@ Agents are _roles_ in the build pipeline. Each agent has:
 
 ## Model category resolution
 
-Each agent declares a _category_, not a model. The provider layer resolves category → provider+model via the user's `~/.factory5/config.toml`. See ADR 0004.
+Each agent declares a _category_, not a model. The provider layer resolves category → provider+model via the user's `<dataDir>/config.toml` (the active instance's `.factory/config.toml`, discovered by cwd-walk; ADR 0023). See ADR 0004.
 
-Default mapping:
+Default mapping (`DEFAULT_CATEGORIES` in `packages/brain/src/config.ts`; the
+`[categories.*]` table in `config.toml` overrides any of these):
 
-| Category        | Default provider/model            |
-| --------------- | --------------------------------- |
-| `quick`         | `anthropic-api/claude-haiku-4-5`  |
-| `planning`      | `anthropic-api/claude-sonnet-4-6` |
-| `reasoning`     | `claude-cli/claude-opus-4-7`      |
-| `deep`          | `claude-cli/claude-opus-4-7`      |
-| `documentation` | `anthropic-api/claude-haiku-4-5`  |
+| Category        | Default provider/model         |
+| --------------- | ------------------------------ |
+| `quick`         | `claude-cli/claude-haiku-4-5`  |
+| `planning`      | `claude-cli/claude-sonnet-4-6` |
+| `reasoning`     | `claude-cli/claude-opus-4-7`   |
+| `deep`          | `claude-cli/claude-opus-4-7`   |
+| `documentation` | `claude-cli/claude-haiku-4-5`  |
 
-Override per agent in user config:
+Per-agent category override (ADR 0004 amendment / ADR 0036) — flip an individual
+agent's resolved category without remapping the global `[categories.*]` table.
+Only `architect` and `critic` are overridable today; the value is a category
+(not a model), and the schema is strict. Lives in `config.toml`:
 
 ```toml
-[agents.builder]
-category = "deep"            # default
-override = "openai/gpt-5"    # force specific model
+[agents]
+architect = "reasoning"   # default: planning
+critic    = "deep"        # default: reasoning
 ```

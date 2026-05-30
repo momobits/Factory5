@@ -439,7 +439,62 @@ The config file is harmless to lose (you can regenerate it from the template + t
 
 ---
 
-## 11. Troubleshooting
+## 11. Resetting & data lifecycle
+
+Factory's per-instance state lives in the instance dir (`<dataDir>` — the active `.factory/` discovered by cwd-walk, or `~/.factory/` as the home fallback; ADR 0023). **Config and runtime data are separate files**, so you can wipe one without touching the other:
+
+| File(s)                                            | Holds                                                                                 | Survives a DB reset?       |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------- |
+| `config.toml`                                      | providers, channels, budgets, `[agents]`                                              | ✅ yes (separate file)     |
+| `factory.db` + `factory.db-wal` + `factory.db-shm` | all runtime state — directives, tasks, projects, findings, spend, sessions, log lines | — this _is_ what you reset |
+| `logs/`                                            | pino log files                                                                        | optional to keep           |
+| `factoryd.pid`                                     | daemon pidfile                                                                        | regenerated on start       |
+
+### Reset everything, keep config
+
+```bash
+# 1. Stop the daemon first — it holds factory.db open in WAL mode.
+factory daemon stop            # or kill the PID in <dataDir>/factoryd.pid
+
+# 2. Delete all THREE sqlite files together (-wal/-shm are live WAL state).
+rm .factory/factory.db .factory/factory.db-wal .factory/factory.db-shm
+#  Windows PowerShell:
+#  Remove-Item .factory\factory.db, .factory\factory.db-wal, .factory\factory.db-shm
+
+# 3. (optional) clear logs
+rm -rf .factory/logs/*
+
+# 4. Restart — the DB is recreated empty and migrations re-run automatically.
+factory daemon start
+```
+
+`config.toml` is untouched, so providers / channels / budgets / `[agents]` all survive.
+
+### Clear or delete a single project
+
+```bash
+factory project list                  # see names + ULIDs
+factory project delete <name>         # unregister (registry row only)
+factory project delete <name> --purge # also rm -rf the workspace dir (double-confirm)
+```
+
+> **Caveat — `project delete` does not cascade.** It removes only the `projects` registry row. The project's directives, spend (`model_usage`), findings, and learnings stay in the DB as an archival ledger (there is no FK on `directives.project_id`), so `factory spend` / `factory findings` still surface its history when queried directly. To fully purge a project's history (stop the daemon first), open `<dataDir>/factory.db` in `sqlite3` and run:
+>
+> ```sql
+> PRAGMA foreign_keys = ON;
+> -- <ULID> from `factory project list`
+> DELETE FROM model_usage      WHERE directive_id IN (SELECT id FROM directives WHERE project_id = '<ULID>');
+> DELETE FROM findings_registry WHERE project_id = '<ULID>';
+> DELETE FROM learnings        WHERE source_project = '<ULID>';
+> DELETE FROM directives       WHERE project_id = '<ULID>';  -- cascades to tasks/pending_questions/log_lines
+> DELETE FROM projects         WHERE id = '<ULID>';
+> ```
+>
+> For most testing, the full DB reset above is simpler than per-project surgery.
+
+---
+
+## 12. Troubleshooting
 
 - **`factory doctor` says `claude-cli: NOT AVAILABLE`** — install Claude Code from <https://claude.com/claude-code> or set `providers.claudeCliPath` in config.
 - **Discord probe says `login: FAILED`** — wrong token, Message Content Intent off, or bot was deleted. Regenerate from the Discord developer portal.

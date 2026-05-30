@@ -8,7 +8,7 @@
 
 Phase 9 shipped the read-only Web UI per ADR 0025: Astro MPA + Islands behind `/app/`, `/api/v1/*` JSON API gated by a per-startup `FACTORY5_UI_TOKEN` bearer. Phase 11's charter (`.control/phases/phase-11-web-ui-9b/README.md`) extends that surface with the deferred 9b mutations — answer pending questions, kick off builds, configure per-project budget defaults — so the Web UI becomes a complete operating surface, not just a dashboard.
 
-Three forcing functions converge here. ADR 0024 made `pending_questions` first-class (workers ask mid-stream; channel handlers collect answers); Phase 9 rendered them in the browser; Phase 11 closes the loop in the browser too. `factory build` already resolves a directive via `loadOrCreateProjectMetadata` + `directivesQ.insert` with two-tier budget resolution (`--max-usd flag → ~/.factory5/config.toml [budget.defaults]`); the API needs the same path plus a per-project tier so operators can pin defaults without flagging every build. And the existing GET-only `/api/v1/*` envelope (`IpcRequestError → { error: { code, message, details? } }`) already exists in production — the mutation routes shouldn't fork it.
+Three forcing functions converge here. ADR 0024 made `pending_questions` first-class (workers ask mid-stream; channel handlers collect answers); Phase 9 rendered them in the browser; Phase 11 closes the loop in the browser too. `factory build` already resolves a directive via `loadOrCreateProjectMetadata` + `directivesQ.insert` with two-tier budget resolution (`--max-usd flag → <dataDir>/config.toml [budget.defaults]`); the API needs the same path plus a per-project tier so operators can pin defaults without flagging every build. And the existing GET-only `/api/v1/*` envelope (`IpcRequestError → { error: { code, message, details? } }`) already exists in production — the mutation routes shouldn't fork it.
 
 Five sub-decisions need pinning before any route lands so 11.2 / 11.3 / 11.4 implement against a fixed contract — same multi-decision one-ADR shape used for [ADR 0024](0024-worker-subprocess-ask-user.md), [ADR 0025](0025-web-ui-architecture.md), and [ADR 0026](0026-pluggable-runtime-contract.md):
 
@@ -109,7 +109,7 @@ Mirrors 10.8's `languageFromProjectMeta` (`packages/cli/src/commands/build.ts:65
 
 1. `--max-usd` / `--max-steps` CLI flag (or `limits` field in the API request body) — most specific, wins always.
 2. `project.json metadata.budgetDefaults` (per-project, this ADR's new tier).
-3. `~/.factory5/config.toml [budget.defaults]` (instance-wide, ADR 0020).
+3. `<dataDir>/config.toml [budget.defaults]` (instance-wide, ADR 0020).
 4. Absent → unlimited (pre-Phase-7 behaviour preserved).
 
 Per-field resolution is independent: a directive with `--max-usd 5` and a project `metadata.budgetDefaults.maxSteps: 200` resolves to `limits: { maxUsd: 5, maxSteps: 200 }`. The change site is `packages/cli/src/commands/build.ts:163-169` — the existing `??`-chain gains the project-tier read between the flag and the config:
