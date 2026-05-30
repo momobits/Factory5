@@ -101,7 +101,9 @@ export function createSupervisor(opts: SupervisorOptions): SupervisorHandle {
         // keeps `consecutiveCrashes` truly consecutive rather than a lifetime
         // tally (which would permanently kill the task after `maxRestarts`
         // crashes spread arbitrarily far apart).
-        const uptimeMs = Date.now() - taskStartedAt;
+        // Clamp: a backward wall-clock jump must not produce a negative uptime
+        // that spuriously skips the healthy-run reset.
+        const uptimeMs = Math.max(0, Date.now() - taskStartedAt);
         if (consecutiveCrashes > 0 && uptimeMs >= resetAfterHealthy) {
           opts.log.info(
             { component: opts.name, uptimeMs, forgaveCrashes: consecutiveCrashes },

@@ -345,14 +345,14 @@ export const taskSchema = z.object({
    */
   maxTurns: z.number().int().positive().optional(),
   /**
-   * Planner-emitted USD estimate for this task. The pool's pre-launch
-   * check adds this against the directive-wide spend pool; when a pool's
-   * effective cap is reached the brain parks the directive with a
-   * structured `blockedReason` (`kind: 'pool-exhausted'`) and the operator
-   * raises the cap from the project page — there is no `[BUDGET]` askUser
-   * (the per-task cap + askUser path was removed by ADR 0034 §3, §6).
-   * Optional — planners that don't emit (legacy / chat-only directives /
-   * estimateless planners) skip the estimate (uncapped path).
+   * Planner-emitted USD estimate for this task. The pool's pre-launch guard
+   * (pool.ts) compares it against the effective `maxUsdPerTask` cap (ADR 0035
+   * per-task axis) and FAILS the task before launching — `errorSubtype:
+   * 'per-task-usd-exceeded'` — when the estimate exceeds the cap. It does NOT
+   * sum into a directive-wide spend pool and does NOT park the directive; the
+   * `pool-exhausted` park is the separate directive-wide turn/spend-pool path.
+   * Optional — planners that don't emit (legacy / chat-only / estimateless
+   * planners) skip the check (uncapped path).
    */
   estimatedUsd: z.number().nonnegative().optional(),
   /**

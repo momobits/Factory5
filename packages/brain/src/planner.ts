@@ -73,7 +73,8 @@ const plannerTaskSchema = z.object({
    * Optional planner estimate of model spend (USD) for this task. The planner
    * prompt instructs the model to emit it; the pool's pre-launch guard
    * (pool.ts) compares it against the `maxUsdPerTask` cap (ADR 0035 per-task
-   * axis) and parks the directive before launching an over-budget task.
+   * axis) and fails the task before launching when its estimate exceeds the cap
+   * (errorSubtype `per-task-usd-exceeded`) — it does not park the directive.
    */
   estimatedUsd: z.number().nonnegative().optional(),
 });

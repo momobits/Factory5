@@ -368,6 +368,9 @@ function softKill(child: ChildProcessWithoutNullStreams): void {
   const t = setTimeout(() => {
     // Force-kill the whole tree after the grace window — the `claude` CLI can
     // spawn its own subprocesses (MCP servers, tools) that child.kill orphans.
+    // Note: on Windows the SIGTERM above is already a hard TerminateProcess of
+    // only the direct child, so the grace window is effectively a no-op for the
+    // tree there — this force path (taskkill /T) is what actually reaps it.
     killProcessTree(child);
   }, KILL_GRACE_MS);
   if (typeof t.unref === 'function') t.unref();

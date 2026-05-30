@@ -158,12 +158,21 @@ async function runForeground(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     log.info({ signal }, 'shutdown signal received');
+    // Force-exit fallback: if stopDaemon() wedges (e.g. the daemon is already
+    // hung — exactly the case the error handlers below fire on), don't hang
+    // forever. Not unref'd, so it keeps the loop alive long enough to fire.
+    const forceTimer = setTimeout(() => {
+      log.error({ signal }, 'shutdown drain timed out — forcing exit');
+      exit(code === 0 ? 1 : code);
+    }, 8000);
     void stopDaemon(handle)
       .then(() => {
+        clearTimeout(forceTimer);
         log.info('factoryd stopped');
         exit(code);
       })
       .catch((err: unknown) => {
+        clearTimeout(forceTimer);
         log.error({ err }, 'shutdown failed');
         exit(1);
       });
