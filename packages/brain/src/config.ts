@@ -93,6 +93,24 @@ export const configSchema = z.object({
       port: z.number().int().positive().max(65535).optional(),
     })
     .default({}),
+  /**
+   * Per-agent model-category overrides (ADR 0004 amendment / ADR 0033 §6 /
+   * ADR 0036). Flips an individual agent's resolved category without
+   * touching the global `[categories.*]` table. Only `architect` and
+   * `critic` are overridable today; `.strict()` so adding a third role is a
+   * deliberate schema bump. Resolved via `resolveAgentCategory` in
+   * `@factory5/state` — the brain loads this block and passes it in.
+   * Absent / empty table → built-in `DEFAULT_AGENT_CATEGORIES` apply.
+   *
+   * ADR 0036 moved this table here from the retired `<dataDir>/config.json`.
+   */
+  agents: z
+    .object({
+      architect: z.enum(MODEL_CATEGORIES).optional(),
+      critic: z.enum(MODEL_CATEGORIES).optional(),
+    })
+    .strict()
+    .default({}),
 });
 
 export type FactoryConfig = z.infer<typeof configSchema>;
@@ -209,6 +227,7 @@ export function defaultConfig(): FactoryConfig {
     budget: { defaults: {} },
     channels: {},
     daemon: {},
+    agents: {},
   });
 }
 

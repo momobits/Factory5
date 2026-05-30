@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { newId } from '@factory5/core';
+import { DEFAULT_ASK_USER_DEADLINE_MS, newId } from '@factory5/core';
 import {
   directives as directivesQ,
   openDatabase,
@@ -14,17 +14,12 @@ import {
   runMigrations,
 } from '@factory5/state';
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
 import {
   askUser,
   defaultAskUserOutbound,
   defaultEscalateOutbound,
   escalateBlocked,
   openQuestionsForDirective,
-  resetDeadlineCache,
 } from './ask-user.js';
 
 function freshDb(): ReturnType<typeof openDatabase> {
@@ -382,62 +377,23 @@ describe('askUser', () => {
     db.close();
   });
 
-  describe('deadline_at stamping (Tier 8 / ADR 0030)', () => {
-    it('auto-stamps deadlineAt from <dataDir>/config.json.askUserDeadlineMs', async () => {
+  describe('deadline_at stamping (Tier 8 / ADR 0030 / ADR 0036)', () => {
+    it('falls back to DEFAULT_ASK_USER_DEADLINE_MS when no override is configured', async () => {
+      // ADR 0036 retired the config.json deadline override. With no
+      // projectBudgets passed (the unified budget path), the deadline is the
+      // baked-in default.
       const db = freshDb();
       const directiveId = seedDirective(db);
-      const configDir = mkdtempSync(join(tmpdir(), 'factory5-askuser-cfg-'));
       try {
-        writeFileSync(
-          join(configDir, 'config.json'),
-          JSON.stringify({ askUserDeadlineMs: 90_000 }),
-          'utf8',
-        );
-        resetDeadlineCache();
-
         const fixedNow = Date.parse('2026-05-08T12:00:00.000Z');
-        const expectedDeadline = new Date(fixedNow + 90_000).toISOString();
+        const expectedDeadline = new Date(fixedNow + DEFAULT_ASK_USER_DEADLINE_MS).toISOString();
 
         const pending = askUser({
           db,
           directiveId,
-          question: 'How long do we wait?',
+          question: 'No override?',
           pollIntervalMs: 5,
           now: () => fixedNow,
-          configDataDir: configDir,
-        });
-        await new Promise((r) => setTimeout(r, 20));
-
-        const open = pendingQuestions.openForDirective(db, directiveId);
-        expect(open).toHaveLength(1);
-        expect(open[0]?.deadlineAt).toBe(expectedDeadline);
-
-        pendingQuestions.answer(db, open[0]?.id as string, 'go', new Date().toISOString());
-        await pending;
-      } finally {
-        rmSync(configDir, { recursive: true, force: true });
-        resetDeadlineCache();
-        db.close();
-      }
-    });
-
-    it('falls back to DEFAULT_ASK_USER_DEADLINE_MS when config file is absent', async () => {
-      const db = freshDb();
-      const directiveId = seedDirective(db);
-      const configDir = mkdtempSync(join(tmpdir(), 'factory5-askuser-default-'));
-      try {
-        resetDeadlineCache();
-
-        const fixedNow = Date.parse('2026-05-08T12:00:00.000Z');
-        const expectedDeadline = new Date(fixedNow + 300_000).toISOString();
-
-        const pending = askUser({
-          db,
-          directiveId,
-          question: 'No config file?',
-          pollIntervalMs: 5,
-          now: () => fixedNow,
-          configDataDir: configDir,
         });
         await new Promise((r) => setTimeout(r, 20));
 
@@ -447,24 +403,14 @@ describe('askUser', () => {
         pendingQuestions.answer(db, open[0]?.id as string, 'go', new Date().toISOString());
         await pending;
       } finally {
-        rmSync(configDir, { recursive: true, force: true });
-        resetDeadlineCache();
         db.close();
       }
     });
 
-    it('caller-provided deadlineAt wins over the config default', async () => {
+    it('caller-provided deadlineAt wins over the default', async () => {
       const db = freshDb();
       const directiveId = seedDirective(db);
-      const configDir = mkdtempSync(join(tmpdir(), 'factory5-askuser-explicit-'));
       try {
-        writeFileSync(
-          join(configDir, 'config.json'),
-          JSON.stringify({ askUserDeadlineMs: 60_000 }),
-          'utf8',
-        );
-        resetDeadlineCache();
-
         const explicitDeadline = '2026-12-31T23:59:59.000Z';
 
         const pending = askUser({
@@ -473,7 +419,6 @@ describe('askUser', () => {
           question: 'Explicit deadline',
           pollIntervalMs: 5,
           deadlineAt: explicitDeadline,
-          configDataDir: configDir,
         });
         await new Promise((r) => setTimeout(r, 20));
 
@@ -483,8 +428,6 @@ describe('askUser', () => {
         pendingQuestions.answer(db, open[0]?.id as string, 'go', new Date().toISOString());
         await pending;
       } finally {
-        rmSync(configDir, { recursive: true, force: true });
-        resetDeadlineCache();
         db.close();
       }
     });

@@ -7,16 +7,8 @@
 export { openDatabase, closeDatabase, defaultDbPath } from './db.js';
 export type { Database } from './db.js';
 
-export {
-  DEFAULT_ASK_USER_DEADLINE_MS,
-  DEFAULT_AGENT_CATEGORIES,
-  agentsConfigSchema,
-  defaultConfigPath,
-  loadConfig,
-  resolveAgentCategory,
-  writeConfig,
-} from './config.js';
-export type { ConfigurableAgentRole, FactoryConfig } from './config.js';
+export { DEFAULT_AGENT_CATEGORIES, agentsConfigSchema, resolveAgentCategory } from './config.js';
+export type { ConfigurableAgentRole } from './config.js';
 
 export { runMigrations, currentSchemaVersion } from './migrations/index.js';
 

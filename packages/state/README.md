@@ -65,24 +65,29 @@ Both paths record the reason in the new `blocked_reason TEXT` column
 (migration 002) so `factory status` / later inspection explain why a
 row was flipped.
 
-## Daemon-wide config (`<dataDir>/config.json`)
+## Per-agent category resolver
 
-Small JSON sidecar for tunables that don't fit `config.toml`'s channels-and-providers shape. Schema + the `DEFAULT_ASK_USER_DEADLINE_MS = 300_000` constant live in `@factory5/core`; the I/O lives here so `core` stays fs-free (per Tier 8 plan deviation; ADR 0030).
+> ADR 0036 retired this package's `<dataDir>/config.json` reader/writer. The single
+> operator config file is now `config.toml` (owned by `@factory5/brain`). What remains here
+> is the **pure resolver** for per-agent model-category overrides.
+
+The `[agents]` table lives in `config.toml`; the brain loads it and passes the block into
+`resolveAgentCategory`. This helper stays in `@factory5/state` (not brain) because the
+dependency direction is brain → state → core — and it is a pure function on a plain
+object, no I/O.
 
 ```ts
-import { loadConfig, writeConfig } from '@factory5/state';
+import { resolveAgentCategory, DEFAULT_AGENT_CATEGORIES } from '@factory5/state';
 
-const cfg = loadConfig(); // returns the parsed config or defaults if absent / unreadable
-await writeConfig({ ...cfg, askUserDeadlineMs: 600_000 }); // atomic write
+// config = the parsed `[agents]` block from config.toml (or {} when absent)
+resolveAgentCategory({ agents: { architect: 'reasoning' } }, 'architect'); // 'reasoning'
+resolveAgentCategory({}, 'critic'); // DEFAULT_AGENT_CATEGORIES.critic === 'reasoning'
 ```
 
-Today's keys:
-
-| Key                 | Type   | Default   | Purpose                                                                                                        |
-| ------------------- | ------ | --------- | -------------------------------------------------------------------------------------------------------------- |
-| `askUserDeadlineMs` | number | `300_000` | How long `pending_questions` rows wait for a human reply before the brain auto-answers them via LLM (ADR 0030) |
-
-`loadConfig` fills in defaults only for the benign cases — a missing or empty file. Corrupt JSON or a schema-mismatched file **throws** (a corrupt config is treated as an operator action, not a silent fallback). Callers that need resilience catch it: e.g. `packages/brain/src/ask-user.ts` wraps `loadConfig` in a `try/catch`, logs a `warn`, and falls back to the default deadline rather than crashing the brain mid-`askUser`.
+The auto-answer deadline that used to live in `config.json` is now the `askUserDeadlineMs`
+**budget axis** (ADR 0035) — resolved per-project (`project.json`) and per-build
+(`payload.budgets`), with `DEFAULT_ASK_USER_DEADLINE_MS` (in `@factory5/core`) as the
+baked-in default.
 
 ## Conventions
 

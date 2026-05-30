@@ -87,6 +87,20 @@ model = "claude-haiku-4-5"
 # quick = [{ provider = "claude-cli", model = "claude-haiku-4-5" }]
 
 # -----------------------------------------------------------------------------
+# Per-agent category overrides (ADR 0004 amendment / ADR 0033 / ADR 0036)
+# -----------------------------------------------------------------------------
+# Flip an individual agent's resolved category without touching the global
+# [categories.*] table above. Only `architect` and `critic` are overridable
+# today; the schema is strict, so adding another role is a deliberate code
+# change. Defaults: architect = "planning" (Sonnet), critic = "reasoning"
+# (Opus). Valid categories: quick | planning | reasoning | deep | documentation.
+# (ADR 0036 moved this table here from the retired <dataDir>/config.json.)
+
+# [agents]
+# architect = "reasoning"
+# critic    = "deep"
+
+# -----------------------------------------------------------------------------
 # Budget defaults (ADR 0020)
 # -----------------------------------------------------------------------------
 # Applied to every directive that doesn't override via CLI flags. Absent /
