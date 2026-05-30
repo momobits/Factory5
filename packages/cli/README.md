@@ -15,11 +15,13 @@ Every `factory <cmd> --help` lists worked examples and exit codes; `factory --he
 | `factory build <project> [--autonomy … --concurrency … --inline]`               | **done** | Delegates to factoryd if running, else inline                                                              |
 | `factory cancel <directive-id> [--reason <text>]`                               | **done** | Actively cancel a directive — flip to `failed` and kill the worker                                         |
 | `factory chat [--autonomy …]`                                                   | **done** | Interactive REPL against factoryd (daemon must be up)                                                      |
+| `factory cleanup [--prune-branches]`                                            | **done** | List and remove abandoned worktrees from prior failed runs                                                 |
 | `factory completion <bash\|zsh\|pwsh>`                                          | **done** | Emit a static tab-completion script                                                                        |
 | `factory daemon start\|stop\|status\|restart`                                   | **done** | Lifecycle; refuses duplicate starts via pidfile                                                            |
 | `factory directive mark-blocked <id> [--reason …]`                              | **done** | Flip a stuck `running` directive to `blocked` (manual recovery)                                            |
 | `factory doctor [--skip-call] [--skip-discord]`                                 | **done** | Provider probe + triage round-trip + optional Discord reachability probe                                   |
 | `factory findings list\|show\|backfill\|mark`                                   | **done** | Cross-project findings registry — list, show one, backfill from workspaces, mark a single finding's status |
+| `factory graph check [<projectPath>]`                                           | **done** | Validate a project's `docs/knowledge/` graph (schema + reference integrity)                                |
 | `factory init [--discord-token … --discord-application-id … ...]`               | **done** | Writes `config.toml`; populates `[channels.discord]` when `--discord-*` given                              |
 | `factory project list\|show\|delete <name> [--force --purge]`                   | **done** | Per-project introspection + lifecycle (registry-aware)                                                     |
 | `factory questions cleanup [--since <iso-date>] [--dry-run]`                    | **done** | Mark un-answered questions on terminated directives as answered (sweep)                                    |

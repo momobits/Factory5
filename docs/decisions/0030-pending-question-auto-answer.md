@@ -48,7 +48,7 @@ The schema column is preferred over the prior `[bracketed]` text-prefix conventi
 
 Every new `ask_user` pending-question gets `deadline_at = now() + askUserDeadlineMs`. The brain reads `askUserDeadlineMs` from `<dataDir>/config.json` at the start of each emission (or caches at startup; implementation choice). Default if file is absent or key is missing: 5 minutes (`300_000` ms).
 
-`<dataDir>` is the same directory `factory.db` lives in (`@factory5/logger/paths` `dataDir()` — typically `~/.factory5/` on Linux, `%LOCALAPPDATA%\factory5\` on Windows). New file (no migration required for the file's absence; readers fall back to defaults). New `loadConfig()` in `@factory5/core` is the single read path.
+`<dataDir>` is the same directory `factory.db` lives in (`@factory5/logger/paths` `dataDir()` — the active instance's `.factory/` dir, discovered by cwd-walk, with the home fallback `~/.factory/` on all platforms; ADR 0023). New file (no migration required for the file's absence; readers fall back to defaults). New `loadConfig()` in `@factory5/core` is the single read path.
 
 ```json
 {

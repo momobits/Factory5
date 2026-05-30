@@ -202,7 +202,7 @@ type ModelCategory =
   | 'documentation'; // doc generation (Haiku-tier)
 ```
 
-Categories map to providers via `~/.factory5/config.toml`. See ADR 0004.
+Categories map to providers via `<dataDir>/config.toml` (the active instance's `.factory/config.toml`; ADR 0023). See ADR 0004.
 
 ---
 

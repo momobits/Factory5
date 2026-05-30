@@ -3,6 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-04-18
 
+> **Path note (ADR 0023):** The `~/.factory5/factoryd.pid` and `%LOCALAPPDATA%\factory5\factoryd.pid` paths below predate [ADR 0023](0023-repo-local-instance-and-cwd-walk.md), which moved factory's runtime state to the active instance's `.factory/` directory (home fallback `~/.factory/`). Read those paths as `<dataDir>/factoryd.pid`.
+
 ## Context
 
 Phase 3 turns `factoryd` into a real long-running daemon. That raises the

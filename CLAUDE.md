@@ -59,7 +59,7 @@ A "session" ends when you stop or hand off. Run through this:
 
 ### Files in projects we build
 
-Project state goes in `<workspace>/<project>/.factory/`. Never write to `~/.factory5/` from worker code — only the brain's state package writes there.
+Project state goes in `<workspace>/<project>/.factory/`. Never write to the factory instance dir (`<dataDir>` — the active `.factory/`, home fallback `~/.factory/`; ADR 0023) from worker code — only the brain's state package writes there.
 
 ### Testing
 

@@ -3,6 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-04-18
 
+> **Path note (ADR 0023):** The `~/.factory5/config.toml` path below predates [ADR 0023](0023-repo-local-instance-and-cwd-walk.md), which moved factory's config to the active instance's `.factory/config.toml` (home fallback `~/.factory/`). Read that path as `<dataDir>/config.toml`. (ADR 0023 supersedes this ADR's config-location half only; the category-routing decision stands.)
+
 ## Context
 
 Factory 5 must support multiple model providers (Claude subscription via CLI, Claude API, OpenAI, OpenRouter, Codex) with different agent roles using different models. The predecessor (factory2) hardcoded a model per agent role:
