@@ -28,7 +28,11 @@ import { loadOrCreateProjectMetadata } from '@factory5/wiki';
 import type { Database } from '@factory5/state';
 import type { Logger } from '@factory5/logger';
 
-import { computePoolUsage, projectBudgetsFromMetadata, type ProjectBudgetsLike } from './pool-usage.js';
+import {
+  computePoolUsage,
+  projectBudgetsFromMetadata,
+  type ProjectBudgetsLike,
+} from './pool-usage.js';
 
 /** Default debounce window — prevents a rapid-save sequence from firing N re-checks. */
 const DEFAULT_DEBOUNCE_MS = 250;
@@ -252,4 +256,3 @@ export function createPoolResume(deps: PoolResumeDeps): PoolResume {
 
   return { registerProject, unregisterProject, activeWatchers, shutdown, flush };
 }
-

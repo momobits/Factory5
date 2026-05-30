@@ -1,15 +1,22 @@
-<!-- packages/brain/src/assets/_templates/feature.md -->
----
+## <!-- packages/brain/src/assets/_templates/feature.md -->
+
 kind: feature
 id: <REPLACE-with-kebab-case-id>
 status: documented
 documented_in:
-  - <REPLACE-with-doc-path>#<REPLACE-with-anchor>
+
+- <REPLACE-with-doc-path>#<REPLACE-with-anchor>
+
 # Optional fields (uncomment as needed):
+
 # implements: []
+
 # decisions: []
+
 # derived_from: []
+
 # supersedes: <feature-id>
+
 ---
 
 # Feature: <REPLACE with human-readable title>

@@ -86,6 +86,7 @@ decisions), you MUST seed the project's knowledge graph:
 
 Copy these files verbatim from `<factory5-install>/packages/brain/src/assets/`
 into `docs/knowledge/`:
+
 - `_schema.md` → `docs/knowledge/_schema.md`
 - `_templates/feature.md` → `docs/knowledge/_templates/feature.md`
 - `_templates/decision.md` → `docs/knowledge/_templates/decision.md`
@@ -97,6 +98,7 @@ into `docs/knowledge/`:
 For each user-visible capability the project provides (based on
 modules.md's per-module contracts), produce a `docs/knowledge/features/<id>.md`
 file. Use `_templates/feature.md` as the starting shape. Set:
+
 - `kind: feature`
 - `id: <kebab-case-derived-from-feature-name>`
 - `status: documented`
@@ -125,6 +127,7 @@ completion if anchors don't resolve.
 ### 4. Emit these in your output
 
 Your `pages: []` output array should include:
+
 - The four wiki pages (overview, modules, testing, decisions) — same as before
 - `_schema.md` (slug: `_schema.md`, content: verbatim from assets)
 - `_templates/feature.md` (slug: `_templates/feature.md`, content: verbatim)

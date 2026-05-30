@@ -1,13 +1,14 @@
-<!-- skills/knowledge-graph.md -->
----
+## <!-- skills/knowledge-graph.md -->
+
 name: knowledge-graph
 description: |
-  How to use the project's living knowledge graph: read and update
-  feature files in docs/knowledge/features/, record decisions in
-  docs/knowledge/decisions/ when you deviate from the documented
-  surface, and keep the graph valid so the validator accepts your
-  task completion. Use during scaffolding, building, and fixing
-  whenever you touch user-facing surface.
+How to use the project's living knowledge graph: read and update
+feature files in docs/knowledge/features/, record decisions in
+docs/knowledge/decisions/ when you deviate from the documented
+surface, and keep the graph valid so the validator accepts your
+task completion. Use during scaffolding, building, and fixing
+whenever you touch user-facing surface.
+
 ---
 
 # Knowledge Graph
@@ -41,7 +42,7 @@ Before claiming the task is done, update the knowledge graph:
    task ID is in `.factory/plan.json`'s entry for your current task.
 3. **Fill in documented stubs** — the architect may have seeded
    placeholder sections in README.md (marked `<!-- to be filled by
-   scaffolder/builder -->`). Replace these with real content matching
+scaffolder/builder -->`). Replace these with real content matching
    what you built.
 
 ## When you deviate from the documented surface
@@ -90,6 +91,7 @@ If your task discovers a need for a feature not in the seeded
 
 At task completion, `factory5 graph check` runs against your worktree.
 It validates:
+
 - Front-matter parses as YAML
 - Required fields are present
 - `documented_in:` anchors resolve to real files / headings

@@ -9,7 +9,11 @@ import { initLogger } from '@factory5/logger';
 import { loadValidatorConfig } from './config-loader.js';
 
 beforeAll(() => {
-  initLogger({ processName: 'coherence-validator-config-loader-test', noFile: true, noConsole: true });
+  initLogger({
+    processName: 'coherence-validator-config-loader-test',
+    noFile: true,
+    noConsole: true,
+  });
 });
 
 describe('loadValidatorConfig', () => {

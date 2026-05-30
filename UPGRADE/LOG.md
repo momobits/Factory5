@@ -27,18 +27,19 @@ Each entry should answer: what was done, what was decided, what's next.
 **worker test suite**: 56 tests across 7 files — 52 prior + 4 new from Task C4 (`listAbandonedWorktrees`) — all green.
 
 **Cleanup CLI smoke tests**:
+
 - `factory cleanup .` (factory5 repo itself): `No abandoned worktrees found.` — exit 0.
 - `factory cleanup C:\Users\Momo\factory5-workspace\pythonetl`: lists 5 abandoned worktrees (tasks `01KSB8X8P94XT552JBGQAEAGPX`, `01KSDMNBTFCCZGPXHAAFYVWCQQ`, `01KSDMNBTFH6RM4MHHX6HR0REM`, `01KSNH7ZV10D6F41V1SYFZY00Y`, `01KSNVQMQPZDHP31VVF7JTD2ZJ`) — prompts `Re-run with --yes to confirm.`
 
 **Phase C completes the Living Knowledge Graph spec. Full spec coverage:**
 
-| Component | Status |
-|---|---|
-| Component 1 — Living Knowledge Graph | ✓ |
-| Component 2 — Structured Findings | ✓ |
-| Component 3 — Coherence Validator | ✓ |
-| Component 4 — Self-Healing Loop | ✓ |
-| Component 5 — Workspace Hygiene | ✓ |
+| Component                            | Status |
+| ------------------------------------ | ------ |
+| Component 1 — Living Knowledge Graph | ✓      |
+| Component 2 — Structured Findings    | ✓      |
+| Component 3 — Coherence Validator    | ✓      |
+| Component 4 — Self-Healing Loop      | ✓      |
+| Component 5 — Workspace Hygiene      | ✓      |
 
 Spec: `docs/superpowers/specs/2026-05-28-living-knowledge-graph-design.md`  
 Plans: `docs/superpowers/plans/2026-05-28-living-knowledge-graph-phase-{a,b,c}.md`

@@ -43,9 +43,7 @@ async function fileExists(path: string): Promise<boolean> {
 async function listMarkdownFiles(dir: string): Promise<string[]> {
   try {
     const entries = await readdir(dir);
-    return entries
-      .filter((e) => e.endsWith('.md') && !e.startsWith('_'))
-      .map((e) => join(dir, e));
+    return entries.filter((e) => e.endsWith('.md') && !e.startsWith('_')).map((e) => join(dir, e));
   } catch {
     return [];
   }
@@ -116,7 +114,10 @@ export async function validateKnowledgeGraph(opts: ValidateOptions): Promise<Val
   if (opts.runtime !== undefined) {
     try {
       const { loadValidatorConfig } = await import('./config-loader.js');
-      const cfg = await loadValidatorConfig({ projectPath: opts.projectPath, runtime: opts.runtime });
+      const cfg = await loadValidatorConfig({
+        projectPath: opts.projectPath,
+        runtime: opts.runtime,
+      });
       if (cfg.config !== undefined) {
         const { checkDocFiction } = await import('./doc-fiction.js');
         const docFictionFindings = await checkDocFiction({

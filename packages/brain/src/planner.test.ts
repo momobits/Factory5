@@ -233,10 +233,7 @@ describe('materialisePlannerTasks — featureIds', () => {
 
   it('defaults featureIds to empty array when planner omits the field', () => {
     const planId = newId();
-    const { tasks } = materialisePlannerTasks(
-      [mkRaw({ title: 'build CLI' })],
-      planId,
-    );
+    const { tasks } = materialisePlannerTasks([mkRaw({ title: 'build CLI' })], planId);
     expect(tasks[0]?.featureIds).toEqual([]);
   });
 });

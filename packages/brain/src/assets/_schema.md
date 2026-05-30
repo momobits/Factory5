@@ -1,4 +1,5 @@
 <!-- packages/brain/src/assets/_schema.md -->
+
 # Knowledge Graph Schema (v1)
 
 This file defines the node and edge kinds used in `docs/knowledge/`.
@@ -13,12 +14,14 @@ A user-visible capability the project provides. Lives at
 `docs/knowledge/features/<id>.md`.
 
 Required front-matter:
+
 - `kind: feature`
 - `id: <kebab-case>` (unique within project)
 - `status: documented | implemented | superseded | abandoned`
 - `documented_in: [<doc-path>#<anchor>, ...]` (at least one entry)
 
 Optional front-matter:
+
 - `implements: [<task-id>, ...]` — task IDs that built this feature
 - `decisions: [<decision-id>, ...]` — decisions that affected this feature
 - `derived_from: [<feature-id>, ...]` — parent features (sub-feature decomposition)
@@ -30,6 +33,7 @@ A judgment call made during a build that modifies a feature's spec.
 Lives at `docs/knowledge/decisions/<YYYY-MM-DD>-<slug>.md`.
 
 Required front-matter:
+
 - `kind: decision`
 - `id: <YYYY-MM-DD>-<slug>`
 - `date: <YYYY-MM-DD>`
@@ -37,25 +41,27 @@ Required front-matter:
 - `modifies: [<feature-id>, ...]` (at least one entry)
 
 Required body sections:
+
 - `## Context`
 - `## Decision`
 - `## Consequences`
 
 Optional front-matter:
+
 - `supersedes: <decision-id>` — decision this one replaced
 - `follow_ups: [<feature-id>, ...]` — features deferred or filed as a result
 
 ## Edge kinds (front-matter array fields)
 
-| Edge | Source kind | Target | Direction |
-|---|---|---|---|
-| `implements` | feature | task-id | feature → was built by → task |
-| `documented_in` | feature | doc-path#anchor | feature → described at → doc location |
-| `modifies` | decision | feature-id | decision → changed → feature |
-| `supersedes` | decision/feature | id of same kind | newer → replaced → older |
-| `derived_from` | feature | feature-id | child → parent |
-| `decisions` | feature | decision-id | feature → affected by → decisions |
-| `follow_ups` | decision | feature-id | decision → spawned → features |
+| Edge            | Source kind      | Target          | Direction                             |
+| --------------- | ---------------- | --------------- | ------------------------------------- |
+| `implements`    | feature          | task-id         | feature → was built by → task         |
+| `documented_in` | feature          | doc-path#anchor | feature → described at → doc location |
+| `modifies`      | decision         | feature-id      | decision → changed → feature          |
+| `supersedes`    | decision/feature | id of same kind | newer → replaced → older              |
+| `derived_from`  | feature          | feature-id      | child → parent                        |
+| `decisions`     | feature          | decision-id     | feature → affected by → decisions     |
+| `follow_ups`    | decision         | feature-id      | decision → spawned → features         |
 
 ## Status state machine
 

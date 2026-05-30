@@ -14,5 +14,9 @@ export {
 } from './validator.js';
 export { type PartialFinding } from './schema-check.js';
 export { type FeatureEntry, type ReferenceCheckContext } from './reference-check.js';
-export { loadValidatorConfig, type LoadConfigOptions, type LoadConfigResult } from './config-loader.js';
+export {
+  loadValidatorConfig,
+  type LoadConfigOptions,
+  type LoadConfigResult,
+} from './config-loader.js';
 export { validatorConfigSchema, type ValidatorConfig } from './config-schema.js';

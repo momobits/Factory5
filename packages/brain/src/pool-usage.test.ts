@@ -9,7 +9,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { newId } from '@factory5/core';
-import { computePoolUsage, projectBudgetsFromMetadata, resolveAxisCap, resolveEffectiveCap } from './pool-usage.js';
+import {
+  computePoolUsage,
+  projectBudgetsFromMetadata,
+  resolveAxisCap,
+  resolveEffectiveCap,
+} from './pool-usage.js';
 import { openDatabase, runMigrations, type Database } from '@factory5/state';
 import { BUDGET_DEFAULTS } from '@factory5/core/budgets';
 

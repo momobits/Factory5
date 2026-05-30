@@ -62,10 +62,7 @@ describe('checkDeadCodePython', () => {
 
   it('does not flag underscore-prefixed (private) symbols', async () => {
     await writeFile(join(projectPath, 'mypkg', '__init__.py'), '');
-    await writeFile(
-      join(projectPath, 'mypkg', 'lib.py'),
-      'def _internal(): pass\n',
-    );
+    await writeFile(join(projectPath, 'mypkg', 'lib.py'), 'def _internal(): pass\n');
     const findings = await checkDeadCodePython({
       projectPath,
       packageGlobs: ['mypkg/**/*.py'],
@@ -81,16 +78,11 @@ describe('checkDeadCodePython', () => {
       '[project.scripts]\nmytool = "mypkg.cli:main"\n',
     );
     await writeFile(join(projectPath, 'mypkg', '__init__.py'), '');
-    await writeFile(
-      join(projectPath, 'mypkg', 'cli.py'),
-      'def main(): pass\n',
-    );
+    await writeFile(join(projectPath, 'mypkg', 'cli.py'), 'def main(): pass\n');
     const findings = await checkDeadCodePython({
       projectPath,
       packageGlobs: ['mypkg/**/*.py'],
-      exposedVia: [
-        { kind: 'entry_points', source: 'pyproject.toml::project.scripts' },
-      ],
+      exposedVia: [{ kind: 'entry_points', source: 'pyproject.toml::project.scripts' }],
       excludeGlobs: [],
     });
     expect(findings.every((f) => !f.title.includes(' main '))).toBe(true);

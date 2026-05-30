@@ -19,9 +19,7 @@ describe('validatorConfigSchema', () => {
       dead_code: {
         package_globs: ['etl/**/*.py'],
         public_symbol_rule: 'no_underscore_prefix',
-        exposed_via: [
-          { kind: 'entry_points', source: 'pyproject.toml::project.scripts' },
-        ],
+        exposed_via: [{ kind: 'entry_points', source: 'pyproject.toml::project.scripts' }],
         caller_scan: {
           method: 'ast_imports_and_calls',
           exclude_globs: ['tests/**'],

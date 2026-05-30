@@ -146,7 +146,10 @@ async function collectExposedSymbols(
           for (const name of info.all_list) exposed.add(name);
         }
       }
-    } else if (source.kind === 'entry_points' && source.source === 'pyproject.toml::project.scripts') {
+    } else if (
+      source.kind === 'entry_points' &&
+      source.source === 'pyproject.toml::project.scripts'
+    ) {
       try {
         const text = await readFile(resolve(opts.projectPath, 'pyproject.toml'), 'utf8');
         const scripts = text.match(/\[project\.scripts\]\s*\n([^[]*)/);

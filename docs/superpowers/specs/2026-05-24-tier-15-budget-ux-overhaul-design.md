@@ -66,23 +66,27 @@ The pool is a derived view, not a stored aggregate. A new helper `computePoolUsa
 
 ```ts
 type PoolUsage = {
-  perAxis: Record<BudgetAxisName, {
-    used: number;
-    cap: number;
-    pct: number;                       // 0–100, UI-friendly
-    tasks: Array<{                     // empty for non-task-aggregated axes
-      taskId: string;
-      title: string;
-      agent: string;
-      contribution: number;
-    }>;
-    status: 'ok' | 'warn' | 'exhausted';  // green / amber / vermillion
-  }>;
+  perAxis: Record<
+    BudgetAxisName,
+    {
+      used: number;
+      cap: number;
+      pct: number; // 0–100, UI-friendly
+      tasks: Array<{
+        // empty for non-task-aggregated axes
+        taskId: string;
+        title: string;
+        agent: string;
+        contribution: number;
+      }>;
+      status: 'ok' | 'warn' | 'exhausted'; // green / amber / vermillion
+    }
+  >;
   parkedReason?: {
     axis: string;
     usedAtPark: number;
     capAtPark: number;
-    nextBumpTo: number;                // cap + projectDefault[axis]
+    nextBumpTo: number; // cap + projectDefault[axis]
   };
 };
 ```
@@ -109,16 +113,16 @@ A `pool-resume` mechanism (Section 2) watches `project.json` writes via chokidar
 
 ### Axis taxonomy after this tier
 
-| Axis | Type | Semantic | Auto-increase eligible? |
-|---|---|---|---|
-| `maxUsd` | currency | directive-wide pool (already) | yes |
-| `maxSteps` | count | directive-wide pool (already) | yes |
-| `maxTurnsScaffolder` | count | **per-agent-class pool (new)** | yes |
-| `maxTurnsBuilder` | count | **per-agent-class pool (new)** | yes |
-| `maxTurnsFixer` | count | **per-agent-class pool (new)** | yes |
-| `maxUsdPerTask` | currency | per-task safety net (unchanged) | no |
-| `askUserDeadlineMs` | duration | per-question (unchanged) | no |
-| `maxWikiReadinessAttempts` | count | single-shot per directive (unchanged) | no |
+| Axis                       | Type     | Semantic                              | Auto-increase eligible? |
+| -------------------------- | -------- | ------------------------------------- | ----------------------- |
+| `maxUsd`                   | currency | directive-wide pool (already)         | yes                     |
+| `maxSteps`                 | count    | directive-wide pool (already)         | yes                     |
+| `maxTurnsScaffolder`       | count    | **per-agent-class pool (new)**        | yes                     |
+| `maxTurnsBuilder`          | count    | **per-agent-class pool (new)**        | yes                     |
+| `maxTurnsFixer`            | count    | **per-agent-class pool (new)**        | yes                     |
+| `maxUsdPerTask`            | currency | per-task safety net (unchanged)       | no                      |
+| `askUserDeadlineMs`        | duration | per-question (unchanged)              | no                      |
+| `maxWikiReadinessAttempts` | count    | single-shot per directive (unchanged) | no                      |
 
 Pool semantics apply to the first five. The last three keep their existing meanings.
 
@@ -128,10 +132,10 @@ Pool semantics apply to the first five. The last three keep their existing meani
 
 ### Files deleted
 
-| File | Lines | Reason |
-|---|---|---|
-| `packages/brain/src/budget-escalation.ts` | ~360 | Entire `[BUDGET]` askUser path |
-| `packages/brain/src/budget-escalation.test.ts` | ~520 | Companion test |
+| File                                           | Lines | Reason                         |
+| ---------------------------------------------- | ----- | ------------------------------ |
+| `packages/brain/src/budget-escalation.ts`      | ~360  | Entire `[BUDGET]` askUser path |
+| `packages/brain/src/budget-escalation.test.ts` | ~520  | Companion test                 |
 
 ### Files partially modified
 
@@ -433,14 +437,14 @@ This preserves both per-build override convenience AND the live-re-resolve invar
 
 ### Code deletion inventory
 
-| File | Lines | Reason |
-|---|---|---|
-| `packages/brain/src/budget-escalation.ts` | ~360 | Entire `[BUDGET]` askUser path |
-| `packages/brain/src/budget-escalation.test.ts` | ~520 | Companion test |
-| `packages/brain/src/auto-answer.ts` (partial) | ~20 + `pickBudgetEscalationAnswer` | `[BUDGET]` marker branch |
-| `packages/brain/src/pool.ts` (partial) | ~80 | Per-task retry-loop |
-| `packages/brain/src/planner.ts` (partial) | ~5 | `task.maxTurns` emit instruction |
-| `apps/factory-web/src/pages/projects/detail.astro` | ~100 | Replaced by tabbed cockpit |
+| File                                               | Lines                              | Reason                           |
+| -------------------------------------------------- | ---------------------------------- | -------------------------------- |
+| `packages/brain/src/budget-escalation.ts`          | ~360                               | Entire `[BUDGET]` askUser path   |
+| `packages/brain/src/budget-escalation.test.ts`     | ~520                               | Companion test                   |
+| `packages/brain/src/auto-answer.ts` (partial)      | ~20 + `pickBudgetEscalationAnswer` | `[BUDGET]` marker branch         |
+| `packages/brain/src/pool.ts` (partial)             | ~80                                | Per-task retry-loop              |
+| `packages/brain/src/planner.ts` (partial)          | ~5                                 | `task.maxTurns` emit instruction |
+| `apps/factory-web/src/pages/projects/detail.astro` | ~100                               | Replaced by tabbed cockpit       |
 
 Total: ~1100 lines removed. Net change roughly neutral after adding pool consumer, pool-resume watcher, pool-usage IPC, and new tabbed UI (~1200 lines added).
 
@@ -467,17 +471,17 @@ Total: ~1100 lines removed. Net change roughly neutral after adding pool consume
 
 ### Test coverage map
 
-| Layer | New tests | What they assert |
-|---|---|---|
-| `@factory5/core` | ~8 | `BudgetsPartial` accepts all 8 axes + project-level scalars; negative ceilingMultiplier rejected; zero-sentinel preserved per axis. |
-| `@factory5/state` | ~6 | `project.json` round-trips new keys; `loadOrCreateProjectMetadata` defaults `autoIncreaseBudgets=false`, `autoIncreaseCeilingMultiplier=5` when absent; corrupt-file path still throws. |
-| `@factory5/brain` `pool-usage.ts` | ~10 | Aggregation: 0 tasks → 0/cap; 3 builder tasks → sum of turnsUsed; per-class isolation; USD/steps roll up across model_usage rows; live cap re-read after project.json mutation. |
-| `@factory5/brain` `pool.ts` | ~12 | Pre-launch pool check blocks dispatch when exhausted; worker watchdog interrupts mid-turn when pool crosses; auto-increase ON within ceiling: bump-then-retry succeeds; ceiling exceeded: parks; no auto-increase: parks first try; parkedReason structure correct. |
-| `@factory5/brain` `pool-resume.ts` | ~8 | project.json write triggers re-check; parked directive with headroom flips to running; parked still-exhausted stays blocked; multiple parked directives on same project all resume; race against operator-issued resume CLI. |
-| `@factory5/brain` `auto-answer.ts` (regression) | ~3 | `[CRITIC]` marker still handled; generic LLM dispatch still works; `[BUDGET]`-prefixed strings no longer specially treated. |
-| `@factory5/daemon` | ~10 | PUT `/budget-defaults` accepts all 8 axes; rejects extra keys (strict); GET `/pool-usage` shape; 404 missing directive; bearer auth required; SSE `pool.tally` event emits on task-completion. |
-| `@factory5/wiki` `project-metadata.ts` regression | ~4 | Schema round-trip includes the two new scalars; `resolveDirectivePayloadBudgets` removed (replaced by live re-resolve) — verify no remaining importers. |
-| `apps/factory-web` light unit + compile | ~5 | Page TypeScript compiles; the four tabs mount; Live tab fetch-render loop doesn't infinite-fetch; auto-increase toggle PUTs correctly. |
+| Layer                                             | New tests | What they assert                                                                                                                                                                                                                                                    |
+| ------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@factory5/core`                                  | ~8        | `BudgetsPartial` accepts all 8 axes + project-level scalars; negative ceilingMultiplier rejected; zero-sentinel preserved per axis.                                                                                                                                 |
+| `@factory5/state`                                 | ~6        | `project.json` round-trips new keys; `loadOrCreateProjectMetadata` defaults `autoIncreaseBudgets=false`, `autoIncreaseCeilingMultiplier=5` when absent; corrupt-file path still throws.                                                                             |
+| `@factory5/brain` `pool-usage.ts`                 | ~10       | Aggregation: 0 tasks → 0/cap; 3 builder tasks → sum of turnsUsed; per-class isolation; USD/steps roll up across model_usage rows; live cap re-read after project.json mutation.                                                                                     |
+| `@factory5/brain` `pool.ts`                       | ~12       | Pre-launch pool check blocks dispatch when exhausted; worker watchdog interrupts mid-turn when pool crosses; auto-increase ON within ceiling: bump-then-retry succeeds; ceiling exceeded: parks; no auto-increase: parks first try; parkedReason structure correct. |
+| `@factory5/brain` `pool-resume.ts`                | ~8        | project.json write triggers re-check; parked directive with headroom flips to running; parked still-exhausted stays blocked; multiple parked directives on same project all resume; race against operator-issued resume CLI.                                        |
+| `@factory5/brain` `auto-answer.ts` (regression)   | ~3        | `[CRITIC]` marker still handled; generic LLM dispatch still works; `[BUDGET]`-prefixed strings no longer specially treated.                                                                                                                                         |
+| `@factory5/daemon`                                | ~10       | PUT `/budget-defaults` accepts all 8 axes; rejects extra keys (strict); GET `/pool-usage` shape; 404 missing directive; bearer auth required; SSE `pool.tally` event emits on task-completion.                                                                      |
+| `@factory5/wiki` `project-metadata.ts` regression | ~4        | Schema round-trip includes the two new scalars; `resolveDirectivePayloadBudgets` removed (replaced by live re-resolve) — verify no remaining importers.                                                                                                             |
+| `apps/factory-web` light unit + compile           | ~5        | Page TypeScript compiles; the four tabs mount; Live tab fetch-render loop doesn't infinite-fetch; auto-increase toggle PUTs correctly.                                                                                                                              |
 
 **Total: ~66 new tests**, target workspace count **~1454** (from current 1388 + 3 skipped). Matches Tier 14 cadence.
 

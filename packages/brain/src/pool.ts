@@ -920,7 +920,8 @@ async function executeTaskWithBudgetGuard(
             await addFinding(projectPath, {
               source: task.agent,
               target: pf.location.file,
-              severity: pf.severity === 'high' ? 'HIGH' : pf.severity === 'medium' ? 'MEDIUM' : 'LOW',
+              severity:
+                pf.severity === 'high' ? 'HIGH' : pf.severity === 'medium' ? 'MEDIUM' : 'LOW',
               description: pf.title,
               category: pf.category,
               location: pf.location,

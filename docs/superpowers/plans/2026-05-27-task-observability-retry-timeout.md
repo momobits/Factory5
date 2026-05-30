@@ -17,6 +17,7 @@
 ### Task 1: Add `taskStreamTimeoutMs` to project metadata schema
 
 **Files:**
+
 - Modify: `packages/core/src/schemas.ts:132`
 - Test: `packages/core/src/schemas.test.ts` (or nearest existing schema test)
 
@@ -73,6 +74,7 @@ git commit -m "feat(core): add taskStreamTimeoutMs to project metadata schema"
 ### Task 2: Bump default stream timeout from 20min to 60min
 
 **Files:**
+
 - Modify: `packages/providers/src/claude-cli.ts:620`
 - Test: `packages/providers/src/claude-cli.test.ts`
 
@@ -127,6 +129,7 @@ git commit -m "feat(providers): bump default stream timeout from 20min to 60min"
 ### Task 3: Thread `streamTimeoutMs` from brain → worker → provider
 
 **Files:**
+
 - Modify: `packages/worker/src/run-worker.ts:66-123` (WorkerOptions)
 - Modify: `packages/brain/src/pool.ts:710-726` (runWorker call site)
 - Test: `packages/worker/src/run-worker.test.ts`
@@ -256,6 +259,7 @@ git commit -m "feat(worker): thread per-project taskStreamTimeoutMs to provider 
 ### Task 4: Add transcript columns to `tasks_inflight` (migration 011)
 
 **Files:**
+
 - Create: `packages/state/src/migrations/011-task-transcript.ts`
 - Modify: `packages/state/src/migrations/index.ts` (register the migration)
 
@@ -293,9 +297,17 @@ export function getTranscriptMeta(
   db: Database,
   taskId: string,
 ): { transcriptPath: string; transcriptBytes: number; transcriptLines: number } | undefined {
-  const row = db.prepare(
-    'SELECT transcript_path, transcript_bytes, transcript_lines FROM tasks_inflight WHERE id = ?',
-  ).get(taskId) as { transcript_path: string | null; transcript_bytes: number | null; transcript_lines: number | null } | undefined;
+  const row = db
+    .prepare(
+      'SELECT transcript_path, transcript_bytes, transcript_lines FROM tasks_inflight WHERE id = ?',
+    )
+    .get(taskId) as
+    | {
+        transcript_path: string | null;
+        transcript_bytes: number | null;
+        transcript_lines: number | null;
+      }
+    | undefined;
   if (row === undefined || row.transcript_path === null) return undefined;
   return {
     transcriptPath: row.transcript_path,
@@ -336,6 +348,7 @@ git commit -m "feat(state): migration 011 — transcript columns on tasks_inflig
 ### Task 5: Add `transcriptLevel` to project metadata schema
 
 **Files:**
+
 - Modify: `packages/core/src/schemas.ts`
 - Test: `packages/core/src/schemas.test.ts`
 
@@ -351,9 +364,7 @@ test('projectMetadata accepts transcriptLevel', () => {
 });
 
 test('transcriptLevel rejects invalid values', () => {
-  expect(() =>
-    projectBudgetDefaultsSchema.parse({ transcriptLevel: 'verbose' }),
-  ).toThrow();
+  expect(() => projectBudgetDefaultsSchema.parse({ transcriptLevel: 'verbose' })).toThrow();
 });
 
 test('transcriptLevel defaults to undefined (full is applied at runtime)', () => {
@@ -392,6 +403,7 @@ git commit -m "feat(core): add transcriptLevel to project metadata schema"
 ### Task 6: Tee NDJSON lines to transcript file in the worker
 
 **Files:**
+
 - Modify: `packages/worker/src/run-worker.ts` (WorkerOptions, WorkerOutcome, runTooling)
 - Test: `packages/worker/src/run-worker.test.ts`
 
@@ -439,10 +451,7 @@ import { mkdir } from 'node:fs/promises';
 let transcriptStream: import('node:fs').WriteStream | undefined;
 let transcriptLineCount = 0;
 
-if (
-  opts.transcriptPath !== undefined &&
-  opts.transcriptLevel !== 'off'
-) {
+if (opts.transcriptPath !== undefined && opts.transcriptLevel !== 'off') {
   await mkdir(join(opts.transcriptPath, '..'), { recursive: true });
   transcriptStream = createWriteStream(opts.transcriptPath, { flags: 'a', encoding: 'utf8' });
 }
@@ -498,19 +507,22 @@ Then in `runTooling()`, build the callback and pass it:
 const shouldLogLine = (line: string): boolean => {
   if (opts.transcriptLevel === 'full' || opts.transcriptLevel === undefined) return true;
   // 'tools' level: only tool_use, tool_result, and result lines
-  return line.includes('"type":"tool_use"') ||
+  return (
+    line.includes('"type":"tool_use"') ||
     line.includes('"type":"tool_result"') ||
-    line.includes('"type":"result"');
+    line.includes('"type":"result"')
+  );
 };
 
-const onRawLine = transcriptStream !== undefined
-  ? (line: string): void => {
-      if (shouldLogLine(line)) {
-        transcriptStream!.write(line + '\n');
-        transcriptLineCount++;
+const onRawLine =
+  transcriptStream !== undefined
+    ? (line: string): void => {
+        if (shouldLogLine(line)) {
+          transcriptStream!.write(line + '\n');
+          transcriptLineCount++;
+        }
       }
-    }
-  : undefined;
+    : undefined;
 
 // Pass in the provider.stream() call:
 const iter = resolution.provider.stream({
@@ -577,6 +589,7 @@ git commit -m "feat(worker): tee raw NDJSON lines to per-task transcript files"
 ### Task 7: Brain constructs transcript path and persists metadata
 
 **Files:**
+
 - Modify: `packages/brain/src/pool.ts` (~lines 710-726)
 
 - [ ] **Step 1: Construct transcript path and pass to worker**
@@ -586,11 +599,14 @@ In `executeTaskWithBudgetGuard()`, before the `runWorker()` call, construct the 
 ```typescript
 import { join } from 'node:path';
 
-const transcriptLevel = ((projectMeta.budgetDefaults as Record<string, unknown>)
-  ?.transcriptLevel as string | undefined) ?? 'full';
-const transcriptPath = transcriptLevel !== 'off'
-  ? join(projectPath, '.factory', 'transcripts', `${task.id}.ndjson`)
-  : undefined;
+const transcriptLevel =
+  ((projectMeta.budgetDefaults as Record<string, unknown>)?.transcriptLevel as
+    | string
+    | undefined) ?? 'full';
+const transcriptPath =
+  transcriptLevel !== 'off'
+    ? join(projectPath, '.factory', 'transcripts', `${task.id}.ndjson`)
+    : undefined;
 
 // Add to the runWorker call:
 outcome = await runWorker({
@@ -629,6 +645,7 @@ git commit -m "feat(brain): construct transcript paths and persist metadata to D
 ### Task 8: Transcript API endpoint
 
 **Files:**
+
 - Modify: `packages/daemon/src/server.ts`
 - Modify: `packages/ipc/src/schemas.ts` (add transcript fields to ApiV1InflightTask + response schema)
 - Test: `packages/daemon/src/server.test.ts`
@@ -668,38 +685,35 @@ In `packages/daemon/src/server.ts`, after the logs endpoint (~line 676), add:
 app.get<{
   Params: { directiveId: string; taskId: string };
   Querystring: { offset?: string; limit?: string; level?: string };
-}>(
-  '/api/v1/directives/:directiveId/tasks/:taskId/transcript',
-  async (request, reply) => {
-    requireUiAuth(request, opts.uiAuthToken);
-    const { directiveId, taskId } = request.params;
+}>('/api/v1/directives/:directiveId/tasks/:taskId/transcript', async (request, reply) => {
+  requireUiAuth(request, opts.uiAuthToken);
+  const { directiveId, taskId } = request.params;
 
-    const directive = directivesQ.getById(opts.db, directiveId);
-    if (directive === undefined) {
-      throw new IpcRequestError(404, 'DIRECTIVE_NOT_FOUND', `directive ${directiveId} not found`);
-    }
+  const directive = directivesQ.getById(opts.db, directiveId);
+  if (directive === undefined) {
+    throw new IpcRequestError(404, 'DIRECTIVE_NOT_FOUND', `directive ${directiveId} not found`);
+  }
 
-    const meta = tasksInflight.getTranscriptMeta(opts.db, taskId);
-    if (meta === undefined) {
-      reply.send({ lines: [], total: 0, bytesTotal: 0, level: 'full', hasMore: false });
-      return;
-    }
+  const meta = tasksInflight.getTranscriptMeta(opts.db, taskId);
+  if (meta === undefined) {
+    reply.send({ lines: [], total: 0, bytesTotal: 0, level: 'full', hasMore: false });
+    return;
+  }
 
-    const offset = parseInt(request.query.offset ?? '0', 10);
-    const limit = parseInt(request.query.limit ?? '500', 10);
-    const level = (request.query.level ?? 'full') as 'full' | 'tools' | 'errors';
+  const offset = parseInt(request.query.offset ?? '0', 10);
+  const limit = parseInt(request.query.limit ?? '500', 10);
+  const level = (request.query.level ?? 'full') as 'full' | 'tools' | 'errors';
 
-    const { lines, total } = await readTranscriptLines(meta.transcriptPath, { offset, limit, level });
+  const { lines, total } = await readTranscriptLines(meta.transcriptPath, { offset, limit, level });
 
-    reply.send({
-      lines,
-      total,
-      bytesTotal: meta.transcriptBytes,
-      level,
-      hasMore: offset + limit < total,
-    });
-  },
-);
+  reply.send({
+    lines,
+    total,
+    bytesTotal: meta.transcriptBytes,
+    level,
+    hasMore: offset + limit < total,
+  });
+});
 ```
 
 - [ ] **Step 4: Implement `readTranscriptLines` helper**
@@ -729,7 +743,11 @@ export async function readTranscriptLines(
       if (opts.level === 'errors' && !isErrorLine && !isResultLine) continue;
     }
     if (lineIndex >= opts.offset && lines.length < opts.limit) {
-      try { lines.push(JSON.parse(raw)); } catch { lines.push({ raw }); }
+      try {
+        lines.push(JSON.parse(raw));
+      } catch {
+        lines.push({ raw });
+      }
     }
     lineIndex++;
   }
@@ -755,6 +773,7 @@ git commit -m "feat(daemon): GET transcript endpoint with pagination and level f
 ### Task 9: Live transcript streaming via SSE
 
 **Files:**
+
 - Modify: `packages/ipc/src/sse.ts` (new `transcript.line` event schema)
 - Modify: `packages/worker/src/run-worker.ts` (emit SSE event alongside file tee)
 - Modify: `packages/daemon/src/directive-stream-route.ts` (no backfill for transcript.line — documented skip)
@@ -796,22 +815,23 @@ In `packages/worker/src/run-worker.ts`, add to `WorkerOptions`:
 In `runTooling()`, update the `onRawLine` construction (from Task 6) to also emit:
 
 ```typescript
-const onRawLine = transcriptStream !== undefined
-  ? (line: string): void => {
-      if (shouldLogLine(line)) {
-        transcriptStream!.write(line + '\n');
-        transcriptLineCount++;
-        // Emit live SSE event for connected frontends
-        if (opts.emitTranscriptLine !== undefined) {
-          try {
-            opts.emitTranscriptLine(JSON.parse(line), transcriptLineCount - 1);
-          } catch {
-            // Malformed line — written to file as-is, skip SSE emission
+const onRawLine =
+  transcriptStream !== undefined
+    ? (line: string): void => {
+        if (shouldLogLine(line)) {
+          transcriptStream!.write(line + '\n');
+          transcriptLineCount++;
+          // Emit live SSE event for connected frontends
+          if (opts.emitTranscriptLine !== undefined) {
+            try {
+              opts.emitTranscriptLine(JSON.parse(line), transcriptLineCount - 1);
+            } catch {
+              // Malformed line — written to file as-is, skip SSE emission
+            }
           }
         }
       }
-    }
-  : undefined;
+    : undefined;
 ```
 
 - [ ] **Step 4: Pass the emission callback from the brain**
@@ -819,17 +839,18 @@ const onRawLine = transcriptStream !== undefined
 In `packages/brain/src/pool.ts`, in the `runWorker()` call site, construct the callback:
 
 ```typescript
-const emitTranscriptLine = emit !== undefined && transcriptPath !== undefined
-  ? (line: unknown, lineIndex: number): void => {
-      emit({
-        type: 'transcript.line',
-        taskId: task.id,
-        directiveId,
-        line,
-        lineIndex,
-      });
-    }
-  : undefined;
+const emitTranscriptLine =
+  emit !== undefined && transcriptPath !== undefined
+    ? (line: unknown, lineIndex: number): void => {
+        emit({
+          type: 'transcript.line',
+          taskId: task.id,
+          directiveId,
+          line,
+          lineIndex,
+        });
+      }
+    : undefined;
 
 outcome = await runWorker({
   // ... existing fields
@@ -867,6 +888,7 @@ git commit -m "feat(worker): emit transcript.line SSE events for live frontend s
 ### Task 10: Migration 012 — `directive_signals` table
 
 **Files:**
+
 - Create: `packages/state/src/migrations/012-directive-signals.ts`
 - Modify: `packages/state/src/migrations/index.ts`
 - Create: `packages/state/src/queries/directive-signals.ts`
@@ -934,8 +956,9 @@ export function consumeNext(
   signalType: string,
 ): DirectiveSignal | undefined {
   const now = new Date().toISOString();
-  const row = db.prepare(
-    `UPDATE directive_signals
+  const row = db
+    .prepare(
+      `UPDATE directive_signals
      SET consumed_at = ?
      WHERE id = (
        SELECT id FROM directive_signals
@@ -943,7 +966,8 @@ export function consumeNext(
        ORDER BY created_at ASC LIMIT 1
      )
      RETURNING *`,
-  ).get(now, directiveId, signalType) as any;
+    )
+    .get(now, directiveId, signalType) as any;
   if (row === undefined) return undefined;
   return {
     id: row.id,
@@ -955,13 +979,12 @@ export function consumeNext(
   };
 }
 
-export function pendingForDirective(
-  db: Database,
-  directiveId: string,
-): DirectiveSignal[] {
-  const rows = db.prepare(
-    'SELECT * FROM directive_signals WHERE directive_id = ? AND consumed_at IS NULL ORDER BY created_at ASC',
-  ).all(directiveId) as any[];
+export function pendingForDirective(db: Database, directiveId: string): DirectiveSignal[] {
+  const rows = db
+    .prepare(
+      'SELECT * FROM directive_signals WHERE directive_id = ? AND consumed_at IS NULL ORDER BY created_at ASC',
+    )
+    .all(directiveId) as any[];
   return rows.map((r) => ({
     id: r.id,
     directiveId: r.directive_id,
@@ -990,6 +1013,7 @@ git commit -m "feat(state): migration 012 — directive_signals table for per-ta
 ### Task 11: Per-task retry daemon endpoint
 
 **Files:**
+
 - Modify: `packages/daemon/src/server.ts`
 - Modify: `packages/ipc/src/schemas.ts` (request/response schemas)
 - Modify: `packages/ipc/src/sse.ts` (task.retried event)
@@ -1041,98 +1065,107 @@ In `packages/daemon/src/server.ts`:
 app.post<{
   Params: { directiveId: string; taskId: string };
   Body: ApiV1TaskRetryRequest;
-}>(
-  '/api/v1/directives/:directiveId/tasks/:taskId/retry',
-  async (request, reply) => {
-    requireUiAuth(request, opts.uiAuthToken);
-    const { directiveId, taskId } = request.params;
-    const { mode } = apiV1TaskRetryRequestSchema.parse(request.body);
+}>('/api/v1/directives/:directiveId/tasks/:taskId/retry', async (request, reply) => {
+  requireUiAuth(request, opts.uiAuthToken);
+  const { directiveId, taskId } = request.params;
+  const { mode } = apiV1TaskRetryRequestSchema.parse(request.body);
 
-    // 1. Validate directive is blocked
-    const directive = directivesQ.getById(opts.db, directiveId);
-    if (directive === undefined) {
-      throw new IpcRequestError(404, 'DIRECTIVE_NOT_FOUND', `directive ${directiveId} not found`);
-    }
-    if (directive.status !== 'blocked') {
-      throw new IpcRequestError(409, 'DIRECTIVE_NOT_BLOCKED', `directive is ${directive.status}, not blocked`);
-    }
+  // 1. Validate directive is blocked
+  const directive = directivesQ.getById(opts.db, directiveId);
+  if (directive === undefined) {
+    throw new IpcRequestError(404, 'DIRECTIVE_NOT_FOUND', `directive ${directiveId} not found`);
+  }
+  if (directive.status !== 'blocked') {
+    throw new IpcRequestError(
+      409,
+      'DIRECTIVE_NOT_BLOCKED',
+      `directive is ${directive.status}, not blocked`,
+    );
+  }
 
-    // 2. Validate task is failed
-    const tasks = tasksInflight.listByDirective(opts.db, directiveId);
-    const task = tasks.find((t) => t.id === taskId);
-    if (task === undefined) {
-      throw new IpcRequestError(404, 'TASK_NOT_FOUND', `task ${taskId} not found`);
-    }
-    if (task.status !== 'failed') {
-      throw new IpcRequestError(409, 'TASK_NOT_FAILED', `task is ${task.status}, not failed`);
-    }
+  // 2. Validate task is failed
+  const tasks = tasksInflight.listByDirective(opts.db, directiveId);
+  const task = tasks.find((t) => t.id === taskId);
+  if (task === undefined) {
+    throw new IpcRequestError(404, 'TASK_NOT_FOUND', `task ${taskId} not found`);
+  }
+  if (task.status !== 'failed') {
+    throw new IpcRequestError(409, 'TASK_NOT_FAILED', `task is ${task.status}, not failed`);
+  }
 
-    // 3. Reset the task
-    const newAttempts = (task.attempts ?? 0) + 1;
-    tasksInflight.resetForRetry(opts.db, taskId, newAttempts);
+  // 3. Reset the task
+  const newAttempts = (task.attempts ?? 0) + 1;
+  tasksInflight.resetForRetry(opts.db, taskId, newAttempts);
 
-    // 4. If clean mode, delete worktree + transcript
-    if (mode === 'clean') {
-      if (task.worktreePath) {
-        try { await rm(task.worktreePath, { recursive: true, force: true }); } catch { /* best effort */ }
+  // 4. If clean mode, delete worktree + transcript
+  if (mode === 'clean') {
+    if (task.worktreePath) {
+      try {
+        await rm(task.worktreePath, { recursive: true, force: true });
+      } catch {
+        /* best effort */
       }
-      const meta = tasksInflight.getTranscriptMeta(opts.db, taskId);
-      if (meta !== undefined) {
-        try { await unlink(meta.transcriptPath); } catch { /* best effort */ }
+    }
+    const meta = tasksInflight.getTranscriptMeta(opts.db, taskId);
+    if (meta !== undefined) {
+      try {
+        await unlink(meta.transcriptPath);
+      } catch {
+        /* best effort */
       }
     }
+  }
 
-    // 5. Cascade reset — find downstream tasks that never ran (attempts=0, failed).
-    // Dependencies live in plan.json on disk (task.dependsOn arrays). Read the
-    // plan to build the dependency graph, then walk it transitively from taskId.
-    const planPath = join(directive.projectPath ?? '', '.factory', 'plan.json');
-    const planData = JSON.parse(await readFile(planPath, 'utf8')) as {
-      tasks: Array<{ id: string; dependsOn: string[]; status: string; attempts: number }>;
-    };
-    const cascadeReset: string[] = [];
-    const findCascadeDeps = (sourceId: string): void => {
-      for (const pt of planData.tasks) {
-        if (pt.dependsOn.includes(sourceId)) {
-          const dbTask = tasks.find((t) => t.id === pt.id);
-          if (dbTask?.status === 'failed' && dbTask.attempts === 0) {
-            cascadeReset.push(pt.id);
-            tasksInflight.resetForRetry(opts.db, pt.id, 0);
-            findCascadeDeps(pt.id);
-          }
+  // 5. Cascade reset — find downstream tasks that never ran (attempts=0, failed).
+  // Dependencies live in plan.json on disk (task.dependsOn arrays). Read the
+  // plan to build the dependency graph, then walk it transitively from taskId.
+  const planPath = join(directive.projectPath ?? '', '.factory', 'plan.json');
+  const planData = JSON.parse(await readFile(planPath, 'utf8')) as {
+    tasks: Array<{ id: string; dependsOn: string[]; status: string; attempts: number }>;
+  };
+  const cascadeReset: string[] = [];
+  const findCascadeDeps = (sourceId: string): void => {
+    for (const pt of planData.tasks) {
+      if (pt.dependsOn.includes(sourceId)) {
+        const dbTask = tasks.find((t) => t.id === pt.id);
+        if (dbTask?.status === 'failed' && dbTask.attempts === 0) {
+          cascadeReset.push(pt.id);
+          tasksInflight.resetForRetry(opts.db, pt.id, 0);
+          findCascadeDeps(pt.id);
         }
       }
-    };
-    findCascadeDeps(taskId);
+    }
+  };
+  findCascadeDeps(taskId);
 
-    // 6. Re-activate directive
-    directivesQ.updateStatus(opts.db, directiveId, 'running');
+  // 6. Re-activate directive
+  directivesQ.updateStatus(opts.db, directiveId, 'running');
 
-    // 7. Signal the brain
-    directiveSignals.insert(opts.db, directiveId, 'task_retry', {
-      taskId,
-      mode,
-      cascadeReset,
-    });
+  // 7. Signal the brain
+  directiveSignals.insert(opts.db, directiveId, 'task_retry', {
+    taskId,
+    mode,
+    cascadeReset,
+  });
 
-    // 8. Emit SSE event
-    opts.streamHub?.emit(directiveId, {
-      type: 'task.retried',
-      taskId,
-      directiveId,
-      mode,
-      attempt: newAttempts,
-      cascadeReset,
-    });
+  // 8. Emit SSE event
+  opts.streamHub?.emit(directiveId, {
+    type: 'task.retried',
+    taskId,
+    directiveId,
+    mode,
+    attempt: newAttempts,
+    cascadeReset,
+  });
 
-    reply.send({
-      taskId,
-      directiveId,
-      mode,
-      attempt: newAttempts,
-      cascadeReset,
-    });
-  },
-);
+  reply.send({
+    taskId,
+    directiveId,
+    mode,
+    attempt: newAttempts,
+    cascadeReset,
+  });
+});
 ```
 
 - [ ] **Step 4: Add `resetForRetry` query helper**
@@ -1168,6 +1201,7 @@ git commit -m "feat(daemon): POST per-task retry endpoint with cascade reset and
 ### Task 12: Brain signal-aware re-entry loop
 
 **Files:**
+
 - Modify: `packages/brain/src/pool.ts`
 - Modify: `packages/brain/src/loop.ts`
 
@@ -1202,7 +1236,8 @@ if (task.attempts > 0) {
   // Check if worktree still exists (resume mode) or was wiped (clean mode)
   const worktreeExists = existsSync(join(projectPath, '.factory', 'worktrees', `task-${task.id}`));
   if (worktreeExists) {
-    resumePrefix = 'This task was previously attempted but did not complete. The worktree contains partial work from the prior attempt. Continue from where it left off.\n\n';
+    resumePrefix =
+      'This task was previously attempted but did not complete. The worktree contains partial work from the prior attempt. Continue from where it left off.\n\n';
   }
 }
 const fullUserPrompt = resumePrefix + userPrompt;
@@ -1225,6 +1260,7 @@ git commit -m "feat(brain): signal-aware re-entry loop for per-task retry"
 ### Task 13: Frontend — expandable task panel with transcript viewer
 
 **Files:**
+
 - Modify: `apps/factory-web/src/pages/directives/detail.astro`
 
 This is the frontend-only task. The API endpoints from Tasks 8 and 10 are already in place. Task 9's `transcript.line` SSE events provide the live-streaming data.
@@ -1370,12 +1406,19 @@ function wireRetryButtons(panel: HTMLElement, taskId: string): void {
   });
 
   panel.querySelector('.retry-clean')!.addEventListener('click', async () => {
-    if (!confirm('Retry this task with a clean slate? The worktree and transcript will be deleted.')) return;
+    if (
+      !confirm('Retry this task with a clean slate? The worktree and transcript will be deleted.')
+    )
+      return;
     await postRetry(directiveId, taskId, 'clean');
   });
 }
 
-async function postRetry(directiveId: string, taskId: string, mode: 'resume' | 'clean'): Promise<void> {
+async function postRetry(
+  directiveId: string,
+  taskId: string,
+  mode: 'resume' | 'clean',
+): Promise<void> {
   const resp = await fetch(`/api/v1/directives/${directiveId}/tasks/${taskId}/retry`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
@@ -1490,26 +1533,108 @@ Add to the page's `<style>` section:
   max-height: 600px;
   overflow-y: auto;
 }
-.transcript-header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
-.transcript-tabs { display: flex; gap: 0.5rem; }
-.tab { padding: 0.25rem 0.75rem; border: 1px solid var(--border); background: none; cursor: pointer; border-radius: 4px; }
-.tab.active { background: var(--accent); color: white; }
-.transcript-stats { font-size: 0.85rem; color: var(--text-muted); }
-.transcript-line { margin-bottom: 0.5rem; padding: 0.5rem; border-radius: 4px; font-size: 0.9rem; }
-.transcript-assistant { background: var(--surface-2); }
-.transcript-tool-use { background: #1a1a2e; border-left: 3px solid #4a9eff; }
-.transcript-tool-result { background: #1a2e1a; border-left: 3px solid #4aff4a; }
-.transcript-tool-error { background: #2e1a1a; border-left: 3px solid #ff4a4a; }
-.transcript-final { background: #2e2a1a; border-left: 3px solid #ffcc4a; font-weight: bold; }
-.transcript-other { background: var(--surface-2); opacity: 0.7; }
-.transcript-header { font-weight: 600; margin-bottom: 0.25rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
-.transcript-content { white-space: pre-wrap; word-break: break-word; }
-.transcript-line pre { max-height: 300px; overflow: auto; font-size: 0.8rem; margin: 0.25rem 0 0; }
-.load-more { width: 100%; padding: 0.5rem; margin-top: 0.5rem; cursor: pointer; }
-.retry-buttons { display: flex; gap: 0.5rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
-.retry-resume, .retry-clean { padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
-.retry-resume { background: var(--accent); color: white; border: none; }
-.retry-clean { background: none; border: 1px solid var(--border); color: var(--text); }
+.transcript-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+.transcript-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+.tab {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.tab.active {
+  background: var(--accent);
+  color: white;
+}
+.transcript-stats {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.transcript-line {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.transcript-assistant {
+  background: var(--surface-2);
+}
+.transcript-tool-use {
+  background: #1a1a2e;
+  border-left: 3px solid #4a9eff;
+}
+.transcript-tool-result {
+  background: #1a2e1a;
+  border-left: 3px solid #4aff4a;
+}
+.transcript-tool-error {
+  background: #2e1a1a;
+  border-left: 3px solid #ff4a4a;
+}
+.transcript-final {
+  background: #2e2a1a;
+  border-left: 3px solid #ffcc4a;
+  font-weight: bold;
+}
+.transcript-other {
+  background: var(--surface-2);
+  opacity: 0.7;
+}
+.transcript-header {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.transcript-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.transcript-line pre {
+  max-height: 300px;
+  overflow: auto;
+  font-size: 0.8rem;
+  margin: 0.25rem 0 0;
+}
+.load-more {
+  width: 100%;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+  cursor: pointer;
+}
+.retry-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.retry-resume,
+.retry-clean {
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.retry-resume {
+  background: var(--accent);
+  color: white;
+  border: none;
+}
+.retry-clean {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
 ```
 
 - [ ] **Step 9: Test in browser**
@@ -1517,6 +1642,7 @@ Add to the page's `<style>` section:
 Run: `pnpm dev` (start the dev server)
 
 Test the following:
+
 1. Navigate to a directive detail page with completed/failed tasks
 2. Click a task row — panel should expand showing transcript (or "no transcript" for pre-feature tasks)
 3. Click level filter tabs — content should reload with filtered lines
@@ -1559,6 +1685,7 @@ Trigger a build. Verify in the brain logs that the provider receives the 60-minu
 - [ ] **Step 2: Verify transcript creation**
 
 After a task completes, check:
+
 - `.factory/transcripts/<taskId>.ndjson` exists
 - Contains valid NDJSON lines
 - `tasks_inflight` row has `transcript_path`, `transcript_bytes`, `transcript_lines` populated
@@ -1584,6 +1711,7 @@ Open the directive detail page. Click a completed task. Verify the transcript pa
 - [ ] **Step 5: Verify per-task retry**
 
 On a directive with a failed task:
+
 1. Open the failed task's transcript panel
 2. Click "Retry (Resume)"
 3. Verify the task resets to pending
