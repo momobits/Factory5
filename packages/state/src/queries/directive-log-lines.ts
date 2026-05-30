@@ -131,7 +131,10 @@ export function listForDirective(
   // Initial page-load seed (no cursor): take the NEWEST `limit` rows, then
   // reverse into chronological order. A directive with more than `limit` lines
   // then shows its recent failure/stall instead of ancient startup noise
-  // (the activity panel's whole purpose — U030/U031).
+  // (the activity panel's whole purpose — U030/U031). The FE pins its SSE join
+  // cursor to the last (newest) seeded line; a live event sharing that exact
+  // millisecond can be deduped — the long-standing ms-collision tradeoff of the
+  // ts-only cursor. Dedupe by (ts, id) on the FE if that ever bites.
   const rows = db
     .prepare(
       `SELECT * FROM directive_log_lines

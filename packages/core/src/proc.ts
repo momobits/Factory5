@@ -53,6 +53,9 @@ export function killProcessTree(child: ChildProcess, opts: KillProcessTreeOption
       });
       // Best-effort: don't let a taskkill spawn error become an unhandled event.
       tk.on('error', () => undefined);
+      // Don't let a hung taskkill keep the event loop alive (matches the
+      // unref discipline used elsewhere, e.g. claude-cli's SIGKILL timer).
+      if (typeof tk.unref === 'function') tk.unref();
     } catch {
       /* taskkill unavailable — fall through to the direct kill below */
     }

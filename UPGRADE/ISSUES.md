@@ -24,6 +24,14 @@ Severity:
 
 ## Open
 
+> **Frozen workspace — Relay is canonical** (Control retired 2026-05-29, commit `fb93779`).
+> Reconciliation of the items below (they were left under "Open" but are stale):
+> **U033** and **U034** were _resolved_ in Phase 13 — see `LOG.md` (2026-05-17) and
+> the Resolved section is the source of truth; **U005** is _still open_ and has been
+> migrated to [`.relay/issues/factory-chat-repl-turn-timeout-120s.md`](../.relay/issues/factory-chat-repl-turn-timeout-120s.md).
+> New bugs/features are tracked in [`.relay/`](../.relay), not here. The full entries
+> remain below as historical detail.
+
 ### U034 — `factory daemon stop` on Windows leaves a stale pidfile; SIGTERM is mapped to hard `TerminateProcess`
 
 - **Severity**: low
