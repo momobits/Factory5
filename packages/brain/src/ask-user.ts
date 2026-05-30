@@ -32,13 +32,11 @@
  */
 
 import type { Directive } from '@factory5/core';
-import { newId } from '@factory5/core';
+import { DEFAULT_ASK_USER_DEADLINE_MS, newId } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import {
   AUTO_ANSWER_IN_FLIGHT,
-  DEFAULT_ASK_USER_DEADLINE_MS,
   directives as directivesQ,
-  loadConfig,
   outbound,
   pendingQuestions,
   type Database,
@@ -65,20 +63,6 @@ const DEFAULT_POLL_INTERVAL_MS = 1000;
 const DEFAULT_AUTO_ANSWER_GRACE_MS = 30_000;
 
 /**
- * Cached `<dataDir>/config.json.askUserDeadlineMs`. Set on first call to
- * {@link askUser} so we don't read+parse the config file on every emission.
- * The brain process is long-lived; the config file is hand-edited via a
- * daemon restart, so a process-lifetime cache is acceptable. Tests reset
- * via {@link resetDeadlineCache}.
- */
-let cachedDeadlineMs: number | undefined = undefined;
-
-/** Test-only: clear the deadline cache so a fresh config read fires. */
-export function resetDeadlineCache(): void {
-  cachedDeadlineMs = undefined;
-}
-
-/**
  * Resolve the askUser deadline in ms.
  *
  * Feature F2 — when `projectBudgets` + `db` + `directiveId` are available,
@@ -86,13 +70,16 @@ export function resetDeadlineCache(): void {
  *   `max(project.json, payload.budgets, BUDGET_DEFAULTS.askUserDeadlineMs)`
  * so per-project + per-build deadline overrides take effect (Relay issue #3).
  *
- * Falls back to the config.json path when the unified inputs are not
- * available (backward compat for callers outside the inline pipeline).
+ * Without those unified inputs (callers outside the inline pipeline) there is
+ * no per-instance override to consult: ADR 0036 retired the daemon-wide
+ * `config.json` deadline knob in favour of the budget axis. The fallback is
+ * therefore the baked-in {@link DEFAULT_ASK_USER_DEADLINE_MS}.
  */
-function resolveDeadlineMs(
-  configDataDir?: string,
-  unifiedInputs?: { db: Database; directiveId: string; projectBudgets: ProjectBudgetsLike },
-): number {
+function resolveDeadlineMs(unifiedInputs?: {
+  db: Database;
+  directiveId: string;
+  projectBudgets: ProjectBudgetsLike;
+}): number {
   // Feature F2 — unified resolution path (Relay issue #3).
   if (unifiedInputs !== undefined) {
     return resolveAxisCap(
@@ -102,17 +89,8 @@ function resolveDeadlineMs(
       unifiedInputs.projectBudgets,
     );
   }
-  // Legacy config.json path — process-lifetime cache.
-  if (cachedDeadlineMs !== undefined) return cachedDeadlineMs;
-  try {
-    cachedDeadlineMs = loadConfig(configDataDir).askUserDeadlineMs;
-  } catch (err) {
-    // Corrupt config file is operator-visible; log and fall back to default
-    // rather than crash the brain on every ask_user emission.
-    log.warn({ err }, 'askUser: config.json read failed — using DEFAULT_ASK_USER_DEADLINE_MS');
-    cachedDeadlineMs = DEFAULT_ASK_USER_DEADLINE_MS;
-  }
-  return cachedDeadlineMs;
+  // No per-instance override (ADR 0036) — use the baked-in default.
+  return DEFAULT_ASK_USER_DEADLINE_MS;
 }
 
 export interface AskUserOptions {
@@ -166,11 +144,6 @@ export interface AskUserOptions {
    * (when `deadlineAt` isn't passed); the abort+poll loop uses real time.
    */
   now?: () => number;
-  /**
-   * Test injection for the config-file lookup. Production callers omit and
-   * `<dataDir>/config.json` is read. Affects only the auto-stamped deadline.
-   */
-  configDataDir?: string;
   /**
    * Feature F2 — project-level budget defaults from `project.json`. When
    * provided, the deadline resolves via the unified three-way max rule
@@ -375,14 +348,14 @@ export async function askUser(opts: AskUserOptions): Promise<AskUserResult> {
     // Stamp deadline (ADR 0030 §2 + Feature F2 unified resolution):
     // caller-provided `deadlineAt` wins; otherwise resolved via the unified
     // three-way max rule when projectBudgets is available (Relay issue #3),
-    // falling back to config.json.askUserDeadlineMs when it is not.
+    // falling back to the baked-in DEFAULT_ASK_USER_DEADLINE_MS when it is not
+    // (ADR 0036 retired the config.json deadline override).
     const unifiedInputs =
       opts.projectBudgets !== undefined
         ? { db: opts.db, directiveId: directive.id, projectBudgets: opts.projectBudgets }
         : undefined;
     const deadlineAt =
-      opts.deadlineAt ??
-      new Date(now() + resolveDeadlineMs(opts.configDataDir, unifiedInputs)).toISOString();
+      opts.deadlineAt ?? new Date(now() + resolveDeadlineMs(unifiedInputs)).toISOString();
     pendingQuestions.create(opts.db, {
       id: questionId,
       directiveId: directive.id,

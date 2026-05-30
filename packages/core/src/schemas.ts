@@ -38,9 +38,6 @@ export const taskStatusSchema = z.enum(TASK_STATUSES);
 export const agentRoleSchema = z.enum(AGENT_ROLES);
 export const modelCategorySchema = z.enum(MODEL_CATEGORIES);
 
-/** Resolved type for a model category string — derived from {@link modelCategorySchema}. */
-type ModelCategory = z.infer<typeof modelCategorySchema>;
-
 // -----------------------------------------------------------------------------
 // Wiki critique (Tier 14 / ADR 0033)
 // -----------------------------------------------------------------------------
@@ -461,13 +458,16 @@ export const directiveLogLineSchema = z.object({
 export const directiveLogLineInputSchema = directiveLogLineSchema.omit({ id: true });
 
 // -----------------------------------------------------------------------------
-// Daemon-wide config file (ADR 0030)
+// Auto-answer deadline default (ADR 0030 §2 / ADR 0036)
 // -----------------------------------------------------------------------------
 
 /**
  * Default `ask_user` deadline, milliseconds. ADR 0030 §2 — 5 minutes.
- * Pre-Tier-8 deployments without `<dataDir>/config.json` use this; missing
- * keys in a present file fall back to this too.
+ *
+ * This is the baked-in fallback. The operator-facing override is the
+ * `askUserDeadlineMs` **budget axis** (ADR 0035), resolved per-project
+ * (`project.json metadata.budgetDefaults`) and per-build (`payload.budgets`).
+ * ADR 0036 retired the prior `<dataDir>/config.json` file override.
  *
  * Re-exports the Tier-12 {@link BUDGET_DEFAULTS} value so the single-
  * source-of-truth contract (ADR 0032 §3) holds — editing this value
@@ -475,46 +475,6 @@ export const directiveLogLineInputSchema = directiveLogLineSchema.omit({ id: tru
  * `budget-defaults.ts`.
  */
 export const DEFAULT_ASK_USER_DEADLINE_MS = BUDGET_DEFAULTS.askUserDeadlineMs.value;
-
-/**
- * The shape `<dataDir>/config.json` is parsed against. All fields are
- * optional on disk; readers fill in defaults for any missing keys. Adding
- * a new key here must update the resolved {@link FactoryConfig} shape too.
- */
-export const factoryConfigFileSchema = z.object({
-  /** ADR 0030 §2 — auto-answer deadline. Positive integer milliseconds. */
-  askUserDeadlineMs: z.number().int().positive().optional(),
-  /**
-   * Per-agent category override layer (ADR 0004 amendment, Phase 14).
-   * Managed and resolved by `@factory5/state` via `resolveAgentCategory`.
-   */
-  // Shape must be kept in sync with agentsConfigSchema in @factory5/state.
-  agents: z
-    .object({
-      architect: modelCategorySchema.optional(),
-      critic: modelCategorySchema.optional(),
-    })
-    .strict()
-    .optional(),
-});
-
-/**
- * The fully-resolved shape returned to callers — every field present,
- * defaults applied. Distinct from {@link factoryConfigFileSchema} which
- * mirrors the on-disk shape (every field optional).
- */
-export interface FactoryConfig {
-  /** ADR 0030 §2 — auto-answer deadline in ms. Defaults to 5 min. */
-  askUserDeadlineMs: number;
-  /**
-   * Per-agent category override layer (ADR 0004 amendment, Phase 14).
-   * When present, overrides the built-in defaults in `DEFAULT_AGENT_CATEGORIES`.
-   */
-  agents?: {
-    architect?: ModelCategory | undefined;
-    critic?: ModelCategory | undefined;
-  };
-}
 
 // -----------------------------------------------------------------------------
 // Project registry

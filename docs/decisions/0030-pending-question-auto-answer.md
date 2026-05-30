@@ -1,6 +1,6 @@
 # 0030 — Pending-question auto-answer: deadline-driven LLM dispatch with structured `answered_by` provenance, daemon-wide config home, no-override-after-auto-answer
 
-- **Status:** Accepted
+- **Status:** Accepted (§2 superseded by [0036](0036-config-home-consolidation.md))
 - **Date:** 2026-05-08
 - **Builds on:** [ADR 0024](0024-worker-subprocess-ask-user.md) — `pending_questions` table + the `ask_user` lifecycle the worker emits and the brain consumes. Tier 8 extends ADR 0024's design rather than supersedes it: the row, the channel routing, the answer correlation are all unchanged. [ADR 0021](0021-first-class-project-identity.md) — spend taxonomy that the auto-answer LLM call records against. [ADR 0028](0028-worker-sandbox-contract.md) — worker sandboxing; the auto-answer dispatcher runs in the brain process, not in a worker subprocess, so sandbox concerns don't apply.
 
@@ -138,3 +138,12 @@ The auto-answer dispatcher's marker-recognition path (Phase 12.6) extends to rec
 ## Amendment — 2026-05-24 (Tier 15)
 
 The `[BUDGET]` marker branch added in Tier 12 (ADR 0032) and extended in the prior Tier 14 amendment block is removed. Per ADR 0034 (Budget Pool Paradigm), the `[BUDGET]` askUser is no longer created — pool exhaustion now parks the directive with a structured `blockedReason` and the operator unblocks via the project page Live tab. The auto-answer dispatcher now handles only the `[CRITIC]` marker (Tier 14) and generic LLM dispatch. `pickBudgetEscalationAnswer` helper deleted along with `packages/brain/src/budget-escalation.ts`. No supersedure — this is the consequence of ADR 0034's `[BUDGET]` deletion, mechanically removing a dependency.
+
+## Amendment — 2026-05-30 (ADR 0036)
+
+§2's config-home decision is **superseded by [ADR 0036](0036-config-home-consolidation.md)**. The daemon-wide `<dataDir>/config.json` is retired:
+
+- The `askUserDeadlineMs` knob is now the budget axis (ADR 0035) — resolved per-project (`project.json metadata.budgetDefaults`) and per-build (`payload.budgets`), with the baked-in `DEFAULT_ASK_USER_DEADLINE_MS` (still 5 min) as the floor. There is no per-instance file override; the `ask-user.ts` fallback returns the baked-in default directly.
+- The per-agent category overrides move to the `[agents]` table in `config.toml`.
+
+The rest of this ADR — deadline-driven dispatch, the `answered_by` provenance enum, race mitigation, no-override-after-auto-answer, and spend treatment — is unchanged.

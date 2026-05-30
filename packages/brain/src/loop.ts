@@ -31,7 +31,6 @@ import type { DirectiveEventEmitter } from '@factory5/ipc';
 import type { ProviderRegistry } from '@factory5/providers';
 import {
   directives as directivesQ,
-  loadConfig,
   modelUsage,
   openDatabase,
   outbound,
@@ -54,6 +53,7 @@ import {
 } from './pool-usage.js';
 
 import { runArchitect, type ArchitectResult } from './architect.js';
+import { loadConfig } from './config.js';
 import { runArchitectWithCritique, WikiReadinessAbortError } from './architect-loop.js';
 import { runWikiCritic } from './critic.js';
 import { askUser, escalateBlocked, type AskUserResult } from './ask-user.js';
@@ -403,12 +403,16 @@ async function runInline(
           return res.answer ?? 'continue';
         };
 
-        const rawConfig = loadConfig();
-        // Strip explicit `undefined` values from agents so the object satisfies
-        // exactOptionalPropertyTypes (FactoryConfig uses `prop?: T | undefined`
-        // while RunArchitectWithCritiqueOptions.config uses `prop?: T`).
+        // Agent category overrides now live in config.toml's `[agents]` table
+        // (ADR 0036, moved from the retired config.json). The brain TOML loader
+        // is async and returns undefined when no config.toml exists. Strip
+        // explicit `undefined` values so the object satisfies
+        // exactOptionalPropertyTypes (the inferred `[agents]` shape uses
+        // `prop?: T | undefined` while RunArchitectWithCritiqueOptions.config
+        // uses `prop?: T`).
+        const rawConfig = await loadConfig();
         const config: { agents?: { architect?: ModelCategory; critic?: ModelCategory } } = {
-          ...(rawConfig.agents !== undefined
+          ...(rawConfig?.agents !== undefined
             ? {
                 agents: {
                   ...(rawConfig.agents.architect !== undefined
