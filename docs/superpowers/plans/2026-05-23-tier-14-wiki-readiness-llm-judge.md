@@ -1475,14 +1475,12 @@ import { runArchitectWithCritique, WikiReadinessAbortError } from './architect-l
 
 describe('runArchitectWithCritique', () => {
   it('passes on attempt 1 — one architect + one critic call', async () => {
-    const arch = vi
-      .fn()
-      .mockResolvedValue({
-        projectPath: '/p',
-        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
-        readiness: { ok: true, checks: [] },
-        rawResponse: '',
-      });
+    const arch = vi.fn().mockResolvedValue({
+      projectPath: '/p',
+      pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+      readiness: { ok: true, checks: [] },
+      rawResponse: '',
+    });
     const crit = vi.fn().mockResolvedValue(passing());
     const result = await runArchitectWithCritique({
       runArchitect: arch,
@@ -1500,14 +1498,12 @@ describe('runArchitectWithCritique', () => {
   });
 
   it('passes on attempt 2 — second architect call gets priorCritique', async () => {
-    const arch = vi
-      .fn()
-      .mockResolvedValue({
-        projectPath: '/p',
-        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
-        readiness: { ok: true, checks: [] },
-        rawResponse: '',
-      });
+    const arch = vi.fn().mockResolvedValue({
+      projectPath: '/p',
+      pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+      readiness: { ok: true, checks: [] },
+      rawResponse: '',
+    });
     const crit = vi.fn().mockResolvedValueOnce(failing('major')).mockResolvedValueOnce(passing());
     const result = await runArchitectWithCritique({
       runArchitect: arch,
@@ -1526,14 +1522,12 @@ describe('runArchitectWithCritique', () => {
   });
 
   it('exhausts after 3 attempts and calls askUser with rendered critique', async () => {
-    const arch = vi
-      .fn()
-      .mockResolvedValue({
-        projectPath: '/p',
-        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
-        readiness: { ok: true, checks: [] },
-        rawResponse: '',
-      });
+    const arch = vi.fn().mockResolvedValue({
+      projectPath: '/p',
+      pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+      readiness: { ok: true, checks: [] },
+      rawResponse: '',
+    });
     const crit = vi.fn().mockResolvedValue(failing('major'));
     const askUser = vi.fn().mockResolvedValue('continue');
     await runArchitectWithCritique({
@@ -1563,14 +1557,12 @@ describe('runArchitectWithCritique', () => {
   });
 
   it('operator extend-3 → 3 more attempts', async () => {
-    const arch = vi
-      .fn()
-      .mockResolvedValue({
-        projectPath: '/p',
-        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
-        readiness: { ok: true, checks: [] },
-        rawResponse: '',
-      });
+    const arch = vi.fn().mockResolvedValue({
+      projectPath: '/p',
+      pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+      readiness: { ok: true, checks: [] },
+      rawResponse: '',
+    });
     const crit = vi.fn().mockResolvedValue(failing('major'));
     let asked = 0;
     const askUser = vi.fn().mockImplementation(() => {
@@ -1593,14 +1585,12 @@ describe('runArchitectWithCritique', () => {
 
   it('maxAttempts: 0 (unlimited) — passes after N attempts without askUser', async () => {
     let i = 0;
-    const arch = vi
-      .fn()
-      .mockResolvedValue({
-        projectPath: '/p',
-        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
-        readiness: { ok: true, checks: [] },
-        rawResponse: '',
-      });
+    const arch = vi.fn().mockResolvedValue({
+      projectPath: '/p',
+      pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+      readiness: { ok: true, checks: [] },
+      rawResponse: '',
+    });
     const crit = vi
       .fn()
       .mockImplementation(() => Promise.resolve(++i === 7 ? passing() : failing('major')));
@@ -1619,14 +1609,12 @@ describe('runArchitectWithCritique', () => {
   });
 
   it('maxAttempts: 1 — first fail triggers immediate askUser, no retry', async () => {
-    const arch = vi
-      .fn()
-      .mockResolvedValue({
-        projectPath: '/p',
-        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
-        readiness: { ok: true, checks: [] },
-        rawResponse: '',
-      });
+    const arch = vi.fn().mockResolvedValue({
+      projectPath: '/p',
+      pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+      readiness: { ok: true, checks: [] },
+      rawResponse: '',
+    });
     const crit = vi.fn().mockResolvedValue(failing('major'));
     const askUser = vi.fn().mockResolvedValue('continue');
     await runArchitectWithCritique({
@@ -1644,14 +1632,12 @@ describe('runArchitectWithCritique', () => {
   });
 
   it('emits a per-attempt log line', async () => {
-    const arch = vi
-      .fn()
-      .mockResolvedValue({
-        projectPath: '/p',
-        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
-        readiness: { ok: true, checks: [] },
-        rawResponse: '',
-      });
+    const arch = vi.fn().mockResolvedValue({
+      projectPath: '/p',
+      pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+      readiness: { ok: true, checks: [] },
+      rawResponse: '',
+    });
     const crit = vi.fn().mockResolvedValueOnce(failing('major')).mockResolvedValueOnce(passing());
     const emit = vi.fn();
     await runArchitectWithCritique({
@@ -1695,14 +1681,12 @@ describe('runArchitectWithCritique', () => {
   // --- shared helpers ---
 
   async function runWithExhaustionAnswer(answer: string, emit?: any) {
-    const arch = vi
-      .fn()
-      .mockResolvedValue({
-        projectPath: '/p',
-        pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
-        readiness: { ok: true, checks: [] },
-        rawResponse: '',
-      });
+    const arch = vi.fn().mockResolvedValue({
+      projectPath: '/p',
+      pages: [{ slug: 'overview.md', path: '/p/x', content: '# x' }],
+      readiness: { ok: true, checks: [] },
+      rawResponse: '',
+    });
     const crit = vi.fn().mockResolvedValue(failing('major'));
     const askUser = vi.fn().mockResolvedValue(answer);
     return runArchitectWithCritique({

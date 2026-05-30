@@ -20,9 +20,7 @@ import { createLogger } from '@factory5/logger';
 const log = createLogger('cli.graph-check');
 
 export function registerGraphCheckCommand(parent: Command): void {
-  const graph = parent
-    .command('graph')
-    .description('Operate on the project knowledge graph');
+  const graph = parent.command('graph').description('Operate on the project knowledge graph');
 
   graph
     .command('check')

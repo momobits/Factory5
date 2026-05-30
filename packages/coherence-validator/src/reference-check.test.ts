@@ -3,9 +3,7 @@ import { checkReferences } from './reference-check.js';
 
 describe('checkReferences', () => {
   it('passes when all documented_in anchors resolve', () => {
-    const docs = new Map([
-      ['README.md', '# Project\n\n## CLI Reference\n\nDoc text.'],
-    ]);
+    const docs = new Map([['README.md', '# Project\n\n## CLI Reference\n\nDoc text.']]);
     const feature = {
       filePath: 'features/cli.md',
       frontmatter: {
@@ -36,9 +34,7 @@ describe('checkReferences', () => {
   });
 
   it('fails when documented_in anchor does not exist in target file', () => {
-    const docs = new Map([
-      ['README.md', '# Project\n\n## Installation\n'],
-    ]);
+    const docs = new Map([['README.md', '# Project\n\n## Installation\n']]);
     const feature = {
       filePath: 'features/cli.md',
       frontmatter: {

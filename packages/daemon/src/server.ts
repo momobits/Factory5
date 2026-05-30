@@ -630,7 +630,9 @@ function registerRoutes(
         ? (directive.payload as Record<string, unknown>)
         : undefined;
     const detailProjectPath =
-      (typeof detailPayload?.['projectPath'] === 'string' ? detailPayload['projectPath'] : undefined) ??
+      (typeof detailPayload?.['projectPath'] === 'string'
+        ? detailPayload['projectPath']
+        : undefined) ??
       (typeof detailPayload?.['project'] === 'string' ? detailPayload['project'] : undefined);
     if (detailProjectPath !== undefined) {
       try {

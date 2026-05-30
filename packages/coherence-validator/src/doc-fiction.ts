@@ -45,11 +45,7 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, '');
 }
 
-function extractCodeBlocks(
-  filePath: string,
-  content: string,
-  headingsRegex: RegExp,
-): CodeBlock[] {
+function extractCodeBlocks(filePath: string, content: string, headingsRegex: RegExp): CodeBlock[] {
   const blocks: CodeBlock[] = [];
   const lines = content.split(/\r?\n/);
   let currentHeading = '';

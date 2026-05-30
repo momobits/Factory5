@@ -461,9 +461,7 @@ describe('projectBudgetDefaultsSchema — transcriptLevel', () => {
   });
 
   it('rejects invalid values', () => {
-    expect(() =>
-      projectBudgetDefaultsSchema.parse({ transcriptLevel: 'verbose' }),
-    ).toThrow();
+    expect(() => projectBudgetDefaultsSchema.parse({ transcriptLevel: 'verbose' })).toThrow();
   });
 
   it('defaults to undefined (full is applied at runtime)', () => {
@@ -490,7 +488,8 @@ describe('findingSchema — structured shape', () => {
       },
       title: 'CLI Reference documents pipeline_name arg that does not exist',
       why: 'Users following the README will hit "unexpected extra argument" error.',
-      suggested_fix: 'Either implement the optional arg or remove it from README.md §CLI Reference.',
+      suggested_fix:
+        'Either implement the optional arg or remove it from README.md §CLI Reference.',
       auto_fixable: false,
     });
     expect(parsed.category).toBe('doc-fiction');

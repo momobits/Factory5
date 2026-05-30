@@ -19,6 +19,7 @@
 ### Task 1: Post-merge validator in pool dispatcher
 
 **Files:**
+
 - Modify: `packages/brain/src/pool.ts:791-870` (after worker invocation, before next task dispatch)
 - Modify: `packages/brain/package.json` (add @factory5/coherence-validator dep)
 - Test: `packages/brain/src/pool.test.ts`
@@ -28,9 +29,11 @@
 - [ ] **Step 1: Add coherence-validator dependency**
 
 In `packages/brain/package.json` `dependencies`:
+
 ```json
 "@factory5/coherence-validator": "workspace:*",
 ```
+
 Run: `pnpm install 2>&1 | tail -3`
 
 - [ ] **Step 2: Locate the post-worker section**
@@ -53,9 +56,7 @@ import { addFinding } from '@factory5/wiki';
 
 // After: const outcome = await runWorker(...); and after the worker has merged
 if (outcome.result.exitCode === 0) {
-  const taskIds = tasksInflight
-    .listByDirective(db, directiveId)
-    .map((t) => t.id);
+  const taskIds = tasksInflight.listByDirective(db, directiveId).map((t) => t.id);
   const validation = await validateKnowledgeGraph({
     projectPath,
     taskIds,
@@ -100,6 +101,7 @@ git commit -m "feat(15.13): brain runs coherence validator post-merge per task"
 ### Task 2: Final-verification validator in loop
 
 **Files:**
+
 - Modify: `packages/brain/src/loop.ts:560` (before terminal-status update)
 - Test: `packages/brain/src/loop.test.ts`
 
@@ -172,6 +174,7 @@ git commit -m "feat(15.13): brain runs final-verification validator before direc
 ### Task 3: Define the validator config schema
 
 **Files:**
+
 - Create: `packages/coherence-validator/src/config-schema.ts`
 - Create: `packages/coherence-validator/src/config-schema.test.ts`
 
@@ -202,9 +205,7 @@ describe('validatorConfigSchema', () => {
       dead_code: {
         package_globs: ['etl/**/*.py'],
         public_symbol_rule: 'no_underscore_prefix',
-        exposed_via: [
-          { kind: 'entry_points', source: 'pyproject.toml::project.scripts' },
-        ],
+        exposed_via: [{ kind: 'entry_points', source: 'pyproject.toml::project.scripts' }],
         caller_scan: {
           method: 'ast_imports_and_calls',
           exclude_globs: ['tests/**'],
@@ -302,6 +303,7 @@ git commit -m "feat(15.13): validator config JSON schema"
 ### Task 4: Ship the Python validator config
 
 **Files:**
+
 - Create: `packages/coherence-validator/configs/python.json`
 
 **Spec reference:** Component 3 → "Three-tier config resolution"
@@ -351,6 +353,7 @@ git commit -m "feat(15.13): validator config JSON schema"
 - [ ] **Step 2: Make tsup include configs/ in the published dist**
 
 In `packages/coherence-validator/package.json`, add to `files`:
+
 ```json
 "files": ["dist", "configs"],
 ```
@@ -367,6 +370,7 @@ git commit -m "feat(15.13): ship default python.json validator config"
 ### Task 5: Config loader with three-tier resolution
 
 **Files:**
+
 - Create: `packages/coherence-validator/src/config-loader.ts`
 - Create: `packages/coherence-validator/src/config-loader.test.ts`
 
@@ -472,7 +476,10 @@ export async function loadValidatorConfig(opts: LoadConfigOptions): Promise<Load
   if (overrideText !== undefined) {
     try {
       const parsed = validatorConfigSchema.parse(JSON.parse(overrideText));
-      log.debug({ projectPath: opts.projectPath, path: overridePath }, 'config: using project override');
+      log.debug(
+        { projectPath: opts.projectPath, path: overridePath },
+        'config: using project override',
+      );
       return { config: parsed, source: 'project-override' };
     } catch (err) {
       log.warn({ err, path: overridePath }, 'config: project override invalid; falling back');
@@ -517,6 +524,7 @@ git commit -m "feat(15.13): validator config loader with three-tier resolution"
 ### Task 6: Doc-fiction engine
 
 **Files:**
+
 - Create: `packages/coherence-validator/src/doc-fiction.ts`
 - Create: `packages/coherence-validator/src/doc-fiction.test.ts`
 
@@ -524,7 +532,7 @@ git commit -m "feat(15.13): validator config loader with three-tier resolution"
 
 - [ ] **Step 1: Write failing tests**
 
-```typescript
+````typescript
 // packages/coherence-validator/src/doc-fiction.test.ts
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -606,7 +614,7 @@ describe('checkDocFiction', () => {
     expect(findings).toEqual([]);
   });
 });
-```
+````
 
 - [ ] **Step 2: Verify fail**
 
@@ -615,7 +623,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement doc-fiction.ts**
 
-```typescript
+````typescript
 // packages/coherence-validator/src/doc-fiction.ts
 import { spawn } from 'node:child_process';
 import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
@@ -645,7 +653,10 @@ interface CodeBlock {
 }
 
 function slugify(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 }
 
 function extractCodeBlocks(filePath: string, content: string, headingsRegex: RegExp): CodeBlock[] {
@@ -691,7 +702,11 @@ function extractCodeBlocks(filePath: string, content: string, headingsRegex: Reg
   return blocks;
 }
 
-async function runWithTimeout(cmd: readonly string[], timeoutMs: number, cwd: string): Promise<{ exitCode: number; stderr: string }> {
+async function runWithTimeout(
+  cmd: readonly string[],
+  timeoutMs: number,
+  cwd: string,
+): Promise<{ exitCode: number; stderr: string }> {
   return new Promise((resolveFn) => {
     const [bin, ...args] = cmd;
     if (bin === undefined) {
@@ -705,7 +720,9 @@ async function runWithTimeout(cmd: readonly string[], timeoutMs: number, cwd: st
       setTimeout(() => child.kill('SIGKILL'), 2000);
       resolveFn({ exitCode: 124, stderr: stderr + '\n<timed out>' });
     }, timeoutMs);
-    child.stderr.on('data', (b: Buffer) => { stderr += b.toString('utf8'); });
+    child.stderr.on('data', (b: Buffer) => {
+      stderr += b.toString('utf8');
+    });
     child.on('close', (code) => {
       clearTimeout(timer);
       resolveFn({ exitCode: code ?? 1, stderr });
@@ -746,8 +763,11 @@ export async function checkDocFiction(opts: DocFictionOptions): Promise<PartialF
     for (const rel of files) {
       const abs = resolve(opts.projectPath, rel);
       let content: string;
-      try { content = await readFile(abs, 'utf8'); }
-      catch { continue; }
+      try {
+        content = await readFile(abs, 'utf8');
+      } catch {
+        continue;
+      }
 
       const blocks = extractCodeBlocks(rel, content, headingsRegex);
       for (const block of blocks) {
@@ -755,7 +775,10 @@ export async function checkDocFiction(opts: DocFictionOptions): Promise<PartialF
         if (runner === undefined) continue;
 
         // Write block to tmp file for path substitution
-        const blockFile = join(tmpDir, `block-${Date.now()}-${Math.random().toString(36).slice(2)}.${block.language}`);
+        const blockFile = join(
+          tmpDir,
+          `block-${Date.now()}-${Math.random().toString(36).slice(2)}.${block.language}`,
+        );
         await writeFile(blockFile, block.content, 'utf8');
 
         const cmd = runner.command.map((c) =>
@@ -766,7 +789,11 @@ export async function checkDocFiction(opts: DocFictionOptions): Promise<PartialF
           }),
         );
 
-        const { exitCode, stderr } = await runWithTimeout(cmd, runner.timeout_ms ?? 30000, opts.projectPath);
+        const { exitCode, stderr } = await runWithTimeout(
+          cmd,
+          runner.timeout_ms ?? 30000,
+          opts.projectPath,
+        );
 
         if (exitCode !== 0) {
           findings.push({
@@ -778,7 +805,10 @@ export async function checkDocFiction(opts: DocFictionOptions): Promise<PartialF
             auto_fixable: false,
             location: { file: rel, line: block.startLine, anchor: `#${block.sectionAnchor}` },
           });
-          log.debug({ filePath: rel, exitCode, stderr: stderr.slice(0, 200) }, 'doc-fiction: block failed');
+          log.debug(
+            { filePath: rel, exitCode, stderr: stderr.slice(0, 200) },
+            'doc-fiction: block failed',
+          );
         }
       }
     }
@@ -786,7 +816,7 @@ export async function checkDocFiction(opts: DocFictionOptions): Promise<PartialF
 
   return findings;
 }
-```
+````
 
 - [ ] **Step 4: Add glob dep**
 
@@ -809,6 +839,7 @@ git commit -m "feat(15.13): doc-fiction engine — executes README code blocks p
 ### Task 7: Wire doc-fiction into validator entry point
 
 **Files:**
+
 - Modify: `packages/coherence-validator/src/validator.ts`
 - Modify: `packages/coherence-validator/src/index.ts` (export config-loader for callers)
 
@@ -843,7 +874,11 @@ if (opts.runtime !== undefined) {
 - [ ] **Step 2: Update index.ts**
 
 ```typescript
-export { validateKnowledgeGraph, type ValidationResult, type ValidateOptions } from './validator.js';
+export {
+  validateKnowledgeGraph,
+  type ValidationResult,
+  type ValidateOptions,
+} from './validator.js';
 export { loadValidatorConfig } from './config-loader.js';
 export type { ValidatorConfig } from './config-schema.js';
 ```
@@ -867,6 +902,7 @@ git commit -m "feat(15.13): validator entry point runs doc-fiction when runtime 
 ### Task 8: Python dead-code scanner
 
 **Files:**
+
 - Create: `packages/coherence-validator/src/dead-code-python.ts`
 - Create: `packages/coherence-validator/src/dead-code-python.test.ts`
 
@@ -933,10 +969,7 @@ describe('checkDeadCodePython', () => {
 
   it('does not flag underscore-prefixed (private) symbols', async () => {
     await writeFile(join(projectPath, 'mypkg', '__init__.py'), '');
-    await writeFile(
-      join(projectPath, 'mypkg', 'lib.py'),
-      'def _internal(): pass\n',
-    );
+    await writeFile(join(projectPath, 'mypkg', 'lib.py'), 'def _internal(): pass\n');
     const findings = await checkDeadCodePython({
       projectPath,
       packageGlobs: ['mypkg/**/*.py'],
@@ -1046,22 +1079,32 @@ interface SymbolInfo {
   error?: string;
 }
 
-async function runAnalyzer(pythonBin: string, paths: readonly string[]): Promise<Record<string, SymbolInfo>> {
+async function runAnalyzer(
+  pythonBin: string,
+  paths: readonly string[],
+): Promise<Record<string, SymbolInfo>> {
   return new Promise((resolveFn, rejectFn) => {
     const child = spawn(pythonBin, ['-c', ANALYZER_PY], { shell: false });
     let stdout = '';
     let stderr = '';
     child.stdin.write(JSON.stringify(paths));
     child.stdin.end();
-    child.stdout.on('data', (b: Buffer) => { stdout += b.toString('utf8'); });
-    child.stderr.on('data', (b: Buffer) => { stderr += b.toString('utf8'); });
+    child.stdout.on('data', (b: Buffer) => {
+      stdout += b.toString('utf8');
+    });
+    child.stderr.on('data', (b: Buffer) => {
+      stderr += b.toString('utf8');
+    });
     child.on('close', (code) => {
       if (code !== 0) {
         rejectFn(new Error(`python analyzer exit ${code}: ${stderr.slice(0, 500)}`));
         return;
       }
-      try { resolveFn(JSON.parse(stdout)); }
-      catch (err) { rejectFn(err as Error); }
+      try {
+        resolveFn(JSON.parse(stdout));
+      } catch (err) {
+        rejectFn(err as Error);
+      }
     });
     child.on('error', rejectFn);
   });
@@ -1080,7 +1123,10 @@ async function collectExposedSymbols(
           for (const name of info.all_list) exposed.add(name);
         }
       }
-    } else if (source.kind === 'entry_points' && source.source === 'pyproject.toml::project.scripts') {
+    } else if (
+      source.kind === 'entry_points' &&
+      source.source === 'pyproject.toml::project.scripts'
+    ) {
       try {
         const text = await readFile(resolve(opts.projectPath, 'pyproject.toml'), 'utf8');
         const scripts = text.match(/\[project\.scripts\]\s*\n([^\[]*)/);
@@ -1091,7 +1137,9 @@ async function collectExposedSymbols(
             if (m && m[1] !== undefined) exposed.add(m[1]);
           }
         }
-      } catch { /* no pyproject — skip */ }
+      } catch {
+        /* no pyproject — skip */
+      }
     } else if (source.kind === 'feature_surface') {
       // Stub: would parse features/*.md documented_in; treat as out-of-scope for v1
       // since the schema-check covers most cases. Future enhancement.
@@ -1104,7 +1152,11 @@ async function collectExposedSymbols(
 export async function checkDeadCodePython(opts: DeadCodeOptions): Promise<PartialFinding[]> {
   const allPaths = new Set<string>();
   for (const pattern of opts.packageGlobs) {
-    const matched = await glob(pattern, { cwd: opts.projectPath, absolute: true, ignore: [...opts.excludeGlobs] });
+    const matched = await glob(pattern, {
+      cwd: opts.projectPath,
+      absolute: true,
+      ignore: [...opts.excludeGlobs],
+    });
     for (const p of matched) allPaths.add(p);
   }
 
@@ -1146,7 +1198,10 @@ export async function checkDeadCodePython(opts: DeadCodeOptions): Promise<Partia
     }
   }
 
-  log.debug({ projectPath: opts.projectPath, candidateCount: findings.length }, 'dead-code: scan complete');
+  log.debug(
+    { projectPath: opts.projectPath, candidateCount: findings.length },
+    'dead-code: scan complete',
+  );
   return findings;
 }
 ```
@@ -1187,6 +1242,7 @@ git commit -m "feat(15.13): Python dead-code scanner via AST subprocess"
 ### Task 9: Create coherence-reviewer agent prompt
 
 **Files:**
+
 - Create: `prompts/agents/coherence-reviewer.md`
 
 **Spec reference:** Component 3 → "Semantic doc-fiction check (coherence-reviewer agent)"
@@ -1195,6 +1251,7 @@ git commit -m "feat(15.13): Python dead-code scanner via AST subprocess"
 
 ```markdown
 <!-- prompts/agents/coherence-reviewer.md -->
+
 # Role: Coherence Reviewer
 
 You are the coherence reviewer for a factory5 project. Your job is to
@@ -1212,7 +1269,7 @@ You have read-only access to the project tree. Read the following:
   its `documented_in:` pointing at user-facing surfaces
 - `docs/knowledge/decisions/*.md` — any decisions that modified
   features mid-build
-- `README.md` and any docs/*.md the features reference
+- `README.md` and any docs/\*.md the features reference
 - The project source code, especially modules referenced in
   `modules.md` and features
 
@@ -1253,12 +1310,13 @@ been written but weren't.
 ## Output
 
 Emit findings using the standard marker format:
-
 ```
+
 FINDING [HIGH] README.md#cli-reference: README CLI Reference lists
 "--pipeline-name" flag but etl/cli.py argparser does not register it.
 Either add the flag (and corresponding decision in
 docs/knowledge/decisions/) or remove the doc reference.
+
 ```
 
 Severity:
@@ -1297,6 +1355,7 @@ git commit -m "feat(15.13): coherence-reviewer agent prompt"
 ### Task 10: Register coherence-reviewer in agent registry
 
 **Files:**
+
 - Modify: `packages/brain/src/agents/registry.ts`
 
 - [ ] **Step 1: Add the entry**
@@ -1338,6 +1397,7 @@ git commit -m "feat(15.13): register coherence-reviewer agent role"
 ### Task 11: Planner inserts coherence-reviewer task at directive end
 
 **Files:**
+
 - Modify: `packages/brain/src/planner.ts` (after the LLM-emitted plan is materialized)
 - Test: `packages/brain/src/planner.test.ts`
 
@@ -1347,14 +1407,16 @@ git commit -m "feat(15.13): register coherence-reviewer agent role"
 
 ```typescript
 it('appends a coherence-reviewer task at directive end', () => {
-  const plannerTasks = [{
-    title: 'Build CLI',
-    agent: 'builder' as const,
-    category: 'deep' as const,
-    inputs: { files: [], context: '' },
-    expectedOutputs: { files: [], signals: [] },
-    dependsOn: [],
-  }];
+  const plannerTasks = [
+    {
+      title: 'Build CLI',
+      agent: 'builder' as const,
+      category: 'deep' as const,
+      inputs: { files: [], context: '' },
+      expectedOutputs: { files: [], signals: [] },
+      dependsOn: [],
+    },
+  ];
   const tasks = materialisePlannerTasks(plannerTasks, 'pln-1');
   // Phase B addition: a terminal coherence-reviewer task should follow
   expect(tasks.find((t) => t.agent === 'coherence-reviewer')).toBeDefined();
@@ -1412,6 +1474,7 @@ git commit -m "feat(15.13): planner appends terminal coherence-reviewer task"
 ### Task 12: Brain detects missing graph and inserts migration task
 
 **Files:**
+
 - Modify: `packages/brain/src/loop.ts` (early in executeDirective, before plan dispatch)
 - Test: `packages/brain/src/loop.test.ts`
 
@@ -1455,10 +1518,15 @@ if (hasKnowledge && !hasSchema) {
     category: 'reasoning',
     inputs: {
       files: ['docs/knowledge/modules.md'],
-      context: 'This project predates the knowledge graph. Read modules.md, infer features (status=implemented since code exists), copy _schema.md and _templates/ from factory5 assets, write features/*.md and decisions.md heading. Single commit.',
+      context:
+        'This project predates the knowledge graph. Read modules.md, infer features (status=implemented since code exists), copy _schema.md and _templates/ from factory5 assets, write features/*.md and decisions.md heading. Single commit.',
     },
     expectedOutputs: {
-      files: ['docs/knowledge/_schema.md', 'docs/knowledge/_templates/feature.md', 'docs/knowledge/features/'],
+      files: [
+        'docs/knowledge/_schema.md',
+        'docs/knowledge/_templates/feature.md',
+        'docs/knowledge/features/',
+      ],
       signals: [],
     },
     dependsOn: [],
@@ -1504,6 +1572,7 @@ Expected: clean (note any pre-existing failures).
 ```bash
 node packages/cli/dist/index.js graph check "C:\Users\Momo\factory5-workspace\pythonetl"
 ```
+
 Expected: now reports findings about missing knowledge graph, OR runs doc-fiction against the existing README and reports the known doc-fiction findings.
 
 - [ ] **Step 3: Verify coherence-reviewer task lands in planner output**
@@ -1534,9 +1603,11 @@ git commit --allow-empty -m "chore(15.13): Phase B complete — deeper validatio
 - [x] Component 1 (backward compat: graph-migration task) — Task 12
 
 **Deferred to Phase C:**
+
 - Self-healing fix loop (consumes the findings Phase B produces)
 - Workspace hygiene (cleanup CLI, abandoned worktree detection)
 
 **Deferred beyond v1:**
+
 - node.json, go.json, rust.json shipped configs (per the engine + config architecture, these are config additions, not engine work)
 - Agent-generated config for unknown runtimes (v3 tier-3)

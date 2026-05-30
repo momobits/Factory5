@@ -26,10 +26,7 @@ describe('validateKnowledgeGraph', () => {
   });
 
   it('returns ok=true and empty findings for a valid graph', async () => {
-    await writeFile(
-      join(projectPath, 'README.md'),
-      '# Project\n\n## CLI Reference\n\nThe CLI.\n',
-    );
+    await writeFile(join(projectPath, 'README.md'), '# Project\n\n## CLI Reference\n\nThe CLI.\n');
     await writeFile(
       join(projectPath, 'docs', 'knowledge', 'features', 'cli.md'),
       `---

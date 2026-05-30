@@ -1,7 +1,7 @@
 # Task Observability, Per-Task Retry, and Timeout Configuration
 
-*Created: 2026-05-27*
-*Status: APPROVED*
+_Created: 2026-05-27_
+_Status: APPROVED_
 
 ## Problem
 
@@ -35,6 +35,7 @@ taskStreamTimeoutMs?: number  // milliseconds, optional
 ```
 
 Example `project.json`:
+
 ```json
 {
   "metadata": {
@@ -70,12 +71,12 @@ This unblocks complex tasks without requiring every project to set a custom valu
 
 ### Files touched
 
-| File | Change |
-|------|--------|
-| `packages/providers/src/claude-cli.ts` | Default from `*2` to `*6` |
-| `packages/worker/src/run-worker.ts` | Accept + forward `streamTimeoutMs` on `WorkerOptions` |
-| `packages/brain/src/pool.ts` | Read `taskStreamTimeoutMs` from project metadata, pass to worker |
-| `packages/core/src/schemas.ts` | Add `taskStreamTimeoutMs` to project metadata schema |
+| File                                   | Change                                                           |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| `packages/providers/src/claude-cli.ts` | Default from `*2` to `*6`                                        |
+| `packages/worker/src/run-worker.ts`    | Accept + forward `streamTimeoutMs` on `WorkerOptions`            |
+| `packages/brain/src/pool.ts`           | Read `taskStreamTimeoutMs` from project metadata, pass to worker |
+| `packages/core/src/schemas.ts`         | Add `taskStreamTimeoutMs` to project metadata schema             |
 
 ## Feature 2: Conversation Logging
 
@@ -84,6 +85,7 @@ This unblocks complex tasks without requiring every project to set a custom valu
 Each task gets a transcript file at `.factory/transcripts/<taskId>.ndjson`. Raw NDJSON lines from `claude-cli` are appended as they stream — no transformation, no buffering.
 
 Why disk files over SQLite:
+
 - Transcripts can be multi-MB. Blobs in `better-sqlite3` bloat the DB and slow queries on `tasks_inflight`.
 - NDJSON append is crash-safe (each line is a complete JSON object). If the task crashes mid-stream, the transcript contains everything up to the crash.
 - Files are inspectable with standard tools (`cat`, `jq`).
@@ -102,7 +104,7 @@ The tee is injected by the worker, not hardcoded in the provider. The worker ope
 ```typescript
 interface StreamOptions {
   // ... existing fields
-  transcriptSink?: WritableStream;  // raw NDJSON lines tee'd here
+  transcriptSink?: WritableStream; // raw NDJSON lines tee'd here
 }
 ```
 
@@ -110,11 +112,11 @@ interface StreamOptions {
 
 Three levels, configurable per-project via `metadata.transcriptLevel` in `project.json`:
 
-| Level | What's stored | Typical size |
-|-------|--------------|-------------|
-| `full` (default) | Every NDJSON line from claude-cli | 1–10 MB/task |
-| `tools` | Only `tool_use`, `tool_result`, and final `result` lines | 100 KB–1 MB |
-| `off` | No transcript file created | 0 |
+| Level            | What's stored                                            | Typical size |
+| ---------------- | -------------------------------------------------------- | ------------ |
+| `full` (default) | Every NDJSON line from claude-cli                        | 1–10 MB/task |
+| `tools`          | Only `tool_use`, `tool_result`, and final `result` lines | 100 KB–1 MB  |
+| `off`            | No transcript file created                               | 0            |
 
 Filtering happens at write time. The tee checks the level before appending each line.
 
@@ -135,11 +137,13 @@ The worker writes these fields to `WorkerOutcome`, and the brain persists them a
 `GET /api/v1/directives/:directiveId/tasks/:taskId/transcript`
 
 Query parameters:
+
 - `offset` (default 0) — skip N lines
 - `limit` (default 500) — return at most N lines
 - `level` (`full` | `tools` | `errors`) — server-side filter when stored transcript is `full` but viewer wants a subset
 
 Response:
+
 ```typescript
 {
   lines: object[],        // parsed NDJSON objects
@@ -160,16 +164,16 @@ Implementation: stream from disk via `readline`, skip `offset` lines, apply leve
 
 ### Files touched
 
-| File | Change |
-|------|--------|
-| `packages/providers/src/claude-cli.ts` | `streamClaude()` accepts + calls `onRawLine` callback per NDJSON line |
-| `packages/worker/src/run-worker.ts` | Opens write stream, passes `onRawLine` to provider (tees to file + emits SSE), records byte/line counts on `WorkerOutcome` |
-| `packages/brain/src/pool.ts` | Constructs transcript path, passes to worker, persists metadata to DB |
-| `packages/state/src/migrations/` | New migration adding columns to `tasks_inflight` |
-| `packages/state/src/queries/tasks-inflight.ts` | Read/write transcript metadata |
-| `packages/daemon/src/server.ts` | New transcript endpoint |
-| `packages/core/src/schemas.ts` | Add `transcriptLevel` to project metadata schema |
-| `packages/ipc/src/schemas.ts` | Add transcript fields to `ApiV1InflightTask` |
+| File                                           | Change                                                                                                                     |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `packages/providers/src/claude-cli.ts`         | `streamClaude()` accepts + calls `onRawLine` callback per NDJSON line                                                      |
+| `packages/worker/src/run-worker.ts`            | Opens write stream, passes `onRawLine` to provider (tees to file + emits SSE), records byte/line counts on `WorkerOutcome` |
+| `packages/brain/src/pool.ts`                   | Constructs transcript path, passes to worker, persists metadata to DB                                                      |
+| `packages/state/src/migrations/`               | New migration adding columns to `tasks_inflight`                                                                           |
+| `packages/state/src/queries/tasks-inflight.ts` | Read/write transcript metadata                                                                                             |
+| `packages/daemon/src/server.ts`                | New transcript endpoint                                                                                                    |
+| `packages/core/src/schemas.ts`                 | Add `transcriptLevel` to project metadata schema                                                                           |
+| `packages/ipc/src/schemas.ts`                  | Add transcript fields to `ApiV1InflightTask`                                                                               |
 
 ## Feature 3: Frontend — Transcript Viewer + Per-Task Retry
 
@@ -219,9 +223,10 @@ The worker emits each raw NDJSON line through the directive's SSE hub as it writ
 **API endpoint:** `POST /api/v1/directives/:id/tasks/:taskId/retry`
 
 Request body:
+
 ```typescript
 {
-  mode: 'resume' | 'clean'
+  mode: 'resume' | 'clean';
 }
 ```
 
@@ -252,13 +257,14 @@ Request body:
 
 The pool dispatcher already iterates pending tasks, checks dependencies, and dispatches when ready. It exits when all tasks are terminal. After retry, the retried task (and cascade-reset dependents) are `pending` again, so the loop naturally re-includes them.
 
-For `mode === 'resume'`: the worker receives the existing worktree path. The agent prompt gets a prefix: *"This task was previously attempted but did not complete. The worktree contains partial work from the prior attempt. Continue from where it left off."*
+For `mode === 'resume'`: the worker receives the existing worktree path. The agent prompt gets a prefix: _"This task was previously attempted but did not complete. The worktree contains partial work from the prior attempt. Continue from where it left off."_
 
 For `mode === 'clean'`: fresh worktree, no prefix. Standard dispatch.
 
 **SSE event:**
 
 New event type `task.retried`:
+
 ```typescript
 {
   type: 'task.retried',
@@ -281,17 +287,17 @@ The frontend handles this by resetting the task's row to `pending` status and cl
 
 ### Files touched
 
-| File | Change |
-|------|--------|
+| File                                                 | Change                                                                  |
+| ---------------------------------------------------- | ----------------------------------------------------------------------- |
 | `apps/factory-web/src/pages/directives/detail.astro` | Expandable task rows, transcript panel, retry buttons, live-stream mode |
-| `packages/daemon/src/server.ts` | New retry endpoint, transcript endpoint |
-| `packages/ipc/src/schemas.ts` | `task.retried` SSE event, transcript fields on `ApiV1InflightTask` |
-| `packages/ipc/src/sse.ts` | `task.retried` event schema |
-| `packages/daemon/src/directive-stream-route.ts` | Emit `task.retried` events |
-| `packages/state/src/migrations/` | `directive_signals` table |
-| `packages/state/src/queries/` | Signal read/consume queries |
-| `packages/brain/src/pool.ts` | Poll signals, re-enter loop, resume prompt prefix |
-| `packages/brain/src/loop.ts` | Signal-aware claim loop |
+| `packages/daemon/src/server.ts`                      | New retry endpoint, transcript endpoint                                 |
+| `packages/ipc/src/schemas.ts`                        | `task.retried` SSE event, transcript fields on `ApiV1InflightTask`      |
+| `packages/ipc/src/sse.ts`                            | `task.retried` event schema                                             |
+| `packages/daemon/src/directive-stream-route.ts`      | Emit `task.retried` events                                              |
+| `packages/state/src/migrations/`                     | `directive_signals` table                                               |
+| `packages/state/src/queries/`                        | Signal read/consume queries                                             |
+| `packages/brain/src/pool.ts`                         | Poll signals, re-enter loop, resume prompt prefix                       |
+| `packages/brain/src/loop.ts`                         | Signal-aware claim loop                                                 |
 
 ## Implementation Order
 
@@ -303,9 +309,9 @@ Each ships as its own commit and can be verified independently.
 
 ## Risks
 
-| Risk | Mitigation |
-|------|-----------|
-| Transcript files grow large for long-running tasks | `tools` and `off` levels exist; pagination prevents browser overload; `.factory/transcripts/` is gitignored |
-| Brain re-entry after retry races with other signals | `directive_signals` is consumed atomically (set `consumed_at` in same query); brain holds directive lock during loop |
+| Risk                                                    | Mitigation                                                                                                                         |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Transcript files grow large for long-running tasks      | `tools` and `off` levels exist; pagination prevents browser overload; `.factory/transcripts/` is gitignored                        |
+| Brain re-entry after retry races with other signals     | `directive_signals` is consumed atomically (set `consumed_at` in same query); brain holds directive lock during loop               |
 | Resume mode confuses the agent (partial worktree state) | Operator chooses the mode after reading the transcript. Clean mode is always available. The resume prompt prefix provides context. |
-| SSE backfill for `task.retried` events on reconnect | Store retries in DB (already via `directive_signals`); backfill reconstructs from task `attempts` field |
+| SSE backfill for `task.retried` events on reconnect     | Store retries in DB (already via `directive_signals`); backfill reconstructs from task `attempts` field                            |

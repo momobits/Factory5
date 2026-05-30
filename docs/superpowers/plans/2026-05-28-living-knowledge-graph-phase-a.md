@@ -17,6 +17,7 @@
 ### Task 1: Create factory5 assets directory with schema file
 
 **Files:**
+
 - Create: `packages/brain/src/assets/_schema.md`
 - Create: `packages/brain/src/assets/.gitkeep` (if directory needs git tracking)
 
@@ -29,10 +30,11 @@ mkdir -p packages/brain/src/assets
 mkdir -p packages/brain/src/assets/_templates
 ```
 
-- [ ] **Step 2: Create _schema.md with the canonical schema reference**
+- [ ] **Step 2: Create \_schema.md with the canonical schema reference**
 
 ```markdown
 <!-- packages/brain/src/assets/_schema.md -->
+
 # Knowledge Graph Schema (v1)
 
 This file defines the node and edge kinds used in `docs/knowledge/`.
@@ -47,12 +49,14 @@ A user-visible capability the project provides. Lives at
 `docs/knowledge/features/<id>.md`.
 
 Required front-matter:
+
 - `kind: feature`
 - `id: <kebab-case>` (unique within project)
 - `status: documented | implemented | superseded | abandoned`
 - `documented_in: [<doc-path>#<anchor>, ...]` (at least one entry)
 
 Optional front-matter:
+
 - `implements: [<task-id>, ...]` — task IDs that built this feature
 - `decisions: [<decision-id>, ...]` — decisions that affected this feature
 - `derived_from: [<feature-id>, ...]` — parent features (sub-feature decomposition)
@@ -64,6 +68,7 @@ A judgment call made during a build that modifies a feature's spec.
 Lives at `docs/knowledge/decisions/<YYYY-MM-DD>-<slug>.md`.
 
 Required front-matter:
+
 - `kind: decision`
 - `id: <YYYY-MM-DD>-<slug>`
 - `date: <YYYY-MM-DD>`
@@ -71,32 +76,35 @@ Required front-matter:
 - `modifies: [<feature-id>, ...]` (at least one entry)
 
 Required body sections:
+
 - `## Context`
 - `## Decision`
 - `## Consequences`
 
 Optional front-matter:
+
 - `supersedes: <decision-id>` — decision this one replaced
 - `follow_ups: [<feature-id>, ...]` — features deferred or filed as a result
 
 ## Edge kinds (front-matter array fields)
 
-| Edge | Source kind | Target | Direction |
-|---|---|---|---|
-| `implements` | feature | task-id | feature → was built by → task |
-| `documented_in` | feature | doc-path#anchor | feature → described at → doc location |
-| `modifies` | decision | feature-id | decision → changed → feature |
-| `supersedes` | decision/feature | id of same kind | newer → replaced → older |
-| `derived_from` | feature | feature-id | child → parent |
-| `decisions` | feature | decision-id | feature → affected by → decisions |
-| `follow_ups` | decision | feature-id | decision → spawned → features |
+| Edge            | Source kind      | Target          | Direction                             |
+| --------------- | ---------------- | --------------- | ------------------------------------- |
+| `implements`    | feature          | task-id         | feature → was built by → task         |
+| `documented_in` | feature          | doc-path#anchor | feature → described at → doc location |
+| `modifies`      | decision         | feature-id      | decision → changed → feature          |
+| `supersedes`    | decision/feature | id of same kind | newer → replaced → older              |
+| `derived_from`  | feature          | feature-id      | child → parent                        |
+| `decisions`     | feature          | decision-id     | feature → affected by → decisions     |
+| `follow_ups`    | decision         | feature-id      | decision → spawned → features         |
 
 ## Status state machine
-
 ```
+
 documented ─→ implemented ─→ superseded
-     │                      │
-     └────→ abandoned ←─────┘
+│ │
+└────→ abandoned ←─────┘
+
 ```
 
 - `documented` — seeded by architect; no implementing task yet
@@ -121,6 +129,7 @@ git commit -m "feat(15.13): seed knowledge graph schema reference file"
 ### Task 2: Create feature template
 
 **Files:**
+
 - Create: `packages/brain/src/assets/_templates/feature.md`
 
 **Spec reference:** Component 1 → "Templates"
@@ -128,18 +137,25 @@ git commit -m "feat(15.13): seed knowledge graph schema reference file"
 - [ ] **Step 1: Write the feature template**
 
 ```markdown
-<!-- packages/brain/src/assets/_templates/feature.md -->
----
+## <!-- packages/brain/src/assets/_templates/feature.md -->
+
 kind: feature
 id: <REPLACE-with-kebab-case-id>
 status: documented
 documented_in:
-  - <REPLACE-with-doc-path>#<REPLACE-with-anchor>
+
+- <REPLACE-with-doc-path>#<REPLACE-with-anchor>
+
 # Optional fields (uncomment as needed):
+
 # implements: []
+
 # decisions: []
+
 # derived_from: []
+
 # supersedes: <feature-id>
+
 ---
 
 # Feature: <REPLACE with human-readable title>
@@ -175,6 +191,7 @@ git commit -m "feat(15.13): seed knowledge graph feature template"
 ### Task 3: Create decision template
 
 **Files:**
+
 - Create: `packages/brain/src/assets/_templates/decision.md`
 
 **Spec reference:** Component 1 → "Templates"
@@ -182,17 +199,22 @@ git commit -m "feat(15.13): seed knowledge graph feature template"
 - [ ] **Step 1: Write the decision template**
 
 ```markdown
-<!-- packages/brain/src/assets/_templates/decision.md -->
----
+## <!-- packages/brain/src/assets/_templates/decision.md -->
+
 kind: decision
 id: <REPLACE-with-YYYY-MM-DD-slug>
 date: <REPLACE-with-YYYY-MM-DD>
 made_by_task: <REPLACE-with-ULID>
 modifies:
-  - <REPLACE-with-feature-id>
+
+- <REPLACE-with-feature-id>
+
 # Optional fields (uncomment as needed):
+
 # supersedes: <decision-id>
+
 # follow_ups: []
+
 ---
 
 # Decision: <REPLACE with one-line summary>
@@ -224,23 +246,25 @@ git commit -m "feat(15.13): seed knowledge graph decision template"
 ### Task 4: Create the knowledge-graph skill
 
 **Files:**
+
 - Create: `skills/knowledge-graph.md`
 
 **Spec reference:** Component 1 → "How agents adopt it"
 
 - [ ] **Step 1: Write the skill file**
 
-```markdown
-<!-- skills/knowledge-graph.md -->
----
+````markdown
+## <!-- skills/knowledge-graph.md -->
+
 name: knowledge-graph
 description: |
-  How to use the project's living knowledge graph: read and update
-  feature files in docs/knowledge/features/, record decisions in
-  docs/knowledge/decisions/ when you deviate from the documented
-  surface, and keep the graph valid so the validator accepts your
-  task completion. Use during scaffolding, building, and fixing
-  whenever you touch user-facing surface.
+How to use the project's living knowledge graph: read and update
+feature files in docs/knowledge/features/, record decisions in
+docs/knowledge/decisions/ when you deviate from the documented
+surface, and keep the graph valid so the validator accepts your
+task completion. Use during scaffolding, building, and fixing
+whenever you touch user-facing surface.
+
 ---
 
 # Knowledge Graph
@@ -274,7 +298,7 @@ Before claiming the task is done, update the knowledge graph:
    task ID is in `.factory/plan.json`'s entry for your current task.
 3. **Fill in documented stubs** — the architect may have seeded
    placeholder sections in README.md (marked `<!-- to be filled by
-   scaffolder/builder -->`). Replace these with real content matching
+scaffolder/builder -->`). Replace these with real content matching
    what you built.
 
 ## When you deviate from the documented surface
@@ -289,6 +313,8 @@ Record the decision:
    cp docs/knowledge/_templates/decision.md \
       docs/knowledge/decisions/$(date +%Y-%m-%d)-<short-slug>.md
    ```
+````
+
 2. Fill in the placeholders. The `## Context`, `## Decision`,
    `## Consequences` sections are required.
 3. Add the new decision's `id` to the affected feature file's
@@ -323,6 +349,7 @@ If your task discovers a need for a feature not in the seeded
 
 At task completion, `factory5 graph check` runs against your worktree.
 It validates:
+
 - Front-matter parses as YAML
 - Required fields are present
 - `documented_in:` anchors resolve to real files / headings
@@ -344,20 +371,22 @@ do NOT skip the knowledge graph step.
   understand the contract.
 - Always update `documented_in:` targets when you change the
   user-facing surface.
-```
+
+````
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add skills/knowledge-graph.md
 git commit -m "feat(15.13): add knowledge-graph skill teaching the schema"
-```
+````
 
 ---
 
 ### Task 5: Wire knowledge-graph skill into agent registry
 
 **Files:**
+
 - Modify: `packages/brain/src/agents/registry.ts`
 
 **Spec reference:** Component 1 → "A skill teaches the rules"
@@ -412,6 +441,7 @@ git commit -m "feat(15.13): attach knowledge-graph skill to scaffolder/builder/f
 ### Task 6: Update architect prompt to seed knowledge graph
 
 **Files:**
+
 - Modify: `prompts/agents/architect.md`
 
 **Spec reference:** Component 1 → "Architect seeding"
@@ -425,7 +455,7 @@ Identify the "Output shape" section (around line 63-68).
 
 Append a new section after the "Rules" section (or before, depending on the file's structure). The full text to append:
 
-```markdown
+````markdown
 ## Knowledge graph seeding
 
 In addition to the four wiki pages (overview, modules, testing,
@@ -435,6 +465,7 @@ decisions), you MUST seed the project's knowledge graph:
 
 Copy these files verbatim from `<factory5-install>/packages/brain/src/assets/`
 into `docs/knowledge/`:
+
 - `_schema.md` → `docs/knowledge/_schema.md`
 - `_templates/feature.md` → `docs/knowledge/_templates/feature.md`
 - `_templates/decision.md` → `docs/knowledge/_templates/decision.md`
@@ -446,6 +477,7 @@ into `docs/knowledge/`:
 For each user-visible capability the project provides (based on
 modules.md's per-module contracts), produce a `docs/knowledge/features/<id>.md`
 file. Use `_templates/feature.md` as the starting shape. Set:
+
 - `kind: feature`
 - `id: <kebab-case-derived-from-feature-name>`
 - `status: documented`
@@ -466,6 +498,7 @@ and explicit stub markers under each section:
 ```markdown
 <!-- to be filled by scaffolder/builder -->
 ```
+````
 
 The headings must match the anchors referenced in your seeded
 `features/*.md` `documented_in:` fields. Validator will fail at task
@@ -474,6 +507,7 @@ completion if anchors don't resolve.
 ### 4. Emit these in your output
 
 Your `pages: []` output array should include:
+
 - The four wiki pages (overview, modules, testing, decisions) — same as before
 - `_schema.md` (slug: `_schema.md`, content: verbatim from assets)
 - `_templates/feature.md` (slug: `_templates/feature.md`, content: verbatim)
@@ -490,20 +524,22 @@ Additionally, emit a top-level `readme` field in your output:
 ```
 
 The brain will write this to the project root.
-```
+
+````
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add prompts/agents/architect.md
 git commit -m "feat(15.13): architect seeds knowledge graph + stub README"
-```
+````
 
 ---
 
 ### Task 6.5: Brain consumes architect's readme + feature outputs
 
 **Files:**
+
 - Modify: `packages/brain/src/architect.ts` (or wherever architect output is parsed)
 - Test: `packages/brain/src/architect.test.ts`
 
@@ -520,10 +556,12 @@ Look at the architect's response schema. It likely uses a zod schema like:
 
 ```typescript
 const architectOutputSchema = z.object({
-  pages: z.array(z.object({
-    slug: z.string(),
-    content: z.string(),
-  })),
+  pages: z.array(
+    z.object({
+      slug: z.string(),
+      content: z.string(),
+    }),
+  ),
 });
 ```
 
@@ -533,10 +571,12 @@ Update the architect output schema:
 
 ```typescript
 const architectOutputSchema = z.object({
-  pages: z.array(z.object({
-    slug: z.string(),
-    content: z.string(),
-  })),
+  pages: z.array(
+    z.object({
+      slug: z.string(),
+      content: z.string(),
+    }),
+  ),
   /** Optional README content seeded with stub markers, written to <project>/README.md. */
   readme: z.string().optional(),
 });
@@ -582,6 +622,7 @@ git commit -m "feat(15.13): brain writes architect's stub README + seeded featur
 ### Task 7: Add featureIds field to taskSchema
 
 **Files:**
+
 - Modify: `packages/core/src/schemas.ts:273-309` (taskSchema)
 - Test: `packages/core/src/schemas.test.ts`
 
@@ -693,6 +734,7 @@ git commit -m "feat(15.13): add featureIds to taskSchema — task↔feature grap
 ### Task 8: Update planner to emit featureIds
 
 **Files:**
+
 - Modify: `packages/brain/src/planner.ts:42` (plannerTaskSchema)
 - Modify: `packages/brain/src/planner.ts:121-135` (task materialization)
 - Test: `packages/brain/src/planner.test.ts`
@@ -710,29 +752,33 @@ Add to `packages/brain/src/planner.test.ts` (find the existing `describe('materi
 
 ```typescript
 it('passes featureIds through when set', () => {
-  const plannerTasks = [{
-    title: 'Build CLI',
-    agent: 'builder' as const,
-    category: 'deep' as const,
-    inputs: { files: [], context: 'Build the CLI.' },
-    expectedOutputs: { files: ['etl/cli.py'], signals: [] },
-    dependsOn: [],
-    featureIds: ['cli-run-command'],
-  }];
+  const plannerTasks = [
+    {
+      title: 'Build CLI',
+      agent: 'builder' as const,
+      category: 'deep' as const,
+      inputs: { files: [], context: 'Build the CLI.' },
+      expectedOutputs: { files: ['etl/cli.py'], signals: [] },
+      dependsOn: [],
+      featureIds: ['cli-run-command'],
+    },
+  ];
   const planId = '01HZZZZZZZZZZZZZZZZZZZZZZZ';
   const tasks = materialisePlannerTasks(plannerTasks, planId);
   expect(tasks[0]?.featureIds).toEqual(['cli-run-command']);
 });
 
 it('defaults featureIds to empty array when planner omits the field', () => {
-  const plannerTasks = [{
-    title: 'Build CLI',
-    agent: 'builder' as const,
-    category: 'deep' as const,
-    inputs: { files: [], context: 'Build the CLI.' },
-    expectedOutputs: { files: ['etl/cli.py'], signals: [] },
-    dependsOn: [],
-  }];
+  const plannerTasks = [
+    {
+      title: 'Build CLI',
+      agent: 'builder' as const,
+      category: 'deep' as const,
+      inputs: { files: [], context: 'Build the CLI.' },
+      expectedOutputs: { files: ['etl/cli.py'], signals: [] },
+      dependsOn: [],
+    },
+  ];
   const planId = '01HZZZZZZZZZZZZZZZZZZZZZZZ';
   const tasks = materialisePlannerTasks(plannerTasks, planId);
   expect(tasks[0]?.featureIds).toEqual([]);
@@ -813,6 +859,7 @@ git commit -m "feat(15.13): planner emits featureIds per task — feeds graph va
 ### Task 9: Define new structured finding schema
 
 **Files:**
+
 - Modify: `packages/core/src/schemas.ts:208-226` (findingSchema)
 - Test: `packages/core/src/schemas.test.ts`
 
@@ -842,7 +889,8 @@ describe('findingSchema — structured shape', () => {
       },
       title: 'CLI Reference documents pipeline_name arg that does not exist',
       why: 'Users following the README will hit "unexpected extra argument" error.',
-      suggested_fix: 'Either implement the optional arg or remove it from README.md §CLI Reference.',
+      suggested_fix:
+        'Either implement the optional arg or remove it from README.md §CLI Reference.',
       auto_fixable: false,
     });
     expect(parsed.category).toBe('doc-fiction');
@@ -999,6 +1047,7 @@ git commit -m "feat(15.13): extend findingSchema with structured fields (categor
 ### Task 10: Add structured-finding helper to wiki findings storage
 
 **Files:**
+
 - Modify: `packages/wiki/src/findings.ts`
 - Test: `packages/wiki/src/findings.test.ts` (or create if absent)
 
@@ -1076,6 +1125,7 @@ Expected: FAIL — addFinding doesn't accept the new optional fields, or doesn't
 In `packages/wiki/src/findings.ts`, find the `addFinding` function. Look at its current signature (around line 144). Update the input type to allow the new optional fields, and persist them:
 
 Find this:
+
 ```typescript
 export async function addFinding(
   projectPath: string,
@@ -1092,6 +1142,7 @@ export async function addFinding(
 ```
 
 Change to:
+
 ```typescript
 export async function addFinding(
   projectPath: string,
@@ -1138,6 +1189,7 @@ const finding: Finding = {
 ```
 
 Also add the imports at the top of findings.ts:
+
 ```typescript
 import type { Finding, FindingCategory, FindingLocation, ... } from '@factory5/core';
 ```
@@ -1164,6 +1216,7 @@ git commit -m "feat(15.13): wiki addFinding accepts + persists structured fields
 ### Task 11: Update IPC schemas for structured findings
 
 **Files:**
+
 - Modify: `packages/ipc/src/schemas.ts` (search for `apiV1FindingSchema` or similar)
 - Test: existing IPC test suite
 
@@ -1219,6 +1272,7 @@ If no changes were needed, skip this step and proceed to Task 12.
 ### Task 12: Frontend renders structured fields with legacy fallback
 
 **Files:**
+
 - Modify: `apps/factory-web/src/pages/directives/detail.astro` (find the findings rendering section)
 
 **Spec reference:** Component 2 → "Structured Findings"
@@ -1282,7 +1336,12 @@ function formatLocation(loc: any): string {
 Find the `<style>` block in `apps/factory-web/src/layouts/Dashboard.astro` (or detail.astro's style section) and append:
 
 ```css
-.finding-header { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.finding-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
 .finding-category {
   font-family: var(--f-body);
   font-size: 10px;
@@ -1302,14 +1361,22 @@ Find the `<style>` block in `apps/factory-web/src/layouts/Dashboard.astro` (or d
   padding: 1px 6px;
   border-radius: 2px;
 }
-.finding-title { margin: 4px 0; font-size: 14px; }
+.finding-title {
+  margin: 4px 0;
+  font-size: 14px;
+}
 .finding-location {
   font-family: var(--f-mono);
   font-size: 11px;
   color: var(--mute);
   margin-bottom: 6px;
 }
-.finding-why, .finding-fix { font-size: 13px; line-height: 1.5; margin-top: 4px; }
+.finding-why,
+.finding-fix {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
 ```
 
 - [ ] **Step 4: Rebuild the web app**
@@ -1331,6 +1398,7 @@ git commit -m "feat(15.13): frontend renders structured findings with legacy fal
 ### Task 13: Scaffold the coherence-validator package
 
 **Files:**
+
 - Create: `packages/coherence-validator/package.json`
 - Create: `packages/coherence-validator/tsconfig.json`
 - Create: `packages/coherence-validator/README.md`
@@ -1390,7 +1458,7 @@ git commit -m "feat(15.13): frontend renders structured findings with legacy fal
 
 - [ ] **Step 3: Create README.md**
 
-```markdown
+````markdown
 # @factory5/coherence-validator
 
 Validates the project's knowledge graph at `docs/knowledge/`:
@@ -1411,6 +1479,7 @@ import { validateKnowledgeGraph } from '@factory5/coherence-validator';
 const result = await validateKnowledgeGraph({ projectPath, planPath, taskId });
 // result.findings contains structured findings if any checks failed
 ```
+````
 
 ## CLI
 
@@ -1419,7 +1488,8 @@ factory5 graph check [<projectPath>]
 ```
 
 See spec at `docs/superpowers/specs/2026-05-28-living-knowledge-graph-design.md`.
-```
+
+````
 
 - [ ] **Step 4: Create stub src/index.ts**
 
@@ -1432,7 +1502,7 @@ See spec at `docs/superpowers/specs/2026-05-28-living-knowledge-graph-design.md`
  */
 
 export { validateKnowledgeGraph, type ValidationResult } from './validator.js';
-```
+````
 
 - [ ] **Step 5: Install workspace dependencies**
 
@@ -1451,6 +1521,7 @@ git commit -m "feat(15.13): scaffold @factory5/coherence-validator package"
 ### Task 14: Implement schema validity check
 
 **Files:**
+
 - Create: `packages/coherence-validator/src/schema-check.ts`
 - Create: `packages/coherence-validator/src/schema-check.test.ts`
 
@@ -1676,7 +1747,10 @@ export function checkFeatureFile(filePath: string, content: string): PartialFind
     findings.push({
       category: 'graph-schema-error',
       severity: 'high',
-      title: status === undefined ? 'Missing required field: status' : `Invalid status: ${String(status)}`,
+      title:
+        status === undefined
+          ? 'Missing required field: status'
+          : `Invalid status: ${String(status)}`,
       why: `Feature status must be one of: ${VALID_FEATURE_STATUSES.join(', ')}.`,
       suggested_fix: 'Set `status: documented` (or another valid value).',
       auto_fixable: true,
@@ -1801,6 +1875,7 @@ git commit -m "feat(15.13): coherence validator — schema validity check"
 ### Task 15: Implement reference integrity check
 
 **Files:**
+
 - Create: `packages/coherence-validator/src/reference-check.ts`
 - Create: `packages/coherence-validator/src/reference-check.test.ts`
 
@@ -1816,9 +1891,7 @@ import { checkReferences } from './reference-check.js';
 
 describe('checkReferences', () => {
   it('passes when all documented_in anchors resolve', () => {
-    const docs = new Map([
-      ['README.md', '# Project\n\n## CLI Reference\n\nDoc text.'],
-    ]);
+    const docs = new Map([['README.md', '# Project\n\n## CLI Reference\n\nDoc text.']]);
     const feature = {
       filePath: 'features/cli.md',
       frontmatter: {
@@ -1849,9 +1922,7 @@ describe('checkReferences', () => {
   });
 
   it('fails when documented_in anchor does not exist in target file', () => {
-    const docs = new Map([
-      ['README.md', '# Project\n\n## Installation\n'],
-    ]);
+    const docs = new Map([['README.md', '# Project\n\n## Installation\n']]);
     const feature = {
       filePath: 'features/cli.md',
       frontmatter: {
@@ -2026,6 +2097,7 @@ git commit -m "feat(15.13): coherence validator — reference integrity check"
 ### Task 16: Implement validator entry point
 
 **Files:**
+
 - Create: `packages/coherence-validator/src/validator.ts`
 - Create: `packages/coherence-validator/src/validator.test.ts`
 
@@ -2058,10 +2130,7 @@ describe('validateKnowledgeGraph', () => {
   });
 
   it('returns ok=true and empty findings for a valid graph', async () => {
-    await writeFile(
-      join(projectPath, 'README.md'),
-      '# Project\n\n## CLI Reference\n\nThe CLI.\n',
-    );
+    await writeFile(join(projectPath, 'README.md'), '# Project\n\n## CLI Reference\n\nThe CLI.\n');
     await writeFile(
       join(projectPath, 'docs', 'knowledge', 'features', 'cli.md'),
       `---
@@ -2191,9 +2260,7 @@ async function fileExists(path: string): Promise<boolean> {
 async function listMarkdownFiles(dir: string): Promise<string[]> {
   try {
     const entries = await readdir(dir);
-    return entries
-      .filter((e) => e.endsWith('.md') && !e.startsWith('_'))
-      .map((e) => join(dir, e));
+    return entries.filter((e) => e.endsWith('.md') && !e.startsWith('_')).map((e) => join(dir, e));
   } catch {
     return [];
   }
@@ -2287,6 +2354,7 @@ git commit -m "feat(15.13): coherence validator entry point (validateKnowledgeGr
 ### Task 17: Wire validator into worker post-task
 
 **Files:**
+
 - Modify: `packages/worker/src/run-worker.ts:735` (the area after listChangedFiles, before cleanupWorktree)
 - Modify: `packages/worker/package.json` (add @factory5/coherence-validator dep)
 - Test: `packages/worker/src/run-worker.test.ts`
@@ -2352,7 +2420,9 @@ async function readPlanTaskIds(projectPath: string): Promise<string[]> {
     const planPath = join(projectPath, '.factory', 'plan.json');
     const raw = await fsReadFile(planPath, 'utf8');
     const parsed = JSON.parse(raw) as { tasks?: Array<{ id?: string }> };
-    return (parsed.tasks ?? []).map((t) => t.id).filter((id): id is string => typeof id === 'string');
+    return (parsed.tasks ?? [])
+      .map((t) => t.id)
+      .filter((id): id is string => typeof id === 'string');
   } catch {
     return [];
   }
@@ -2390,6 +2460,7 @@ Run: `pnpm build && pnpm --filter @factory5/worker test 2>&1 | tail -10`
 Expected: build success; existing tests pass.
 
 The validator's unit-level behavior is covered comprehensively in `packages/coherence-validator/src/validator.test.ts` (Task 16). A full end-to-end worker integration test requires the worker's complete mock infrastructure (mock provider, mock worktree, mock registry) which is heavy. Phase A's verification of the wiring is:
+
 - Worker compiles with the new import + call site (covered by `pnpm build`)
 - Validator's own tests still pass (covered by Task 16)
 - The manual end-to-end check in Task 19 step 2 exercises the full path
@@ -2408,6 +2479,7 @@ git commit -m "feat(15.13): worker runs coherence validator post-task when featu
 ### Task 18: Create factory5 graph check CLI command
 
 **Files:**
+
 - Create: `packages/cli/src/commands/graph-check.ts`
 - Modify: `packages/cli/src/commands/index.ts` (register the command)
 - Modify: `packages/cli/package.json` (add @factory5/coherence-validator dep)
@@ -2438,9 +2510,7 @@ import { createLogger } from '@factory5/logger';
 const log = createLogger('cli.graph-check');
 
 export function registerGraphCheckCommand(parent: Command): void {
-  const graph = parent
-    .command('graph')
-    .description('Operate on the project knowledge graph');
+  const graph = parent.command('graph').description('Operate on the project knowledge graph');
 
   graph
     .command('check')
@@ -2524,6 +2594,7 @@ cp packages/brain/src/assets/_templates/feature.md /tmp/factory5-graph-test/docs
 # Hand-edit test-feature.md filling in id/status/documented_in.
 node packages/cli/dist/index.js graph check /tmp/factory5-graph-test
 ```
+
 Expected: validator runs; if you reference a non-existent file in `documented_in:`, it reports the issue.
 
 - [ ] **Step 3: Verify schema test coverage**
@@ -2563,11 +2634,13 @@ Verify before handoff to Phase B:
 - [x] Component 3: `factory5 graph check` CLI — Task 18
 
 **Deferred to Phase B:**
+
 - Post-merge validator wiring in brain (waits for self-healing loop integration)
 - Doc-fiction programmatic check (engine + python.json config)
 - Dead-code scan
 - Coherence-reviewer agent
 
 **Deferred to Phase C:**
+
 - Self-healing loop wiring around the validator's findings
 - Workspace hygiene (`factory5 cleanup`, abandoned worktree detection)

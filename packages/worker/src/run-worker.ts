@@ -630,26 +630,29 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
 
   const shouldLogLine = (line: string): boolean => {
     if (opts.transcriptLevel === 'full' || opts.transcriptLevel === undefined) return true;
-    return line.includes('"type":"tool_use"') ||
+    return (
+      line.includes('"type":"tool_use"') ||
       line.includes('"type":"tool_result"') ||
-      line.includes('"type":"result"');
+      line.includes('"type":"result"')
+    );
   };
 
-  const onRawLine = transcriptStream !== undefined
-    ? (line: string): void => {
-        if (shouldLogLine(line)) {
-          transcriptStream!.write(line + '\n');
-          transcriptLineCount++;
-          if (opts.emitTranscriptLine !== undefined) {
-            try {
-              opts.emitTranscriptLine(JSON.parse(line) as unknown, transcriptLineCount - 1);
-            } catch {
-              // Malformed line — written to file as-is, skip SSE emission
+  const onRawLine =
+    transcriptStream !== undefined
+      ? (line: string): void => {
+          if (shouldLogLine(line)) {
+            transcriptStream!.write(line + '\n');
+            transcriptLineCount++;
+            if (opts.emitTranscriptLine !== undefined) {
+              try {
+                opts.emitTranscriptLine(JSON.parse(line) as unknown, transcriptLineCount - 1);
+              } catch {
+                // Malformed line — written to file as-is, skip SSE emission
+              }
             }
           }
         }
-      }
-    : undefined;
+      : undefined;
 
   try {
     const iter = resolution.provider.stream({
@@ -749,7 +752,9 @@ async function runTooling(opts: WorkerOptions, fullUserPrompt: string): Promise<
           bytes: stat.size,
           lines: transcriptLineCount,
         };
-      } catch { /* File may not exist if no lines written */ }
+      } catch {
+        /* File may not exist if no lines written */
+      }
     }
   }
 

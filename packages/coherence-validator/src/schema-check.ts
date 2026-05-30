@@ -84,7 +84,10 @@ export function checkFeatureFile(filePath: string, content: string): PartialFind
     findings.push({
       category: 'graph-schema-error',
       severity: 'high',
-      title: status === undefined ? 'Missing required field: status' : `Invalid status: ${String(status)}`,
+      title:
+        status === undefined
+          ? 'Missing required field: status'
+          : `Invalid status: ${String(status)}`,
       why: `Feature status must be one of: ${VALID_FEATURE_STATUSES.join(', ')}.`,
       suggested_fix: 'Set `status: documented` (or another valid value).',
       auto_fixable: true,

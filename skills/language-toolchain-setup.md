@@ -17,7 +17,7 @@ those typically resolve to the oldest installed version, which usually
 doesn't satisfy modern projects.
 
 This skill applies to the **runtime version selection** that comes
-*before* the `dependency-install` skill's `pip install` / `pnpm install`
+_before_ the `dependency-install` skill's `pip install` / `pnpm install`
 steps. Pick the interpreter first, then install dependencies into it.
 
 ## Python
@@ -44,6 +44,7 @@ py --list
 ```
 
 Output is one line per installed version, e.g.:
+
 ```
  -V:3.13          *
  -V:3.12
@@ -67,6 +68,7 @@ constraint is `>=3.11` risks using newer syntax/stdlib that won't run
 on a 3.11 deployment target.
 
 Examples:
+
 - Constraint `>=3.11`, installed `{3.11, 3.12, 3.13}` → pick **3.11**
 - Constraint `>=3.12`, installed `{3.11, 3.13}` → pick **3.13**
   (3.11 doesn't satisfy, 3.13 does, no 3.12 available)
@@ -76,11 +78,13 @@ Examples:
 ### 4. Create the venv with that specific interpreter
 
 **Windows:**
+
 ```cmd
 py -3.11 -m venv .venv
 ```
 
 **macOS / Linux:**
+
 ```bash
 python3.11 -m venv .venv
 ```
@@ -94,12 +98,14 @@ Do NOT rely on `source .venv/bin/activate` / `.venv\Scripts\Activate.ps1`
 in subprocess inheritance. Reference the interpreter directly:
 
 **Windows:**
+
 ```cmd
 .venv\Scripts\python.exe -m pip install -e ".[test]"
 .venv\Scripts\python.exe -m pytest
 ```
 
 **macOS / Linux:**
+
 ```bash
 .venv/bin/python -m pip install -e ".[test]"
 .venv/bin/python -m pytest
@@ -108,6 +114,7 @@ in subprocess inheritance. Reference the interpreter directly:
 ### Validation: confirm the venv satisfies the constraint
 
 After creation, probe:
+
 ```cmd
 .venv\Scripts\python.exe --version
 ```
@@ -141,7 +148,7 @@ node --version
   - If `nvm` is available: `nvm use <required-version>` (or
     `nvm install <required>` then `nvm use`).
   - If not: emit a `FINDING [HIGH] package.json: engines.node
-    requires <X>, system has <Y>` and stop. Do not attempt to
+requires <X>, system has <Y>` and stop. Do not attempt to
     install a new Node — that's an operator-level concern.
 
 ## If no installed runtime satisfies the constraint

@@ -202,9 +202,11 @@ You SHOULD update the knowledge graph as part of your fixes (use the
 `knowledge-graph` skill). For `graph-orphan` findings, the fix is
 usually a front-matter edit. For `doc-fiction` findings, the fix is
 either implementing the documented feature or removing the doc claim
-+ writing a decision file in `docs/knowledge/decisions/`.
+
+- writing a decision file in `docs/knowledge/decisions/`.
 
 When iterating through a batch:
+
 - Don't try to combine fixes across findings. Each finding is its
   own minimal change.
 - Don't reorder. Process top-to-bottom in the list provided.

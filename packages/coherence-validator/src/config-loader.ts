@@ -52,10 +52,16 @@ export async function loadValidatorConfig(opts: LoadConfigOptions): Promise<Load
   if (overrideText !== undefined) {
     try {
       const parsed = validatorConfigSchema.parse(JSON.parse(overrideText));
-      log.debug({ projectPath: opts.projectPath, path: overridePath }, 'config: using project override');
+      log.debug(
+        { projectPath: opts.projectPath, path: overridePath },
+        'config: using project override',
+      );
       return { config: parsed, source: 'project-override' };
     } catch (err) {
-      log.warn({ err, path: overridePath }, 'config: project override invalid; falling back to shipped default');
+      log.warn(
+        { err, path: overridePath },
+        'config: project override invalid; falling back to shipped default',
+      );
     }
   }
 
@@ -67,7 +73,10 @@ export async function loadValidatorConfig(opts: LoadConfigOptions): Promise<Load
       const parsed = validatorConfigSchema.parse(JSON.parse(shippedText));
       return { config: parsed, source: 'shipped-default' };
     } catch (err) {
-      log.warn({ err, path: shippedPath }, 'config: shipped default invalid (should never happen — package bug)');
+      log.warn(
+        { err, path: shippedPath },
+        'config: shipped default invalid (should never happen — package bug)',
+      );
     }
   }
 

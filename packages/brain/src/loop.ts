@@ -15,7 +15,14 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AutonomyMode, Directive, DirectiveLimits, ModelCategory, Plan, Task } from '@factory5/core';
+import type {
+  AutonomyMode,
+  Directive,
+  DirectiveLimits,
+  ModelCategory,
+  Plan,
+  Task,
+} from '@factory5/core';
 import { newId } from '@factory5/core';
 import { createLogger } from '@factory5/logger';
 import { assess, type AssessResult, type Runtime } from '@factory5/assessor';
@@ -40,7 +47,11 @@ import {
   readPlan,
   readWiki,
 } from '@factory5/wiki';
-import { projectBudgetsFromMetadata, resolveAxisCap, type ProjectBudgetsLike } from './pool-usage.js';
+import {
+  projectBudgetsFromMetadata,
+  resolveAxisCap,
+  type ProjectBudgetsLike,
+} from './pool-usage.js';
 
 import { runArchitect, type ArchitectResult } from './architect.js';
 import { runArchitectWithCritique, WikiReadinessAbortError } from './architect-loop.js';
@@ -599,8 +610,7 @@ async function runInline(
       // ADR 0018: advisory findings (today: verifier source by default) never
       // enter `hadFailures`. Assessor gate results remain the sole ground truth.
       // `let` because the final-verification validator below may flip it to true.
-      let hadFailures =
-        taskResults.some((r) => r.exitCode !== 0) || !assessment.gateResults.verify;
+      let hadFailures = taskResults.some((r) => r.exitCode !== 0) || !assessment.gateResults.verify;
 
       // Autonomous mode never silently finishes with failures — escalate (ADR 0005).
       // The call blocks until the user answers or the brain is aborted. The
@@ -611,9 +621,9 @@ async function runInline(
         // dispatch the fixer agent for any auto-fixable findings. Up to N
         // attempts; zero-progress detection breaks early.
         const MAX_FIXER_ATTEMPTS = 3;
-        let autoFixableRemaining = (
-          await listFindings(projectPath, { status: 'OPEN' })
-        ).filter((f) => f.auto_fixable === true);
+        let autoFixableRemaining = (await listFindings(projectPath, { status: 'OPEN' })).filter(
+          (f) => f.auto_fixable === true,
+        );
 
         let attemptIndex = 0;
         while (autoFixableRemaining.length > 0 && attemptIndex < MAX_FIXER_ATTEMPTS) {
@@ -672,9 +682,9 @@ async function runInline(
           }
 
           // Re-query findings to see what changed
-          autoFixableRemaining = (
-            await listFindings(projectPath, { status: 'OPEN' })
-          ).filter((f) => f.auto_fixable === true);
+          autoFixableRemaining = (await listFindings(projectPath, { status: 'OPEN' })).filter(
+            (f) => f.auto_fixable === true,
+          );
 
           // Zero-progress detection: if no findings resolved AND no new ones appeared
           const after = autoFixableRemaining.length;
@@ -787,7 +797,8 @@ async function runInline(
                 await addFinding(projectPath, {
                   source: 'verifier',
                   target: pf.location.file,
-                  severity: pf.severity === 'high' ? 'HIGH' : pf.severity === 'medium' ? 'MEDIUM' : 'LOW',
+                  severity:
+                    pf.severity === 'high' ? 'HIGH' : pf.severity === 'medium' ? 'MEDIUM' : 'LOW',
                   description: pf.title,
                   category: pf.category,
                   location: pf.location,

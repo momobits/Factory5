@@ -8,13 +8,13 @@ HTTP contracts (Zod-validated) and typed client for daemon ↔ brain communicati
 
 The daemon listens on `127.0.0.1:25295` (overridable via env `FACTORY5_DAEMON_PORT` / `FACTORY5_DAEMON_HOST`).
 
-| Method | Path                                | Direction             | Purpose                                                |
-| ------ | ----------------------------------- | --------------------- | ------------------------------------------------------ |
-| `GET`  | `/status`                           | brain → daemon        | Liveness + version + active channel count              |
-| `POST` | `/send`                             | brain → daemon        | Immediate channel send (skip SQLite roundtrip latency) |
-| `POST` | `/directives/notify`                | daemon → brain (rare) | Wake brain when a high-priority directive arrives      |
-| `POST` | `/reload-config`                    | brain → daemon        | Reload daemon config without restart                   |
-| `GET`  | `/api/v1/directives/:id/stream`     | SPA → daemon          | Server-Sent Events live tail of one directive's task / finding / spend / log events |
+| Method | Path                            | Direction             | Purpose                                                                             |
+| ------ | ------------------------------- | --------------------- | ----------------------------------------------------------------------------------- |
+| `GET`  | `/status`                       | brain → daemon        | Liveness + version + active channel count                                           |
+| `POST` | `/send`                         | brain → daemon        | Immediate channel send (skip SQLite roundtrip latency)                              |
+| `POST` | `/directives/notify`            | daemon → brain (rare) | Wake brain when a high-priority directive arrives                                   |
+| `POST` | `/reload-config`                | brain → daemon        | Reload daemon config without restart                                                |
+| `GET`  | `/api/v1/directives/:id/stream` | SPA → daemon          | Server-Sent Events live tail of one directive's task / finding / spend / log events |
 
 (Brain-side `/directives/notify` requires a brain HTTP listener too; for v0 the brain's listener is opt-in via `factory chat --listen`.)
 
@@ -41,8 +41,10 @@ import { directiveStreamEventSchema, type DirectiveStreamEvent } from '@factory5
 
 const event: DirectiveStreamEvent = directiveStreamEventSchema.parse(JSON.parse(raw));
 switch (event.type) {
-  case 'task.started': /* … */ break;
-  case 'task.completed': /* … */ break;
+  case 'task.started':
+    /* … */ break;
+  case 'task.completed':
+    /* … */ break;
   // …also: task.retried, finding.created, spend.updated, transcript.line,
   // log.line, pool.tally, directive.completed
 }

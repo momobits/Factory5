@@ -47,8 +47,7 @@ export async function readTranscriptLines(
   for await (const raw of rl) {
     total++;
     if (opts.level !== 'full') {
-      const isToolLine =
-        raw.includes('"type":"tool_use"') || raw.includes('"type":"tool_result"');
+      const isToolLine = raw.includes('"type":"tool_use"') || raw.includes('"type":"tool_result"');
       const isResultLine = raw.includes('"type":"result"');
       const isErrorLine = raw.includes('"is_error":true') || raw.includes('"error"');
       if (opts.level === 'tools' && !isToolLine && !isResultLine) continue;

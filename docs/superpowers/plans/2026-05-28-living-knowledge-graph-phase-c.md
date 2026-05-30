@@ -19,6 +19,7 @@
 ### Task 1: Fixer reads structured findings
 
 **Files:**
+
 - Modify: `prompts/agents/fixer.md`
 
 **Spec reference:** Component 4 → "Fixer agent input"
@@ -36,8 +37,8 @@ Append to `prompts/agents/fixer.md`:
 
 You may receive a structured findings payload in your user prompt's
 context. Format:
-
 ```
+
 ## Findings to resolve
 
 The brain detected N auto-fixable findings. Resolve each one with the
@@ -57,6 +58,7 @@ Findings:
 
 - ID: F043
   ...
+
 ```
 
 For each finding:
@@ -93,6 +95,7 @@ git commit -m "feat(15.13): fixer prompt handles structured findings input"
 ### Task 2: Brain partitions findings and dispatches fixer
 
 **Files:**
+
 - Modify: `packages/brain/src/loop.ts` (escalateBlocked call site, ~lines 530-558)
 - Test: `packages/brain/src/loop.test.ts`
 
@@ -113,12 +116,12 @@ In `packages/brain/src/loop.ts`, before the `escalateBlocked` call, add:
 // (default 3, configurable via project metadata).
 import { listFindings } from '@factory5/wiki';
 
-const maxAttempts = (
-  (await loadProjectMetadata(directive.projectPath))?.metadata?.maxFixerAttempts ?? 3
-) as number;
+const maxAttempts = ((await loadProjectMetadata(directive.projectPath))?.metadata
+  ?.maxFixerAttempts ?? 3) as number;
 
-let autoFixableRemaining = (await listFindings(directive.projectPath, { status: 'OPEN' }))
-  .filter((f) => f.auto_fixable === true);
+let autoFixableRemaining = (await listFindings(directive.projectPath, { status: 'OPEN' })).filter(
+  (f) => f.auto_fixable === true,
+);
 
 let attemptIndex = 0;
 while (autoFixableRemaining.length > 0 && attemptIndex < maxAttempts) {
@@ -170,8 +173,9 @@ while (autoFixableRemaining.length > 0 && attemptIndex < maxAttempts) {
   }
 
   // Re-query findings to see what changed
-  autoFixableRemaining = (await listFindings(directive.projectPath, { status: 'OPEN' }))
-    .filter((f) => f.auto_fixable === true);
+  autoFixableRemaining = (await listFindings(directive.projectPath, { status: 'OPEN' })).filter(
+    (f) => f.auto_fixable === true,
+  );
 
   // Zero-progress detection: if no findings resolved AND no new ones appeared
   const after = autoFixableRemaining.length;
@@ -186,7 +190,10 @@ while (autoFixableRemaining.length > 0 && attemptIndex < maxAttempts) {
 }
 
 if (autoFixableRemaining.length === 0) {
-  log.info({ directiveId: directive.id, attempts: attemptIndex }, 'loop: self-healing resolved all findings');
+  log.info(
+    { directiveId: directive.id, attempts: attemptIndex },
+    'loop: self-healing resolved all findings',
+  );
   hadFailures = false; // Re-evaluate; if other failures exist, hadFailures stays true via other paths
 }
 ```
@@ -208,6 +215,7 @@ git commit -m "feat(15.13): self-healing fix loop — try-then-ask before escala
 ### Task 3: Structured escalation payload
 
 **Files:**
+
 - Modify: `packages/brain/src/ask-user.ts` (find escalateBlocked, update payload shape)
 - Test: relevant test file
 
@@ -258,6 +266,7 @@ git commit -m "feat(15.13): escalation payload includes attempts + remaining fin
 ### Task 4: Helper to list abandoned worktrees
 
 **Files:**
+
 - Create: `packages/worker/src/abandoned-worktrees.ts`
 - Create: `packages/worker/src/abandoned-worktrees.test.ts`
 
@@ -293,7 +302,9 @@ describe('listAbandonedWorktrees', () => {
   });
 
   it('flags worktree directories not in activeTaskIds', async () => {
-    await mkdir(join(projectPath, '.factory', 'worktrees', 'task-01ABANDONED'), { recursive: true });
+    await mkdir(join(projectPath, '.factory', 'worktrees', 'task-01ABANDONED'), {
+      recursive: true,
+    });
     await mkdir(join(projectPath, '.factory', 'worktrees', 'task-01ACTIVE'), { recursive: true });
     const result = await listAbandonedWorktrees({
       projectPath,
@@ -332,8 +343,11 @@ export interface ListOptions {
 export async function listAbandonedWorktrees(opts: ListOptions): Promise<AbandonedWorktree[]> {
   const dir = join(opts.projectPath, '.factory', 'worktrees');
   let entries: string[];
-  try { entries = await readdir(dir); }
-  catch { return []; }
+  try {
+    entries = await readdir(dir);
+  } catch {
+    return [];
+  }
 
   const activeSet = new Set(opts.activeTaskIds);
   const result: AbandonedWorktree[] = [];
@@ -369,6 +383,7 @@ git commit -m "feat(15.13): worker helper to list abandoned worktrees"
 ### Task 5: Cleanup command
 
 **Files:**
+
 - Create: `packages/cli/src/commands/cleanup.ts`
 - Modify: `packages/cli/src/cli.ts` (register the command)
 
@@ -409,8 +424,12 @@ export function registerCleanupCommand(parent: Command): void {
         const { readFile } = await import('node:fs/promises');
         const planText = await readFile(`${abs}/.factory/plan.json`, 'utf8');
         const parsed = JSON.parse(planText) as { tasks?: Array<{ id?: string }> };
-        activeTaskIds = (parsed.tasks ?? []).map((t) => t.id).filter((id): id is string => typeof id === 'string');
-      } catch { /* no plan — all worktrees are abandoned */ }
+        activeTaskIds = (parsed.tasks ?? [])
+          .map((t) => t.id)
+          .filter((id): id is string => typeof id === 'string');
+      } catch {
+        /* no plan — all worktrees are abandoned */
+      }
 
       const abandoned = await listAbandonedWorktrees({ projectPath: abs, activeTaskIds });
 
@@ -440,9 +459,14 @@ export function registerCleanupCommand(parent: Command): void {
         }
         if (opts.pruneBranches === true) {
           try {
-            execFileSync('git', ['branch', '-D', `factory/task-${w.taskId.toLowerCase()}`], { cwd: abs });
+            execFileSync('git', ['branch', '-D', `factory/task-${w.taskId.toLowerCase()}`], {
+              cwd: abs,
+            });
           } catch (err) {
-            log.warn({ err, taskId: w.taskId }, 'cleanup: branch delete failed (probably already gone)');
+            log.warn(
+              { err, taskId: w.taskId },
+              'cleanup: branch delete failed (probably already gone)',
+            );
           }
         }
       }
@@ -463,11 +487,13 @@ registerCleanupCommand(program);
 - [ ] **Step 3: Add @factory5/worker dep to CLI package**
 
 In `packages/cli/package.json`:
+
 ```json
 "@factory5/worker": "workspace:*",
 ```
 
 Export `listAbandonedWorktrees` from `packages/worker/src/index.ts`:
+
 ```typescript
 export { listAbandonedWorktrees, type AbandonedWorktree } from './abandoned-worktrees.js';
 ```
@@ -496,6 +522,7 @@ git commit -m "feat(15.13): factory5 cleanup CLI lists + removes abandoned workt
 ### Task 6: Daemon detects abandoned worktrees on resume
 
 **Files:**
+
 - Modify: `packages/daemon/src/server.ts:1415` (POST resume endpoint)
 - Modify: `packages/ipc/src/schemas.ts` (extend resume response with abandoned-worktree info)
 
@@ -512,11 +539,15 @@ In `packages/ipc/src/schemas.ts`, find the resume response schema and extend:
 ```typescript
 export const apiV1DirectiveResumeResponseSchema = z.object({
   // ... existing fields
-  abandonedWorktrees: z.array(z.object({
-    path: z.string(),
-    taskId: z.string(),
-    abandonedSince: z.string().datetime({ offset: true }),
-  })).optional(),
+  abandonedWorktrees: z
+    .array(
+      z.object({
+        path: z.string(),
+        taskId: z.string(),
+        abandonedSince: z.string().datetime({ offset: true }),
+      }),
+    )
+    .optional(),
 });
 ```
 
@@ -554,6 +585,7 @@ git commit -m "feat(15.13): resume endpoint surfaces abandoned worktrees in resp
 ### Task 7: Web UI surfaces abandoned worktrees on directive detail
 
 **Files:**
+
 - Modify: `apps/factory-web/src/pages/directives/detail.astro`
 
 **Spec reference:** Component 5 → "Operator surfaces — Directive detail page"
@@ -571,11 +603,13 @@ if (state.abandonedWorktrees.length > 0) {
   const panel = el('div', { class: 'abandoned-panel' });
   panel.appendChild(el('h3', {}, 'Abandoned worktrees from prior attempts'));
   for (const w of state.abandonedWorktrees) {
-    panel.appendChild(el('div', { class: 'abandoned-row' },
-      `${w.taskId} — last modified ${w.abandonedSince}`));
+    panel.appendChild(
+      el('div', { class: 'abandoned-row' }, `${w.taskId} — last modified ${w.abandonedSince}`),
+    );
   }
-  panel.appendChild(el('div', { class: 'abandoned-hint' },
-    'Run `factory5 cleanup` (CLI) to remove these.'));
+  panel.appendChild(
+    el('div', { class: 'abandoned-hint' }, 'Run `factory5 cleanup` (CLI) to remove these.'),
+  );
   // Insert into main column
 }
 ```
@@ -601,6 +635,7 @@ git commit -m "feat(15.13): directive detail page surfaces abandoned worktrees"
 ### Task 8: Channel degradation for non-CLI resume
 
 **Files:**
+
 - Modify: `packages/channels/src/discord-commands.ts` (or wherever channel commands are defined)
 
 **Spec reference:** Component 5 → "Non-CLI channels"

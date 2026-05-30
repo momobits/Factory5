@@ -16,50 +16,50 @@
 
 **New files:**
 
-| Path | Responsibility |
-|---|---|
-| `packages/brain/src/pool-usage.ts` | `computePoolUsage(db, directiveId, projectBudgets)` — SQL aggregation + cap resolution |
-| `packages/brain/src/pool-usage.test.ts` | Unit tests for pool-usage |
-| `packages/brain/src/pool-resume.ts` | chokidar watcher for project.json; flips parked directives back to running |
-| `packages/brain/src/pool-resume.test.ts` | Unit tests for pool-resume |
-| `docs/decisions/0034-budget-pool-paradigm.md` | ADR 0034 (new, supersedes ADR 0032) |
-| `UPGRADE/plans/tier-15-budget-ux-overhaul.md` | Control-framework tier plan (separate file, already authored at brainstorm time) |
-| `.control/phases/phase-15-budget-ux-overhaul/README.md` | Phase README |
-| `.control/phases/phase-15-budget-ux-overhaul/steps.md` | Phase steps checkboxes |
+| Path                                                    | Responsibility                                                                         |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `packages/brain/src/pool-usage.ts`                      | `computePoolUsage(db, directiveId, projectBudgets)` — SQL aggregation + cap resolution |
+| `packages/brain/src/pool-usage.test.ts`                 | Unit tests for pool-usage                                                              |
+| `packages/brain/src/pool-resume.ts`                     | chokidar watcher for project.json; flips parked directives back to running             |
+| `packages/brain/src/pool-resume.test.ts`                | Unit tests for pool-resume                                                             |
+| `docs/decisions/0034-budget-pool-paradigm.md`           | ADR 0034 (new, supersedes ADR 0032)                                                    |
+| `UPGRADE/plans/tier-15-budget-ux-overhaul.md`           | Control-framework tier plan (separate file, already authored at brainstorm time)       |
+| `.control/phases/phase-15-budget-ux-overhaul/README.md` | Phase README                                                                           |
+| `.control/phases/phase-15-budget-ux-overhaul/steps.md`  | Phase steps checkboxes                                                                 |
 
 **Modified files:**
 
-| Path | Change |
-|---|---|
-| `packages/core/src/schemas.ts` | Extend `projectMetadataSchema` (or equivalent) with `autoIncreaseBudgets` + `autoIncreaseCeilingMultiplier` |
-| `packages/core/src/schemas.test.ts` | Tests for new fields |
-| `packages/core/src/budget-defaults.ts` | Re-export `axisForAgent` (moved from `budget-escalation.ts`) or define here |
-| `packages/wiki/src/project-metadata.ts` | Surface the two new scalars; delete `resolveDirectivePayloadBudgets` |
-| `packages/wiki/src/project-metadata.test.ts` | Add round-trip tests for new scalars; remove `resolveDirectivePayloadBudgets` tests |
-| `packages/brain/src/pool.ts` | Replace per-task retry-loop with pool-driven dispatcher; add `parkOrAutoIncrease` helper |
-| `packages/brain/src/pool.test.ts` | Tests for pool-driven dispatcher (or new file if mock plumbing requires) |
-| `packages/brain/src/planner.ts` | Drop `task.maxTurns` emit instruction from prompt |
-| `packages/brain/src/auto-answer.ts` | Delete `[BUDGET]` branch + `pickBudgetEscalationAnswer` helper |
-| `packages/brain/src/auto-answer.test.ts` | Drop `[BUDGET]` tests; keep `[CRITIC]` + generic LLM tests |
-| `packages/brain/src/budget-escalation.ts` | **DELETE entirely** |
-| `packages/brain/src/budget-escalation.test.ts` | **DELETE entirely** |
-| `packages/brain/src/worker.ts` (or wherever runWorker lives) | Add `onTurnComplete?: () => { interrupt: boolean }` callback param to `runWorker` |
-| `packages/brain/src/serve.ts` | Wire `pool-resume.ts` watcher startup into the serve lifecycle |
-| `packages/daemon/src/server.ts` | Extend PUT /budget-defaults schema; new GET /pool-usage route; pool.tally SSE event |
-| `packages/daemon/src/server.test.ts` | Tests for new schema + route + SSE event |
-| `packages/ipc/src/schemas.ts` (or equivalent) | New + extended IPC schemas |
-| `apps/factory-web/src/pages/projects/detail.astro` | Full rewrite — four-tabbed cockpit |
-| `apps/factory-web/src/pages/directives/detail.astro` | Add Pool usage pill linking to project page |
-| `apps/factory-web/src/pages/build.astro` | Copy update on Advanced budgets accordion |
-| `docs/decisions/0032-budget-ux-paradigm.md` | Status line edit only: `Status: Superseded by ADR 0034` |
-| `docs/decisions/0030-pending-question-auto-answer.md` | Append amendment block |
-| `docs/decisions/0020-limits.md` | Append amendment block (cross-ref to ADR 0034) |
-| `docs/decisions/INDEX.md` | Add ADR 0034 row; flip ADR 0032 status note |
-| `docs/ARCHITECTURE.md` | ADR count 33 → 34 |
-| `UPGRADE/ROADMAP.md` | Add Tier 15 row; bump intro count "Fourteen tiers" → "Fifteen tiers" |
-| `UPGRADE/ISSUES.md` | Open U036, U037, U038 |
-| `.control/architecture/phase-plan.md` | Add Phase 15 row |
-| `.control/progress/STATE.md` | Cursor flip arc-complete → Phase 15 active |
+| Path                                                         | Change                                                                                                      |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/schemas.ts`                               | Extend `projectMetadataSchema` (or equivalent) with `autoIncreaseBudgets` + `autoIncreaseCeilingMultiplier` |
+| `packages/core/src/schemas.test.ts`                          | Tests for new fields                                                                                        |
+| `packages/core/src/budget-defaults.ts`                       | Re-export `axisForAgent` (moved from `budget-escalation.ts`) or define here                                 |
+| `packages/wiki/src/project-metadata.ts`                      | Surface the two new scalars; delete `resolveDirectivePayloadBudgets`                                        |
+| `packages/wiki/src/project-metadata.test.ts`                 | Add round-trip tests for new scalars; remove `resolveDirectivePayloadBudgets` tests                         |
+| `packages/brain/src/pool.ts`                                 | Replace per-task retry-loop with pool-driven dispatcher; add `parkOrAutoIncrease` helper                    |
+| `packages/brain/src/pool.test.ts`                            | Tests for pool-driven dispatcher (or new file if mock plumbing requires)                                    |
+| `packages/brain/src/planner.ts`                              | Drop `task.maxTurns` emit instruction from prompt                                                           |
+| `packages/brain/src/auto-answer.ts`                          | Delete `[BUDGET]` branch + `pickBudgetEscalationAnswer` helper                                              |
+| `packages/brain/src/auto-answer.test.ts`                     | Drop `[BUDGET]` tests; keep `[CRITIC]` + generic LLM tests                                                  |
+| `packages/brain/src/budget-escalation.ts`                    | **DELETE entirely**                                                                                         |
+| `packages/brain/src/budget-escalation.test.ts`               | **DELETE entirely**                                                                                         |
+| `packages/brain/src/worker.ts` (or wherever runWorker lives) | Add `onTurnComplete?: () => { interrupt: boolean }` callback param to `runWorker`                           |
+| `packages/brain/src/serve.ts`                                | Wire `pool-resume.ts` watcher startup into the serve lifecycle                                              |
+| `packages/daemon/src/server.ts`                              | Extend PUT /budget-defaults schema; new GET /pool-usage route; pool.tally SSE event                         |
+| `packages/daemon/src/server.test.ts`                         | Tests for new schema + route + SSE event                                                                    |
+| `packages/ipc/src/schemas.ts` (or equivalent)                | New + extended IPC schemas                                                                                  |
+| `apps/factory-web/src/pages/projects/detail.astro`           | Full rewrite — four-tabbed cockpit                                                                          |
+| `apps/factory-web/src/pages/directives/detail.astro`         | Add Pool usage pill linking to project page                                                                 |
+| `apps/factory-web/src/pages/build.astro`                     | Copy update on Advanced budgets accordion                                                                   |
+| `docs/decisions/0032-budget-ux-paradigm.md`                  | Status line edit only: `Status: Superseded by ADR 0034`                                                     |
+| `docs/decisions/0030-pending-question-auto-answer.md`        | Append amendment block                                                                                      |
+| `docs/decisions/0020-limits.md`                              | Append amendment block (cross-ref to ADR 0034)                                                              |
+| `docs/decisions/INDEX.md`                                    | Add ADR 0034 row; flip ADR 0032 status note                                                                 |
+| `docs/ARCHITECTURE.md`                                       | ADR count 33 → 34                                                                                           |
+| `UPGRADE/ROADMAP.md`                                         | Add Tier 15 row; bump intro count "Fourteen tiers" → "Fifteen tiers"                                        |
+| `UPGRADE/ISSUES.md`                                          | Open U036, U037, U038                                                                                       |
+| `.control/architecture/phase-plan.md`                        | Add Phase 15 row                                                                                            |
+| `.control/progress/STATE.md`                                 | Cursor flip arc-complete → Phase 15 active                                                                  |
 
 ---
 
@@ -543,13 +543,15 @@ describe('project-metadata — Tier 15 scalars', () => {
   it('rejects malformed autoIncreaseCeilingMultiplier (write side)', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'factory5-pm-t15-reject-'));
     try {
-      await expect(writeProjectMetadata(dir, {
-        id: '01KSB8C3...',
-        name: 'pythonetl',
-        createdAt: '2026-05-23T20:28:06.332Z',
-        factoryVersion: '0.x',
-        metadata: { autoIncreaseCeilingMultiplier: -1 },
-      })).rejects.toThrow();
+      await expect(
+        writeProjectMetadata(dir, {
+          id: '01KSB8C3...',
+          name: 'pythonetl',
+          createdAt: '2026-05-23T20:28:06.332Z',
+          factoryVersion: '0.x',
+          metadata: { autoIncreaseCeilingMultiplier: -1 },
+        }),
+      ).rejects.toThrow();
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -652,8 +654,10 @@ describe('computePoolUsage', () => {
 
   it('returns 0 used for an empty directive', () => {
     const directiveId = ulid();
-    db.prepare(`INSERT INTO directives (id, source, principal, channel_ref, intent, payload, autonomy, created_at, status)
-      VALUES (?, 'cli', 'test', 'test-ref', 'build', '{}', 'autonomous', ?, 'running')`).run(directiveId, new Date().toISOString());
+    db.prepare(
+      `INSERT INTO directives (id, source, principal, channel_ref, intent, payload, autonomy, created_at, status)
+      VALUES (?, 'cli', 'test', 'test-ref', 'build', '{}', 'autonomous', ?, 'running')`,
+    ).run(directiveId, new Date().toISOString());
 
     const pool = computePoolUsage(db, directiveId, projectBudgets);
 
@@ -665,20 +669,42 @@ describe('computePoolUsage', () => {
 
   it('sums turnsUsed across builder tasks', () => {
     const directiveId = ulid();
-    db.prepare(`INSERT INTO directives (id, source, principal, channel_ref, intent, payload, autonomy, created_at, status)
-      VALUES (?, 'cli', 'test', 'test-ref', 'build', '{}', 'autonomous', ?, 'running')`).run(directiveId, new Date().toISOString());
+    db.prepare(
+      `INSERT INTO directives (id, source, principal, channel_ref, intent, payload, autonomy, created_at, status)
+      VALUES (?, 'cli', 'test', 'test-ref', 'build', '{}', 'autonomous', ?, 'running')`,
+    ).run(directiveId, new Date().toISOString());
 
     // Insert 3 builder tasks with turnsUsed
     const planId = ulid();
-    db.prepare(`INSERT INTO plans (id, directive_id, payload, created_at) VALUES (?, ?, '{}', ?)`)
-      .run(planId, directiveId, new Date().toISOString());
+    db.prepare(
+      `INSERT INTO plans (id, directive_id, payload, created_at) VALUES (?, ?, '{}', ?)`,
+    ).run(planId, directiveId, new Date().toISOString());
 
-    for (const [title, turns] of [['Task A', 60], ['Task B', 80], ['Task C', 45]]) {
+    for (const [title, turns] of [
+      ['Task A', 60],
+      ['Task B', 80],
+      ['Task C', 45],
+    ]) {
       const taskId = ulid();
-      db.prepare(`INSERT INTO tasks (id, directive_id, plan_id, title, agent, category, status, attempts, started_at, finished_at, result_json)
-        VALUES (?, ?, ?, ?, 'builder', 'deep', 'complete', 1, ?, ?, ?)`)
-        .run(taskId, directiveId, planId, title, new Date().toISOString(), new Date().toISOString(),
-             JSON.stringify({ exitCode: 0, turnsUsed: turns, filesChanged: [], findingsRaised: [], signalsEmitted: [], durationMs: 1000 }));
+      db.prepare(
+        `INSERT INTO tasks (id, directive_id, plan_id, title, agent, category, status, attempts, started_at, finished_at, result_json)
+        VALUES (?, ?, ?, ?, 'builder', 'deep', 'complete', 1, ?, ?, ?)`,
+      ).run(
+        taskId,
+        directiveId,
+        planId,
+        title,
+        new Date().toISOString(),
+        new Date().toISOString(),
+        JSON.stringify({
+          exitCode: 0,
+          turnsUsed: turns,
+          filesChanged: [],
+          findingsRaised: [],
+          signalsEmitted: [],
+          durationMs: 1000,
+        }),
+      );
     }
 
     const pool = computePoolUsage(db, directiveId, projectBudgets);
@@ -701,9 +727,14 @@ describe('computePoolUsage', () => {
 
   it('uses max(project, payload.budgets, BUDGET_DEFAULTS) for cap', () => {
     const directiveId = ulid();
-    db.prepare(`INSERT INTO directives (id, source, principal, channel_ref, intent, payload, autonomy, created_at, status)
-      VALUES (?, 'cli', 'test', 'test-ref', 'build', ?, 'autonomous', ?, 'running')`)
-      .run(directiveId, JSON.stringify({ budgets: { maxTurnsBuilder: 500 } }), new Date().toISOString());
+    db.prepare(
+      `INSERT INTO directives (id, source, principal, channel_ref, intent, payload, autonomy, created_at, status)
+      VALUES (?, 'cli', 'test', 'test-ref', 'build', ?, 'autonomous', ?, 'running')`,
+    ).run(
+      directiveId,
+      JSON.stringify({ budgets: { maxTurnsBuilder: 500 } }),
+      new Date().toISOString(),
+    );
 
     const pool = computePoolUsage(db, directiveId, {
       budgetDefaults: { maxTurnsBuilder: 100 },
@@ -715,8 +746,10 @@ describe('computePoolUsage', () => {
 
   it('falls back to BUDGET_DEFAULTS when neither project nor payload set the axis', () => {
     const directiveId = ulid();
-    db.prepare(`INSERT INTO directives (id, source, principal, channel_ref, intent, payload, autonomy, created_at, status)
-      VALUES (?, 'cli', 'test', 'test-ref', 'build', '{}', 'autonomous', ?, 'running')`).run(directiveId, new Date().toISOString());
+    db.prepare(
+      `INSERT INTO directives (id, source, principal, channel_ref, intent, payload, autonomy, created_at, status)
+      VALUES (?, 'cli', 'test', 'test-ref', 'build', '{}', 'autonomous', ?, 'running')`,
+    ).run(directiveId, new Date().toISOString());
 
     const pool = computePoolUsage(db, directiveId, { budgetDefaults: {} });
 
@@ -735,10 +768,19 @@ describe('computePoolUsage', () => {
 
   it('returns parkedReason when directive is blocked with pool-exhausted', () => {
     const directiveId = ulid();
-    db.prepare(`INSERT INTO directives (id, source, principal, channel_ref, intent, payload, autonomy, created_at, status, blocked_reason)
-      VALUES (?, 'cli', 'test', 'test-ref', 'build', '{}', 'autonomous', ?, 'blocked', ?)`)
-      .run(directiveId, new Date().toISOString(),
-           JSON.stringify({ kind: 'pool-exhausted', axis: 'maxTurnsBuilder', usedAtPark: 240, capAtPark: 240 }));
+    db.prepare(
+      `INSERT INTO directives (id, source, principal, channel_ref, intent, payload, autonomy, created_at, status, blocked_reason)
+      VALUES (?, 'cli', 'test', 'test-ref', 'build', '{}', 'autonomous', ?, 'blocked', ?)`,
+    ).run(
+      directiveId,
+      new Date().toISOString(),
+      JSON.stringify({
+        kind: 'pool-exhausted',
+        axis: 'maxTurnsBuilder',
+        usedAtPark: 240,
+        capAtPark: 240,
+      }),
+    );
 
     const pool = computePoolUsage(db, directiveId, projectBudgets);
 
@@ -746,19 +788,20 @@ describe('computePoolUsage', () => {
       axis: 'maxTurnsBuilder',
       usedAtPark: 240,
       capAtPark: 240,
-      nextBumpTo: 240 + 240,  // current cap + project default for that axis
+      nextBumpTo: 240 + 240, // current cap + project default for that axis
     });
   });
 
   it('handles malformed blocked_reason gracefully (legacy free-text)', () => {
     const directiveId = ulid();
-    db.prepare(`INSERT INTO directives (id, source, principal, channel_ref, intent, payload, autonomy, created_at, status, blocked_reason)
-      VALUES (?, 'cli', 'test', 'test-ref', 'build', '{}', 'autonomous', ?, 'blocked', ?)`)
-      .run(directiveId, new Date().toISOString(), 'cancelled-from-web-ui');
+    db.prepare(
+      `INSERT INTO directives (id, source, principal, channel_ref, intent, payload, autonomy, created_at, status, blocked_reason)
+      VALUES (?, 'cli', 'test', 'test-ref', 'build', '{}', 'autonomous', ?, 'blocked', ?)`,
+    ).run(directiveId, new Date().toISOString(), 'cancelled-from-web-ui');
 
     const pool = computePoolUsage(db, directiveId, projectBudgets);
 
-    expect(pool.parkedReason).toBeUndefined();  // not a structured pool-exhausted reason
+    expect(pool.parkedReason).toBeUndefined(); // not a structured pool-exhausted reason
   });
 });
 ```
@@ -786,7 +829,12 @@ Expected: all tests fail with "Cannot find module './pool-usage.js'".
  * brain's 250 ms serve poll tick and the daemon's `GET /pool-usage` endpoint.
  */
 
-import { BUDGET_DEFAULTS, type BudgetAxisName, axisForAgent, type MaxTurnsAxis } from '@factory5/core/budgets';
+import {
+  BUDGET_DEFAULTS,
+  type BudgetAxisName,
+  axisForAgent,
+  type MaxTurnsAxis,
+} from '@factory5/core/budgets';
 import type { Database } from '@factory5/state';
 
 export interface PoolTaskContribution {
@@ -841,7 +889,9 @@ export function computePoolUsage(
 ): PoolUsage {
   const directiveRow = db
     .prepare(`SELECT payload, status, blocked_reason FROM directives WHERE id = ?`)
-    .get(directiveId) as { payload: string; status: string; blocked_reason: string | null } | undefined;
+    .get(directiveId) as
+    | { payload: string; status: string; blocked_reason: string | null }
+    | undefined;
 
   if (directiveRow === undefined) {
     throw new Error(`computePoolUsage: directive ${directiveId} not found`);
@@ -855,9 +905,10 @@ export function computePoolUsage(
     perAxis[axis] = computeAxis(db, directiveId, axis, projectBudgets, payloadBudgets);
   }
 
-  const parkedReason = directiveRow.status === 'blocked'
-    ? parseParkedReason(directiveRow.blocked_reason, projectBudgets)
-    : undefined;
+  const parkedReason =
+    directiveRow.status === 'blocked'
+      ? parseParkedReason(directiveRow.blocked_reason, projectBudgets)
+      : undefined;
 
   return {
     directiveId,
@@ -901,7 +952,9 @@ function aggregateUsed(
   switch (axis) {
     case 'maxUsd': {
       const row = db
-        .prepare(`SELECT COALESCE(SUM(cost_usd), 0) AS total FROM model_usage WHERE directive_id = ?`)
+        .prepare(
+          `SELECT COALESCE(SUM(cost_usd), 0) AS total FROM model_usage WHERE directive_id = ?`,
+        )
         .get(directiveId) as { total: number };
       return { used: row.total, tasks: [] };
     }
@@ -914,12 +967,22 @@ function aggregateUsed(
     case 'maxTurnsScaffolder':
     case 'maxTurnsBuilder':
     case 'maxTurnsFixer': {
-      const agent = axis === 'maxTurnsScaffolder' ? 'scaffolder'
-                  : axis === 'maxTurnsBuilder' ? 'builder'
-                  : 'fixer';
+      const agent =
+        axis === 'maxTurnsScaffolder'
+          ? 'scaffolder'
+          : axis === 'maxTurnsBuilder'
+            ? 'builder'
+            : 'fixer';
       const rows = db
-        .prepare(`SELECT id, title, agent, result_json FROM tasks WHERE directive_id = ? AND agent = ?`)
-        .all(directiveId, agent) as Array<{ id: string; title: string; agent: string; result_json: string | null }>;
+        .prepare(
+          `SELECT id, title, agent, result_json FROM tasks WHERE directive_id = ? AND agent = ?`,
+        )
+        .all(directiveId, agent) as Array<{
+        id: string;
+        title: string;
+        agent: string;
+        result_json: string | null;
+      }>;
       const tasks: PoolTaskContribution[] = [];
       let used = 0;
       for (const row of rows) {
@@ -947,7 +1010,10 @@ function parseParkedReason(
   const usedAtPark = Number(parsed.usedAtPark);
   const capAtPark = Number(parsed.capAtPark);
   if (!Number.isFinite(usedAtPark) || !Number.isFinite(capAtPark)) return undefined;
-  const projectDefault = projectBudgets.budgetDefaults[axis as BudgetAxisName] ?? BUDGET_DEFAULTS[axis as BudgetAxisName]?.value ?? 0;
+  const projectDefault =
+    projectBudgets.budgetDefaults[axis as BudgetAxisName] ??
+    BUDGET_DEFAULTS[axis as BudgetAxisName]?.value ??
+    0;
   return {
     axis,
     usedAtPark,
@@ -1159,9 +1225,13 @@ export function createPoolResume(deps: PoolResumeDeps): PoolResume {
   function registerProject(projectPath: string): void {
     if (watchers.has(projectPath)) return;
     const target = join(projectPath, '.factory', 'project.json');
-    const watcher = deps.watcherFactory !== undefined
-      ? deps.watcherFactory(target)
-      : chokidar.watch(target, { ignoreInitial: true, awaitWriteFinish: { stabilityThreshold: 100 } });
+    const watcher =
+      deps.watcherFactory !== undefined
+        ? deps.watcherFactory(target)
+        : chokidar.watch(target, {
+            ignoreInitial: true,
+            awaitWriteFinish: { stabilityThreshold: 100 },
+          });
     const entry: { watcher: FSWatcher; timer?: NodeJS.Timeout } = { watcher };
     watcher.on('change', () => {
       if (entry.timer !== undefined) clearTimeout(entry.timer);
@@ -1205,7 +1275,9 @@ async function recheckParkedDirectives(deps: PoolResumeDeps, projectPath: string
     projectBudgets = {
       budgetDefaults: (metadata.metadata?.budgetDefaults ?? {}) as Partial<Record<string, number>>,
       autoIncreaseBudgets: metadata.metadata?.autoIncreaseBudgets as boolean | undefined,
-      autoIncreaseCeilingMultiplier: metadata.metadata?.autoIncreaseCeilingMultiplier as number | undefined,
+      autoIncreaseCeilingMultiplier: metadata.metadata?.autoIncreaseCeilingMultiplier as
+        | number
+        | undefined,
     };
   } catch (err) {
     deps.log.warn({ err, projectPath }, 'pool-resume: failed to load project.json');
@@ -1213,26 +1285,35 @@ async function recheckParkedDirectives(deps: PoolResumeDeps, projectPath: string
   }
 
   const parkedRows = deps.db
-    .prepare(`SELECT id FROM directives
+    .prepare(
+      `SELECT id FROM directives
       WHERE status = 'blocked'
         AND blocked_reason IS NOT NULL
         AND json_extract(blocked_reason, '$.kind') = 'pool-exhausted'
-        AND json_extract(payload, '$.projectPath') = ?`)
+        AND json_extract(payload, '$.projectPath') = ?`,
+    )
     .all(projectPath) as Array<{ id: string }>;
 
   for (const row of parkedRows) {
     const pool = computePoolUsage(deps.db, row.id, projectBudgets as any);
     const axis = pool.parkedReason?.axis;
     if (axis === undefined) continue;
-    if (pool.perAxis[axis as keyof typeof pool.perAxis].used < pool.perAxis[axis as keyof typeof pool.perAxis].cap) {
+    if (
+      pool.perAxis[axis as keyof typeof pool.perAxis].used <
+      pool.perAxis[axis as keyof typeof pool.perAxis].cap
+    ) {
       // Re-enqueue: clear blocked_reason, flip to running. The serve loop's
       // 250 ms poll tick will discover the running directive on its next pass
       // and re-claim it. (Doorbell `onWake` is wired from the IPC
       // `/directives/notify` route; pool-resume doesn't have direct access to
       // it from this helper. Polling within ≤250 ms is acceptable per spec.)
-      deps.db.prepare(`UPDATE directives SET status = 'running', blocked_reason = NULL WHERE id = ?`).run(row.id);
-      deps.log.info({ directiveId: row.id, axis, newCap: pool.perAxis[axis as keyof typeof pool.perAxis].cap },
-                    'pool-resume: directive re-enqueued after cap raise');
+      deps.db
+        .prepare(`UPDATE directives SET status = 'running', blocked_reason = NULL WHERE id = ?`)
+        .run(row.id);
+      deps.log.info(
+        { directiveId: row.id, axis, newCap: pool.perAxis[axis as keyof typeof pool.perAxis].cap },
+        'pool-resume: directive re-enqueued after cap raise',
+      );
     }
   }
 }
@@ -1440,10 +1521,15 @@ async function parkOrAutoIncrease(opts: {
   if (opts.projectBudgets.autoIncreaseBudgets === true && currentCap < ceiling) {
     const newCap = currentCap + defaultDelta;
     await bumpProjectCap(opts.directive, opts.axis, newCap);
-    emitLogLine(opts.emit, opts.directive.id, 'info', 'brain.pool',
+    emitLogLine(
+      opts.emit,
+      opts.directive.id,
+      'info',
+      'brain.pool',
       `pool: auto-bumped ${opts.axis} to ${newCap} (was ${currentCap})`,
-      { axis: opts.axis, oldCap: currentCap, newCap });
-    return;  // dispatcher loop re-runs pool check against new cap
+      { axis: opts.axis, oldCap: currentCap, newCap },
+    );
+    return; // dispatcher loop re-runs pool check against new cap
   }
 
   const usedAtPark = opts.pool.perAxis[opts.axis].used;
@@ -1453,14 +1539,24 @@ async function parkOrAutoIncrease(opts: {
     usedAtPark,
     capAtPark: currentCap,
   });
-  opts.db.prepare(`UPDATE directives SET status = 'blocked', blocked_reason = ? WHERE id = ?`)
+  opts.db
+    .prepare(`UPDATE directives SET status = 'blocked', blocked_reason = ? WHERE id = ?`)
     .run(blockedReason, opts.directive.id);
-  emitLogLine(opts.emit, opts.directive.id, 'warn', 'brain.pool',
+  emitLogLine(
+    opts.emit,
+    opts.directive.id,
+    'warn',
+    'brain.pool',
     `pool: ${opts.axis} exhausted at ${currentCap} — directive parked; raise cap on project page to resume`,
-    { axis: opts.axis, capAtPark: currentCap, nextBumpTo: currentCap + defaultDelta });
+    { axis: opts.axis, capAtPark: currentCap, nextBumpTo: currentCap + defaultDelta },
+  );
 }
 
-async function bumpProjectCap(directive: Directive, axis: MaxTurnsAxis, newCap: number): Promise<void> {
+async function bumpProjectCap(
+  directive: Directive,
+  axis: MaxTurnsAxis,
+  newCap: number,
+): Promise<void> {
   const projectPath = directive.payload?.projectPath as string | undefined;
   if (projectPath === undefined) {
     throw new Error(`bumpProjectCap: directive ${directive.id} has no projectPath`);
@@ -1657,34 +1753,42 @@ In `packages/ipc/src/schemas.ts`:
 
 ```ts
 // PUT /api/v1/projects/:id/budget-defaults — extended
-export const apiV1ProjectBudgetDefaultsPutBodySchema = z.object({
-  budgetDefaults: budgetsSchema.optional(),
-  autoIncreaseBudgets: z.boolean().optional(),
-  autoIncreaseCeilingMultiplier: z.number().min(1).optional(),
-}).strict();
+export const apiV1ProjectBudgetDefaultsPutBodySchema = z
+  .object({
+    budgetDefaults: budgetsSchema.optional(),
+    autoIncreaseBudgets: z.boolean().optional(),
+    autoIncreaseCeilingMultiplier: z.number().min(1).optional(),
+  })
+  .strict();
 
 // GET /api/v1/directives/:id/pool-usage — new
 export const apiV1PoolUsageResponseSchema = z.object({
   directiveId: z.string(),
   computedAt: z.string(),
-  perAxis: z.record(z.object({
-    used: z.number(),
-    cap: z.number(),
-    pct: z.number(),
-    tasks: z.array(z.object({
-      taskId: z.string(),
-      title: z.string(),
-      agent: z.string(),
-      contribution: z.number(),
-    })),
-    status: z.enum(['ok', 'warn', 'exhausted']),
-  })),
-  parkedReason: z.object({
-    axis: z.string(),
-    usedAtPark: z.number(),
-    capAtPark: z.number(),
-    nextBumpTo: z.number(),
-  }).optional(),
+  perAxis: z.record(
+    z.object({
+      used: z.number(),
+      cap: z.number(),
+      pct: z.number(),
+      tasks: z.array(
+        z.object({
+          taskId: z.string(),
+          title: z.string(),
+          agent: z.string(),
+          contribution: z.number(),
+        }),
+      ),
+      status: z.enum(['ok', 'warn', 'exhausted']),
+    }),
+  ),
+  parkedReason: z
+    .object({
+      axis: z.string(),
+      usedAtPark: z.number(),
+      capAtPark: z.number(),
+      nextBumpTo: z.number(),
+    })
+    .optional(),
 });
 
 // Structured blocked reason union
@@ -1695,7 +1799,7 @@ export const directiveBlockedReasonSchema = z.union([
     usedAtPark: z.number(),
     capAtPark: z.number(),
   }),
-  z.string(),  // legacy free-text reasons
+  z.string(), // legacy free-text reasons
 ]);
 ```
 
@@ -1763,32 +1867,40 @@ In `packages/daemon/src/server.ts`:
 
 ```ts
 // Extend the existing PUT route
-app.put('/api/v1/projects/:id/budget-defaults', {
-  // ... existing config
-  schema: { body: zodToFastify(apiV1ProjectBudgetDefaultsPutBodySchema) },
-}, async (req, reply) => {
-  const parsed = apiV1ProjectBudgetDefaultsPutBodySchema.parse(req.body);
-  // ... use wiki.updateProjectMetadata with the parsed body
-});
+app.put(
+  '/api/v1/projects/:id/budget-defaults',
+  {
+    // ... existing config
+    schema: { body: zodToFastify(apiV1ProjectBudgetDefaultsPutBodySchema) },
+  },
+  async (req, reply) => {
+    const parsed = apiV1ProjectBudgetDefaultsPutBodySchema.parse(req.body);
+    // ... use wiki.updateProjectMetadata with the parsed body
+  },
+);
 
 // New GET route
-app.get('/api/v1/directives/:id/pool-usage', {
-  preHandler: bearerAuth,
-}, async (req, reply) => {
-  const directive = directives.getById(db, req.params.id);
-  if (directive === undefined) {
-    reply.code(404).send({ error: 'directive not found' });
-    return;
-  }
-  const projectMetadata = await loadOrCreateProjectMetadata(directive.payload.projectPath, '');
-  const projectBudgets = {
-    budgetDefaults: projectMetadata.metadata.budgetDefaults ?? {},
-    autoIncreaseBudgets: projectMetadata.metadata.autoIncreaseBudgets,
-    autoIncreaseCeilingMultiplier: projectMetadata.metadata.autoIncreaseCeilingMultiplier,
-  };
-  const pool = computePoolUsage(db, directive.id, projectBudgets);
-  reply.send(apiV1PoolUsageResponseSchema.parse(pool));
-});
+app.get(
+  '/api/v1/directives/:id/pool-usage',
+  {
+    preHandler: bearerAuth,
+  },
+  async (req, reply) => {
+    const directive = directives.getById(db, req.params.id);
+    if (directive === undefined) {
+      reply.code(404).send({ error: 'directive not found' });
+      return;
+    }
+    const projectMetadata = await loadOrCreateProjectMetadata(directive.payload.projectPath, '');
+    const projectBudgets = {
+      budgetDefaults: projectMetadata.metadata.budgetDefaults ?? {},
+      autoIncreaseBudgets: projectMetadata.metadata.autoIncreaseBudgets,
+      autoIncreaseCeilingMultiplier: projectMetadata.metadata.autoIncreaseCeilingMultiplier,
+    };
+    const pool = computePoolUsage(db, directive.id, projectBudgets);
+    reply.send(apiV1PoolUsageResponseSchema.parse(pool));
+  },
+);
 ```
 
 For SSE: in the brain's pool dispatcher (Task 7), after every task-completion and after every `bumpProjectCap`, emit:
@@ -1847,6 +1959,7 @@ Note: existing file is ~250 lines, has a `Dashboard` layout, `Form`/`Field`/`Sub
 - [ ] **Step 2: Sketch the page structure**
 
 Top to bottom:
+
 1. Header (project name, ULID, workspace path, language, status) — unchanged
 2. Parked-alert banner (conditional)
 3. Tab strip
@@ -1875,6 +1988,7 @@ pnpm --filter factory-web dev
 ```
 
 Navigate to `http://localhost:4321/app/projects/{id}` and verify:
+
 - Page loads without console errors
 - Four tabs visible; clicking switches content
 - Defaults tab form submits (PUT happens; success alert shows)
@@ -1945,7 +2059,8 @@ document.getElementById('pool-pill-text').textContent =
 sse.on('pool.tally', (event) => {
   const sorted = Object.entries(event.perAxis).sort((a, b) => b[1].pct - a[1].pct);
   const [axis, axisData] = sorted[0];
-  document.getElementById('pool-pill-text').textContent = `${axis} ${axisData.used}/${axisData.cap}${axisData.status === 'exhausted' ? ' EXHAUSTED' : ''}`;
+  document.getElementById('pool-pill-text').textContent =
+    `${axis} ${axisData.used}/${axisData.cap}${axisData.status === 'exhausted' ? ' EXHAUSTED' : ''}`;
 });
 ```
 
@@ -2013,6 +2128,7 @@ pnpm factory daemon restart
 ```
 
 In Playwright MCP:
+
 1. Navigate to `/app/projects/new`, create project `tier-15-smoke` with `language=python`
 2. Navigate to project detail Defaults tab; set `maxTurnsBuilder = 80`
 3. Navigate to `/app/build`, kick off build with spec "full python CLI helper"
@@ -2029,6 +2145,7 @@ Record: directive ID, spend, time to auto-resume. Append to STATE.md "Notes for 
 Same project, edit Settings tab: `autoIncreaseBudgets = true`, `autoIncreaseCeilingMultiplier = 3`. Re-kick the build with `maxTurnsBuilder = 80`.
 
 Verify:
+
 - Pool exhaustion fires; auto-bump to 160 happens silently; activity feed narrates `pool: auto-bumped maxTurnsBuilder to 160`
 - Second exhaustion → auto-bump to 240
 - Third exhaustion → directive parks (3× ceiling reached); banner shows; activity feed narrates ceiling
@@ -2053,6 +2170,7 @@ In `.control/phases/phase-15-budget-ux-overhaul/steps.md`, flip all checkboxes t
 - [ ] **Step 8: STATE cursor flip**
 
 In `.control/progress/STATE.md`:
+
 - Update "Last updated" to today's date with the Phase 15 close note
 - Flip "Current phase" to `arc-complete (eleventh time)`
 - Update "Status" with Tier 15 outcome summary

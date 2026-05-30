@@ -569,10 +569,7 @@ export function defaultEscalateOutbound(
     remainingFindings?: EscalateBlockedOptions['remainingFindings'];
   },
 ): string {
-  const lines = [
-    `(escalation ${ctx.questionId})`,
-    `I'm stuck. Reason: ${ctx.reason}`,
-  ];
+  const lines = [`(escalation ${ctx.questionId})`, `I'm stuck. Reason: ${ctx.reason}`];
   if (ctx.fixerAttempts !== undefined) {
     lines.push(
       '',

@@ -29,7 +29,9 @@ describe('listAbandonedWorktrees', () => {
   });
 
   it('flags worktree directories not in activeTaskIds', async () => {
-    await mkdir(join(projectPath, '.factory', 'worktrees', 'task-01ABANDONED'), { recursive: true });
+    await mkdir(join(projectPath, '.factory', 'worktrees', 'task-01ABANDONED'), {
+      recursive: true,
+    });
     await mkdir(join(projectPath, '.factory', 'worktrees', 'task-01ACTIVE'), { recursive: true });
     const result = await listAbandonedWorktrees({
       projectPath,

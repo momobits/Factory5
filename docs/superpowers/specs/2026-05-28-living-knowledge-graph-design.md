@@ -1,7 +1,7 @@
 # Living Knowledge Graph for Project Coherence
 
-*Created: 2026-05-28*
-*Status: APPROVED*
+_Created: 2026-05-28_
+_Status: APPROVED_
 
 ## Problem
 
@@ -56,12 +56,12 @@ docs/knowledge/
 
 ### Node kinds
 
-| Kind | What it represents | Lives at |
-|---|---|---|
-| `feature` | A user-visible capability the project provides | `features/<id>.md` |
-| `decision` | A judgment call made during a build that modifies the spec | `decisions/<YYYY-MM-DD>-<slug>.md` |
+| Kind          | What it represents                                                    | Lives at                                                         |
+| ------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `feature`     | A user-visible capability the project provides                        | `features/<id>.md`                                               |
+| `decision`    | A judgment call made during a build that modifies the spec            | `decisions/<YYYY-MM-DD>-<slug>.md`                               |
 | `module-spec` | The intended shape of a code module (the spec for `etl/cli.py`, etc.) | embedded sections within `modules.md` for now; future: own files |
-| `goal` | The project's overall intent | `overview.md` (single node per project) |
+| `goal`        | The project's overall intent                                          | `overview.md` (single node per project)                          |
 
 ### Edge kinds (front-matter arrays)
 
@@ -109,6 +109,7 @@ A single file at `docs/knowledge/_schema.md` defines the node kinds, their requi
 Required fields per kind:
 
 **`feature`**:
+
 - `kind: feature` (literal)
 - `id: <kebab-case>` (unique within the project)
 - `status: documented | implemented | superseded | abandoned`
@@ -116,6 +117,7 @@ Required fields per kind:
 - Optional: `implements: [...]`, `decisions: [...]`, `derived_from: [...]`, `supersedes: <id>`
 
 **`decision`**:
+
 - `kind: decision` (literal)
 - `id: <YYYY-MM-DD>-<slug>` (date-prefixed)
 - `date: <YYYY-MM-DD>`
@@ -156,6 +158,7 @@ The migration is **idempotent** — re-running it on an already-migrated project
 ### Non-greenfield directives
 
 Many directives don't run the full architect → planner → scaffolder flow:
+
 - "Fix bug X" — adds a fixer task only
 - "Add feature Y to existing project" — adds builder tasks only
 - "Refactor module Z" — adds builder tasks only
@@ -209,13 +212,13 @@ Escalation questions get the same shape — `title + why + options[]` instead of
 
 A new CLI subcommand: `factory5 graph check [<projectPath>]`. Runs deterministic checks against the knowledge area:
 
-| Check | What it catches |
-|---|---|
-| **Schema validity** | Front-matter parses as YAML; required fields present; values match enums. |
-| **Reference integrity** | Every `documented_in: <file>#<anchor>` resolves to a real anchor in a real file. Every `implements: <task-id>` matches a task in the current `plan.json`. |
-| **Status coherence** | Features marked `status: implemented` have `implements: [<task-id>]` set. Decisions exist for status changes that aren't purely additive. |
-| **Doc-fiction** | Symbols/commands mentioned in README/docs but absent in code. (Catches the README-claims-pipeline_name case.) |
-| **Dead code** | Exported symbols in code with no caller outside their own module/tests and not declared as a feature surface. (Catches the unwired Pipeline.register_pipeline case.) |
+| Check                   | What it catches                                                                                                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Schema validity**     | Front-matter parses as YAML; required fields present; values match enums.                                                                                            |
+| **Reference integrity** | Every `documented_in: <file>#<anchor>` resolves to a real anchor in a real file. Every `implements: <task-id>` matches a task in the current `plan.json`.            |
+| **Status coherence**    | Features marked `status: implemented` have `implements: [<task-id>]` set. Decisions exist for status changes that aren't purely additive.                            |
+| **Doc-fiction**         | Symbols/commands mentioned in README/docs but absent in code. (Catches the README-claims-pipeline_name case.)                                                        |
+| **Dead code**           | Exported symbols in code with no caller outside their own module/tests and not declared as a feature surface. (Catches the unwired Pipeline.register_pipeline case.) |
 
 Each check emits structured findings via the schema in Component 2. Auto-fixable categories: `graph-schema-error` (most), `graph-orphan` (most). Not auto-fixable: `doc-fiction`, `dead-code`, `half-implementation` — these need human judgment or fixer-agent reasoning.
 
@@ -261,9 +264,9 @@ Instead of per-language imperative code that factory5 has to grow for each new r
     "package_globs": ["<project_pkg>/**/*.py"],
     "public_symbol_rule": "no_underscore_prefix",
     "exposed_via": [
-      {"kind": "entry_points", "source": "pyproject.toml::project.scripts"},
-      {"kind": "explicit_export", "source": "__all__"},
-      {"kind": "feature_surface", "source": "docs/knowledge/features/*.md::documented_in"}
+      { "kind": "entry_points", "source": "pyproject.toml::project.scripts" },
+      { "kind": "explicit_export", "source": "__all__" },
+      { "kind": "feature_surface", "source": "docs/knowledge/features/*.md::documented_in" }
     ],
     "caller_scan": {
       "method": "ast_imports_and_calls",
@@ -277,17 +280,18 @@ The engine reads this and executes. Templates like `<interpreter>`, `<CODE>`, `<
 
 #### Three-tier config resolution
 
-| Tier | Source | When it applies |
-|---|---|---|
-| **1. Shipped defaults** | `packages/coherence-validator/configs/<runtime>.json` | Always tried first for known runtimes. v1 ships `python.json`. v2+ adds `node.json`, `go.json`, `rust.json` as needed. |
-| **2. Project override** | `<projectPath>/.factory/coherence-validator.json` | Operator-authored, takes precedence over shipped defaults. For projects with unusual config DSLs or non-standard layout. |
-| **3. Agent-generated** | Same path as tier 2, but written by a one-shot `coherence-validator-bootstrap` task | Triggered when the brain detects a runtime with no shipped default AND no project override. An architect-role agent reads `pyproject.toml` / `package.json` / `Cargo.toml` / `go.mod`, infers the config, writes it. Cached forever; regenerated only if `project.json` runtime kind changes. v3 ships this; v1 errors out with a "no validator config for runtime X — add one to .factory/coherence-validator.json" finding. |
+| Tier                    | Source                                                                              | When it applies                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Shipped defaults** | `packages/coherence-validator/configs/<runtime>.json`                               | Always tried first for known runtimes. v1 ships `python.json`. v2+ adds `node.json`, `go.json`, `rust.json` as needed.                                                                                                                                                                                                                                                                                                        |
+| **2. Project override** | `<projectPath>/.factory/coherence-validator.json`                                   | Operator-authored, takes precedence over shipped defaults. For projects with unusual config DSLs or non-standard layout.                                                                                                                                                                                                                                                                                                      |
+| **3. Agent-generated**  | Same path as tier 2, but written by a one-shot `coherence-validator-bootstrap` task | Triggered when the brain detects a runtime with no shipped default AND no project override. An architect-role agent reads `pyproject.toml` / `package.json` / `Cargo.toml` / `go.mod`, infers the config, writes it. Cached forever; regenerated only if `project.json` runtime kind changes. v3 ships this; v1 errors out with a "no validator config for runtime X — add one to .factory/coherence-validator.json" finding. |
 
 This means the v1 implementation has the same code size as the Python-only spec I originally wrote — just structured as `engine + python.json` instead of `python_extractor.ts`. The architectural shift (declarative config, not imperative code) opens the door for v2/v3 without rewrites.
 
 #### Doc-fiction in detail
 
 For each file matching `doc_globs`, the engine:
+
 1. Parses fenced code blocks (` ```<lang> `).
 2. Walks back to the nearest preceding `#`-level heading; if the heading matches `section_headings` regex, the block is in scope.
 3. Looks up `code_block_runners[<lang>]` from the config. If present, executes per the runner spec:
@@ -300,6 +304,7 @@ The check is conservative: code blocks under headings that don't match `section_
 #### Dead-code in detail
 
 For each project-package file (per `package_globs`), the engine:
+
 1. Parses the file with the runtime's AST (Python: `ast` module; Node: TypeScript compiler API; etc. — runtime-specific, but the rule is the same).
 2. Enumerates public symbols per `public_symbol_rule` (e.g., `no_underscore_prefix`).
 3. For each candidate, checks if it's "exposed" via any source in `exposed_via`:
@@ -310,6 +315,7 @@ For each project-package file (per `package_globs`), the engine:
 5. Symbols with no callers and no exposure = `category: dead-code` findings. Not auto-fixable — agent/operator decides: wire it or remove it.
 
 The pythonetl case (`Pipeline.register_pipeline`, `get_pipeline`, `list_pipelines`) catches because:
+
 - Public methods on `Pipeline` (no underscore prefix)
 - No other module imports or calls them
 - Not in `__all__`
@@ -335,7 +341,7 @@ For prose claims that aren't executable code blocks (e.g., "the CLI supports an 
 }
 ```
 
-**System prompt** (sketch): "You verify that the project's docs match its code. You read the knowledge area (features/*.md, decisions/*.md, modules.md, README.md) and the actual code modules. You raise findings for any documented capability that isn't actually implemented, any code symbol that's exposed but not documented, and any decision that's missing for a documented-vs-actual divergence. Your output is a list of structured findings — you never fix anything; you report only."
+**System prompt** (sketch): "You verify that the project's docs match its code. You read the knowledge area (features/_.md, decisions/_.md, modules.md, README.md) and the actual code modules. You raise findings for any documented capability that isn't actually implemented, any code symbol that's exposed but not documented, and any decision that's missing for a documented-vs-actual divergence. Your output is a list of structured findings — you never fix anything; you report only."
 
 **Inputs**: full read access to the project. Receives a single user prompt summarizing the directive scope.
 
@@ -352,6 +358,7 @@ The brain's failure handling becomes finding-aware:
 **Current**: task fails → directive parks blocked → operator escalation.
 
 **New**:
+
 1. Task fails (or finishes with open findings from the validator).
 2. Brain partitions findings into `auto_fixable: true` and `auto_fixable: false`.
 3. For auto-fixable findings: dispatch a `fixer` agent with the structured findings as input. Up to N attempts (default 3, configurable per-project via `metadata.maxFixerAttempts`).
@@ -374,6 +381,7 @@ The "zero progress" detection compares the finding set before and after: if the 
 ### Fixer agent input
 
 The fixer gets a structured task:
+
 ```json
 {
   "kind": "fix-findings",
@@ -390,6 +398,7 @@ The fixer's `defaultSkills` grow to include the new `knowledge-graph` skill (so 
 ### Abandoned worktree detection
 
 A new helper queries:
+
 ```
 worktrees on disk WHERE task NOT IN (current plan tasks)
   OR (task.status IN failed/aborted/cancelled AND merged_as IS NULL)
@@ -458,30 +467,30 @@ Each section ships as its own commit set and can be verified independently. Sect
 
 ## Files touched (high-level)
 
-| Component | Files |
-|---|---|
-| **1. Knowledge graph** | `skills/knowledge-graph.md` (new), `packages/brain/src/agents/registry.ts`, `prompts/agents/architect.md`, factory5 ships `_schema.md` + `_templates/*.md` as embedded assets |
-| **2. Structured findings** | `packages/core/src/schemas.ts` (finding schema), `packages/ipc/src/schemas.ts`, `packages/wiki/src/findings.ts` (storage), `apps/factory-web/src/pages/directives/detail.astro` (rendering) |
-| **3. Validator** | New package `packages/coherence-validator/`, integration in `packages/worker/src/run-worker.ts` post-task, integration in `packages/brain/src/pool.ts` pre-merge, integration in `packages/brain/src/loop.ts` final verification |
-| **4. Coherence-reviewer agent** | `prompts/agents/coherence-reviewer.md` (new), `packages/brain/src/agents/registry.ts`, planner updates to insert reviewer task at directive end |
-| **5. Self-healing** | `packages/brain/src/pool.ts` (finding partition + fixer dispatch), fixer skill update |
-| **6. Workspace hygiene** | `packages/cli/src/commands/cleanup.ts` (new), `packages/brain/src/loop.ts` (resume-time prompt), `apps/factory-web/src/pages/directives/detail.astro` (previous-attempts panel) |
+| Component                       | Files                                                                                                                                                                                                                            |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Knowledge graph**          | `skills/knowledge-graph.md` (new), `packages/brain/src/agents/registry.ts`, `prompts/agents/architect.md`, factory5 ships `_schema.md` + `_templates/*.md` as embedded assets                                                    |
+| **2. Structured findings**      | `packages/core/src/schemas.ts` (finding schema), `packages/ipc/src/schemas.ts`, `packages/wiki/src/findings.ts` (storage), `apps/factory-web/src/pages/directives/detail.astro` (rendering)                                      |
+| **3. Validator**                | New package `packages/coherence-validator/`, integration in `packages/worker/src/run-worker.ts` post-task, integration in `packages/brain/src/pool.ts` pre-merge, integration in `packages/brain/src/loop.ts` final verification |
+| **4. Coherence-reviewer agent** | `prompts/agents/coherence-reviewer.md` (new), `packages/brain/src/agents/registry.ts`, planner updates to insert reviewer task at directive end                                                                                  |
+| **5. Self-healing**             | `packages/brain/src/pool.ts` (finding partition + fixer dispatch), fixer skill update                                                                                                                                            |
+| **6. Workspace hygiene**        | `packages/cli/src/commands/cleanup.ts` (new), `packages/brain/src/loop.ts` (resume-time prompt), `apps/factory-web/src/pages/directives/detail.astro` (previous-attempts panel)                                                  |
 
 ## Risks
 
-| Risk | Mitigation |
-|---|---|
-| Agents ignore the schema | Validator catches at task end with structured findings; agent must fix to complete. Templates make correct shape easier than incorrect shape. |
-| Schema evolves and old projects break | `_schema.md` is per-project and git-tracked; old projects keep their schema. Factory5 ships a migration helper for major schema changes. |
-| Doc-fiction check produces false positives | Per-runtime extractors are conservative (only executable code blocks). Semantic check is LLM-judgment, which the operator can override per finding. |
-| Self-healing loop runs forever | Hard cap on attempts (default 3); finding partition is deterministic; brain escalates with full audit of attempts. |
-| Fixer makes things worse | Fixer's task contract is "smallest change that resolves this specific finding"; reviewer can audit fixer outputs in a follow-up if needed. Worst case: operator rolls back. |
-| Workspace auto-cleanup destroys work the operator wanted | Auto-cleanup default is **off**; cleanup happens via explicit operator action or opt-in retention policy. Non-CLI channels degrade to a structured message, no silent removal. |
-| Coherence-reviewer becomes a token sink | Read-only agent (single `provider.call()`); time-boxed by the existing stream-timeout config. Findings are deduplicated against the validator's existing findings. |
-| The schema spec lives in the project, so cross-project intelligence is lost | Acceptable for v1. Future: a registry that aggregates schemas across projects for federation. |
-| Validator runs at every task completion — performance footprint | Schema + reference checks parse the `docs/knowledge/` tree (typically <100 small markdown files). Expected cost <100ms per task. If a project grows large enough to exceed this, the validator can be made incremental (only re-check files touched by the current task). v1 ships the full-scan version; instrument the actual cost; optimize only if needed. |
-| Existing projects without a knowledge graph | One-shot `graph-migration` task inserted at directive start when the brain detects missing graph. Idempotent — runs once per project ever. Inferred features from existing `modules.md`. Defined in the "Existing projects (backward compat)" section. |
-| Architect's seeded README stubs get out of sync with what builder ships | Builder is responsible for filling stubs as features land (see lifecycle step 4). Validator's reference-integrity check at final-verification phase catches unfilled stub markers (`<!-- to be filled by scaffolder/builder -->`) as `half-implementation` findings. |
+| Risk                                                                        | Mitigation                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agents ignore the schema                                                    | Validator catches at task end with structured findings; agent must fix to complete. Templates make correct shape easier than incorrect shape.                                                                                                                                                                                                                  |
+| Schema evolves and old projects break                                       | `_schema.md` is per-project and git-tracked; old projects keep their schema. Factory5 ships a migration helper for major schema changes.                                                                                                                                                                                                                       |
+| Doc-fiction check produces false positives                                  | Per-runtime extractors are conservative (only executable code blocks). Semantic check is LLM-judgment, which the operator can override per finding.                                                                                                                                                                                                            |
+| Self-healing loop runs forever                                              | Hard cap on attempts (default 3); finding partition is deterministic; brain escalates with full audit of attempts.                                                                                                                                                                                                                                             |
+| Fixer makes things worse                                                    | Fixer's task contract is "smallest change that resolves this specific finding"; reviewer can audit fixer outputs in a follow-up if needed. Worst case: operator rolls back.                                                                                                                                                                                    |
+| Workspace auto-cleanup destroys work the operator wanted                    | Auto-cleanup default is **off**; cleanup happens via explicit operator action or opt-in retention policy. Non-CLI channels degrade to a structured message, no silent removal.                                                                                                                                                                                 |
+| Coherence-reviewer becomes a token sink                                     | Read-only agent (single `provider.call()`); time-boxed by the existing stream-timeout config. Findings are deduplicated against the validator's existing findings.                                                                                                                                                                                             |
+| The schema spec lives in the project, so cross-project intelligence is lost | Acceptable for v1. Future: a registry that aggregates schemas across projects for federation.                                                                                                                                                                                                                                                                  |
+| Validator runs at every task completion — performance footprint             | Schema + reference checks parse the `docs/knowledge/` tree (typically <100 small markdown files). Expected cost <100ms per task. If a project grows large enough to exceed this, the validator can be made incremental (only re-check files touched by the current task). v1 ships the full-scan version; instrument the actual cost; optimize only if needed. |
+| Existing projects without a knowledge graph                                 | One-shot `graph-migration` task inserted at directive start when the brain detects missing graph. Idempotent — runs once per project ever. Inferred features from existing `modules.md`. Defined in the "Existing projects (backward compat)" section.                                                                                                         |
+| Architect's seeded README stubs get out of sync with what builder ships     | Builder is responsible for filling stubs as features land (see lifecycle step 4). Validator's reference-integrity check at final-verification phase catches unfilled stub markers (`<!-- to be filled by scaffolder/builder -->`) as `half-implementation` findings.                                                                                           |
 
 ## Out of scope (deferred)
 
