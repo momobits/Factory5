@@ -186,7 +186,7 @@ const LIVE_GROUPS: ReadonlyArray<{ title: string; axes: ReadonlyArray<BudgetAxis
       <h3 class="tab-section-title">Budget defaults</h3>
       <p class="tab-section-prose">
         Resolution order per ADR 0027 §4 + ADR 0034 §1:
-        <code>--max-*</code> flag → project (here) → <code>~/.factory5/config.toml</code> → unlimited.
+        <code>--max-*</code> flag → project (here) → <code>instance config.toml</code> → unlimited.
         On in-flight builds, pool caps are the max of project / per-build / built-in defaults and
         can only rise (not fall) for the lifetime of the directive.
       </p>
