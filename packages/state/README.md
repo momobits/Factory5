@@ -82,7 +82,7 @@ Today's keys:
 | ------------------- | ------ | --------- | -------------------------------------------------------------------------------------------------------------- |
 | `askUserDeadlineMs` | number | `300_000` | How long `pending_questions` rows wait for a human reply before the brain auto-answers them via LLM (ADR 0030) |
 
-`loadConfig` is forgiving: corrupt JSON or schema-mismatched files log a `warn` and fall back to defaults rather than crashing the brain mid-`askUser`.
+`loadConfig` fills in defaults only for the benign cases — a missing or empty file. Corrupt JSON or a schema-mismatched file **throws** (a corrupt config is treated as an operator action, not a silent fallback). Callers that need resilience catch it: e.g. `packages/brain/src/ask-user.ts` wraps `loadConfig` in a `try/catch`, logs a `warn`, and falls back to the default deadline rather than crashing the brain mid-`askUser`.
 
 ## Conventions
 

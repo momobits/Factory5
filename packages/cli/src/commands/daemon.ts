@@ -2,8 +2,9 @@
  * `factory daemon start | stop | status | restart` — lifecycle control for
  * factoryd. The CLI talks to the daemon via two mechanisms:
  *
- *   - Pidfile (for liveness probing) under `%LOCALAPPDATA%\factory5\` /
- *     `~/.factory5/`. `FACTORY5_PIDFILE` overrides.
+ *   - Pidfile (for liveness probing) under the factory data directory
+ *     (`<repo>/.factory/` repo-local, else `~/.factory/` fallback, on all
+ *     platforms). `FACTORY5_PIDFILE` overrides.
  *   - Localhost HTTP at `127.0.0.1:25295` (`@factory5/ipc` client) for a
  *     responsiveness check on `factory daemon status`.
  */

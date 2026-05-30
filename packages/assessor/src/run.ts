@@ -13,6 +13,8 @@ import { access } from 'node:fs/promises';
 import { delimiter, join } from 'node:path';
 import { env, platform } from 'node:process';
 
+import { killProcessTree } from '@factory5/core/proc';
+
 export interface SubprocessResult {
   stdout: string;
   stderr: string;
@@ -74,11 +76,9 @@ export function runSubprocess(
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        /* ignore */
-      }
+      // Tree-kill: build/test launchers (pnpm, go, cargo, python, cmd.exe)
+      // spawn deep child trees; child.kill alone orphans them (esp. on Windows).
+      killProcessTree(child);
       reject(new Error(`assessor.run: ${bin} timed out after ${String(timeoutMs)}ms`));
     }, timeoutMs);
 

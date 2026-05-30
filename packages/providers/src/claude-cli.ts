@@ -29,6 +29,7 @@ import { delimiter, join } from 'node:path';
 import { env, platform } from 'node:process';
 import { createInterface } from 'node:readline';
 
+import { killProcessTree } from '@factory5/core/proc';
 import { createLogger } from '@factory5/logger';
 import { z } from 'zod';
 
@@ -365,11 +366,12 @@ function softKill(child: ChildProcessWithoutNullStreams): void {
     return;
   }
   const t = setTimeout(() => {
-    try {
-      child.kill('SIGKILL');
-    } catch {
-      /* exited during grace */
-    }
+    // Force-kill the whole tree after the grace window — the `claude` CLI can
+    // spawn its own subprocesses (MCP servers, tools) that child.kill orphans.
+    // Note: on Windows the SIGTERM above is already a hard TerminateProcess of
+    // only the direct child, so the grace window is effectively a no-op for the
+    // tree there — this force path (taskkill /T) is what actually reaps it.
+    killProcessTree(child);
   }, KILL_GRACE_MS);
   if (typeof t.unref === 'function') t.unref();
   child.once('close', () => clearTimeout(t));

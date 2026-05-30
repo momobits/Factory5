@@ -2,7 +2,7 @@
 
 Factory 5 is a multi-channel autonomous software builder. It accepts requirements via CLI, Discord, Telegram, or web UI; designs, implements, tests, and verifies projects through a verification-first build loop; and runs against any of four supported language runtimes (Python, Node, Go, Rust). The operator's Claude subscription is the primary model provider, with category-based routing and provider fallback.
 
-This document is the canonical system reference. Per-decision rationale lives in [`decisions/`](decisions) (34 ADRs). Data shapes live in [`CONTRACTS.md`](CONTRACTS.md). For the operator-facing view of how to drive factory5 — the four canonical loops, when to use which surface, how to author a `CLAUDE.md` spec — see [`WORKFLOWS.md`](WORKFLOWS.md).
+This document is the canonical system reference. Per-decision rationale lives in [`decisions/`](decisions) (35 ADRs). Data shapes live in [`CONTRACTS.md`](CONTRACTS.md). For the operator-facing view of how to drive factory5 — the four canonical loops, when to use which surface, how to author a `CLAUDE.md` spec — see [`WORKFLOWS.md`](WORKFLOWS.md).
 
 ---
 
@@ -79,13 +79,13 @@ The daemon is required for chat, Discord, Telegram, fs-driven, and web-UI work. 
 
 ## Components
 
-### Packages (15)
+### Packages (16)
 
 | Package                    | Process            | Responsibility                                                                                                                                                                                                    |
 | -------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@factory5/core`           | shared             | Types + Zod schemas — `Directive`, `Event`, `Finding`, `Plan`, `Task`, `AgentRole`, `ModelCategory`, `AutonomyMode`                                                                                               |
 | `@factory5/logger`         | shared             | Pino logger factory; correlation-ID propagation; file-sink with daily rotation                                                                                                                                    |
-| `@factory5/state`          | shared             | SQLite (better-sqlite3) wrapper; 8 migrations; typed CRUD; spend / findings / pending-questions queries                                                                                                           |
+| `@factory5/state`          | shared             | SQLite (better-sqlite3) wrapper; 12 migrations; typed CRUD; spend / findings / pending-questions queries                                                                                                          |
 | `@factory5/ipc`            | shared             | HTTP contracts (Zod) + typed `DaemonClient` for daemon ↔ brain                                                                                                                                                    |
 | `@factory5/channels`       | daemon             | `ChannelPlugin` interface + registry + `cli-rpc` (ADR 0014) + `discord` + `telegram` (ADR 0022)                                                                                                                   |
 | `@factory5/events`         | daemon             | `EventSource` interface + `fs-watcher` (chokidar, debounced)                                                                                                                                                      |
@@ -93,6 +93,7 @@ The daemon is required for chat, Discord, Telegram, fs-driven, and web-UI work. 
 | `@factory5/providers`      | brain              | `ClaudeCliProvider` (stream-json NDJSON parsing, ADR 0009) + `StubProvider` (via `FACTORY5_TEST_PROVIDER=stub`)                                                                                                   |
 | `@factory5/wiki`           | brain              | Pages, findings, BUILD.md, plan, readiness gate; project metadata (`project.json`); `resolveDirectiveLimits` budget merge                                                                                         |
 | `@factory5/assessor`       | brain              | Pluggable runtimes (Python / Node / Go / Rust, ADR 0026) + artifact + git checks. **No LLM.**                                                                                                                     |
+| `@factory5/coherence-validator` | brain         | Knowledge-graph coherence validator over `docs/knowledge/` — schema-check, reference-check, doc-fiction engine, Python dead-code scanner; runs post-merge per task + at final-verification. **No LLM.**            |
 | `@factory5/brain`          | brain              | Triage → architect → planner → delegate → verify loop; agent registry; category routing; `askUser` / `escalateBlocked` (ADR 0015); pre-call budget enforcement (ADR 0020); `maxTurns*` pool dispatcher (ADR 0034) |
 | `@factory5/worker`         | brain (subprocess) | Per-task git worktrees (ADR 0008); tool-using `claude -p` subprocess (ADR 0007); parallel pool with heartbeats (ADR 0010)                                                                                         |
 | `@factory5/worker-mcp`     | brain (subprocess) | MCP server exposing `mcp__factory5-ask-user__ask_user` to the worker subprocess (ADR 0024)                                                                                                                        |
@@ -110,7 +111,7 @@ The daemon is required for chat, Discord, Telegram, fs-driven, and web-UI work. 
 ## Storage
 
 - **Project state** — files in `<workspace>/<project>/{CLAUDE.md, docs/knowledge/, BUILD.md, .factory/}`. Per-project; ships with the project; human-readable; git-committable. The project's `.factory/project.json` is the first-class identity record (ADR 0021), holding `metadata.language`, `metadata.budgetDefaults`, and similar persistent settings.
-- **Factory runtime state** — SQLite at `<repo>/.factory/factory.db` (repo-local instance per ADR 0023; cwd-walk discovery) or `~/.factory/factory.db` fallback. 8 schema migrations.
+- **Factory runtime state** — SQLite at `<repo>/.factory/factory.db` (repo-local instance per ADR 0023; cwd-walk discovery) or `~/.factory/factory.db` fallback. 12 schema migrations.
 
 ## Inter-process communication
 

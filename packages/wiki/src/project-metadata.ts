@@ -220,10 +220,18 @@ export function resolveDirectiveLimits(opts: {
   /** Instance config tier (`config.toml [budget.defaults]`). */
   configDefaults?: { maxUsd?: number | undefined; maxSteps?: number | undefined } | undefined;
 }): DirectiveLimits | undefined {
-  const maxUsd =
+  const maxUsdRaw =
     opts.explicitFlags?.maxUsd ?? opts.projectDefaults?.maxUsd ?? opts.configDefaults?.maxUsd;
-  const maxSteps =
+  const maxStepsRaw =
     opts.explicitFlags?.maxSteps ?? opts.projectDefaults?.maxSteps ?? opts.configDefaults?.maxSteps;
+  // 0 is the documented "unlimited" sentinel for budgetsSchema (ADR 0035 §6),
+  // but directiveLimitsSchema uses `.positive()` and rejects 0 — so passing a
+  // stored `maxUsd: 0` / `maxSteps: 0` through would make directiveSchema.parse
+  // throw a ZodError and crash every mint path. Normalize the sentinel to
+  // "absent = no cap" here, at the single resolution chokepoint shared by all
+  // four directive-creation surfaces.
+  const maxUsd = maxUsdRaw === 0 ? undefined : maxUsdRaw;
+  const maxSteps = maxStepsRaw === 0 ? undefined : maxStepsRaw;
   if (maxUsd === undefined && maxSteps === undefined) return undefined;
   return {
     ...(maxUsd !== undefined ? { maxUsd } : {}),

@@ -3,7 +3,7 @@
 Daemon assembly. Wires together:
 
 - pidfile (one daemon per host — `%LOCALAPPDATA%\factory5\factoryd.pid` on
-  Windows, `~/.factory5/factoryd.pid` elsewhere; overridable via
+  Windows, `~/.factory/factoryd.pid` elsewhere; overridable via
   `FACTORY5_PIDFILE`)
 - `@factory5/state` (SQLite — the durable bus for directives, outbound
   messages, events, tasks_inflight)

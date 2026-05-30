@@ -115,19 +115,33 @@ export function listForDirective(
   options: ListForDirectiveOptions = {},
 ): DirectiveLogLine[] {
   const limit = Math.max(1, options.limit ?? DEFAULT_LOG_LINE_LIMIT);
-  const wheres: string[] = ['directive_id = ?'];
-  const params: unknown[] = [directiveId];
   if (options.sinceTs !== undefined) {
-    wheres.push('ts > ?');
-    params.push(options.sinceTs);
+    // Replay-catchup (cursor present): everything strictly after the cursor,
+    // in chronological order — matches the FE join-cursor contract.
+    const rows = db
+      .prepare(
+        `SELECT * FROM directive_log_lines
+          WHERE directive_id = ? AND ts > ?
+          ORDER BY ts ASC, id ASC
+          LIMIT ?`,
+      )
+      .all(directiveId, options.sinceTs, limit) as Row[];
+    return rows.map(rowToLogLine);
   }
+  // Initial page-load seed (no cursor): take the NEWEST `limit` rows, then
+  // reverse into chronological order. A directive with more than `limit` lines
+  // then shows its recent failure/stall instead of ancient startup noise
+  // (the activity panel's whole purpose — U030/U031). The FE pins its SSE join
+  // cursor to the last (newest) seeded line; a live event sharing that exact
+  // millisecond can be deduped — the long-standing ms-collision tradeoff of the
+  // ts-only cursor. Dedupe by (ts, id) on the FE if that ever bites.
   const rows = db
     .prepare(
       `SELECT * FROM directive_log_lines
-        WHERE ${wheres.join(' AND ')}
-        ORDER BY ts ASC, id ASC
+        WHERE directive_id = ?
+        ORDER BY ts DESC, id DESC
         LIMIT ?`,
     )
-    .all(...params, limit) as Row[];
-  return rows.map(rowToLogLine);
+    .all(directiveId, limit) as Row[];
+  return rows.reverse().map(rowToLogLine);
 }

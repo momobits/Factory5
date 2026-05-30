@@ -27,18 +27,20 @@ taskLog.info('task started');
 
 ## Sinks
 
-| Sink           | When                                                     | Format                                                                           |
-| -------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Console        | always                                                   | pretty-printed colorized when stdout is a TTY; JSON otherwise (CI-friendly)      |
-| File           | always                                                   | JSON to `<logsDir>/<process>-<date>.log`, daily rotation, 14-day retention       |
-| Per-build file | when `withBuildSink({ projectPath, buildId })` is called | JSON mirror of brain logs into `<projectPath>/.factory/logs/build-<buildId>.log` |
+| Sink                       | When                                                     | Format                                                                           |
+| -------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Console                    | always                                                   | pretty-printed colorized when stdout is a TTY; JSON otherwise (CI-friendly)      |
+| File                       | always                                                   | JSON to `<logsDir>/<process>-<date>.log`, daily rotation, 14-day retention       |
+| Per-build file _(planned)_ | when `withBuildSink({ projectPath, buildId })` is called | JSON mirror of brain logs into `<projectPath>/.factory/logs/build-<buildId>.log` |
 
-`<logsDir>` is platform-aware:
+> `withBuildSink` is exported but is currently a **no-op stub** — it returns a handle whose `close()` does nothing and whose `path` is `''`. The per-build mirror is **planned / not yet implemented** (tracked for Phase 1; the real implementation needs Pino support for attaching a stream to a live logger, or a `createLogger` fan-out wrapper). Do not rely on it writing a file yet.
 
-- Linux/Mac: `~/.factory5/logs/`
-- Windows: `%LOCALAPPDATA%\factory5\logs\`
+`<logsDir>` resolves the same way on every platform (Linux, macOS, Windows) via `@factory5/logger`'s `dataDir()`:
 
-Override with env `FACTORY5_LOG_DIR`.
+- **Repo-local instance** (the usual case): `<repo>/.factory/logs/` — the nearest ancestor `.factory/` directory containing a `config.toml`, discovered by walking up from the cwd (ADR 0023).
+- **Fallback** (no instance discovered): `~/.factory/logs/` (e.g. `C:\Users\<user>\.factory\logs\` on Windows).
+
+Override the whole data root with env `FACTORY5_DATA_DIR`, or the log directory alone with `FACTORY5_LOG_DIR`.
 
 ## Levels
 
@@ -55,22 +57,24 @@ Default minimum level is `info`. Override per process with `FACTORY5_LOG_LEVEL`.
 
 ## Operator interface
 
-This package writes logs; the `factory` CLI surfaces them. Today `factory logs` is a stub — it prints a hint pointing at `~/.factory5/logs/` (or `%LOCALAPPDATA%\factory5\logs\` on Windows) and exits. Tail those files directly:
+This package writes logs; the `factory` CLI surfaces them. Today `factory logs` is a stub — it prints a hint pointing at the resolved log directory (`<repo>/.factory/logs/`, or `~/.factory/logs/` when no repo-local instance is found) and exits. Tail those files directly:
 
 ```bash
-# Linux / Mac
-tail -f ~/.factory5/logs/factoryd-*.log
-tail -f ~/.factory5/logs/factory-*.log
+# Linux / Mac (repo-local instance)
+tail -f .factory/logs/factoryd-*.log
+tail -f .factory/logs/factory-*.log
+# …or the home fallback when there's no repo-local instance:
+tail -f ~/.factory/logs/factoryd-*.log
 
 # Windows (PowerShell)
-Get-Content -Wait $env:LOCALAPPDATA\factory5\logs\factoryd-*.log
+Get-Content -Wait .factory\logs\factoryd-*.log
 ```
 
 Each log line is one JSON object with stable component / correlation-id fields, so `jq` works for filtering:
 
 ```bash
-jq 'select(.component == "brain.triage")' ~/.factory5/logs/factoryd-*.log
-jq 'select(.directiveId == "01HQXM...")' ~/.factory5/logs/factoryd-*.log
+jq 'select(.component == "brain.triage")' .factory/logs/factoryd-*.log
+jq 'select(.directiveId == "01HQXM...")' .factory/logs/factoryd-*.log
 ```
 
 The richer `factory logs --component / --directive / --follow` and a directive-scoped log-stitcher are tracked as planned UX in the upgrade roadmap.

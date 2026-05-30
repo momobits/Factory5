@@ -26,7 +26,7 @@ function baseOpts(pidPath: string) {
     noBrain: true,
     noFsWatcher: true,
     noOutboundWorker: true,
-    // Never read the user's real ~/.factory5/config.toml — otherwise a user
+    // Never read the user's real ~/.factory/config.toml — otherwise a user
     // with a Discord token configured would have these tests try to log into
     // Discord with live credentials on every run.
     noConfigFile: true,

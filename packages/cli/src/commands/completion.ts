@@ -166,7 +166,7 @@ function zshScript(): string {
     doctor: 'Smoke-check the stack',
     findings: 'Cross-project findings registry',
     init: 'Write config.toml with sensible defaults',
-    logs: 'Pointer to ~/.factory5/logs/ (placeholder)',
+    logs: 'Pointer to ~/.factory/logs/ (placeholder)',
     project: 'Per-project introspection + lifecycle (list/show/delete)',
     questions: 'Pending-question maintenance (cleanup)',
     resume: 'Resume the most recent build for a project',

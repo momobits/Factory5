@@ -16,6 +16,7 @@ import { join, resolve } from 'node:path';
 
 import { glob } from 'glob';
 
+import { killProcessTree } from '@factory5/core/proc';
 import { createLogger } from '@factory5/logger';
 
 import type { ValidatorConfig } from './config-schema.js';
@@ -105,8 +106,10 @@ async function runWithTimeout(
     const child = spawn(bin, args, { cwd, shell: false });
     let stderr = '';
     const timer = setTimeout(() => {
+      // Graceful first (POSIX), then force-kill the whole tree — a documented
+      // example may itself spawn children (servers, subprocesses).
       child.kill('SIGTERM');
-      setTimeout(() => child.kill('SIGKILL'), 2000);
+      setTimeout(() => killProcessTree(child), 2000);
       resolveFn({ exitCode: 124, stderr: stderr + '\n<timed out>' });
     }, timeoutMs);
     child.stderr.on('data', (b: Buffer) => {

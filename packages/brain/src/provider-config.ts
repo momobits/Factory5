@@ -95,7 +95,7 @@ export function buildStubRegistry(): ProviderRegistry {
 }
 
 /**
- * Like {@link buildDefaultRegistry} but reads `~/.factory5/config.toml`
+ * Like {@link buildDefaultRegistry} but reads `~/.factory/config.toml`
  * first. Falls back to built-in defaults if no config exists.
  */
 export async function buildRegistryFromDisk(

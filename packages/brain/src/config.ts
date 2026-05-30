@@ -1,6 +1,7 @@
 /**
- * Read/write `~/.factory5/config.toml` (or `%LOCALAPPDATA%\factory5\config.toml`
- * on Windows). Validated with Zod.
+ * Read/write `config.toml` under the factory data directory — `<repo>/.factory/`
+ * when a repo-local instance is discovered via cwd-walk, else `~/.factory/`
+ * on all platforms (see `@factory5/logger` `dataDir()`). Validated with Zod.
  *
  * TOML was chosen in ADR 0004; `smol-toml` is the parser.
  *

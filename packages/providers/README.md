@@ -7,7 +7,7 @@
 For a given `ModelCategory`:
 
 1. **Per-directive override** (e.g. `--model anthropic-api/claude-opus-4-7`)
-2. **Category default** from `~/.factory5/config.toml [categories]`
+2. **Category default** from `~/.factory/config.toml [categories]`
 3. **Provider fallback chain** from `[fallback_chains]`
 4. **System default** (typically `claude-cli/claude-opus-4-7` if Claude subscription is set up)
 

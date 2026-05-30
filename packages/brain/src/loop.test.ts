@@ -25,9 +25,28 @@ import {
   runMigrations,
   type Database,
 } from '@factory5/state';
+import { isToolUsingAgent } from '@factory5/worker';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { emitLogLine } from './loop.js';
+import { buildGraphMigrationTask, emitLogLine } from './loop.js';
+
+describe('buildGraphMigrationTask', () => {
+  it('uses a tool-using agent so the worker actually writes + commits the seed', () => {
+    const task = buildGraphMigrationTask(newId());
+    // The migration is worthless unless the worker routes it through runTooling
+    // (worktree + commit). A read-only agent (e.g. architect) routes to
+    // runReadOnly and silently seeds nothing — this pins the cross-package
+    // contract with @factory5/worker's isToolUsingAgent.
+    expect(isToolUsingAgent(task.agent)).toBe(true);
+  });
+
+  it('declares the schema + templates as expected outputs and carries the migration title', () => {
+    const task = buildGraphMigrationTask(newId());
+    expect(task.title).toContain('Migrate to knowledge graph');
+    expect(task.expectedOutputs.files).toContain('docs/knowledge/_schema.md');
+    expect(task.dependsOn).toEqual([]);
+  });
+});
 
 describe('emitLogLine', () => {
   it('is silent when no emitter is wired', () => {

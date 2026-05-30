@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { configExists, configPath, defaultConfig, loadConfig, saveConfig } from './config.js';
 
 // Each test redirects the data dir via FACTORY5_DATA_DIR so we don't touch
-// the user's real ~/.factory5 during the workspace test run.
+// the user's real ~/.factory during the workspace test run.
 
 let tmp: string;
 let originalDataDir: string | undefined;

@@ -181,15 +181,17 @@ describe('directiveLogLines.appendLogLine + listForDirective', () => {
       });
     }
 
-    // Explicit limit smaller than the available rows.
+    // Explicit limit smaller than the available rows, no cursor → the NEWEST 5,
+    // reversed into chronological order (so the panel shows the recent tail, not
+    // ancient startup lines).
     const limited = directiveLogLines.listForDirective(db, directiveId, { limit: 5 });
     expect(limited).toHaveLength(5);
     expect(limited.map((l) => l.msg)).toEqual([
-      'event 0',
-      'event 1',
-      'event 2',
-      'event 3',
-      'event 4',
+      'event 7',
+      'event 8',
+      'event 9',
+      'event 10',
+      'event 11',
     ]);
 
     // No limit supplied → default; 12 rows fit comfortably below the default.

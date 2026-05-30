@@ -44,6 +44,57 @@ describe('supervisor', () => {
     expect(crashes).toEqual([1, 2, 3]);
   });
 
+  it('resets the consecutive-crash counter after a healthy run (does not hit the cap)', async () => {
+    let started = 0;
+    const crashes: number[] = [];
+    const sup = createSupervisor({
+      name: 'recoverer',
+      log,
+      minBackoffMs: 1,
+      maxBackoffMs: 5,
+      maxRestarts: 3,
+      // Treat every run as "healthy" so each crash forgives the previous one.
+      // With a lifetime counter this would give up after 3 crashes; here it
+      // survives 5 and reaches the clean 6th run.
+      resetAfterHealthyMs: 0,
+      onCrash: (_err, attempt) => crashes.push(attempt),
+      start: async () => {
+        started += 1;
+        if (started <= 5) throw new Error('boom');
+      },
+    });
+    await sup.done;
+    await sup.stop();
+    expect(started).toBe(6);
+    expect(crashes).toEqual([1, 1, 1, 1, 1]);
+  });
+
+  it('fires onGiveUp once when the crash cap is reached', async () => {
+    let started = 0;
+    let gaveUp = 0;
+    let giveUpAttempts = 0;
+    const sup = createSupervisor({
+      name: 'giver',
+      log,
+      minBackoffMs: 1,
+      maxBackoffMs: 5,
+      maxRestarts: 2,
+      resetAfterHealthyMs: 100_000, // immediate crashes never count as healthy
+      onGiveUp: (_err, attempts) => {
+        gaveUp += 1;
+        giveUpAttempts = attempts;
+      },
+      start: async () => {
+        started += 1;
+        throw new Error('boom');
+      },
+    });
+    await sup.done;
+    expect(started).toBe(2);
+    expect(gaveUp).toBe(1);
+    expect(giveUpAttempts).toBe(2);
+  });
+
   it('stop() aborts the supplied signal and settles done', async () => {
     let aborted = false;
     const sup = createSupervisor({

@@ -30,12 +30,30 @@ export interface SupervisorOptions {
   /** Upper bound on the backoff. Default 30_000ms. */
   maxBackoffMs?: number;
   /**
-   * Max consecutive crashes before giving up (prevents infinite tight
+   * Max *consecutive* crashes before giving up (prevents infinite tight
    * crash loops from burning CPU). `null` disables the cap. Default 10.
+   *
+   * "Consecutive" is enforced via {@link resetAfterHealthyMs}: a crash that
+   * follows a healthy run resets the counter, so crashes spread across a long
+   * lifetime never accumulate to the cap.
    */
   maxRestarts?: number | null;
+  /**
+   * If the task ran for at least this long before crashing, the consecutive-
+   * crash counter is reset to 0 (the prior crashes are "forgiven" — the task
+   * clearly recovered). Without this, the counter is a *lifetime* counter and
+   * the supervised task is killed permanently after `maxRestarts` crashes no
+   * matter how far apart. Default 60_000ms.
+   */
+  resetAfterHealthyMs?: number;
   /** Called on each crash — mostly for test hooks / telemetry. */
   onCrash?: (err: unknown, attempt: number) => void;
+  /**
+   * Called once when the supervisor permanently gives up (crash cap reached).
+   * Lets the daemon surface a loud, actionable signal instead of silently
+   * running on with a dead supervised task.
+   */
+  onGiveUp?: (lastErr: unknown, attempts: number) => void;
 }
 
 export interface SupervisorHandle {
@@ -49,6 +67,7 @@ export function createSupervisor(opts: SupervisorOptions): SupervisorHandle {
   const minBackoff = opts.minBackoffMs ?? 500;
   const maxBackoff = opts.maxBackoffMs ?? 30_000;
   const maxRestarts = opts.maxRestarts === undefined ? 10 : opts.maxRestarts;
+  const resetAfterHealthy = opts.resetAfterHealthyMs ?? 60_000;
 
   let stopped = false;
   let consecutiveCrashes = 0;
@@ -62,6 +81,7 @@ export function createSupervisor(opts: SupervisorOptions): SupervisorHandle {
     while (!stopped) {
       const ac = new AbortController();
       currentAc = ac;
+      const taskStartedAt = Date.now();
       try {
         opts.log.info(
           { component: opts.name, attempt: consecutiveCrashes + 1 },
@@ -77,6 +97,20 @@ export function createSupervisor(opts: SupervisorOptions): SupervisorHandle {
           opts.log.debug({ component: opts.name, err }, 'supervisor: task errored during shutdown');
           return;
         }
+        // A crash that follows a healthy run forgives the earlier crashes —
+        // keeps `consecutiveCrashes` truly consecutive rather than a lifetime
+        // tally (which would permanently kill the task after `maxRestarts`
+        // crashes spread arbitrarily far apart).
+        // Clamp: a backward wall-clock jump must not produce a negative uptime
+        // that spuriously skips the healthy-run reset.
+        const uptimeMs = Math.max(0, Date.now() - taskStartedAt);
+        if (consecutiveCrashes > 0 && uptimeMs >= resetAfterHealthy) {
+          opts.log.info(
+            { component: opts.name, uptimeMs, forgaveCrashes: consecutiveCrashes },
+            'supervisor: task ran healthy before crashing — resetting consecutive-crash counter',
+          );
+          consecutiveCrashes = 0;
+        }
         consecutiveCrashes += 1;
         opts.onCrash?.(err, consecutiveCrashes);
         opts.log.error(
@@ -88,6 +122,7 @@ export function createSupervisor(opts: SupervisorOptions): SupervisorHandle {
             { component: opts.name, attempt: consecutiveCrashes, max: maxRestarts },
             'supervisor: crash cap reached, giving up',
           );
+          opts.onGiveUp?.(err, consecutiveCrashes);
           return;
         }
         const delay = Math.min(maxBackoff, minBackoff * Math.pow(2, consecutiveCrashes - 1));

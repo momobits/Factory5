@@ -184,20 +184,40 @@ describe('materialisePlannerTasks — file-ownership synthetic deps', () => {
   });
 });
 
-describe('materialisePlannerTasks — maxTurns passthrough', () => {
-  it('passes maxTurns through when set', () => {
+describe('materialisePlannerTasks — maxTurns is stripped (ADR 0034 §6)', () => {
+  it('strips maxTurns even when the planner emits it (turn budgets are pool-managed)', () => {
     const planId = newId();
     const { tasks } = materialisePlannerTasks(
       [mkRaw({ title: 'big builder', maxTurns: 60 })],
       planId,
     );
-    expect(tasks[0]?.maxTurns).toBe(60);
+    // Per ADR 0034 §6, per-task maxTurns is no longer honored — turn budgets are
+    // managed by the pool per agent class — so it must not survive materialisation.
+    expect(tasks[0]?.maxTurns).toBeUndefined();
   });
 
   it('leaves maxTurns undefined when the planner omits it', () => {
     const planId = newId();
     const { tasks } = materialisePlannerTasks([mkRaw({ title: 'default builder' })], planId);
     expect(tasks[0]?.maxTurns).toBeUndefined();
+  });
+});
+
+describe('materialisePlannerTasks — estimatedUsd passthrough', () => {
+  it('passes estimatedUsd through when the planner emits it', () => {
+    const planId = newId();
+    const { tasks } = materialisePlannerTasks(
+      [mkRaw({ title: 'pricey task', estimatedUsd: 1.25 })],
+      planId,
+    );
+    // The pool's pre-launch maxUsdPerTask guard reads this off the task.
+    expect(tasks[0]?.estimatedUsd).toBe(1.25);
+  });
+
+  it('leaves estimatedUsd undefined when the planner omits it', () => {
+    const planId = newId();
+    const { tasks } = materialisePlannerTasks([mkRaw({ title: 'free task' })], planId);
+    expect(tasks[0]?.estimatedUsd).toBeUndefined();
   });
 });
 

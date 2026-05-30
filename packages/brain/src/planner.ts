@@ -69,6 +69,14 @@ const plannerTaskSchema = z.object({
    * graph-bound (e.g. infrastructure tasks).
    */
   featureIds: z.array(z.string()).default([]),
+  /**
+   * Optional planner estimate of model spend (USD) for this task. The planner
+   * prompt instructs the model to emit it; the pool's pre-launch guard
+   * (pool.ts) compares it against the `maxUsdPerTask` cap (ADR 0035 per-task
+   * axis) and fails the task before launching when its estimate exceeds the cap
+   * (errorSubtype `per-task-usd-exceeded`) — it does not park the directive.
+   */
+  estimatedUsd: z.number().nonnegative().optional(),
 });
 
 const plannerJsonSchema = z.object({
@@ -137,6 +145,10 @@ export function materialisePlannerTasks(
       status: 'pending',
       attempts: 0,
       featureIds: t.featureIds,
+      // Pass the planner's per-task USD estimate through so the pool's
+      // pre-launch maxUsdPerTask guard (ADR 0035) has a value to check.
+      // Omitted (not set to undefined) when the planner didn't estimate.
+      ...(t.estimatedUsd !== undefined ? { estimatedUsd: t.estimatedUsd } : {}),
     };
     // F4 / ADR 0034 §6 — maxTurns stripped from LLM output. Turn budgets are
     // pool-managed per-agent-class; per-task caps are no longer used.
