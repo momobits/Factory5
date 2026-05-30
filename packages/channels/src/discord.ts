@@ -385,15 +385,31 @@ export class DiscordChannel implements ChannelPlugin {
       });
     });
 
-    const handler = async (message: Message): Promise<void> => this.handleMessage(message);
+    // discord.js does not await or catch the promise a listener returns — an
+    // unguarded throw/rejection inside handleMessage/handleInteraction escapes
+    // as an unhandledRejection and (pre-Tier-fix) would take down factoryd.
+    // Catch at the listener boundary: a bad message logs and is dropped; the
+    // daemon stays up.
+    const handler = async (message: Message): Promise<void> => {
+      try {
+        await this.handleMessage(message);
+      } catch (err) {
+        this.log?.error({ err }, 'discord: messageCreate handler threw');
+      }
+    };
     this.messageHandler = handler;
     client.on('messageCreate', handler);
 
     // Slash-command dispatch — registered before login so any interactions
     // arriving while ready races resolve cleanly. Tests whose stub omits
     // `interactionCreate` support naturally skip this leg.
-    const interactionHandler = async (interaction: Interaction): Promise<void> =>
-      this.handleInteraction(interaction);
+    const interactionHandler = async (interaction: Interaction): Promise<void> => {
+      try {
+        await this.handleInteraction(interaction);
+      } catch (err) {
+        this.log?.error({ err }, 'discord: interactionCreate handler threw');
+      }
+    };
     this.interactionHandler = interactionHandler;
     client.on('interactionCreate', interactionHandler);
 

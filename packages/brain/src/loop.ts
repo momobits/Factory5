@@ -697,15 +697,12 @@ async function runInline(
             { directiveId: directive.id, attempts: attemptIndex },
             'loop: self-healing resolved all auto-fixable findings',
           );
-          // Re-evaluate hadFailures: if the only thing that flipped it was
-          // these findings, we can clear it. Re-run the validator-driven
-          // assessment is too heavy here; instead, only clear if no other
-          // failures exist (task exit codes + assessor verify gate).
-          const otherFailures =
-            taskResults.some((r) => r.exitCode !== 0) || !assessment.gateResults.verify;
-          if (!otherFailures) {
-            hadFailures = false;
-          }
+          // Nothing to clear here: per ADR 0018 findings never set `hadFailures`
+          // (only task exit codes + the assessor verify gate do), and neither
+          // changed during the self-heal loop — so recomputing that same
+          // expression always reproduces the current value. Reflecting the
+          // fixer's merges would require re-running the assessor, a separate
+          // ADR-gated behavior change.
         }
 
         if (hadFailures) {

@@ -154,14 +154,14 @@ async function runForeground(): Promise<void> {
   }
 
   let shuttingDown = false;
-  const shutdown = (signal: string): void => {
+  const shutdown = (signal: string, code = 0): void => {
     if (shuttingDown) return;
     shuttingDown = true;
     log.info({ signal }, 'shutdown signal received');
     void stopDaemon(handle)
       .then(() => {
         log.info('factoryd stopped');
-        exit(0);
+        exit(code);
       })
       .catch((err: unknown) => {
         log.error({ err }, 'shutdown failed');
@@ -170,6 +170,19 @@ async function runForeground(): Promise<void> {
   };
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
+  // Without these, a stray unhandled rejection / uncaught exception (e.g. from a
+  // fire-and-forget channel listener) terminates factoryd abruptly under Node's
+  // default policy, bypassing graceful shutdown (stale pidfile, undrained state).
+  // Log loudly, drain, and exit non-zero so a process manager / next-start
+  // reconcile recovers predictably.
+  process.on('unhandledRejection', (reason) => {
+    log.error({ err: reason }, 'unhandledRejection — draining factoryd and exiting non-zero');
+    shutdown('unhandledRejection', 1);
+  });
+  process.on('uncaughtException', (err) => {
+    log.error({ err }, 'uncaughtException — draining factoryd and exiting non-zero');
+    shutdown('uncaughtException', 1);
+  });
 }
 
 async function main(): Promise<void> {

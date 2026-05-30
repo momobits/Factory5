@@ -60,6 +60,15 @@ export function startBrainSupervisor(opts: BrainSupervisorOptions): SupervisorHa
     ...(opts.minBackoffMs !== undefined ? { minBackoffMs: opts.minBackoffMs } : {}),
     ...(opts.maxBackoffMs !== undefined ? { maxBackoffMs: opts.maxBackoffMs } : {}),
     ...(opts.maxRestarts !== undefined ? { maxRestarts: opts.maxRestarts } : {}),
+    onGiveUp: (lastErr, attempts) => {
+      // The supervisor has permanently stopped restarting the serve loop.
+      // factoryd stays up (channels, IPC) but will NOT process any further
+      // directives until it is restarted — make that loud rather than silent.
+      opts.log.error(
+        { component: 'brain', err: lastErr, attempts },
+        'brain supervisor gave up after repeated crashes — NO directives will be processed until factoryd is restarted; investigate the crash above',
+      );
+    },
     start: async (signal) => {
       let handle: BrainHandle | undefined;
       try {

@@ -199,6 +199,15 @@ describe('apiV1ProjectBudgetDefaultsPutBodySchema (Tier 15.9)', () => {
     ).toThrow();
   });
 
+  it('rejects a typo’d axis name nested inside budgetDefaults (not just top-level)', () => {
+    // Regression: the nested budgetsSchema used to strip unknown keys, so a typo
+    // like `maxUsdd` returned 200 with the value silently dropped. The nested
+    // object is now strict-parsed so the operator gets a 422.
+    expect(() =>
+      apiV1ProjectBudgetDefaultsPutBodySchema.parse({ budgetDefaults: { maxUsdd: 5 } }),
+    ).toThrow();
+  });
+
   it('rejects autoIncreaseCeilingMultiplier below 1', () => {
     expect(() =>
       apiV1ProjectBudgetDefaultsPutBodySchema.parse({ autoIncreaseCeilingMultiplier: 0 }),

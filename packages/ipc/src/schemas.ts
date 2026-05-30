@@ -687,7 +687,11 @@ export type ApiV1ProjectDetailResponse = z.infer<typeof apiV1ProjectDetailRespon
  */
 export const apiV1ProjectBudgetDefaultsPutBodySchema = z
   .object({
-    budgetDefaults: budgetsSchema.optional(),
+    // `.strict()` here (not on the shared `budgetsSchema`, which the build/resume
+    // paths use leniently) so a typo'd axis name like `maxUsdd` is REJECTED with
+    // 422 rather than silently stripped and persisted as a no-op — matching this
+    // route's "unknown keys rejected" contract.
+    budgetDefaults: budgetsSchema.strict().optional(),
     autoIncreaseBudgets: z.boolean().optional(),
     autoIncreaseCeilingMultiplier: z.number().min(1).optional(),
   })
