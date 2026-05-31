@@ -89,7 +89,7 @@ export const pythonRuntime: RuntimeAssessor = {
     const provisioning = toProvisioningRecord(env.provisioning);
 
     // Imports check uses the shared post-install interpreter, so third-party
-    // deps declared in pyproject.toml actually resolve.
+    // deps declared in pyproject.toml or requirements.txt actually resolve.
     const importsOpts: {
       pythonBin?: string;
       timeoutMs?: number;

@@ -12,9 +12,10 @@
  *
  * ADR 0017 (Phase 5c): before invoking pytest we provision the interpreter
  * (preferring a project-local .venv, then an interpreter matching the
- * project's `requires-python` constraint, then PATH `python`) and run
- * `python -m pip install -e .[test]` so the built project's own dependencies
- * are on the import path.
+ * project's `requires-python` constraint, then PATH `python`) and install the
+ * built project's declared dependencies so they're on the import path — via
+ * `pip install -e .[test]` for a `pyproject.toml` and/or `pip install -r`
+ * for a `requirements.txt` (ADR 0037 broadened this beyond pyproject-only).
  *
  * ADR 0017 Implementation Notes (Phase 5f, I006): the install site is always
  * a venv. Precedence: project `.venv/` → `<projectPath>/.factory/assessor-env/`
@@ -601,10 +602,43 @@ export interface ProvisionEnvDeps {
    */
   pyprojectPickExtra?: (projectPath: string) => Promise<string | undefined>;
   pyprojectHasTestExtra?: (projectPath: string) => Promise<boolean>;
+  /**
+   * Returns the requirements files (relative names) present in the project,
+   * each installed via `pip install -r <file>`. Defaults to probing the
+   * common `requirements*.txt` / `*-requirements.txt` names.
+   */
+  requirementsFiles?: (projectPath: string) => Promise<readonly string[]>;
 }
 
 async function projectHasPyproject(projectPath: string): Promise<boolean> {
   return defaultFileExists(join(projectPath, 'pyproject.toml'));
+}
+
+/**
+ * Requirements-file names we install via `pip install -r <file>`, in order.
+ * Covers the dominant application-style convention (`requirements.txt`) plus
+ * the common split where test/dev deps live in a sibling file. A packaged
+ * library that declares everything in `pyproject.toml` simply ships none of
+ * these and is handled by the editable-install path instead.
+ */
+const REQUIREMENTS_FILENAMES = [
+  'requirements.txt',
+  'requirements-dev.txt',
+  'dev-requirements.txt',
+  'requirements-test.txt',
+] as const;
+
+/**
+ * Return the requirements files present in `projectPath` (relative names),
+ * each to be installed with `pip install -r`. Empty when the project declares
+ * its dependencies elsewhere (pyproject.toml) or not at all.
+ */
+async function defaultRequirementsFiles(projectPath: string): Promise<string[]> {
+  const found: string[] = [];
+  for (const name of REQUIREMENTS_FILENAMES) {
+    if (await defaultFileExists(join(projectPath, name))) found.push(name);
+  }
+  return found;
 }
 
 async function pyprojectPickExtra(projectPath: string): Promise<string | undefined> {
@@ -632,10 +666,17 @@ function tailLines(s: string, n: number): string {
 }
 
 /**
- * Pick a Python interpreter and, when the project carries a pyproject.toml,
- * run `pip install -e .[test]` (or `-e .` fallback) so the project's declared
- * deps are on the import path. Returns the chosen interpreter plus an
- * `installOk` / `installSummary` report.
+ * Pick a Python interpreter and install the project's declared dependencies
+ * into the assessor venv so they're on the import path. Two conventions are
+ * supported and combine when both are present:
+ *   - `pyproject.toml` → `pip install -e .[test]` (with `-e .` fallback),
+ *     installing the project itself plus its declared deps.
+ *   - `requirements.txt` (and common dev/test variants) → `pip install -r`,
+ *     the dominant convention for applications that ship no packaging
+ *     metadata (ADR 0017 originally covered only the pyproject case; ADR
+ *     0037 broadened it).
+ * When neither is present, nothing is installed and `installOk` is `true`.
+ * Returns the chosen interpreter plus an `installOk` / `installSummary` report.
  *
  * Shared helper for {@link runPytest} and {@link checkPythonImports} — both
  * runners need the same interpreter + installed deps to agree on gate
@@ -651,6 +692,7 @@ export async function provisionAssessorEnv(
     ensureAssessorVenv: depsOverride.ensureAssessorVenv ?? ensureAssessorVenv,
     runSubprocess: depsOverride.runSubprocess ?? runSubprocess,
     hasPyproject: depsOverride.hasPyproject ?? projectHasPyproject,
+    requirementsFiles: depsOverride.requirementsFiles ?? defaultRequirementsFiles,
     pyprojectPickExtra: depsOverride.pyprojectPickExtra ?? pyprojectPickExtra,
     // Test-only back-compat: older tests inject `pyprojectHasTestExtra`; if
     // present, interpret it as "pick `test` when true, `.` otherwise."
@@ -689,7 +731,15 @@ export async function provisionAssessorEnv(
     'assessor-env: interpreter ready',
   );
 
-  if (!(await deps.hasPyproject(projectPath))) {
+  const hasPyproject = await deps.hasPyproject(projectPath);
+  const requirementsFiles = await deps.requirementsFiles(projectPath);
+
+  // No declared dependencies anywhere — the empty venv is the correct,
+  // healthy result. (A project that imports third-party packages without
+  // declaring them in pyproject.toml *or* requirements.txt surfaces later as
+  // an import/build failure, which is the accurate diagnosis — not a
+  // provisioning failure.)
+  if (!hasPyproject && requirementsFiles.length === 0) {
     return {
       choice,
       provisioning: {
@@ -701,60 +751,94 @@ export async function provisionAssessorEnv(
     };
   }
 
-  const extraName =
-    deps.pyprojectHasTestExtraLegacy !== undefined
-      ? (await deps.pyprojectHasTestExtraLegacy(projectPath))
-        ? 'test'
-        : undefined
-      : await deps.pyprojectPickExtra(projectPath);
-  const target = extraName !== undefined ? `.[${extraName}]` : '.';
-  const pipArgs = [
-    ...choice.prefixArgs,
-    '-m',
-    'pip',
-    'install',
-    '-e',
-    target,
-    '--disable-pip-version-check',
-    '--quiet',
-  ];
+  const installTimeoutMs = opts.installTimeoutMs ?? 180_000;
   const installStarted = Date.now();
-  log.info(
-    { projectPath, python: choice.bin, target },
-    'assessor-env: installing project (editable)',
-  );
-  const installRes = await deps.runSubprocess(choice.bin, pipArgs, {
-    cwd: projectPath,
-    timeoutMs: opts.installTimeoutMs ?? 180_000,
-  });
-  let installOk = installRes.exitCode === 0;
+  let installOk = true;
   let installSummary: string | undefined;
-  if (!installOk && extraName !== undefined) {
-    log.warn(
-      { projectPath, target, exitCode: installRes.exitCode },
-      `assessor-env: install -e .[${extraName}] failed; retrying with -e .`,
+  const noteFailure = (summary: string): void => {
+    installOk = false;
+    installSummary = installSummary !== undefined ? `${installSummary}\n${summary}` : summary;
+  };
+
+  // 1. pyproject.toml → editable install of the project itself (plus its test
+  //    extra when declared) so first-party modules + declared deps resolve.
+  if (hasPyproject) {
+    const extraName =
+      deps.pyprojectHasTestExtraLegacy !== undefined
+        ? (await deps.pyprojectHasTestExtraLegacy(projectPath))
+          ? 'test'
+          : undefined
+        : await deps.pyprojectPickExtra(projectPath);
+    const target = extraName !== undefined ? `.[${extraName}]` : '.';
+    log.info(
+      { projectPath, python: choice.bin, target },
+      'assessor-env: installing project (editable)',
     );
-    const retryArgs = [
-      ...choice.prefixArgs,
-      '-m',
-      'pip',
-      'install',
-      '-e',
-      '.',
-      '--disable-pip-version-check',
-      '--quiet',
-    ];
-    const retryRes = await deps.runSubprocess(choice.bin, retryArgs, {
-      cwd: projectPath,
-      timeoutMs: opts.installTimeoutMs ?? 180_000,
-    });
-    installOk = retryRes.exitCode === 0;
-    if (!installOk) {
-      installSummary = tailLines(`${retryRes.stdout}\n${retryRes.stderr}`, 40);
+    const installRes = await deps.runSubprocess(
+      choice.bin,
+      [
+        ...choice.prefixArgs,
+        '-m',
+        'pip',
+        'install',
+        '-e',
+        target,
+        '--disable-pip-version-check',
+        '--quiet',
+      ],
+      { cwd: projectPath, timeoutMs: installTimeoutMs },
+    );
+    let editableOk = installRes.exitCode === 0;
+    if (!editableOk && extraName !== undefined) {
+      log.warn(
+        { projectPath, target, exitCode: installRes.exitCode },
+        `assessor-env: install -e .[${extraName}] failed; retrying with -e .`,
+      );
+      const retryRes = await deps.runSubprocess(
+        choice.bin,
+        [
+          ...choice.prefixArgs,
+          '-m',
+          'pip',
+          'install',
+          '-e',
+          '.',
+          '--disable-pip-version-check',
+          '--quiet',
+        ],
+        { cwd: projectPath, timeoutMs: installTimeoutMs },
+      );
+      editableOk = retryRes.exitCode === 0;
+      if (!editableOk) noteFailure(tailLines(`${retryRes.stdout}\n${retryRes.stderr}`, 40));
+    } else if (!editableOk) {
+      noteFailure(tailLines(`${installRes.stdout}\n${installRes.stderr}`, 40));
     }
-  } else if (!installOk) {
-    installSummary = tailLines(`${installRes.stdout}\n${installRes.stderr}`, 40);
   }
+
+  // 2. requirements.txt (and common dev/test variants) → `pip install -r`.
+  //    This is the dominant dependency-declaration convention for
+  //    applications (vs. packaged libraries) — e.g. a pygame/numpy app that
+  //    ships no pyproject.toml. Skipping it leaves the venv empty and every
+  //    third-party import fails the verify gate (the ADR-0017 gap this closes).
+  for (const reqFile of requirementsFiles) {
+    log.info({ projectPath, python: choice.bin, reqFile }, 'assessor-env: installing requirements');
+    const reqRes = await deps.runSubprocess(
+      choice.bin,
+      [
+        ...choice.prefixArgs,
+        '-m',
+        'pip',
+        'install',
+        '-r',
+        reqFile,
+        '--disable-pip-version-check',
+        '--quiet',
+      ],
+      { cwd: projectPath, timeoutMs: installTimeoutMs },
+    );
+    if (reqRes.exitCode !== 0) noteFailure(tailLines(`${reqRes.stdout}\n${reqRes.stderr}`, 40));
+  }
+
   log.info(
     { projectPath, installOk, durationMs: Date.now() - installStarted },
     installOk ? 'assessor-env: install complete' : 'assessor-env: install failed',
@@ -815,6 +899,7 @@ export interface RunPytestDeps {
   ) => Promise<AssessorVenvChoice>;
   hasPyproject?: (projectPath: string) => Promise<boolean>;
   pyprojectHasTestExtra?: (projectPath: string) => Promise<boolean>;
+  requirementsFiles?: (projectPath: string) => Promise<readonly string[]>;
 }
 
 /**
@@ -851,6 +936,8 @@ export async function runPytest(
           legacyDeps.hasPyproject = depsOverride.hasPyproject;
         if (depsOverride.pyprojectHasTestExtra !== undefined)
           legacyDeps.pyprojectHasTestExtra = depsOverride.pyprojectHasTestExtra;
+        if (depsOverride.requirementsFiles !== undefined)
+          legacyDeps.requirementsFiles = depsOverride.requirementsFiles;
         return provisionAssessorEnv(pp, o, legacyDeps);
       }),
     runSubprocess: depsOverride.runSubprocess ?? runSubprocess,

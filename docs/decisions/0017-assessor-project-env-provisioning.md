@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-04-19
+- **Extended by:** [0037](0037-assessor-requirements-txt-provisioning.md) — the install step now also covers `requirements.txt`, not just `pyproject.toml`.
 
 ## Context
 
