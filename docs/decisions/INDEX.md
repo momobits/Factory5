@@ -48,6 +48,7 @@ Decisions are append-only. To overturn a decision, write a new ADR with `Superse
 | [0034](0034-budget-pool-paradigm.md)                     | Budget Pool Paradigm: directive-wide pools for `maxTurns*` axes, live re-resolve from `project.json`, auto-increase toggle          | Superseded by 0035               | 2026-05-24 |
 | [0035](0035-budget-axis-canonical-table.md)              | Budget Axis Canonical Table: 12-axis unified model with type classification and auto-increase eligibility                           | Accepted                         | 2026-05-25 |
 | [0036](0036-config-home-consolidation.md)                | Config-home consolidation: one `config.toml`, retire the daemon-wide `config.json`                                                  | Accepted                         | 2026-05-30 |
+| [0037](0037-assessor-requirements-txt-provisioning.md)   | Assessor installs `requirements.txt` dependencies (extends 0017 beyond pyproject-only)                                              | Accepted                         | 2026-05-31 |
 
 ## Adding a new ADR
 

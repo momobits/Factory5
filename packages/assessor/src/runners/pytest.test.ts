@@ -354,6 +354,110 @@ describe('runPytest provisioning', () => {
     // Keep the tail bounded at 40 lines
     expect(summaryLines.length).toBeLessThanOrEqual(41);
   });
+
+  it('installs requirements.txt when no pyproject.toml is present', async () => {
+    const calls: { bin: string; args: readonly string[] }[] = [];
+    const deps: RunPytestDeps = {
+      pickPython: async () => ({
+        bin: '/usr/bin/python3.11',
+        prefixArgs: [],
+        version: '3.11.9',
+        reason: '.venv detected',
+      }),
+      hasPyproject: async () => false,
+      requirementsFiles: async () => ['requirements.txt'],
+      fileExists: async () => true,
+      runSubprocess: async (bin, args) => {
+        calls.push({ bin, args: [...args] });
+        if (args.includes('pytest')) return okExit('3 passed in 0.01s\n');
+        return okExit();
+      },
+    };
+    const result = await runPytest(projectDir, {}, deps);
+    const installCalls = calls.filter((c) => c.args.includes('install'));
+    expect(installCalls.length).toBe(1);
+    expect(installCalls[0]?.args).toContain('-r');
+    expect(installCalls[0]?.args).toContain('requirements.txt');
+    // No editable install when there's no pyproject.
+    expect(installCalls[0]?.args).not.toContain('-e');
+    expect(result.provisioning?.installOk).toBe(true);
+    expect(result.passed).toBe(3);
+  });
+
+  it('installs both pyproject (editable) and requirements.txt when both exist', async () => {
+    const calls: { bin: string; args: readonly string[] }[] = [];
+    const deps: RunPytestDeps = {
+      pickPython: async () => ({
+        bin: '/usr/bin/python3.11',
+        prefixArgs: [],
+        version: '3.11.9',
+        reason: '.venv detected',
+      }),
+      hasPyproject: async () => true,
+      pyprojectHasTestExtra: async () => false,
+      requirementsFiles: async () => ['requirements.txt'],
+      fileExists: async () => true,
+      runSubprocess: async (bin, args) => {
+        calls.push({ bin, args: [...args] });
+        if (args.includes('pytest')) return okExit('1 passed in 0.01s\n');
+        return okExit();
+      },
+    };
+    const result = await runPytest(projectDir, {}, deps);
+    const installCalls = calls.filter((c) => c.args.includes('install'));
+    expect(installCalls.length).toBe(2);
+    expect(installCalls[0]?.args).toContain('-e');
+    expect(installCalls[0]?.args).toContain('.');
+    expect(installCalls[1]?.args).toContain('-r');
+    expect(installCalls[1]?.args).toContain('requirements.txt');
+    expect(result.provisioning?.installOk).toBe(true);
+  });
+
+  it('skips install entirely when neither pyproject nor requirements is present', async () => {
+    const calls: { bin: string; args: readonly string[] }[] = [];
+    const deps: RunPytestDeps = {
+      pickPython: async () => ({
+        bin: '/usr/bin/python3.11',
+        prefixArgs: [],
+        version: '3.11.9',
+        reason: '.venv detected',
+      }),
+      hasPyproject: async () => false,
+      requirementsFiles: async () => [],
+      fileExists: async () => true,
+      runSubprocess: async (bin, args) => {
+        calls.push({ bin, args: [...args] });
+        if (args.includes('pytest')) return okExit('0 passed in 0.01s\n');
+        return okExit();
+      },
+    };
+    const result = await runPytest(projectDir, {}, deps);
+    const installCalls = calls.filter((c) => c.args.includes('install'));
+    expect(installCalls.length).toBe(0);
+    expect(result.provisioning?.installOk).toBe(true);
+  });
+
+  it('surfaces requirements.txt install failure as provisioning.installOk=false', async () => {
+    const deps: RunPytestDeps = {
+      pickPython: async () => ({
+        bin: '/usr/bin/python3.11',
+        prefixArgs: [],
+        version: '3.11.9',
+        reason: '.venv detected',
+      }),
+      hasPyproject: async () => false,
+      requirementsFiles: async () => ['requirements.txt'],
+      fileExists: async () => true,
+      runSubprocess: async (_bin, args) => {
+        if (args.includes('install'))
+          return failExit('ERROR: Could not find a version of pygame\n');
+        return { stdout: '', stderr: '', exitCode: 5, durationMs: 5 };
+      },
+    };
+    const result = await runPytest(projectDir, {}, deps);
+    expect(result.provisioning?.installOk).toBe(false);
+    expect(result.provisioning?.installSummary).toBeDefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
